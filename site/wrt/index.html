@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" data-i18n="app.desc" content="OpenWrt 固件在线定制:选源码、勾插件,GitHub Actions 云编译,免费自取">
+<title>Wei.G · OpenWrt 固件在线定制</title>
+<link rel="icon" href="Wei.G.ico">
+<link rel="stylesheet" href="app.css?v=6e42fee2e2">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap header-row">
+    <div class="brand">
+      <img class="brand-icon" src="Wei.G-favicon_little.png" alt="Wei.G" width="34" height="34">
+      <div>
+        <h1><span class="brand-name">Wei.G</span> <span data-i18n="app.title">OpenWrt 固件在线定制</span></h1>
+        <p class="sub" data-i18n="app.subtitle">选好插件,云端自动编译,喝杯卡布奇诺，迎接开“源”盛世</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="text-btn" id="helpBtn" type="button" data-i18n="help.btn">说明</button>
+      <a class="icon-btn" id="repoLink" href="https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild" target="_blank" rel="noopener" data-i18n-aria="btn.repo" data-i18n-title="btn.repo">
+        <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+      <a class="icon-btn blog-link" href="https://www.weigeshare.cc.cd" target="_blank" rel="noopener" title="Wei.G Blog" aria-label="Wei.G Blog">
+        <img src="Wei.G-favicon_little.png" alt="" width="20" height="20">
+      </a>
+    </div>
+  </div>
+</header>
+
+<div class="side-dock" id="sideDock">
+  <button class="icon-btn dock-toggle" id="dockToggle" type="button" aria-label="toggle dock" aria-expanded="true">⚙</button>
+  <div class="dock-items">
+    <select id="langSel" class="lang-sel" aria-label="界面语言"></select>
+    <button class="icon-btn dock-selftest" id="selfTestBtn" type="button" data-i18n-title="btn.selfTest.title" data-i18n-aria="btn.selfTest.title">检</button>
+    <button class="icon-btn" id="densityBtn" type="button" data-i18n-title="font.label" data-i18n-aria="font.label" aria-haspopup="dialog" aria-expanded="false" aria-controls="fontPanel">Aa</button>
+    <button class="icon-btn" id="themeBtn" type="button" aria-label="主题">◐</button>
+  </div>
+</div>
+
+<!-- V11:Aa 字号面板,毛玻璃小卡,点外部关闭 / V11: Aa font-size panel, small glassy card, closes on outside click -->
+<div class="font-panel" id="fontPanel" hidden role="dialog" aria-labelledby="fontLabel">
+  <span class="font-title" id="fontLabel" data-i18n="font.label">字号</span>
+  <div class="font-row">
+    <button type="button" class="icon-btn font-btn" id="fontDec" aria-label="A−">A−</button>
+    <input type="number" id="fontInput" class="font-input" min="14" max="24" step="1" inputmode="numeric" aria-labelledby="fontLabel">
+    <span class="font-unit" aria-hidden="true">px</span>
+    <button type="button" class="icon-btn font-btn" id="fontInc" aria-label="A+">A+</button>
+    <button type="button" class="text-btn font-reset" id="fontReset" data-i18n="font.reset">重置</button>
+  </div>
+</div>
+
+<div class="risk-bar" id="riskBar" hidden>
+  <div class="wrap risk-row">
+    <div class="risk-text" id="riskText">
+      <strong class="risk-line risk-q0" data-i18n="risk.q0">⚠️刷机前三问:</strong>
+      <span class="risk-line risk-q1" data-i18n="risk.q1">① 我的路由器真是这个型号吗?</span>
+      <span class="risk-line risk-q2" data-i18n="risk.q2">② 固件选对了吗?</span>
+      <span class="risk-line risk-q3" data-i18n="risk.q3">③ 变砖我会救吗?</span>
+      <span class="risk-tail" data-i18n="risk.tail">任何一个不确定,请放下手，今晚不用跪键盘。</span>
+      <span class="risk-disclaimer" data-i18n="risk.disclaimer">固件由社区爱好者提供,刷坏自理，风险自负。</span>
+    </div>
+    <button type="button" class="btn risk-ok" id="riskOk" data-i18n="risk.ok">知道了</button>
+  </div>
+</div>
+
+<main class="wrap" id="app">
+  <div class="loading" id="loading">
+    <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton sk-short"></div>
+    <p data-i18n="loading">正在加载插件数据…</p>
+  </div>
+
+  <div id="form" hidden>
+    <section class="step device-step" id="deviceStep">
+      <h2><span class="stepnum">①</span> <span data-i18n="step.device">选择构建参数</span> <span class="hint" data-i18n="step.device.hint"></span>
+        <button class="fold-btn" id="deviceFold" type="button" aria-expanded="true" aria-controls="devicePicker" data-i18n="fold.hide">隐藏</button>
+      </h2>
+      <button class="device-summary" id="deviceSummary" type="button" hidden></button>
+      <div id="devicePicker">
+        <div class="target-picker" id="targetPicker">
+          <label class="target-field target-source"><span id="targetSourceLabel">Source</span><select id="targetSource"></select></label>
+          <label class="target-field target-branch"><span id="targetBranchLabel">Branch</span><select id="targetBranch"></select></label>
+          <div class="target-dynamic" id="targetDynamicSelectors"></div>
+          <button class="catalog-load-state" id="catalogLoadState" type="button" hidden disabled>
+            <span class="catalog-load-spinner" aria-hidden="true"></span>
+            <span id="catalogLoadText">Loading Target and menuconfig…</span>
+          </button>
+        </div>
+        <div class="catalog-locator">
+          <div class="catalog-locator-row">
+            <input type="search" id="catalogLocator" autocomplete="off"
+              placeholder="Search source, branch, target, menu or package"
+              aria-label="Search source, branch, target, menu or package">
+            <label class="minimum-boot-switch">
+              <input type="checkbox" id="minimumBootToggle">
+              <span id="minimumBootLabel">Recommended</span>
+            </label>
+            <button class="recommended-config-btn" id="minimumBootConfig" type="button" hidden>Configure</button>
+          </div>
+          <div class="catalog-locator-results" id="catalogLocatorResults" hidden></div>
+        </div>
+        <div class="menuconfig-box" id="menuconfigBox" hidden>
+          <button class="menuconfig-toggle" id="menuconfigToggle" type="button" aria-expanded="false" aria-controls="menuconfigBody">
+            <strong>Advanced menuconfig</strong>
+            <span class="hint" id="menuconfigStatus"></span>
+            <span class="menuconfig-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div id="menuconfigBody" hidden>
+            <div class="import-workspace" id="importWorkspace" hidden>
+              <div class="import-summary">
+                <strong id="importSummaryText"></strong>
+                <button class="text-btn" id="importReset" type="button">Restore uploaded values</button>
+              </div>
+              <div class="import-target-card" id="importTargetCard" hidden></div>
+            </div>
+            <div class="menuconfig-workspace">
+              <div class="menuconfig-workspace-head">
+                <div class="menuconfig-toolbar">
+                  <button class="menuconfig-back" id="menuconfigBack" type="button" hidden>←</button>
+                  <nav class="menuconfig-breadcrumb" id="menuconfigPanelTitle" aria-label="Menu path"></nav>
+                  <input type="search" id="menuconfigSearch" placeholder="Search option / symbol">
+                  <label title="Selected only"><input type="checkbox" id="menuconfigSelectedOnly"> Selected only</label>
+                  <button class="menuconfig-state-help" id="menuconfigStateHelp" type="button">N/M/Y ?</button>
+                </div>
+                <button class="menuconfig-selected-toggle" id="menuconfigSelectedToggle" type="button"
+                  aria-expanded="false" aria-controls="menuconfigContent" hidden>
+                  <span><strong>Selected options</strong> <small id="menuconfigSelectedCount">0</small></span>
+                  <span class="menuconfig-chevron" aria-hidden="true">⌄</span>
+                </button>
+              </div>
+              <div class="menuconfig-scroll" id="menuconfigScroll">
+                <div id="menuconfigContent">
+                  <div class="menuconfig-grid" id="menuconfigGrid"></div>
+                  <div class="menuconfig-panel" id="menuconfigPanel" hidden>
+                    <div id="menuconfigOptions"></div>
+                  </div>
+                  <button class="menuconfig-more" id="menuconfigMore" type="button" hidden tabindex="-1">More</button>
+                </div>
+              </div>
+            </div>
+            <details class="import-unknown" id="importUnknownBox" hidden>
+              <summary id="importUnknownSummary"></summary>
+              <p class="hint" id="importUnknownHint">These items are not in the Catalog, so dependencies are not inferred. Disable writes “is not set”; deleting a line leaves the default to make defconfig.</p>
+              <div class="menuconfig-toolbar">
+                <input type="search" id="importUnknownSearch" placeholder="Search CONFIG symbol">
+                <label><input type="checkbox" id="importUnknownDisabled"> <span id="importUnknownDisabledLabel">Show disabled</span></label>
+              </div>
+              <div id="importUnknownOptions"></div>
+              <button class="menuconfig-more" id="importUnknownMore" type="button" hidden>Show 50 more</button>
+            </details>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="step" id="sourceStep">
+      <h2><span class="stepnum">①</span> <span data-i18n="step.source">选择源码</span> <span class="hint" data-i18n="step.source.hint"></span></h2>
+      <div class="pill-row" id="sourceRow"></div>
+    </section>
+
+    <section class="step" id="versionStep">
+      <h2><span class="stepnum">②</span> <span data-i18n="step.version">选择版本</span> <span class="hint" data-i18n="step.version.hint"></span></h2>
+      <div class="pill-row" id="versionRow"></div>
+    </section>
+
+    <section class="step" id="variantStep">
+      <h2><span class="stepnum">③</span> <span data-i18n="step.variant">分区变体</span></h2>
+      <div class="pill-row" id="variantRow"></div>
+    </section>
+
+    <section class="step">
+      <h2><span class="stepnum">②</span> <span data-i18n="step.plugins">勾选插件</span> <span class="hint" data-i18n="step.plugins.hint"></span></h2>
+      <div class="legend">
+        <span class="lg-item"><span class="lg-box"></span><span data-i18n="legend.ok"></span></span>
+        <span class="lg-item"><span class="lg-box lg-builtin">✓</span><span data-i18n="legend.builtin"></span></span>
+        <span class="lg-item"><span class="lg-box lg-off"></span><span data-i18n="legend.off"></span></span>
+        <label class="adv-toggle" id="advLabel"><input type="checkbox" id="advMode"> <span data-i18n="adv.toggle">高级模式</span></label>
+        <!-- 灰色插件门禁紧挨开发者模式,仅开发者模式开启时显示 / Grey-plugin gate sits beside Developer mode and appears only while it is enabled -->
+        <label class="adv-grey-toggle" id="advGreyRow" for="advGrey" data-i18n-title="adv.grey.hint" hidden><input type="checkbox" id="advGrey"> <span data-i18n="adv.grey.toggle">选择灰色插件</span></label>
+        <span class="lg-stats" id="availStats"></span>
+      </div>
+      <div class="toolbar">
+        <input type="search" id="searchBox" data-i18n-ph="search.placeholder" data-i18n-aria="search.aria">
+        <label class="hot-only"><input type="checkbox" id="hotOnly"> <span data-i18n="filter.hotOnly">只看热门</span></label>
+      </div>
+      <div class="group devpkg" id="devpkgBox" hidden>
+        <button class="group-head devpkg-head" id="devpkgToggle" type="button" aria-expanded="false" aria-controls="devpkgBody">
+          <span class="group-ico" aria-hidden="true">📦</span><span data-i18n="devpkg.title"></span><span class="group-count" id="devpkgCount"></span><span class="devpkg-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <div class="devpkg-body" id="devpkgBody" hidden>
+          <p class="hint" data-i18n="devpkg.hint"></p>
+          <div class="devpkg-meta"><span class="hint" id="devpkgStatus"></span><a href="packages.html" target="_blank" rel="noopener" data-i18n="devpkg.docs">📖 软件包用途说明页</a></div>
+          <input type="search" id="pkgSearch" placeholder="iptables-mod / kmod-usb / luci-i18n …">
+          <div id="pkgList" class="pkg-list"></div>
+        </div>
+      </div>
+      <div id="groups"></div>
+    </section>
+
+    <section class="step">
+      <h2><span class="stepnum">③</span> <span data-i18n="step.submit">提交设置</span></h2>
+      <label class="field-label" for="tagBox" data-i18n="tag.label"></label>
+      <input type="text" id="tagBox" maxlength="24" data-i18n-ph="tag.placeholder">
+      <label class="field-label" for="lanipBox" data-i18n="lanip.label" style="margin-top:10px"></label>
+      <input type="text" id="lanipBox" value="192.168.1.1" inputmode="decimal" autocapitalize="off" autocorrect="off">
+      <p class="hint" data-i18n="lanip.hint"></p>
+      <p class="hint" id="loginInfo"></p>
+      <label class="field-label" for="rootpwBox" data-i18n="rootpw.label" style="margin-top:10px"></label>
+      <input type="text" id="rootpwBox" maxlength="32" autocapitalize="off" autocorrect="off" autocomplete="off">
+      <p class="hint rootpw-warning"><strong data-i18n="rootpw.public">⚠️ 提交内容公开可见,密码公开！！</strong><span data-i18n="rootpw.hint">临时登录密码,刷机后必须立即修改! (lede 源 填 @empty 清成空密码）</span></p>
+      <div class="firmware-settings">
+        <label><span data-i18n="fw.timezone">时区</span><span class="timezone-combo" id="timezoneCombo"><input type="search" id="timezoneBox" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="timezoneMenu" autocomplete="off" spellcheck="false"><span class="timezone-menu" id="timezoneMenu" role="listbox" hidden></span></span></label>
+        <label><span data-i18n="fw.theme">固件主题</span><select id="fwThemeBox"></select></label>
+        <label><span data-i18n="fw.ntp">NTP 服务器</span><select id="ntpBox"></select></label>
+        <label><span data-i18n="fw.opkg">opkg 镜像</span><select id="opkgBox"></select></label>
+      </div>
+      <div class="mode-row">
+        <span class="mode-label" data-i18n="mode.label">构建仓库:</span>
+        <div class="pill-row" id="modeRow">
+          <button type="button" class="pill pill-active" data-mode="official" data-i18n="mode.official">官方仓库</button>
+          <button type="button" class="pill" data-mode="self" data-i18n="mode.self">我自己的 Fork</button>
+        </div>
+      </div>
+      <div class="self-box" id="selfBox" hidden>
+        <label class="field-label" for="ownerBox" data-i18n="owner.label"></label>
+        <input type="text" id="ownerBox" data-i18n-ph="owner.placeholder" autocapitalize="off" autocorrect="off">
+        <p class="hint" id="selfHint"></p>
+      </div>
+    </section>
+  </div>
+</main>
+<div class="menu-tooltip" id="menuTooltip" role="tooltip" hidden></div>
+
+<div class="actionbar" id="actionbar" hidden>
+  <div class="wrap actionbar-row">
+    <div class="stats">
+      <button type="button" class="link-btn" id="selCount" data-i18n-title="bar.selected.title"></button>
+      <div class="cap" id="capBox" data-i18n-title="bar.capacity.title"><div class="cap-fill" id="capFill"></div></div>
+      <span class="cap-text" id="capText"></span>
+    </div>
+    <div class="actions">
+      <input id="configImport" type="file" accept=".json,.config,.buildinfo,text/plain,application/json" hidden>
+      <span class="site-version site-version-action site-version-value" id="siteVersion">v----------</span>
+      <button type="button" class="btn" id="importBtn" data-i18n="btn.import">加载配置</button>
+      <button type="button" class="btn" id="importLogBtn" data-i18n="import.downloadLog" hidden>下载加载日志</button>
+      <button type="button" class="btn btn-primary" id="submitBtn" data-i18n="btn.submit">提交云编译</button>
+    </div>
+  </div>
+</div>
+
+<footer class="site-footer wrap">
+  <p><span data-i18n="footer.thanksLabel">【鸣谢】</span>
+     <a href="https://openwrt.org/" target="_blank" rel="noopener">OpenWrt</a> /
+     <a href="https://immortalwrt.org/" target="_blank" rel="noopener">ImmortalWrt</a> /
+     <a href="https://github.com/coolsnowwolf/lede" target="_blank" rel="noopener">Lean</a> /
+     <a href="packages.html" target="_blank" rel="noopener" data-i18n="footer.pluginAuthors">全部插件作者</a>
+  </p>
+  <p><span data-i18n="footer.actionsPrefix">固件在</span>
+     <a id="actionsLink" href="https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions" target="_blank" rel="noopener">Actions</a>
+     <span data-i18n="footer.note">页按“构建标识”命名,下载底部的 artifact。本站纯静态、开源、无后端、不收集任何信息。</span>
+  </p>
+  <p><a id="footRepo" href="https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild" target="_blank" rel="noopener">GitHub</a> ·
+     <a class="blog-link" href="https://www.weigeshare.cc.cd/" target="_blank" rel="noopener">Weige Share Blog</a> ·
+     <a href="packages.html" target="_blank" rel="noopener" data-i18n="pkgpage.title">软件包用途说明</a></p>
+  <p class="footer-version"><span class="site-version site-version-value" id="siteVersionFooter">v----------</span></p>
+</footer>
+
+<div class="popover" id="popover" hidden role="tooltip">
+  <p class="pop-title" id="popTitle"></p>
+  <p class="pop-body" id="popBody"></p>
+</div>
+
+<div class="modal-mask" id="modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-head">
+      <h3 id="modalTitle"></h3>
+      <button type="button" class="icon-btn" id="modalClose" data-i18n-aria="btn.close">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<noscript><p class="wrap" style="padding:2rem 0">本页面需要启用 JavaScript 才能使用。/ JavaScript is required.</p></noscript>
+<script src="app.js?v=a94d01155c"></script>
+</body>
+</html>

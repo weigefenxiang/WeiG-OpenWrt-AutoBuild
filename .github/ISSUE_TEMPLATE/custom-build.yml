@@ -1,0 +1,23 @@
+name: Custom build / 定制固件
+description: Upload build-request.json, .config, or config.buildinfo / 上传网页请求或配置
+title: "[build] "
+labels:
+  - custom-build
+body:
+  - type: markdown
+    attributes:
+      value: |
+        新手只需上传网页“提交云编译”刚生成的 `build-request.json`,无需填写任何参数。
+        已有 `.config` 或 `config.buildinfo` 请先在定制网页点“加载配置”,网页识别机型后会生成可直接提交的 JSON。
+        网页生成且带 `# device=...` 文件头的 `.config` 仍可直接上传。
+
+        New users only need the web-generated `build-request.json`; no parameters are required.
+        Load an existing `.config` or `config.buildinfo` on the customizer first so it can identify the target and create a submit-ready JSON.
+  - type: textarea
+    id: request
+    attributes:
+      label: Build request / 构建请求
+      description: Upload exactly one web-generated file. Do not paste config text / 只上传一个网页生成文件,不要粘贴配置正文
+      placeholder: build-request-*.json
+    validations:
+      required: true

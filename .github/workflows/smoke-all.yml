@@ -1,0 +1,37 @@
+# 把所有构建产线走一遍:一键触发 3 个源的 360T7 最小构建,健康状况直接看各自的 run
+# Walks every build pipeline: dispatches a minimal 360T7 build per source; pipeline health shows up as 3 custom-build runs.
+name: Smoke All / 全产线冒烟
+run-name: Smoke All 全产线冒烟
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '43 20 1 * *'   # 每月 1 号 20:43 UTC,错开镜像任务且避开整点 / monthly, offset from the mirror job, odd minute
+
+permissions:
+  actions: write
+
+jobs:
+  dispatch:
+    name: Dispatch / 派发
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch minimal build per source / 逐源触发最小构建
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // 每源的默认版本/变体 / default version & variant per source
+            const MATRIX = [
+              { source: 'ImmortalWrt', version: 'master', variant: 'qihoo_360t7' },
+              { source: 'OpenWrt',     version: 'main',   variant: 'qihoo_360t7' },
+              { source: 'lede',        version: 'master', variant: 'qihoo_360t7' },
+            ];
+            for (const m of MATRIX) {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner, repo: context.repo.repo,
+                workflow_id: 'custom-build.yml', ref: 'main',
+                inputs: { device: '360t7', source: m.source, version: m.version, variant: m.variant, plugins: '', tag: 'smoke-' + m.source },
+              });
+              console.log('dispatched', m.source);
+            }

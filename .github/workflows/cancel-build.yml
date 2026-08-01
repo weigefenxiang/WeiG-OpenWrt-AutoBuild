@@ -1,0 +1,68 @@
+name: Cancel Custom Build / 取消定制构建
+run-name: Cancel build / 取消构建 · #${{ github.event.issue.number }}
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  actions: write
+  issues: write
+
+jobs:
+  cancel:
+    name: Cancel own build / 取消自己的构建
+    if: github.event.issue.pull_request == null
+    runs-on: ubuntu-22.04
+    timeout-minutes: 2
+    steps:
+      - name: Verify requester and cancel / 核验提交者并取消
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const command = context.payload.comment.body.trim().toLowerCase();
+            if (!['/cancel', '/cancel-build'].includes(command)) return;
+            const issue = context.payload.issue;
+            if (!issue.title.startsWith('[build]')) return;
+            const requester = issue.user.login;
+            const commenter = context.payload.comment.user.login;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            if (commenter.toLowerCase() !== requester.toLowerCase()) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue.number,
+                body: `@${commenter}\n\n⛔ 只能由该构建的提交者 @${requester} 取消。`,
+              });
+              return;
+            }
+            const list = async (status) => (await github.rest.actions.listWorkflowRuns({
+              owner, repo, workflow_id: 'custom-build.yml', actor: requester, status, per_page: 100,
+            })).data.workflow_runs;
+            const active = [...await list('queued'), ...await list('in_progress')]
+              .filter((run) => run.event === 'issues' && run.display_title === issue.title);
+            if (!active.length) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue.number,
+                body: `@${requester}\n\nℹ️ 没有找到可取消的排队中或运行中的构建。`,
+              });
+              return;
+            }
+            const cancelled = [];
+            for (const run of active) {
+              await github.rest.actions.cancelWorkflowRun({ owner, repo, run_id: run.id });
+              await new Promise((resolve) => setTimeout(resolve, 15000));
+              const { data: latest } = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: run.id });
+              if (latest.status !== 'completed') {
+                await github.request('POST /repos/{owner}/{repo}/actions/runs/{run_id}/force-cancel', {
+                  owner, repo, run_id: run.id,
+                });
+              }
+              cancelled.push(run.html_url);
+            }
+            await github.rest.issues.createComment({
+              owner, repo, issue_number: issue.number,
+              body: `@${requester}\n\n🛑 已请求取消构建：${cancelled.join('、')}\n\n任务将停止；若普通取消未在约 15 秒内完成，系统已自动改用强制取消。`,
+            });
+            await github.rest.issues.update({
+              owner, repo, issue_number: issue.number, state: 'closed', state_reason: 'not_planned',
+            });

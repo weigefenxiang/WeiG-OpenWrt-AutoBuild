@@ -1,0 +1,47 @@
+# 防删库后手:每月把上游仓库镜像到自己名下 / Anti-deletion backstop: monthly mirrors of upstream repos.
+# 需要 fine-grained PAT(Administration:write + Contents:write)存进 secrets.MIRROR_TOKEN
+# Needs a fine-grained PAT (repo admin + contents write) saved as secrets.MIRROR_TOKEN.
+# 三个现行上游均使用 --mirror，包含其全部远程分支。
+# All three active upstreams use --mirror, including every remote branch.
+name: Mirror Upstream / 上游镜像
+run-name: Mirror Upstream 上游镜像备份
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 19 1 * *'   # 每月 1 号 19:23 UTC,避开整点拥堵 / monthly at an odd minute to dodge the top-of-hour rush
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    name: Mirror / 镜像
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        repo:
+          - openwrt/openwrt
+          - immortalwrt/immortalwrt
+          - coolsnowwolf/lede
+    steps:
+      - name: Mirror ${{ matrix.repo }} / 镜像备份
+        env:
+          TOKEN: ${{ secrets.MIRROR_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then echo '未配置 secrets.MIRROR_TOKEN,跳过 / MIRROR_TOKEN not set, skipping'; exit 0; fi
+          SRC='${{ matrix.repo }}'
+          NAME="mirror-$(echo "$SRC" | tr '/' '-')"
+          OWNER='${{ github.repository_owner }}'
+          # 目标仓库不存在则自动创建(私有)/ auto-create the target repo (private) if missing
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: token $TOKEN" "https://api.github.com/repos/$OWNER/$NAME")
+          if [ "$STATUS" = "404" ]; then
+            curl -s -X POST -H "Authorization: token $TOKEN" https://api.github.com/user/repos \
+              -d "{\"name\":\"$NAME\",\"private\":true,\"description\":\"Mirror of $SRC (auto)\"}" >/dev/null
+          fi
+          git clone --mirror "https://github.com/$SRC" repo.git
+          cd repo.git
+          git push --mirror "https://x-access-token:$TOKEN@github.com/$OWNER/$NAME.git"
+          echo "已镜像到 $OWNER/$NAME / mirrored"
