@@ -3858,6 +3858,27 @@ function targetRepo() {
 
 let lastFocus = null;
 let modalCancelHandler = null;
+const MOBILE_ISSUE_URL_LIMIT = 6000;
+const mobileIssueClient = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+function issueSubmitUrl(repo, title, body = '') {
+  const params = new URLSearchParams({ template: 'custom-build.yml', title });
+  if (body) params.set('body', body);
+  return 'https://github.com/' + repo + '/issues/new?' + params;
+}
+async function mobileIssuePayload(payload) {
+  if (!mobileIssueClient()) return '';
+  if (!('CompressionStream' in window)) throw new Error('手机浏览器不支持压缩请求，请改用浏览器上传 JSON');
+  const raw = JSON.stringify(payload);
+  const zipped = new Uint8Array(await new Response(
+    new Blob([raw]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < zipped.length; i += 0x4000) binary += String.fromCharCode(...zipped.subarray(i, i + 0x4000));
+  const body = '<!-- WEIG_BUILD_REQUEST_GZIP_BASE64\n' + btoa(binary) + '\n-->';
+  if (encodeURIComponent(body).length > MOBILE_ISSUE_URL_LIMIT) {
+    throw new Error('手机请求过大，请用浏览器上传刚下载的 JSON 文件');
+  }
+  return body;
+}
 function openModal(title) {
   $('modalTitle').textContent = title;
   lastFocus = document.activeElement;
@@ -3903,8 +3924,6 @@ function openSubmitModal() {
   Object.assign(state, firmware);
   const requestStamp = localStamp();
   const title = '[build] ' + requestStamp + '/' + requestTargetProfilePart() + '/' + state.source.id + '/' + state.version.id + '/' + selectedTargetProfileName();
-  const issueUrl = 'https://github.com/' + repo + '/issues/new?template=custom-build.yml&title=' +
-    encodeURIComponent(title);
 
   openModal(t('btn.submit'));
   const mb = $('modalBody');
@@ -3969,6 +3988,7 @@ function openSubmitModal() {
         const filename = [requestStamp, requestTargetProfilePart(true), safeDownloadNamePart(state.source.id, 'source'),
           safeDownloadNamePart(state.version.id, 'branch'), safeDownloadNamePart(selectedTargetProfileName())].join('-') + '.json';
         downloadBlob(JSON.stringify(payload, null, 2) + '\n', 'application/json;charset=utf-8', filename);
+        const issueUrl = issueSubmitUrl(repo, title, await mobileIssuePayload(payload));
         if (issueWindow) issueWindow.location.href = issueUrl;
         else window.open(issueUrl, '_blank', 'noopener');
       } catch (err) {

@@ -335,6 +335,7 @@ JSON.stringify(minimumBootSource) === JSON.stringify(minimumBootPublic) &&
   const issueForm = readFileSync(join(ROOT, '.github', 'ISSUE_TEMPLATE', 'custom-build.yml'), 'utf8');
   const workflow = readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8')
     .replace(/\r\n/g, '\n');
+  const issueRequestReader = readFileSync(join(ROOT, 'tools', 'fetch-build-request.mjs'), 'utf8');
   const cancelWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'cancel-build.yml'), 'utf8')
     .replace(/\r\n/g, '\n');
   const versionWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'site-version.yml'), 'utf8');
@@ -353,6 +354,13 @@ JSON.stringify(minimumBootSource) === JSON.stringify(minimumBootPublic) &&
   contractOk
     ? ok('Issue attachment → submitted.config → openwrt/.config 权威链路已接通')
     : bad('Issue attachment contract', `Issue 表单或 workflow 关键链路缺失；字段=${issueFieldIds.join(',') || '(无)'}`);
+  const mobileIssueContract = js.includes('function mobileIssuePayload') &&
+    js.includes('WEIG_BUILD_REQUEST_GZIP_BASE64') &&
+    issueRequestReader.includes('WEIG_BUILD_REQUEST_GZIP_BASE64') &&
+    issueRequestReader.includes('gunzipSync') && workflow.includes('mobile request');
+  mobileIssueContract
+    ? ok('手机 GitHub App 正文压缩请求 → 权威 config 校验链已接通')
+    : bad('mobile Issue request contract', '网页压缩载荷、Actions 解压或工作流入口缺失');
   const artifactContract = [
     'FIRMWARE-ALL', 'CONFIG-', 'BUILD-LOGS', 'OPTIONAL-PACKAGES-',
     'tools/collect-optional-packages.mjs',

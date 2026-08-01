@@ -123,7 +123,7 @@ jobs:
       - name: Checkout / 检出代码
         uses: actions/checkout@v4
 
-      - name: Download Issue request attachment
+      - name: Read Issue attachment or mobile request / 读取附件或手机请求
         if: github.event_name == 'issues'
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}

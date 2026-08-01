@@ -3,6 +3,7 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_FILES = 3;
@@ -11,6 +12,8 @@ const output = String(process.env.REQUEST_MANIFEST_OUT || 'request-attachments.j
 const outputDir = String(process.env.REQUEST_DIR || 'request-attachments');
 const linkRe = /\[([^\]\r\n]{1,160})\]\((https:\/\/github\.com\/user-attachments\/(?:files|assets)\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+)\)/g;
 const bareRe = /https:\/\/github\.com\/user-attachments\/(?:files|assets)\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+/g;
+const inlineMatch = body.match(/<!--\s*WEIG_BUILD_REQUEST_GZIP_BASE64\s*([\s\S]*?)-->/i);
+const inlinePayload = inlineMatch ? inlineMatch[1].replace(/\s+/g, '') : '';
 const named = [...body.matchAll(linkRe)].map((m) => ({ name: m[1], url: m[2] }));
 const seen = new Set(named.map((x) => x.url));
 for (const match of body.matchAll(bareRe)) {
@@ -40,11 +43,27 @@ function detect(name, text) {
   return /config\.buildinfo$/i.test(name) ? 'buildinfo' : 'config';
 }
 
-if (named.length < 1 || named.length > MAX_FILES) {
+if (inlinePayload && named.length) fail('mobile inline request and file attachment cannot be mixed');
+if (!inlinePayload && (named.length < 1 || named.length > MAX_FILES)) {
   fail(`expected 1..${MAX_FILES} GitHub user attachments, found ${named.length}`);
 }
 mkdirSync(outputDir, { recursive: true });
 const files = [];
+if (inlinePayload) {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(inlinePayload)) fail('mobile inline request is not valid base64');
+  let buffer;
+  try { buffer = gunzipSync(Buffer.from(inlinePayload, 'base64')); }
+  catch (e) { fail('mobile inline request cannot be decompressed: ' + e.message); }
+  if (buffer.length < 32 || buffer.length > MAX_BYTES) fail(`mobile inline request size must be 32B..2MB, got ${buffer.length}`);
+  let text;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(buffer); }
+  catch (e) { fail('mobile inline request is not valid UTF-8 text'); }
+  if (text.charCodeAt(0) === 0xFEFF || text.includes('\0')) fail('mobile inline request has BOM/NUL');
+  if (detect('mobile-inline-build-request.json', text) !== 'json') fail('mobile inline request must be build-request.json');
+  const path = join(outputDir, '01-mobile-inline-build-request.json');
+  writeFileSync(path, buffer);
+  files.push({ name: 'mobile-inline-build-request.json', path, type: 'json', bytes: buffer.length });
+}
 for (let i = 0; i < named.length; i++) {
   const item = named[i];
   const response = await fetch(item.url, { redirect: 'follow' });
@@ -64,4 +83,4 @@ for (let i = 0; i < named.length; i++) {
 }
 if (files.filter((x) => x.type === 'json').length > 1) fail('only one build-request.json is allowed');
 writeFileSync(output, JSON.stringify({ version: 1, files }, null, 2) + '\n');
-console.log(`Downloaded ${files.length} authoritative attachment(s) / 已下载 ${files.length} 个权威附件 -> ${output}`);
+console.log(`${inlinePayload ? 'Decoded mobile request' : 'Downloaded'} ${files.length} authoritative request(s) / 已取得 ${files.length} 个权威请求 -> ${output}`);

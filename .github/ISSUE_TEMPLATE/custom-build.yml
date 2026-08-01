@@ -7,11 +7,11 @@ body:
   - type: markdown
     attributes:
       value: |
-        新手只需上传网页“提交云编译”刚生成的 `build-request.json`,无需填写任何参数。
+        新手只需上传网页“提交云编译”刚生成的 `build-request.json`,无需填写任何参数。手机 GitHub App 会自动在正文附带压缩请求,请勿删除正文内容。
         已有 `.config` 或 `config.buildinfo` 请先在定制网页点“加载配置”,网页识别机型后会生成可直接提交的 JSON。
         网页生成且带 `# device=...` 文件头的 `.config` 仍可直接上传。
 
-        New users only need the web-generated `build-request.json`; no parameters are required.
+        New users only need the web-generated `build-request.json`; no parameters are required. The mobile GitHub App adds a compressed request in the body automatically; do not delete it.
         Load an existing `.config` or `config.buildinfo` on the customizer first so it can identify the target and create a submit-ready JSON.
   - type: textarea
     id: request
