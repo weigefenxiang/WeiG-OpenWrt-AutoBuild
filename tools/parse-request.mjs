@@ -11,6 +11,7 @@ import { readFileSync, appendFileSync, writeFileSync, existsSync } from 'node:fs
 import { createHash } from 'node:crypto';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DEVICES = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'devices.json'), 'utf8'));
@@ -37,6 +38,28 @@ async function loadCatalogIndex() {
     }
   }
   return LOCAL_CATALOG_INDEX;
+}
+
+async function loadCatalogOption(repo, branch, symbol) {
+  const asset = String(branch?.asset || '');
+  if (!/^[A-Za-z0-9._-]+\.json\.gz$/.test(asset)) throw new Error(`Catalog 资源名非法:${asset || '(缺失)'}`);
+  const urls = [
+    `https://raw.githubusercontent.com/${repo}/catalog-data/${asset}`,
+    `https://cdn.jsdelivr.net/gh/${repo}@catalog-data/${asset}`,
+  ];
+  let lastError = '';
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const catalog = JSON.parse(gunzipSync(Buffer.from(await response.arrayBuffer())).toString('utf8'));
+      if (Number(catalog?.schema || 0) < 2 || !Array.isArray(catalog?.menu?.options)) throw new Error('目录格式非法');
+      return catalog.menu.options.find((item) => item?.symbol === symbol) || null;
+    } catch (error) {
+      lastError = error.message;
+    }
+  }
+  throw new Error(lastError || '无可用镜像');
 }
 
 let req;
@@ -113,12 +136,15 @@ if (requestManifest) {
 const hasSubmittedConfig = requestMode.startsWith('issue-') && !requestMode.includes('inline');
 const isCustomTarget = ['custom-target', 'catalog-target'].includes(req.device);
 let device, source, version, variant;
+let catalogRepo = '';
+let catalogBranch;
 if (isCustomTarget) {
   if (!hasSubmittedConfig) fail('自定义 Target 必须通过 Issue 附件提交完整 .config');
   const catalogIndex = await loadCatalogIndex();
+  catalogRepo = catalogIndex.catalogRepo || PROJECT.catalogRepository || LOCAL_CATALOG_INDEX.catalogRepo;
   const catalogSource = catalogIndex.sources.find((item) => item.id === req.source);
   const requestedBranch = String(req.branch || '');
-  const catalogBranch = catalogSource?.branches?.find((item) =>
+  catalogBranch = catalogSource?.branches?.find((item) =>
     item.id === String(req.version) &&
     (!requestedBranch || item.branch === requestedBranch));
   if (!catalogSource || !catalogBranch) {
@@ -259,8 +285,15 @@ if (existsSync(packageTable)) {
   const table = JSON.parse(readFileSync(packageTable, 'utf8'));
   if (!table.pkgs[theme] || !Object.hasOwn(table.pkgs[theme], source.id)) fail(`固件主题不在 ${device.id}/${source.id} 软件包白名单:${theme}`);
 }
-// Catalog target / seed device 没有独立 packages.json 时，不能用旧的主题白名单拦截。
-// 下面会按权威提交 .config 中的 CONFIG_PACKAGE_<theme>=y 再核验实际启用项。
+if (isCustomTarget) {
+  let catalogTheme;
+  try { catalogTheme = await loadCatalogOption(catalogRepo, catalogBranch, `PACKAGE_${theme}`); } catch (error) {
+    fail(`无法读取 ${source.id}/${version.branch} 的 Catalog 主题清单:${error.message}`);
+  }
+  if (!catalogTheme || catalogTheme.kind !== 'config' || !['bool', 'tristate'].includes(catalogTheme.type)) {
+    fail(`Catalog 不提供该源码/分支的固件主题:${source.id}/${version.branch}/${theme}`);
+  }
+}
 const firmwareHeader = submittedConfig.match(
   /^# firmware-settings: zonename=([^\s]+) timezone=([^\s]+) theme=([^\s]+) ntp=([^\s]+) opkg=([^\s]+)$/m);
 const hasFirmwareSnapshot = Boolean(req.firmware || firmwareHeader);

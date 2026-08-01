@@ -210,6 +210,8 @@ JSON.stringify(minimumBootSource) === JSON.stringify(minimumBootPublic) &&
     js.includes("errorStage: 'catalog-refresh-required'") &&
     !js.includes("filter((branch) => branch.state !== 'unavailable')") &&
     parser.includes('async function loadCatalogIndex()') &&
+    parser.includes('async function loadCatalogOption(') &&
+    parser.includes('Catalog 不提供该源码/分支的固件主题') &&
     parser.includes('catalogBranch.state ===');
   catalogProjectContract
     ? ok('Fork 单文件参数 + Catalog 4 源 14 分支 + 构建白名单已接通')
