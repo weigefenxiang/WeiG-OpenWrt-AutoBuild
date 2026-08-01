@@ -1,11 +1,11 @@
 # WeiG-OpenWrt-AutoBuild
 
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES2020-f7df1e?logo=javascript&logoColor=black)
-![HTML5](https://img.shields.io/badge/HTML5-Semantic-e34f26?logo=html5&logoColor=white)
-![CSS3](https://img.shields.io/badge/CSS3-No_Framework-1572b6?logo=css3&logoColor=white)
-![Node.js](https://img.shields.io/badge/Node.js-Tooling-339933?logo=nodedotjs&logoColor=white)
-![Shell](https://img.shields.io/badge/Shell-Bash-4eaa25?logo=gnubash&logoColor=white)
-![YAML](https://img.shields.io/badge/YAML-GitHub_Actions-cb171e?logo=yaml&logoColor=white)
+![HTML](https://img.shields.io/badge/HTML-5-e34f26?logo=html5&logoColor=white)
+![CSS](https://img.shields.io/badge/CSS-3-1572b6?logo=css3&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-22-339933?logo=nodedotjs&logoColor=white)
+![Bash](https://img.shields.io/badge/Bash-5-4eaa25?logo=gnubash&logoColor=white)
+![YAML](https://img.shields.io/badge/YAML-1.2-cb171e?logo=yaml&logoColor=white)
 
 **语言**: 简 · [繁](translations/README.zh-TW.md) · [English](translations/README.en.md) · [Русский](translations/README.ru.md) · [Español](translations/README.es.md) · [Português](translations/README.pt.md) · [日本語](translations/README.ja.md) · [한국어](translations/README.ko.md) · [Deutsch](translations/README.de.md) · [Français](translations/README.fr.md) · [Tiếng Việt](translations/README.vi.md)
 
@@ -18,14 +18,11 @@ OpenWrt 固件**在线定制 + 云编译**。在 [网站](https://wrt.weigeshare
  页面里其余 200+ 台机型以**种子模式**开放(仅保证"能刷"、未经实机验证,风险自担。
 
 
-- 定制页面: [主站](https://wrt.weigefenxiang.cc.cd)
-[Page备用](https://www.weigeshare.cc.cd/wrt/)
+- 定制页面：[主站 Page](https://www.weigeshare.cc.cd/wrt/) 
 - 三种源码：[ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [OpenWrt](https://github.com/openwrt/openwrt) · [Lean](https://github.com/coolsnowwolf/lede)
 - **版本分支**：ImmortalWrt 收录全部远程分支；OpenWrt 收录 `main` 与全部 `openwrt-*` 分支，排除 `lede-17.01`、`pcs-standalone-back`、`master`。
 
 网页会按“源码＋分支＋设备 Profile”生成独立配置，只显示该设备真实存在的分支与布局。
-
-- 界面支持 **11 种语言**(简/繁/英/俄/西/葡/日/韩/德/法/越)
 
 ---
 
@@ -135,12 +132,12 @@ config 副本,同时对"配置里有但没收录"的插件给出警告;
 
 ## 鸣谢
 
-感谢所有为本项目直接或间接做出贡献的开源项目与作者:
+- **源码：** [OpenWrt](https://github.com/openwrt/openwrt) · [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [LEDE](https://github.com/coolsnowwolf/lede) · [hanwckf mt798x](https://github.com/hanwckf/immortalwrt-mt798x) 
 
-- **源码：** [OpenWrt](https://github.com/openwrt/openwrt) · [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede)
+- **参考：** [P3TERX](https://github.com/P3TERX/Actions-OpenWrt)
 
 
-- **<!--plugin-count-->226<!--/plugin-count--> 个 LuCI 插件的全部作者**
-- **每一位**参与的小伙伴。
+- **LuCI 插件的全部作者**
 
-本项目对上述项目仅作编排调用,版权归各自作者所有。
+- **每一位**参与的小伙伴
+
