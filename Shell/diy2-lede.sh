@@ -38,8 +38,9 @@ fi
 if [ -f "$CG" ]; then
   sed -i "s/0.openwrt.pool.ntp.org/$WRT_NTP_1/g; s/1.openwrt.pool.ntp.org/$WRT_NTP_2/g; s/2.openwrt.pool.ntp.org/$WRT_NTP_3/g; s/3.openwrt.pool.ntp.org/$WRT_NTP_4/g" "$CG"
 fi
-if [ "$WRT_OPKG_MIRROR" != "@default" ] && [ -f package/base-files/files/etc/opkg/distfeeds.conf ]; then
-  sed -i "s,downloads.openwrt.org,$WRT_OPKG_MIRROR,g" package/base-files/files/etc/opkg/distfeeds.conf
-fi
+MIRROR_HELPER="$(dirname "${BASH_SOURCE[0]}")/apply-package-mirror.sh"
+[ -f "$MIRROR_HELPER" ] || { echo "Package mirror helper is missing" >&2; exit 1; }
+source "$MIRROR_HELPER"
+apply_package_mirror
 
 echo '--- lede default settings applied ---'

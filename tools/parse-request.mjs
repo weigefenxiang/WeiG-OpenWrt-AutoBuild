@@ -19,6 +19,8 @@ const CONFIG_MANIFEST = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data'
 const PROJECT = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
 const LOCAL_CATALOG_INDEX = JSON.parse(
   readFileSync(join(ROOT, 'site', 'wrt', 'data', 'menuconfig-index.json'), 'utf8'));
+const PACKAGE_MIRRORS = JSON.parse(
+  readFileSync(join(ROOT, 'site', 'wrt', 'data', 'package-mirrors.json'), 'utf8'));
 
 function fail(msg) { console.error('校验失败: ' + msg); process.exit(1); }
 async function loadCatalogIndex() {
@@ -263,10 +265,9 @@ const NTP = {
   global: ['0.openwrt.pool.ntp.org', '1.openwrt.pool.ntp.org', '2.openwrt.pool.ntp.org', '3.openwrt.pool.ntp.org'],
   cloudflare: ['time.cloudflare.com', 'time.google.com', 'time.apple.com', 'pool.ntp.org'],
 };
-const OPKG = {
-  auto: '@default', pku: 'mirrors.pku.edu.cn/immortalwrt',
-  tuna: 'mirrors.tuna.tsinghua.edu.cn/openwrt', official: 'downloads.openwrt.org',
-};
+const requestedMirrorId = String(fw.opkg || 'auto');
+const mirrorPreset = (PACKAGE_MIRRORS.presets || []).find((preset) => preset.id === requestedMirrorId);
+if (!mirrorPreset) fail(`未知 opkg 镜像预设:${requestedMirrorId}`);
 const selectedZone = TIMEZONES.find((zone) => zone.zonename === fw.zonename) ||
   TIMEZONES.find((zone) => zone.zonename === fw.timezone) ||
   TIMEZONES.find((zone) => zone.timezone === fw.timezone) ||
@@ -274,10 +275,11 @@ const selectedZone = TIMEZONES.find((zone) => zone.zonename === fw.zonename) ||
 const zonename = selectedZone.zonename;
 const timezone = selectedZone.timezone;
 const ntpId = Object.hasOwn(NTP, fw.ntp) ? fw.ntp : 'cn';
-const opkgId = Object.hasOwn(OPKG, fw.opkg) ? fw.opkg : 'auto';
-const opkgAllowed = source.id === 'OpenWrt' ? ['auto', 'official', 'tuna']
-  : source.id === 'lede' ? ['auto'] : ['auto', 'pku'];
-if (!opkgAllowed.includes(opkgId)) fail(`${source.id} 不接受所选 opkg 镜像预设:${opkgId}`);
+const opkgId = mirrorPreset.id;
+const opkgMirror = opkgId === 'auto' ? '@default' : String(mirrorPreset?.roots?.[source.id] || '');
+if (!/^(?:@default|[A-Za-z0-9.-]+(?:\/[A-Za-z0-9._/-]+)?)$/.test(opkgMirror)) {
+  fail(`${source.id} 不接受所选 opkg 镜像预设:${String(fw.opkg || '')}`);
+}
 const theme = String(fw.theme || (['OpenWrt', 'lede'].includes(source.id) ? 'luci-theme-bootstrap' : 'luci-theme-argon'));
 if (!/^luci-theme-[A-Za-z0-9._+-]{1,48}$/.test(theme)) fail('固件主题格式非法');
 const packageTable = join(ROOT, 'site', 'wrt', 'data', device.id, 'packages.json');
@@ -356,7 +358,7 @@ const out = [
   `ntp_3=${NTP[ntpId][2]}`,
   `ntp_4=${NTP[ntpId][3]}`,
   `opkg_id=${opkgId}`,
-  `opkg_mirror=${OPKG[opkgId]}`,
+  `opkg_mirror=${opkgMirror}`,
   `firmware_snapshot=${hasFirmwareSnapshot ? 1 : 0}`,
   `packages=${packages.join(' ')}`,
   `advanced=${advanced}`,

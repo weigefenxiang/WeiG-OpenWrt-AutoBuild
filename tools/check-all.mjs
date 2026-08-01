@@ -37,6 +37,7 @@ for (const f of ['site/wrt/data/devices.json', 'site/wrt/data/i18n.json', 'site/
   'site/wrt/data/timezones.json', 'site/wrt/data/plugins-i18n.json',
   'site/wrt/data/menuconfig-index.json', 'site/wrt/data/menuconfig-demo.json',
   'site/wrt/data/project.json', 'site/wrt/data/minimum-boot.json',
+  'site/wrt/data/package-mirrors.json',
   'config/001.presets/minimum-boot.json',
   'tools/plugins-meta.json', 'tools/plugin-sizes.json', 'tools/i18n-source.json',
   'tools/i18n-translations.json', 'tools/plugins-i18n.json', 'tools/device-catalog.json',
@@ -121,6 +122,8 @@ const minimumBootSource = JSON.parse(readFileSync(
   join(ROOT, 'config', '001.presets', 'minimum-boot.json'), 'utf8'));
 const minimumBootPublic = JSON.parse(readFileSync(
   join(ROOT, 'site', 'wrt', 'data', 'minimum-boot.json'), 'utf8'));
+const packageMirrors = JSON.parse(readFileSync(
+  join(ROOT, 'site', 'wrt', 'data', 'package-mirrors.json'), 'utf8'));
 const minimumItems = [...(minimumBootSource.items || []),
   ...(minimumBootSource.firewallBackend?.candidates || [])];
 const minimumSymbols = minimumItems.map((item) => item.symbol);
@@ -134,6 +137,15 @@ JSON.stringify(minimumBootSource) === JSON.stringify(minimumBootPublic) &&
   minimumSymbols.includes('PACKAGE_firewall4') && minimumSymbols.includes('PACKAGE_firewall')
   ? ok(`推荐项预设:${minimumBootSource.items.length} 个可维护项目 + opkg + firewall4/firewall 强制二选一`)
   : bad('minimum-boot.json', '源文件/网页副本不一致、项目 ID/符号重复、opkg 或防火墙后端缺失');
+const mirrorIds = (packageMirrors.presets || []).map((preset) => preset.id);
+const mirrorRootsOk = packageMirrors.schema === 1 &&
+  ['auto', 'ustc', 'tuna', 'bfsu', 'pku', 'official'].every((id) => mirrorIds.includes(id)) &&
+  new Set(mirrorIds).size === mirrorIds.length &&
+  packageMirrors.presets.every((preset) => preset.id === 'auto' ||
+    Object.values(preset.roots || {}).every((root) => /^[A-Za-z0-9.-]+(?:\/[A-Za-z0-9._/-]+)?$/.test(root)));
+mirrorRootsOk
+  ? ok('软件源镜像:网页与 Actions 共用白名单，按源码过滤并在构建时校验分支路径')
+  : bad('package-mirrors.json', '镜像 ID、根路径或来源映射不符合安全格式');
   const html = readFileSync(join(ROOT, 'site', 'wrt', 'index.html'), 'utf8');
   const js = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
   const css = readFileSync(join(ROOT, 'site', 'wrt', 'app.css'), 'utf8');
@@ -345,6 +357,7 @@ JSON.stringify(minimumBootSource) === JSON.stringify(minimumBootPublic) &&
   const requestParser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
   const configBuilder = readFileSync(join(ROOT, 'tools', 'build-config.mjs'), 'utf8');
   const genericDiy = readFileSync(join(ROOT, 'Shell', 'diy2-generic.sh'), 'utf8');
+  const mirrorDiy = readFileSync(join(ROOT, 'Shell', 'apply-package-mirror.sh'), 'utf8');
   const issueFieldIds = [...issueForm.matchAll(/^\s+id:\s*([A-Za-z0-9_-]+)\s*$/gm)].map((m) => m[1]);
   const issueFormIsSingleAttachment = issueFieldIds.length === 1 && issueFieldIds[0] === 'request';
   const contractOk = issueForm.includes('build-request.json') &&
@@ -383,10 +396,12 @@ JSON.stringify(minimumBootSource) === JSON.stringify(minimumBootPublic) &&
     genericDiy.includes("luci.main.mediaurlbase") &&
     genericDiy.includes("printf '%s\\n'") &&
     !genericDiy.includes("\\\\''") &&
-    genericDiy.includes('Selected opkg mirror was not written') &&
-    genericDiy.includes('FeedSourcesAppendAPK') &&
-    genericDiy.includes('VERSION_REPO:=https://') &&
-    genericDiy.includes('Selected APK mirror was not written');
+    requestParser.includes("package-mirrors.json") &&
+    genericDiy.includes('apply-package-mirror.sh') &&
+    mirrorDiy.includes('downloads\\.openwrt\\.org') &&
+    mirrorDiy.includes('downloads\\.immortalwrt\\.org') &&
+    mirrorDiy.includes('Selected package mirror applied') &&
+    mirrorDiy.includes('Selected package mirror has no feed for this source/branch');
   firmwareSettingsContract
     ? ok('请求编号 Artifact 前缀与时区/主题/NTP/opkg 固件内审计链已接通')
     : bad('firmware settings contract', '请求编号、提交快照、DIY、主题或 opkg 核验缺失');

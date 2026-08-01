@@ -6,7 +6,7 @@
 <meta name="description" data-i18n="app.desc" content="OpenWrt 固件在线定制:选源码、勾插件,GitHub Actions 云编译,免费自取">
 <title>Wei.G · OpenWrt 固件在线定制</title>
 <link rel="icon" href="Wei.G.ico">
-<link rel="stylesheet" href="app.css?v=6e42fee2e2">
+<link rel="stylesheet" href="app.css?v=65ea671ffb">
 </head>
 <body>
 <header class="site-header">
@@ -94,7 +94,7 @@
               placeholder="Search source, branch, target, menu or package"
               aria-label="Search source, branch, target, menu or package">
             <label class="minimum-boot-switch">
-              <input type="checkbox" id="minimumBootToggle">
+              <input type="checkbox" id="minimumBootToggle" checked>
               <span id="minimumBootLabel">Recommended</span>
             </label>
             <button class="recommended-config-btn" id="minimumBootConfig" type="button" hidden>Configure</button>
@@ -239,6 +239,7 @@
       <button type="button" class="link-btn" id="selCount" data-i18n-title="bar.selected.title"></button>
       <div class="cap" id="capBox" data-i18n-title="bar.capacity.title"><div class="cap-fill" id="capFill"></div></div>
       <span class="cap-text" id="capText"></span>
+      <span class="site-version site-version-mobile site-version-value" id="siteVersionMobile">v----------</span>
     </div>
     <div class="actions">
       <input id="configImport" type="file" accept=".json,.config,.buildinfo,text/plain,application/json" hidden>
@@ -285,6 +286,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <noscript><p class="wrap" style="padding:2rem 0">本页面需要启用 JavaScript 才能使用。/ JavaScript is required.</p></noscript>
-<script src="app.js?v=9bd1fc7c5c"></script>
+<script src="app.js?v=1329bf740b"></script>
 </body>
 </html>

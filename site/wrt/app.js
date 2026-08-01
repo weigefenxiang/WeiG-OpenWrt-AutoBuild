@@ -53,7 +53,7 @@ const state = {
   rootpwAuto: false,
   timezone: '',
   theme: '@base',
-  minimumBoot: false,
+  minimumBoot: true,
   ntp: 'cn',
   opkg: 'auto',
   siteVersion: 'v----------',
@@ -62,6 +62,7 @@ const state = {
 };
 const LANIP_RE = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/;   // 仅接受内网 IPv4 / private IPv4 only
 let DEVICES = null, PLUGINS = null, I18N = null, TIMEZONES = null, MINIMUM_BOOT = null;
+let PACKAGE_MIRRORS = { presets: [{ id: 'auto', label: { 'zh-CN': '跟随源码默认', en: 'Follow source default' }, roots: {} }] };
 let MENU_INDEX = null, MENU_CATALOG = null;
 let menuCatalogKey = '', menuLoadingKey = '', menuCatalogSeq = 0, menuCatalogPromise = null;
 let catalogLoadMode = 'idle', catalogLoadError = '';
@@ -141,16 +142,27 @@ const DEFAULT_TARGET_SELECTORS = [
   { id: 'profile', labelEn: 'Target Profile', labelZh: '目标配置' },
 ];
 let targetSelectorValues = {};
-const DATA_CACHE_VERSION = 'v16-recommended-source';
+const DATA_CACHE_VERSION = 'v17-defaults-mirrors';
 const NTP_PRESETS = {
   cn: ['ntp.aliyun.com', 'time1.cloud.tencent.com', 'cn.ntp.org.cn', 'cn.pool.ntp.org'],
   global: ['0.openwrt.pool.ntp.org', '1.openwrt.pool.ntp.org', '2.openwrt.pool.ntp.org', '3.openwrt.pool.ntp.org'],
   cloudflare: ['time.cloudflare.com', 'time.google.com', 'time.apple.com', 'pool.ntp.org'],
 };
-const OPKG_PRESETS = {
-  auto: '@default', pku: 'mirrors.pku.edu.cn/immortalwrt',
-  tuna: 'mirrors.tuna.tsinghua.edu.cn/openwrt', official: 'downloads.openwrt.org',
-};
+function mirrorPreset(id) {
+  return (PACKAGE_MIRRORS?.presets || []).find((preset) => preset.id === id) || null;
+}
+function packageMirrorRoot(id, sourceId = state.source?.id) {
+  const preset = mirrorPreset(id);
+  if (!preset) return null;
+  if (id === 'auto') return '@default';
+  const root = preset.roots?.[sourceId];
+  return /^[A-Za-z0-9.-]+(?:\/[A-Za-z0-9._/-]+)?$/.test(root || '') ? root : null;
+}
+function packageMirrorEntries(sourceId = state.source?.id) {
+  return (PACKAGE_MIRRORS?.presets || [])
+    .filter((preset) => packageMirrorRoot(preset.id, sourceId))
+    .map((preset) => [preset.id, preset.label?.[state.lang === 'zh-CN' ? 'zh-CN' : 'en'] || preset.label?.en || preset.id]);
+}
 let PLUG_I18N = null;                  // 插件名/说明多语言表,非中文界面按需加载 / plugin name/desc i18n table, lazy-loaded for non-Chinese UIs
 let CONFIG_MANIFEST = null;
 let plugI18nLoading = false;           // 防止重复请求 / guards against duplicate fetches
@@ -431,9 +443,10 @@ async function init() {
         if (/^https?:\/\//.test(PROJECT.blogUrl || '')) link.href = PROJECT.blogUrl;
       });
     } catch (e) { /* old deployments keep the built-in project defaults */ }
-    [DEVICES, CONFIG_MANIFEST, TIMEZONES, MENU_INDEX, MINIMUM_BOOT] = await Promise.all([
+    [DEVICES, CONFIG_MANIFEST, TIMEZONES, MENU_INDEX, MINIMUM_BOOT, PACKAGE_MIRRORS] = await Promise.all([
       loadJson('devices.json'), loadJson('config-manifest.json'), loadJson('timezones.json'),
       loadJson('menuconfig-index.json'), loadJson('minimum-boot.json'),
+      loadJson('package-mirrors.json').catch(() => PACKAGE_MIRRORS),
     ]);
     initializeTimezone();
     MENU_INDEX = stableCatalogIndex(MENU_INDEX);
@@ -452,6 +465,7 @@ async function init() {
     initDeviceFold();
     initMenuconfigControls();
     initCatalogLocator();
+    $('minimumBootToggle').checked = state.minimumBoot;
     initMinimumBoot();
     applyI18n();
     $('advMode').checked = state.advanced;
@@ -972,6 +986,7 @@ async function loadCatalog(source, branch, applyDefault = true) {
       const preferred = String(choice.defaults?.[0] || '').split(/\s+/)[0];
       if (!selected && preferred) menuValues.set(preferred, 'y');
     }
+    applyDefaultCatalogTheme();
     if (state.minimumBoot) await applyMinimumBootPreset(false);
     else renderMinimumBoot();
     resetMenuNavigation();
@@ -1388,6 +1403,15 @@ function syncThemeFromMenu(option, value) {
   if (!option.symbol.startsWith('PACKAGE_luci-theme-')) return;
   if (value === 'y') state.theme = option.symbol.slice('PACKAGE_'.length);
   else if (`PACKAGE_${state.theme}` === option.symbol) state.theme = '@base';
+}
+function applyDefaultCatalogTheme() {
+  if (state.theme !== '@base') return;
+  const argon = menuOptionBySymbol.get('PACKAGE_luci-theme-argon');
+  if (!argon || !optionVisible(argon)) return;
+  for (const [symbol] of menuOptionBySymbol) {
+    if (symbol.startsWith('PACKAGE_luci-theme-')) menuValues.set(symbol, symbol === argon.symbol ? 'y' : 'n');
+  }
+  state.theme = 'luci-theme-argon';
 }
 function catalogSelectLock(option) {
   return (MENU_CATALOG?.menu?.options || []).find((candidate) => {
@@ -2684,8 +2708,7 @@ function renderFirmwareSettings() {
   const catalogThemes = [...menuOptionBySymbol.keys()]
     .filter((symbol) => symbol.startsWith('PACKAGE_luci-theme-'))
     .map((symbol) => symbol.slice('PACKAGE_'.length));
-  const available = catalogThemes.length ? catalogThemes :
-    ['luci-theme-bootstrap', 'luci-theme-argon', 'luci-theme-material', 'luci-theme-openwrt-2020'];
+  const available = MENU_CATALOG ? catalogThemes : [];
   const themes = [['@base', uiText('跟随基础配置', '跟隨基礎設定', 'Follow base config')]]
     .concat([...new Set(available)].map((id) => [id, knownLabels[id] || id.replace(/^luci-theme-/, '')]));
   if (!themes.some(([id]) => id === state.theme)) state.theme = '@base';
@@ -2693,9 +2716,7 @@ function renderFirmwareSettings() {
   state.ntp = fillSelect('ntpBox', [
     ['cn', t('fw.ntp.cn')], ['global', t('fw.ntp.global')], ['cloudflare', t('fw.ntp.cloud')],
   ], state.ntp);
-  const opkgEntries = [['auto', t('fw.opkg.auto')]];
-  if (state.source.id === 'OpenWrt') opkgEntries.push(['official', 'downloads.openwrt.org'], ['tuna', 'TUNA']);
-  else if (state.source.id !== 'lede') opkgEntries.push(['pku', 'PKU']);
+  const opkgEntries = packageMirrorEntries(state.source.id);
   if (!opkgEntries.some(([id]) => id === state.opkg)) state.opkg = 'auto';
   state.opkg = fillSelect('opkgBox', opkgEntries, state.opkg);
 }
@@ -3782,7 +3803,7 @@ function restoreSelections(config, payload) {
     if (zone) state.timezone = zone.zonename;
     if (/^luci-theme-[A-Za-z0-9._+-]+$/.test(String(fw.theme || ''))) state.theme = fw.theme;
     if (NTP_PRESETS[fw.ntp]) state.ntp = fw.ntp;
-    if (Object.hasOwn(OPKG_PRESETS, fw.opkg)) state.opkg = fw.opkg;
+    if (packageMirrorRoot(fw.opkg, state.source?.id)) state.opkg = fw.opkg;
   }
   renderFirmwareSettings();
   renderGroups();
@@ -3815,6 +3836,10 @@ async function importConfigFile(file) {
       text = payload.config;
     }
     text = text.replace(/\r\n/g, '\n');
+    state.minimumBoot = false;
+    minimumBootOriginal.clear();
+    minimumBootTouchedOriginal.clear();
+    $('minimumBootToggle').checked = false;
     const configId = await selectImportedTarget(text, file.name, payload);
     if (seq !== configImportSeq) return;
     if (!configId) {

@@ -563,6 +563,7 @@ input:focus-visible { border-color: var(--accent); }
 .cap-text { font-size: 13.5px; color: var(--text3); white-space: nowrap; }
 .actions { margin-left: auto; display: flex; gap: 10px; flex: none; }
 .site-version { align-self: center; color: var(--text3); font: 12px/1.2 ui-monospace, Consolas, monospace; white-space: nowrap; }
+.site-version-mobile { display: none; }
 .btn {
   min-height: 42px;
   padding: 9px 18px; border-radius: var(--radius);
@@ -768,7 +769,9 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
   .legend { gap: 8px; }
   .lg-stats { margin-left: 0; width: 100%; white-space: normal; overflow-wrap: anywhere; }
   .actionbar-row { flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
-  .stats { width: 100%; justify-content: space-between; }
+  .stats { width: 100%; justify-content: flex-start; gap: 6px; }
+  .stats .link-btn { margin-right: auto; }
+  .site-version-mobile { display: inline; }
   .actions { margin-left: 0; width: 100%; }
   .actions .btn { flex: 1; min-height: 44px; }
   .site-version-action { display: none; }

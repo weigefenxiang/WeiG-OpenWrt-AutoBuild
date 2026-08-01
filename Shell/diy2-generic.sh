@@ -45,28 +45,7 @@ if [ -f feeds/luci/collections/luci/Makefile ] &&
    grep -q 'luci-theme-[A-Za-z0-9._+-]*' feeds/luci/collections/luci/Makefile; then
   sed -i -E "0,/luci-theme-[A-Za-z0-9._+-]+/s//$WRT_THEME/" feeds/luci/collections/luci/Makefile
 fi
-if [ "$WRT_OPKG_MIRROR" != "@default" ]; then
-  OPKG_FILE="package/base-files/files/etc/opkg/distfeeds.conf"
-  APK_VERSION_FILE="include/version.mk"
-  if [ -f "$OPKG_FILE" ]; then
-    sed -i -E \
-      -e "s#https?://downloads\\.(openwrt|immortalwrt)\\.org/#https://$WRT_OPKG_MIRROR/#g" \
-      -e "s#https?://[^/]+/(openwrt|immortalwrt)/#https://$WRT_OPKG_MIRROR/#g" \
-      "$OPKG_FILE"
-    grep -Fq "$WRT_OPKG_MIRROR" "$OPKG_FILE" || {
-      echo "Selected opkg mirror was not written: $WRT_OPKG_MIRROR" >&2
-      exit 1
-    }
-  elif [ -f "$APK_VERSION_FILE" ] && [ -f include/feeds.mk ] &&
-       grep -Fq 'FeedSourcesAppendAPK' include/feeds.mk; then
-    sed -i -E "s#^VERSION_REPO:=\\$\\(if \\$\\(VERSION_REPO\\),\\$\\(VERSION_REPO\\),https?://[^)]*\\)#VERSION_REPO:=https://$WRT_OPKG_MIRROR#" "$APK_VERSION_FILE"
-    grep -Fx "VERSION_REPO:=https://$WRT_OPKG_MIRROR" "$APK_VERSION_FILE" >/dev/null || {
-      echo "Selected APK mirror was not written: $WRT_OPKG_MIRROR" >&2
-      exit 1
-    }
-    echo "Selected APK mirror will generate distfeeds.list: $WRT_OPKG_MIRROR"
-  else
-    echo "Selected package mirror cannot be applied: no opkg distfeeds.conf or APK feed generator" >&2
-    exit 1
-  fi
-fi
+MIRROR_HELPER="$(dirname "${BASH_SOURCE[0]}")/apply-package-mirror.sh"
+[ -f "$MIRROR_HELPER" ] || { echo "Package mirror helper is missing" >&2; exit 1; }
+source "$MIRROR_HELPER"
+apply_package_mirror

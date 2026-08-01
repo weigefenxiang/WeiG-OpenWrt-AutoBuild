@@ -39,10 +39,10 @@ sed -i "s/1.openwrt.pool.ntp.org/$WRT_NTP_2/g" package/base-files/files/bin/conf
 sed -i "s/2.openwrt.pool.ntp.org/$WRT_NTP_3/g" package/base-files/files/bin/config_generate
 sed -i "s/3.openwrt.pool.ntp.org/$WRT_NTP_4/g" package/base-files/files/bin/config_generate
 
-# opkg 镜像 / opkg mirror
-if [ "$WRT_OPKG_MIRROR" != "@default" ]; then
-  sed -i "s,downloads.openwrt.org,$WRT_OPKG_MIRROR,g" package/base-files/files/etc/opkg/distfeeds.conf
-fi
+MIRROR_HELPER="$(dirname "${BASH_SOURCE[0]}")/apply-package-mirror.sh"
+[ -f "$MIRROR_HELPER" ] || { echo "Package mirror helper is missing" >&2; exit 1; }
+source "$MIRROR_HELPER"
+apply_package_mirror
 
 echo '--- official OpenWrt default settings applied ---'
 grep -n 'timezone\|ntp' package/base-files/files/bin/config_generate | head -20
