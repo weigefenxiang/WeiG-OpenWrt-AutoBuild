@@ -258,9 +258,9 @@ const packageTable = join(ROOT, 'site', 'wrt', 'data', device.id, 'packages.json
 if (existsSync(packageTable)) {
   const table = JSON.parse(readFileSync(packageTable, 'utf8'));
   if (!table.pkgs[theme] || !Object.hasOwn(table.pkgs[theme], source.id)) fail(`固件主题不在 ${device.id}/${source.id} 软件包白名单:${theme}`);
-} else if (!['luci-theme-bootstrap', 'luci-theme-openwrt-2020', 'luci-theme-argon'].includes(theme)) {
-  fail(`种子机型仅允许基础主题:${theme}`);
 }
+// Catalog target / seed device 没有独立 packages.json 时，不能用旧的主题白名单拦截。
+// 下面会按权威提交 .config 中的 CONFIG_PACKAGE_<theme>=y 再核验实际启用项。
 const firmwareHeader = submittedConfig.match(
   /^# firmware-settings: zonename=([^\s]+) timezone=([^\s]+) theme=([^\s]+) ntp=([^\s]+) opkg=([^\s]+)$/m);
 const hasFirmwareSnapshot = Boolean(req.firmware || firmwareHeader);
