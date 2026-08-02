@@ -140,7 +140,7 @@ WeiG-OpenWrt-AutoBuild/
 
 - `.github/workflows/custom-build.yml`:网页用户只通过 Issue 附件构建；`Smoke All` 通过隐藏 `repository_dispatch` 触发兼容构建，因此 Actions 不再展示旧手动参数表单。四类 Artifact 统一以 Issue/附件请求编号开头，如 `006_01-FIRMWARE-ALL-…`，其中固件全集零压缩上传但仍保留 GitHub 下载外壳。时区、主题、NTP、opkg 在提交配置、Summary、`firmware-settings.txt` 与固件内 `/etc/weig-build-info` 交叉核验；固件/config 保留 30 天，完整日志保留 14 天。
 - 软件源镜像由 `diy2-generic.sh` 自动兼容：旧版 opkg 源改写 `distfeeds.conf`；APK 源（25.12+）改写构建期 `VERSION_REPO`，由源码生成 `distfeeds.list`。不要把 APK 的生成文件当作源码内固定文件。
-- 构建准入默认限制每位提交者同时最多 2 个排队中或运行中的任务；第 3 个 Issue 会自动回评并关闭。Fork 可在仓库 Variables 设置正整数 `MAX_BUILDS_PER_USER` 覆盖默认值。`cancel-build.yml` 只接受原 Issue 提交者的 `/cancel` 或 `/cancel-build`，先普通取消，15 秒未结束才强制取消；管理员仍可在 Actions 页面管理任意任务。
+- 构建准入默认限制每位提交者同时最多 2 个排队中或运行中的任务；第 3 个 Issue 会自动回评并关闭。仓库所有者按 GitHub 登录名识别，不受此上限限制，并为每次构建使用独立并发组，不会在本项目队列中互相等待。Fork 可在仓库 Variables 设置正整数 `MAX_BUILDS_PER_USER` 覆盖默认值。`cancel-build.yml` 只接受原 Issue 提交者的 `/cancel` 或 `/cancel-build`，先普通取消，15 秒未结束才强制取消；管理员仍可在 Actions 页面管理任意任务。
 - 根目录 `VERSION` 是仓库与网页共用的分钟级 `vYYMMDDHHmm` 版本源；`site-version.json` 是静态部署副本。Actions Summary 同时记录 VERSION、请求网页版本、定制器 commit、上游 commit 和完整输入参数。
 - 下载与编译统一使用 `JOBS=$(( $(nproc) + 1 ))` 动态并发，并通过 `stdbuf` + `tee` 在 Actions 实时逐行显示原始输出，同时完整写入 `download.log` / `build.log`。`make defconfig` 后会根据当前源码的 `tmp/.packageinfo` 拒绝已启用的 `Conflicts:` 软件包组合；网页/Issue 解析则使用 Catalog 的同一份互斥元数据提前提示。`CONFIG_DEVEL=y`、`CONFIG_BUILD_LOG=y` 确保按包日志真正生成。并行编译失败后，CI 最多 60 分钟执行一次 `make -j1 V=s`：若该次补跑成功，构建标为“单线程恢复”并继续产出；仍失败或超时才保持失败，完整 `build-diagnostic.log` 会上传。
 - `make defconfig` 后会按清单复核源码分支与精确设备 Profile，防止旧分支静默换掉目标。

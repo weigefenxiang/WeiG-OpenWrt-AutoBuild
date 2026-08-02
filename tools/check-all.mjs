@@ -511,6 +511,9 @@ mirrorRootsOk
     : bad('Actions live log contract', '动态并发、逐行 tee、单次下载、失败诊断或旧过滤清理不完整');
   const buildLimitContract = workflow.includes('MAX_BUILDS_PER_USER') &&
     workflow.includes('Build admission refused') &&
+    workflow.includes('const isRepositoryOwner = isIssue && requester.toLowerCase() === context.repo.owner.toLowerCase();') &&
+    workflow.includes('`owner-${context.runId}`') &&
+    workflow.includes('Repository owner build admitted without queue') &&
     workflow.includes('custom-build-user-${{ needs.admission.outputs.requester }}-${{ needs.admission.outputs.slot }}') &&
     workflow.includes('queue: max') &&
     workflow.includes('/cancel') &&
@@ -520,8 +523,8 @@ mirrorRootsOk
     cancelWorkflow.includes('cancelWorkflowRun') &&
     cancelWorkflow.includes('force-cancel');
   buildLimitContract
-    ? ok('每用户构建上限、Issue 自助取消与强制取消兜底已接通')
-    : bad('per-user build control', '准入上限、分槽并发或 Issue 作者取消链路缺失');
+    ? ok('仓库主免排队、每用户构建上限、Issue 自助取消与强制取消兜底已接通')
+    : bad('per-user build control', '仓库主绕过、准入上限、分槽并发或 Issue 作者取消链路缺失');
   const catalogUrlBlock = js.slice(js.indexOf('function catalogUrls'), js.indexOf('function stableCatalogIndex'));
   const menuconfigContract = html.includes('id="menuconfigGrid"') &&
     html.includes('id="menuconfigPanel"') &&

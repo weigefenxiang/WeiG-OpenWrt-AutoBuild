@@ -37,11 +37,14 @@ jobs:
             const isSmoke = context.eventName === 'repository_dispatch';
             const requester = isIssue ? context.payload.issue.user.login
               : `smoke-${String(context.payload.client_payload?.source || 'internal').toLowerCase()}`;
-            if (isSmoke) {
+            const isRepositoryOwner = isIssue && requester.toLowerCase() === context.repo.owner.toLowerCase();
+            if (isSmoke || isRepositoryOwner) {
               core.setOutput('allowed', 'true');
-              core.setOutput('requester', requester);
+              core.setOutput('requester', isRepositoryOwner ? `owner-${context.runId}` : requester);
               core.setOutput('slot', '0');
-              core.notice(`Internal smoke build admitted: ${requester}`);
+              core.notice(isRepositoryOwner
+                ? `Repository owner build admitted without queue: ${requester}`
+                : `Internal smoke build admitted: ${requester}`);
               return;
             }
             const configured = Number(process.env.MAX_BUILDS_PER_USER || '2');
