@@ -454,6 +454,8 @@ mirrorRootsOk
     js.includes('function selectCatalogLocatorTarget') &&
     js.includes('const preferredTarget = { ...values };') &&
     js.includes('renderCatalogTargetSelectors(preferredTarget)') &&
+    js.includes("selector.id === 'profile'") &&
+    js.includes('preferred[`${selector.id}Symbol`] || preferred[selector.id]') &&
     js.includes("if (node.profileId) {") &&
     js.includes('function syncCatalogApplications') &&
     js.includes("['Top level', ...menuBreadcrumb]") &&

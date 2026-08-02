@@ -652,9 +652,12 @@ function renderCatalogTargetSelectors(preferred = {}) {
   const selectedNodes = new Map();
   for (const selector of schema) {
     const selectId = targetControlId(selector.id);
+    const preferredValue = selector.id === 'profile'
+      ? preferred[`${selector.id}Symbol`] || preferred[selector.id] || targetSelectorValues[selector.id]
+      : preferred[selector.id] || preferred[`${selector.id}Symbol`] || targetSelectorValues[selector.id];
     const value = fillTargetSelect(selectId, nodes, (item) => item.value,
       (item) => item.labelEn || item.value,
-      preferred[selector.id] || preferred[`${selector.id}Symbol`] || targetSelectorValues[selector.id]);
+      preferredValue);
     targetSelectorValues[selector.id] = value;
     const selected = nodes.find((item) => item.value === value);
     if (selected) selectedNodes.set(selector.id, selected);
