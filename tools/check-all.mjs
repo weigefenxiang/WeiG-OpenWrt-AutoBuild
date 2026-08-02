@@ -454,6 +454,10 @@ mirrorRootsOk
     js.includes('function selectCatalogLocatorTarget') &&
     js.includes('const preferredTarget = { ...values };') &&
     js.includes('renderCatalogTargetSelectors(preferredTarget)') &&
+    js.includes('const INITIAL_CATALOG_TARGET =') &&
+    js.includes("sourceId: 'ImmortalWrt', branch: 'openwrt-25.12'") &&
+    js.includes("system: 'x86', subtarget: '64', profileSymbol: 'DEVICE_generic'") &&
+    js.includes('function initialCatalogTargetRequest()') &&
     js.includes("selector.id === 'profile'") &&
     js.includes('preferred[`${selector.id}Symbol`] || preferred[selector.id]') &&
     js.includes("if (node.profileId) {") &&

@@ -142,6 +142,11 @@ const DEFAULT_TARGET_SELECTORS = [
   { id: 'profile', labelEn: 'Target Profile', labelZh: '目标配置' },
 ];
 let targetSelectorValues = {};
+const INITIAL_CATALOG_TARGET = {
+  sourceId: 'ImmortalWrt', branch: 'openwrt-25.12',
+  system: 'x86', subtarget: '64', profileSymbol: 'DEVICE_generic',
+};
+let catalogInitialTargetPending = true;
 const DATA_CACHE_VERSION = 'v17-defaults-mirrors';
 const NTP_PRESETS = {
   cn: ['ntp.aliyun.com', 'time1.cloud.tencent.com', 'cn.ntp.org.cn', 'cn.pool.ntp.org'],
@@ -949,7 +954,7 @@ function buildMenuIndexes(catalog) {
     }
   }
 }
-async function loadCatalog(source, branch, applyDefault = true) {
+async function loadCatalog(source, branch, applyDefault = true, requested = null) {
   if (!source || !branch) return null;
   const key = `${source.id}/${branch.branch}`;
   if (menuCatalogKey === key && MENU_CATALOG) return MENU_CATALOG;
@@ -994,8 +999,11 @@ async function loadCatalog(source, branch, applyDefault = true) {
     else renderMinimumBoot();
     resetMenuNavigation();
     menuVisibleLimit = MENU_PAGE_SIZE;
-    renderCatalogPicker(false, { sourceId: source.id, branchId: branch.id });
-    if (applyDefault) await applyCatalogTarget();
+    renderCatalogPicker(false, requested || { sourceId: source.id, branchId: branch.id });
+    if (applyDefault) {
+      if (requested?.initialCatalogTarget) catalogInitialTargetPending = false;
+      await applyCatalogTarget();
+    }
     return catalog;
   })().catch((error) => {
     if (seq !== menuCatalogSeq) return null;
@@ -1011,6 +1019,13 @@ async function loadCatalog(source, branch, applyDefault = true) {
   });
   return menuCatalogPromise;
 }
+function initialCatalogTargetRequest() {
+  if (!catalogInitialTargetPending || state.importedConfig) return null;
+  const source = MENU_INDEX?.sources?.find((item) => item.id === INITIAL_CATALOG_TARGET.sourceId);
+  const branch = source?.branches?.find((item) => item.branch === INITIAL_CATALOG_TARGET.branch);
+  if (!source || !branch || branch.state === 'unavailable') return null;
+  return { ...INITIAL_CATALOG_TARGET, sourceId: source.id, branchId: branch.id, initialCatalogTarget: true };
+}
 function isCatalogTargetSymbol(symbol, catalog = MENU_CATALOG) {
   if (menuTargetSymbols.has(symbol)) return true;
   if (/^TARGET_(?:BOARD|SUBTARGET|PROFILE)$/.test(symbol)) return true;
@@ -1019,12 +1034,13 @@ function isCatalogTargetSymbol(symbol, catalog = MENU_CATALOG) {
 }
 function renderCatalogPicker(preferState = true, requested = null) {
   if (!MENU_INDEX?.sources?.length) return null;
-  const currentSource = requested?.sourceId ||
+  const targetRequest = requested || initialCatalogTargetRequest();
+  const currentSource = targetRequest?.sourceId ||
     (preferState && state.device?.id === 'catalog-target' ? state.source?.id : '');
   const sourceId = fillTargetSelect('targetSource', MENU_INDEX.sources,
     (item) => item.id, (item) => item.label || item.id, currentSource);
   const source = MENU_INDEX.sources.find((item) => item.id === sourceId);
-  const currentBranch = requested?.branchId ||
+  const currentBranch = targetRequest?.branchId ||
     (preferState && state.device?.id === 'catalog-target' ? state.version?.id : '');
   let branchId = fillTargetSelect('targetBranch', source.branches,
     (item) => item.id, catalogBranchLabel, currentBranch);
@@ -1050,10 +1066,10 @@ function renderCatalogPicker(preferState = true, requested = null) {
   }
   const key = `${source.id}/${branch.branch}`;
   if (!MENU_CATALOG || menuCatalogKey !== key) {
-    loadCatalog(source, branch).catch(() => {});
+    loadCatalog(source, branch, true, targetRequest).catch(() => {});
     return null;
   }
-  const preferred = requested ||
+  const preferred = targetRequest ||
     (preferState && state.device?.id === 'catalog-target' ? state.device.target : {});
   const selectedTarget = renderCatalogTargetSelectors(preferred);
   setCatalogLoadState('idle');
@@ -2201,6 +2217,7 @@ function renderTargetPicker(preferState = true) {
   return rows.find((r) => r.variant.id === profile);
 }
 async function selectCatalogLocatorTarget(values) {
+  catalogInitialTargetPending = false;
   const preferredTarget = { ...values };
   targetSelectorValues = {};
   const selected = renderCatalogTargetSelectors(preferredTarget);
@@ -2390,6 +2407,7 @@ function renderDevices() {
     const select = event.target.closest('select');
     if (!select || !select.closest('#targetPicker')) return;
     const id = select.id;
+      catalogInitialTargetPending = false;
       if (state.importedConfig) {
         if (!confirm('切换 Target 会退出上传配置工作区，并改为网页新建配置。继续吗？')) {
           renderDevices();
