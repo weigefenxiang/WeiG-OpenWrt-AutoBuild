@@ -643,7 +643,7 @@
   {
    "id": "ipsec-vpnd",
    "name": "IPSec VPN 服务器",
-   "group": "内网穿透与组网",
+   "group": "魔法与加速",
    "desc": "搭建IPSec VPN远程回家",
    "size": 3,
    "pkgs": {},
@@ -1054,7 +1054,7 @@
   {
    "id": "openvpn",
    "name": "OpenVPN",
-   "group": "内网穿透与组网",
+   "group": "魔法与加速",
    "desc": "OpenVPN 客户端远程组网",
    "size": 2,
    "pkgs": {},
@@ -1063,7 +1063,7 @@
   {
    "id": "openvpn-server",
    "name": "OpenVPN 服务器",
-   "group": "内网穿透与组网",
+   "group": "魔法与加速",
    "desc": "一键搭建 OpenVPN 服务器",
    "size": 2,
    "pkgs": {},
@@ -1356,7 +1356,7 @@
   {
    "id": "softether",
    "name": "SoftEther VPN",
-   "group": "内网穿透与组网",
+   "group": "魔法与加速",
    "desc": "多协议VPN服务器，远程回家",
    "size": 8,
    "pkgs": {},
@@ -1365,7 +1365,7 @@
   {
    "id": "softethervpn",
    "name": "SoftEther VPN 4",
-   "group": "内网穿透与组网",
+   "group": "魔法与加速",
    "desc": "老牌多协议VPN服务器",
    "size": 8,
    "pkgs": {},
@@ -1853,7 +1853,7 @@
   {
    "id": "wireguard",
    "name": "WireGuard",
-   "group": "内网穿透与组网",
+   "group": "魔法与加速",
    "desc": "内核级 VPN,异地组网快而稳",
    "size": 2,
    "pkgs": {},

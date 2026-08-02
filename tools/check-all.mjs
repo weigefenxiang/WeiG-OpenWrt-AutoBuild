@@ -99,6 +99,14 @@ try {
   missingPluginFallbacks.length === 0
     ? ok('360T7 精选插件均有安全包名兜底')
     : bad('360t7 plugin package fallback', missingPluginFallbacks.map((p) => p.id).join(','));
+  const pluginMeta = JSON.parse(readFileSync(join(ROOT, 'tools', 'plugins-meta.json'), 'utf8')).plugins;
+  const networkMagicIds = ['ipsec-vpnd', 'openvpn', 'openvpn-server', 'softether', 'softethervpn', 'wireguard'];
+  const networkMagicOk = networkMagicIds.every((id) =>
+    pluginMeta.find((plugin) => plugin.id === id)?.group === '魔法与加速' &&
+    t7PluginRows.find((plugin) => plugin.id === id)?.group === '魔法与加速');
+  networkMagicOk
+    ? ok('指定 VPN/组网插件已从内网穿透与组网移至魔法与加速')
+    : bad('plugin group placement', networkMagicIds.join(','));
   const rawPackageData = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', '360t7', 'packages.json'), 'utf8'));
   const rawPackages = rawPackageData.pkgs;
   const baselinePackageData = JSON.parse(readFileSync(join(ROOT, 'tools', 'package-baseline-360t7.json'), 'utf8'));
@@ -148,6 +156,11 @@ mirrorRootsOk
   : bad('package-mirrors.json', '镜像 ID、根路径或来源映射不符合安全格式');
   const html = readFileSync(join(ROOT, 'site', 'wrt', 'index.html'), 'utf8');
   const js = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
+  const sensitiveMaskContract = js.includes("'wireguard'") && js.includes("'tor'") &&
+    js.includes("/^wireguard$/i.test(w)") && js.includes("w.slice(0, 3) + '***' + w.slice(-3)");
+  sensitiveMaskContract
+    ? ok('中文界面 WireGuard→Wir***ard、Tor→T*r 敏感词打码已接通')
+    : bad('sensitive mask', 'WireGuard 或 Tor 的中文界面打码规则缺失');
   const css = readFileSync(join(ROOT, 'site', 'wrt', 'app.css'), 'utf8');
   const parser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
   const project = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));

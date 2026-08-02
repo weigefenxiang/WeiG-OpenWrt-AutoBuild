@@ -312,10 +312,11 @@ function targetRepoBase() { return OFFICIAL_REPO; }
 /* 中文敏感词直接替换为隐晦说法 / Chinese sensitive terms are replaced with euphemisms */
 const ZH_SUB = [['科学上网', '魔法上网'], ['科学', '魔法'], ['代理', '魔法'], ['翻墙', '魔法'], ['梯子', '魔法']];
 /* 英文品牌/协议名保留首尾、中间打星;按长度降序排序防止短词抢先匹配 / English brand/protocol names keep head and tail with stars between; sorted longest-first so short words cannot match early */
-const EN_MASK = ['shadowsocks', 'passwall', 'trojan', 'proxy', 'v2ray', 'socks', 'brook', 'clash', 'xray', 'vpn', 'ssr']
+const EN_MASK = ['shadowsocks', 'wireguard', 'passwall', 'trojan', 'proxy', 'v2ray', 'socks', 'brook', 'clash', 'xray', 'vpn', 'ssr', 'tor']
   .sort((a, b) => b.length - a.length);
 const EN_RE = new RegExp(EN_MASK.join('|'), 'gi');
 function starMask(w) {
+  if (/^wireguard$/i.test(w)) return w.slice(0, 3) + '***' + w.slice(-3);
   if (w.length <= 2) return w[0] + '*';
   if (w.length === 3) return w[0] + '*' + w[2];
   const stars = Math.min(Math.max(w.length - 3, 2), 4);

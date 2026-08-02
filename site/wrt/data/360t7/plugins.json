@@ -341,18 +341,6 @@
    "hot": true
   },
   {
-   "id": "wireguard",
-   "name": "WireGuard",
-   "group": "内网穿透与组网",
-   "desc": "内核级 VPN,异地组网快而稳",
-   "size": 0.237,
-   "pkgs": {
-    "ImmortalWrt": "luci-proto-wireguard"
-   },
-   "pkg": "luci-proto-wireguard",
-   "hot": true
-  },
-  {
    "id": "zerotier",
    "name": "ZeroTier",
    "group": "内网穿透与组网",
@@ -409,17 +397,6 @@
     "OpenWrt": "luci-app-frps"
    },
    "pkg": "luci-app-frps"
-  },
-  {
-   "id": "ipsec-vpnd",
-   "name": "IPSec VPN 服务器",
-   "group": "内网穿透与组网",
-   "desc": "搭建IPSec VPN远程回家",
-   "size": 3.268,
-   "pkgs": {
-    "ImmortalWrt": "luci-app-ipsec-vpnd"
-   },
-   "pkg": "luci-app-ipsec-vpnd"
   },
   {
    "id": "ipsec-vpnserver-manyusers",
@@ -501,29 +478,6 @@
    "pkg": "luci-app-ocserv"
   },
   {
-   "id": "openvpn",
-   "name": "OpenVPN",
-   "group": "内网穿透与组网",
-   "desc": "OpenVPN 客户端远程组网",
-   "size": 0.584,
-   "pkgs": {
-    "ImmortalWrt": "luci-app-openvpn",
-    "OpenWrt": "luci-app-openvpn"
-   },
-   "pkg": "luci-app-openvpn"
-  },
-  {
-   "id": "openvpn-server",
-   "name": "OpenVPN 服务器",
-   "group": "内网穿透与组网",
-   "desc": "一键搭建 OpenVPN 服务器",
-   "size": 2.831,
-   "pkgs": {
-    "ImmortalWrt": "luci-app-openvpn-server"
-   },
-   "pkg": "luci-app-openvpn-server"
-  },
-  {
    "id": "pagekitec",
    "name": "PageKite 内网穿透",
    "group": "内网穿透与组网",
@@ -534,29 +488,6 @@
     "OpenWrt": "luci-app-pagekitec"
    },
    "pkg": "luci-app-pagekitec"
-  },
-  {
-   "id": "softether",
-   "name": "SoftEther VPN",
-   "group": "内网穿透与组网",
-   "desc": "多协议VPN服务器，远程回家",
-   "size": 5.998,
-   "pkgs": {
-    "ImmortalWrt": "luci-app-softether",
-    "OpenWrt": "luci-app-softether"
-   },
-   "pkg": "luci-app-softether"
-  },
-  {
-   "id": "softethervpn",
-   "name": "SoftEther VPN 4",
-   "group": "内网穿透与组网",
-   "desc": "老牌多协议VPN服务器",
-   "size": 6.903,
-   "pkgs": {
-    "ImmortalWrt": "luci-app-softethervpn"
-   },
-   "pkg": "luci-app-softethervpn"
   },
   {
    "id": "softethervpn5",
@@ -2399,6 +2330,18 @@
    "hot": true
   },
   {
+   "id": "wireguard",
+   "name": "WireGuard",
+   "group": "魔法与加速",
+   "desc": "内核级 VPN,异地组网快而稳",
+   "size": 0.237,
+   "pkgs": {
+    "ImmortalWrt": "luci-proto-wireguard"
+   },
+   "pkg": "luci-proto-wireguard",
+   "hot": true
+  },
+  {
    "id": "brook-server",
    "name": "Brook 服务端",
    "group": "魔法与加速",
@@ -2419,6 +2362,17 @@
     "ImmortalWrt": "luci-app-gost"
    },
    "pkg": "luci-app-gost"
+  },
+  {
+   "id": "ipsec-vpnd",
+   "name": "IPSec VPN 服务器",
+   "group": "魔法与加速",
+   "desc": "搭建IPSec VPN远程回家",
+   "size": 3.268,
+   "pkgs": {
+    "ImmortalWrt": "luci-app-ipsec-vpnd"
+   },
+   "pkg": "luci-app-ipsec-vpnd"
   },
   {
    "id": "kcptun",
@@ -2454,6 +2408,29 @@
    "pkg": "luci-app-naiveproxy"
   },
   {
+   "id": "openvpn",
+   "name": "OpenVPN",
+   "group": "魔法与加速",
+   "desc": "OpenVPN 客户端远程组网",
+   "size": 0.584,
+   "pkgs": {
+    "ImmortalWrt": "luci-app-openvpn",
+    "OpenWrt": "luci-app-openvpn"
+   },
+   "pkg": "luci-app-openvpn"
+  },
+  {
+   "id": "openvpn-server",
+   "name": "OpenVPN 服务器",
+   "group": "魔法与加速",
+   "desc": "一键搭建 OpenVPN 服务器",
+   "size": 2.831,
+   "pkgs": {
+    "ImmortalWrt": "luci-app-openvpn-server"
+   },
+   "pkg": "luci-app-openvpn-server"
+  },
+  {
    "id": "polipo",
    "name": "Polipo 缓存代理",
    "group": "魔法与加速",
@@ -2476,6 +2453,29 @@
     "OpenWrt": "luci-app-shadowsocks-libev"
    },
    "pkg": "luci-app-shadowsocks-libev"
+  },
+  {
+   "id": "softether",
+   "name": "SoftEther VPN",
+   "group": "魔法与加速",
+   "desc": "多协议VPN服务器，远程回家",
+   "size": 5.998,
+   "pkgs": {
+    "ImmortalWrt": "luci-app-softether",
+    "OpenWrt": "luci-app-softether"
+   },
+   "pkg": "luci-app-softether"
+  },
+  {
+   "id": "softethervpn",
+   "name": "SoftEther VPN 4",
+   "group": "魔法与加速",
+   "desc": "老牌多协议VPN服务器",
+   "size": 6.903,
+   "pkgs": {
+    "ImmortalWrt": "luci-app-softethervpn"
+   },
+   "pkg": "luci-app-softethervpn"
   },
   {
    "id": "speederv2",
