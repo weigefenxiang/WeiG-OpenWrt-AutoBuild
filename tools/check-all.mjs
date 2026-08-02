@@ -13,6 +13,7 @@ import {
   findPackageInfoConflicts,
   formatPackageConflicts,
 } from './verify-package-conflicts.mjs';
+import { sourcePackageRuleViolations } from './source-package-rules.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 let fail = 0;
@@ -42,8 +43,8 @@ for (const f of ['site/wrt/data/devices.json', 'site/wrt/data/i18n.json', 'site/
   'site/wrt/data/timezones.json', 'site/wrt/data/plugins-i18n.json',
   'site/wrt/data/menuconfig-index.json', 'site/wrt/data/menuconfig-demo.json',
   'site/wrt/data/project.json', 'site/wrt/data/minimum-boot.json',
-  'site/wrt/data/package-mirrors.json',
-  'config/001.presets/minimum-boot.json',
+  'site/wrt/data/package-mirrors.json', 'site/wrt/data/source-package-rules.json',
+  'config/001.presets/minimum-boot.json', 'config/001.presets/source-package-rules.json',
   'tools/plugins-meta.json', 'tools/plugin-sizes.json', 'tools/i18n-source.json',
   'tools/i18n-translations.json', 'tools/plugins-i18n.json', 'tools/device-catalog.json',
   'tools/package-baseline-360t7.json']) {
@@ -71,6 +72,16 @@ try {
     formatPackageConflicts(catalogConflicts) === 'tls-alpha <-> tls-beta'
     ? ok('package conflict parser: upstream and Catalog reject y/y pairs but allow module selections')
     : bad('package conflict parser', 'unexpected conflict result');
+  const sourceRuleFixture = 'CONFIG_DEFAULT_libustream-openssl=y\nCONFIG_PACKAGE_luci-ssl=y\n';
+  const sourceRulesSource = JSON.parse(readFileSync(
+    join(ROOT, 'config', '001.presets', 'source-package-rules.json'), 'utf8'));
+  const sourceRulesPublic = JSON.parse(readFileSync(
+    join(ROOT, 'site', 'wrt', 'data', 'source-package-rules.json'), 'utf8'));
+  JSON.stringify(sourceRulesSource) === JSON.stringify(sourceRulesPublic) &&
+    sourcePackageRuleViolations(sourceRuleFixture, 'lede').length === 1 &&
+    sourcePackageRuleViolations(sourceRuleFixture, 'OpenWrt').length === 0
+    ? ok('source package rules: LEDE luci-ssl/OpenSSL conflict is generated or rejected by one shared rule')
+    : bad('source package rules', 'public copy or LEDE TLS rule is invalid');
   const dev = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'devices.json'), 'utf8'));
   const t7 = dev.devices.find((d) => d.id === '360t7');
   const activeSources = new Set(['ImmortalWrt', 'OpenWrt', 'lede']);
@@ -229,7 +240,12 @@ mirrorRootsOk
     buildWorkflow.includes('build-diagnostic.log') &&
     buildWorkflow.includes('Finalize compile result') &&
     buildWorkflow.includes('Verify package conflicts') &&
+    buildWorkflow.includes('id: package_conflicts') &&
     buildWorkflow.includes('verify-package-conflicts.mjs') &&
+    buildWorkflow.includes('配置预检失败，未进入编译') &&
+    parser.includes('sourcePackageRuleViolations(config, source.id)') &&
+    js.includes('sourcePackageRuleMatches(config)') &&
+    js.includes('applySourcePackageRules(config, sourceRules)') &&
     buildWorkflow.includes('实际列出的文件');
   failureDiagnosticsContract
     ? ok('失败诊断:DEVEL/BUILD_LOG 断言、单线程 V=s 日志与按实列出的 Artifact 已接通')

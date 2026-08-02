@@ -315,6 +315,7 @@ jobs:
           grep -c '^CONFIG_PACKAGE_luci-app' .config || true
 
       - name: Verify package conflicts / 软件包互斥预检
+        id: package_conflicts
         run: |
           cd openwrt
           test -s tmp/.packageinfo
@@ -467,6 +468,17 @@ jobs:
       - name: Finalize compile result / 确认编译结果
         if: always()
         run: |
+          if [ "${{ steps.package_conflicts.outcome }}" = "failure" ]; then
+            echo "::error::配置预检失败，未进入编译；请下载 BUILD-LOGS。"
+            {
+              echo "### ⛔ 配置预检拦截 / Configuration preflight blocked"
+              echo ""
+              echo "- compilation: not started / 未开始"
+              echo "- read BUILD-LOGS/00-SUMMARY.txt or errors.txt for the exact conflict"
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
           if [ "${{ steps.compile.outcome }}" = "success" ]; then
             echo "Parallel compile succeeded / 并行编译成功"
             exit 0

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "lede-openssl-luci",
+      "source": "lede",
+      "requires": {
+        "DEFAULT_libustream-openssl": "y",
+        "PACKAGE_luci-ssl": "y"
+      },
+      "replace": {
+        "PACKAGE_luci-ssl": "n",
+        "PACKAGE_luci-ssl-openssl": "y"
+      },
+      "message": {
+        "zh-CN": "LEDE 的 luci-ssl 会选择 mbedTLS，与默认 OpenSSL 冲突；请改用 luci-ssl-openssl。",
+        "en": "LEDE luci-ssl selects mbedTLS and conflicts with the default OpenSSL; use luci-ssl-openssl instead."
+      }
+    }
+  ]
+}

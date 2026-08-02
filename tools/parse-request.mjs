@@ -13,6 +13,7 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { findCatalogPackageConflicts, formatPackageConflicts } from './verify-package-conflicts.mjs';
+import { sourcePackageRuleViolations } from './source-package-rules.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DEVICES = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'devices.json'), 'utf8'));
@@ -219,6 +220,10 @@ if (hasSubmittedConfig) {
     if (!targetMatches) {
       fail(`上传配置的目标设备签名与 ${configId} 不一致,请勿上传其他机型的配置`);
     }
+  }
+  const sourceRuleViolations = sourcePackageRuleViolations(config, source.id);
+  if (sourceRuleViolations.length) {
+    fail(sourceRuleViolations.map((rule) => rule.message?.['zh-CN'] || rule.message?.en || rule.id).join(' '));
   }
   if (!config.endsWith('\n')) config += '\n';
   submittedSha256 = createHash('sha256').update(config).digest('hex');

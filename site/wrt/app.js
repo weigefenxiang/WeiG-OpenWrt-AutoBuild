@@ -61,7 +61,7 @@ const state = {
   importedConfigId: '',
 };
 const LANIP_RE = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/;   // 仅接受内网 IPv4 / private IPv4 only
-let DEVICES = null, PLUGINS = null, I18N = null, TIMEZONES = null, MINIMUM_BOOT = null;
+let DEVICES = null, PLUGINS = null, I18N = null, TIMEZONES = null, MINIMUM_BOOT = null, SOURCE_PACKAGE_RULES = null;
 let PACKAGE_MIRRORS = { presets: [{ id: 'auto', label: { 'zh-CN': '跟随源码默认', en: 'Follow source default' }, roots: {} }] };
 let MENU_INDEX = null, MENU_CATALOG = null;
 let menuCatalogKey = '', menuLoadingKey = '', menuCatalogSeq = 0, menuCatalogPromise = null;
@@ -449,10 +449,11 @@ async function init() {
         if (/^https?:\/\//.test(PROJECT.blogUrl || '')) link.href = PROJECT.blogUrl;
       });
     } catch (e) { /* old deployments keep the built-in project defaults */ }
-    [DEVICES, CONFIG_MANIFEST, TIMEZONES, MENU_INDEX, MINIMUM_BOOT, PACKAGE_MIRRORS] = await Promise.all([
+    [DEVICES, CONFIG_MANIFEST, TIMEZONES, MENU_INDEX, MINIMUM_BOOT, PACKAGE_MIRRORS, SOURCE_PACKAGE_RULES] = await Promise.all([
       loadJson('devices.json'), loadJson('config-manifest.json'), loadJson('timezones.json'),
       loadJson('menuconfig-index.json'), loadJson('minimum-boot.json'),
       loadJson('package-mirrors.json').catch(() => PACKAGE_MIRRORS),
+      loadJson('source-package-rules.json'),
     ]);
     initializeTimezone();
     MENU_INDEX = stableCatalogIndex(MENU_INDEX);
@@ -3273,6 +3274,22 @@ function setConfigSymbol(text, symbol, value, type = 'bool') {
   if (pattern.test(text)) return text.replace(pattern, line);
   return text.replace(/\s*$/, '\n') + line + '\n';
 }
+function sourcePackageRuleMatches(text) {
+  const values = new Map();
+  for (const match of String(text).matchAll(/^CONFIG_([A-Za-z0-9_.+-]+)=([ym])$/gm)) values.set(match[1], match[2]);
+  return (SOURCE_PACKAGE_RULES?.rules || []).filter((rule) => rule.source === state.source?.id &&
+    Object.entries(rule.requires || {}).every(([symbol, value]) => values.get(symbol) === value));
+}
+function sourcePackageRuleMessage(rules) {
+  const messages = rules.map((rule) => rule.message?.['zh-CN'] || rule.message?.en || rule.id).join(' ');
+  return uiText(messages, messages, rules.map((rule) => rule.message?.en || rule.id).join(' '));
+}
+function applySourcePackageRules(text, rules) {
+  for (const rule of rules) {
+    for (const [symbol, value] of Object.entries(rule.replace || {})) text = setConfigSymbol(text, symbol, value);
+  }
+  return text;
+}
 function applyMenuConfig(text) {
   if (!MENU_CATALOG) return text;
   for (const symbol of menuTouched) {
@@ -3416,7 +3433,12 @@ async function generateConfigText() {
     : state.device.id === 'catalog-target'
       ? catalogTargetConfig()
     : await (await fetchData(state.device.id + '/' + configName)).text();
-  const config = applyToConfig(raw, effectiveSelection());
+  let config = applyToConfig(raw, effectiveSelection());
+  const sourceRules = sourcePackageRuleMatches(config);
+  if (sourceRules.length) {
+    if (state.importedConfig) throw new Error(sourcePackageRuleMessage(sourceRules));
+    config = applySourcePackageRules(config, sourceRules);
+  }
   assertCatalogPackageConflicts(config);
   return config;
 }
