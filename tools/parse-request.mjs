@@ -13,7 +13,7 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { findCatalogPackageConflicts, formatPackageConflicts } from './verify-package-conflicts.mjs';
-import { sourcePackageRuleViolations } from './source-package-rules.mjs';
+import { matchingConfigRules } from './config-rules.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DEVICES = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'devices.json'), 'utf8'));
@@ -221,9 +221,17 @@ if (hasSubmittedConfig) {
       fail(`上传配置的目标设备签名与 ${configId} 不一致,请勿上传其他机型的配置`);
     }
   }
-  const sourceRuleViolations = sourcePackageRuleViolations(config, source.id);
-  if (sourceRuleViolations.length) {
-    fail(sourceRuleViolations.map((rule) => rule.message?.['zh-CN'] || rule.message?.en || rule.id).join(' '));
+  const configRuleContext = {
+    sourceId: source.id,
+    branch: version.branch,
+    system: actualTarget.find((line) => /^CONFIG_TARGET_BOARD=/.test(line))?.split('=')[1]?.replaceAll('"', '') || '',
+    subtarget: actualTarget.find((line) => /^CONFIG_TARGET_SUBTARGET=/.test(line))?.split('=')[1]?.replaceAll('"', '') || '',
+    profile: actualTarget.find((line) => /^CONFIG_TARGET_PROFILE=/.test(line))?.split('=')[1]?.replaceAll('"', '') ||
+      actualDevices[0]?.match(/_DEVICE_(.+)=y$/)?.[1] || '',
+  };
+  const configRuleViolations = matchingConfigRules(config, configRuleContext);
+  if (configRuleViolations.length) {
+    fail(configRuleViolations.map((rule) => rule.message?.['zh-CN'] || rule.message?.en || rule.id).join(' '));
   }
   if (!config.endsWith('\n')) config += '\n';
   submittedSha256 = createHash('sha256').update(config).digest('hex');
@@ -250,11 +258,7 @@ if (hasSubmittedConfig) {
     if (activeCatalog) {
       const conflicts = findCatalogPackageConflicts(submittedConfig, activeCatalog);
       if (conflicts.length) {
-        const ledeTlsConflict = source.id === 'lede' && conflicts.some((pair) =>
-          pair.symbols.includes('PACKAGE_libustream-mbedtls20201210') &&
-          pair.symbols.includes('PACKAGE_libustream-openssl20201210'));
-        const hint = ledeTlsConflict ? '；LEDE 默认 OpenSSL 时请使用 luci-ssl-openssl' : '';
-        fail(`软件包互斥: ${formatPackageConflicts(conflicts)}。请只保留一个后端${hint}。`);
+        fail(`软件包互斥: ${formatPackageConflicts(conflicts)}。请只保留其中一项。`);
       }
     }
   }

@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "lede-tls-backend",
+      "scope": { "sources": ["lede"] },
+      "when": {
+        "all": {
+          "DEFAULT_libustream-openssl": "y",
+          "PACKAGE_luci-ssl": "y",
+          "PACKAGE_libustream-openssl": "y"
+        }
+      },
+      "message": {
+        "zh-CN": "LEDE 的 luci-ssl 会选择 mbedTLS，与默认 OpenSSL 冲突；请改用 luci-ssl-openssl。",
+        "en": "LEDE luci-ssl selects mbedTLS and conflicts with the default OpenSSL; use luci-ssl-openssl instead."
+      },
+      "resolutions": [
+        {
+          "id": "openssl",
+          "recommended": true,
+          "label": { "zh-CN": "保留 OpenSSL（推荐）", "en": "Keep OpenSSL (recommended)" },
+          "description": { "zh-CN": "匹配 LEDE 默认包；改用 luci-ssl-openssl。", "en": "Matches LEDE default packages and uses luci-ssl-openssl." },
+          "set": {
+            "PACKAGE_luci-ssl": "n",
+            "PACKAGE_luci-ssl-openssl": "y",
+            "PACKAGE_libustream-mbedtls": "n",
+            "PACKAGE_libustream-openssl": "y"
+          }
+        },
+        {
+          "id": "mbedtls",
+          "label": { "zh-CN": "保留 mbedTLS", "en": "Keep mbedTLS" },
+          "description": { "zh-CN": "关闭 OpenSSL 的 ustream 后端，继续使用 luci-ssl。", "en": "Disable the OpenSSL ustream backend and keep luci-ssl." },
+          "set": {
+            "PACKAGE_luci-ssl": "y",
+            "PACKAGE_luci-ssl-openssl": "n",
+            "PACKAGE_libustream-mbedtls": "y",
+            "PACKAGE_libustream-openssl": "n"
+          }
+        }
+      ]
+    }
+  ]
+}

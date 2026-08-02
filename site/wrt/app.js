@@ -61,8 +61,8 @@ const state = {
   importedConfigId: '',
 };
 const LANIP_RE = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/;   // 仅接受内网 IPv4 / private IPv4 only
-let DEVICES = null, PLUGINS = null, I18N = null, TIMEZONES = null, MINIMUM_BOOT = null, SOURCE_PACKAGE_RULES = null;
-const sourcePackageRuleChoices = new Map();
+let DEVICES = null, PLUGINS = null, I18N = null, TIMEZONES = null, MINIMUM_BOOT = null, CONFIG_RULES = null;
+const configRuleChoices = new Map();
 let PACKAGE_MIRRORS = { presets: [{ id: 'auto', label: { 'zh-CN': '跟随源码默认', en: 'Follow source default' }, roots: {} }] };
 let MENU_INDEX = null, MENU_CATALOG = null;
 let menuCatalogKey = '', menuLoadingKey = '', menuCatalogSeq = 0, menuCatalogPromise = null;
@@ -450,11 +450,11 @@ async function init() {
         if (/^https?:\/\//.test(PROJECT.blogUrl || '')) link.href = PROJECT.blogUrl;
       });
     } catch (e) { /* old deployments keep the built-in project defaults */ }
-    [DEVICES, CONFIG_MANIFEST, TIMEZONES, MENU_INDEX, MINIMUM_BOOT, PACKAGE_MIRRORS, SOURCE_PACKAGE_RULES] = await Promise.all([
+    [DEVICES, CONFIG_MANIFEST, TIMEZONES, MENU_INDEX, MINIMUM_BOOT, PACKAGE_MIRRORS, CONFIG_RULES] = await Promise.all([
       loadJson('devices.json'), loadJson('config-manifest.json'), loadJson('timezones.json'),
       loadJson('menuconfig-index.json'), loadJson('minimum-boot.json'),
       loadJson('package-mirrors.json').catch(() => PACKAGE_MIRRORS),
-      loadJson('source-package-rules.json'),
+      loadJson('config-rules.json'),
     ]);
     initializeTimezone();
     MENU_INDEX = stableCatalogIndex(MENU_INDEX);
@@ -2180,7 +2180,7 @@ function renderImportedWorkspace() {
 function clearImportedWorkspace() {
   state.importedConfig = null;
   state.importedConfigId = '';
-  sourcePackageRuleChoices.clear();
+  configRuleChoices.clear();
   importedConfigValues.clear();
   importedUnknownOriginal.clear();
   importedUnknownEdits.clear();
@@ -3276,34 +3276,46 @@ function setConfigSymbol(text, symbol, value, type = 'bool') {
   if (pattern.test(text)) return text.replace(pattern, line);
   return text.replace(/\s*$/, '\n') + line + '\n';
 }
-function sourcePackageRuleMatches(text) {
+function matchingConfigRules(text) {
   const values = new Map();
   for (const match of String(text).matchAll(/^CONFIG_([A-Za-z0-9_.+-]+)=([ym])$/gm)) values.set(match[1], match[2]);
-  return (SOURCE_PACKAGE_RULES?.rules || []).filter((rule) => rule.source === state.source?.id &&
-    Object.entries(rule.requires || {}).every(([symbol, value]) => values.get(symbol) === value));
+  for (const match of String(text).matchAll(/^# CONFIG_([A-Za-z0-9_.+-]+) is not set$/gm)) values.set(match[1], 'n');
+  const target = state.device?.target || {};
+  const targetValue = (symbol) => String(text).match(new RegExp(`^CONFIG_${symbol}="([^"]+)"$`, 'm'))?.[1] || '';
+  const scope = {
+    sourceId: state.source?.id, branch: state.version?.branch,
+    system: targetValue('TARGET_BOARD') || target.system,
+    subtarget: targetValue('TARGET_SUBTARGET') || target.subtarget,
+    profile: targetValue('TARGET_PROFILE') || target.profile || state.variant?.id,
+  };
+  const fields = [['sources', 'sourceId'], ['branches', 'branch'], ['systems', 'system'],
+    ['subtargets', 'subtarget'], ['profiles', 'profile']];
+  return (CONFIG_RULES?.rules || []).filter((rule) =>
+    fields.every(([scopeKey, contextKey]) => !rule.scope?.[scopeKey]?.length || rule.scope[scopeKey].includes(scope[contextKey])) &&
+    Object.entries(rule.when?.all || {}).every(([symbol, value]) => values.get(symbol) === value));
 }
-function sourcePackageRuleMessage(rules) {
+function configRuleMessage(rules) {
   const messages = rules.map((rule) => rule.message?.['zh-CN'] || rule.message?.en || rule.id).join(' ');
   return uiText(messages, messages, rules.map((rule) => rule.message?.en || rule.id).join(' '));
 }
-function sourcePackageRuleResolution(rule) {
+function configRuleResolution(rule) {
   const resolutions = rule.resolutions || [];
-  const selected = sourcePackageRuleChoices.get(rule.id);
+  const selected = configRuleChoices.get(rule.id);
   return resolutions.find((item) => item.id === selected) ||
     resolutions.find((item) => item.recommended) || resolutions[0] || null;
 }
-function applySourcePackageRules(text, rules) {
+function applyConfigRules(text, rules) {
   for (const rule of rules) {
-    const resolution = sourcePackageRuleResolution(rule);
-    for (const [symbol, value] of Object.entries(resolution?.replace || rule.replace || {})) {
+    const resolution = configRuleResolution(rule);
+    for (const [symbol, value] of Object.entries(resolution?.set || rule.set || {})) {
       text = setConfigSymbol(text, symbol, value);
     }
   }
   return text;
 }
-class SourcePackageResolutionRequired extends Error {
+class ConfigRuleResolutionRequired extends Error {
   constructor(rules) {
-    super(sourcePackageRuleMessage(rules));
+    super(configRuleMessage(rules));
     this.rules = rules;
   }
 }
@@ -3415,12 +3427,10 @@ function assertCatalogPackageConflicts(text) {
   const conflicts = catalogPackageConflicts(text);
   if (!conflicts.length) return;
   const names = conflicts.map((pair) => pair.join(' <-> ')).join('; ');
-  const ledeTls = state.source?.id === 'lede' && conflicts.some((pair) =>
-    pair.includes('libustream-openssl') && pair.includes('libustream-mbedtls'));
   throw new Error(uiText(
-    `软件包互斥：${names}。请只保留一个后端${ledeTls ? '；LEDE 默认 OpenSSL，请使用 luci-ssl-openssl。' : '。'}`,
-    `軟體套件互斥：${names}。請只保留一個後端${ledeTls ? '；LEDE 預設 OpenSSL，請使用 luci-ssl-openssl。' : '。'}`,
-    `Package conflict: ${names}. Keep one backend${ledeTls ? '; LEDE defaults to OpenSSL, so use luci-ssl-openssl.' : '.'}`));
+    `软件包互斥：${names}。请只保留其中一项。`,
+    `軟體套件互斥：${names}。請只保留其中一項。`,
+    `Package conflict: ${names}. Keep only one item.`));
 }
 function resolveConfigTheme(text, fallback = true) {
   const enabled = [...String(text).matchAll(/^CONFIG_PACKAGE_(luci-theme-[A-Za-z0-9._+-]+)=y$/gm)]
@@ -3449,14 +3459,18 @@ async function generateConfigText() {
     ? state.importedConfig
     : state.device.id === 'catalog-target'
       ? catalogTargetConfig()
-    : await (await fetchData(state.device.id + '/' + configName)).text();
+      : await (await fetchData(state.device.id + '/' + configName)).text();
   let config = applyToConfig(raw, effectiveSelection());
-  const sourceRules = sourcePackageRuleMatches(config);
-  if (sourceRules.length) {
-    const unresolved = sourceRules.filter((rule) => !sourcePackageRuleChoices.has(rule.id));
-    if (state.importedConfig && unresolved.length) throw new SourcePackageResolutionRequired(unresolved);
-    config = applySourcePackageRules(config, sourceRules);
+  for (let pass = 0; pass < 16; pass++) {
+    const rules = matchingConfigRules(config);
+    if (!rules.length) break;
+    const unresolved = rules.filter((rule) => !configRuleChoices.has(rule.id));
+    if (state.importedConfig && unresolved.length) throw new ConfigRuleResolutionRequired(unresolved);
+    const updated = applyConfigRules(config, rules);
+    if (updated === config) throw new Error(uiText('配置规则未产生修正，请检查规则文件。', '設定規則未產生修正，請檢查規則檔。', 'The configuration rule made no change; check the rule file.'));
+    config = updated;
   }
+  if (matchingConfigRules(config).length) throw new Error(uiText('配置规则循环超过 16 次，请检查规则文件。', '設定規則循環超過 16 次，請檢查規則檔。', 'Configuration rules exceeded 16 passes; check the rule file.'));
   assertCatalogPackageConflicts(config);
   return config;
 }
@@ -3927,7 +3941,7 @@ function restoreSelections(config, payload) {
 async function importConfigFile(file) {
   const seq = ++configImportSeq;
   importingConfig = true;
-  sourcePackageRuleChoices.clear();
+  configRuleChoices.clear();
   beginImportLog(file);
   try {
     if (!file || file.size < 32 || file.size > 2 * 1024 * 1024) throw new Error(t('import.size'));
@@ -4024,7 +4038,7 @@ function closeModal() {
   const cancel = modalCancelHandler;
   modalCancelHandler = null;
   $('modal').hidden = true;
-  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'conflict-resolver');
+  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'config-rule-resolver');
   document.body.classList.remove('modal-open');
   if (lastFocus && lastFocus.focus) lastFocus.focus();
   if (cancel) cancel();
@@ -4044,19 +4058,19 @@ function localizedRuleText(row, key) {
   const text = row?.[key] || {};
   return uiText(text['zh-CN'] || text.en || '', text['zh-TW'] || text.en || '', text.en || '');
 }
-function openSourcePackageResolver(rules) {
+function openConfigRuleResolver(rules) {
   return new Promise((resolve, reject) => {
-    openModal(uiText('处理配置冲突', '處理設定衝突', 'Resolve configuration conflict'));
+    openModal(uiText('处理配置规则', '處理設定規則', 'Resolve configuration rule'));
     const modal = $('modal').querySelector('.modal');
     modal.classList.remove('modal-wide', 'modal-import-source', 'recommended-config');
-    modal.classList.add('conflict-resolver');
+    modal.classList.add('config-rule-resolver');
     const body = $('modalBody');
     body.textContent = '';
     const intro = document.createElement('p');
     intro.className = 'import-error';
-    intro.textContent = uiText('检测到互斥 TLS 后端。请选择保留哪一项；不会修改原上传文件，只有继续下载或提交时才写入修正后的配置。',
-      '偵測到互斥 TLS 後端。請選擇保留哪一項；不會修改原上傳檔案，只有繼續下載或提交時才寫入修正後的設定。',
-      'Mutually exclusive TLS backends were detected. Choose one; the uploaded file stays unchanged until the corrected configuration is downloaded or submitted.');
+    intro.textContent = uiText('检测到需要确认的配置规则。请选择处理方式；不会修改原上传文件，只有继续下载或提交时才写入修正后的配置。',
+      '偵測到需要確認的設定規則。請選擇處理方式；不會修改原上傳檔案，只有繼續下載或提交時才寫入修正後的設定。',
+      'A configuration rule needs your choice. The uploaded file stays unchanged until the corrected configuration is downloaded or submitted.');
     body.appendChild(intro);
     const choices = new Map();
     const continueButton = document.createElement('button');
@@ -4066,7 +4080,7 @@ function openSourcePackageResolver(rules) {
     continueButton.disabled = true;
     for (const rule of rules) {
       const card = document.createElement('section');
-      card.className = 'conflict-rule';
+      card.className = 'config-rule';
       const title = document.createElement('h4');
       title.textContent = rule.id;
       card.appendChild(title);
@@ -4074,11 +4088,11 @@ function openSourcePackageResolver(rules) {
       message.textContent = localizedRuleText(rule, 'message');
       card.appendChild(message);
       const options = document.createElement('div');
-      options.className = 'conflict-options';
+      options.className = 'config-rule-options';
       for (const resolution of rule.resolutions || []) {
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'conflict-option';
+        button.className = 'config-rule-option';
         const label = document.createElement('strong');
         label.textContent = localizedRuleText(resolution, 'label');
         const description = document.createElement('span');
@@ -4098,7 +4112,7 @@ function openSourcePackageResolver(rules) {
     const actions = document.createElement('div');
     actions.className = 'modal-actions';
     continueButton.addEventListener('click', () => {
-      for (const [ruleId, resolutionId] of choices) sourcePackageRuleChoices.set(ruleId, resolutionId);
+      for (const [ruleId, resolutionId] of choices) configRuleChoices.set(ruleId, resolutionId);
       modalCancelHandler = null;
       closeModal();
       resolve();
@@ -4110,16 +4124,17 @@ function openSourcePackageResolver(rules) {
     cancel.addEventListener('click', closeModal);
     actions.append(continueButton, cancel);
     body.appendChild(actions);
-    modalCancelHandler = () => reject(new Error(uiText('已取消处理配置冲突', '已取消處理設定衝突', 'Configuration conflict resolution cancelled')));
+    modalCancelHandler = () => reject(new Error(uiText('已取消处理配置规则', '已取消處理設定規則', 'Configuration rule resolution cancelled')));
   });
 }
 async function generateResolvedConfigText() {
-  try {
-    return await generateConfigText();
-  } catch (error) {
-    if (!(error instanceof SourcePackageResolutionRequired)) throw error;
-    await openSourcePackageResolver(error.rules);
-    return generateConfigText();
+  while (true) {
+    try {
+      return await generateConfigText();
+    } catch (error) {
+      if (!(error instanceof ConfigRuleResolutionRequired)) throw error;
+      await openConfigRuleResolver(error.rules);
+    }
   }
 }
 
