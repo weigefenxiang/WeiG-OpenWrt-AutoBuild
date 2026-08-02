@@ -142,7 +142,7 @@ WeiG-OpenWrt-AutoBuild/
 - 软件源镜像由 `diy2-generic.sh` 自动兼容：旧版 opkg 源改写 `distfeeds.conf`；APK 源（25.12+）改写构建期 `VERSION_REPO`，由源码生成 `distfeeds.list`。不要把 APK 的生成文件当作源码内固定文件。
 - 构建准入默认限制每位提交者同时最多 2 个排队中或运行中的任务；第 3 个 Issue 会自动回评并关闭。Fork 可在仓库 Variables 设置正整数 `MAX_BUILDS_PER_USER` 覆盖默认值。`cancel-build.yml` 只接受原 Issue 提交者的 `/cancel` 或 `/cancel-build`，先普通取消，15 秒未结束才强制取消；管理员仍可在 Actions 页面管理任意任务。
 - 根目录 `VERSION` 是仓库与网页共用的分钟级 `vYYMMDDHHmm` 版本源；`site-version.json` 是静态部署副本。Actions Summary 同时记录 VERSION、请求网页版本、定制器 commit、上游 commit 和完整输入参数。
-- 下载与编译统一使用 `JOBS=$(( $(nproc) + 1 ))` 动态并发，并通过 `stdbuf` + `tee` 在 Actions 实时逐行显示原始输出，同时完整写入 `download.log` / `build.log`。下载失败只警告并继续，编译失败直接结束任务，不再低噪声过滤或单线程重试。
+- 下载与编译统一使用 `JOBS=$(( $(nproc) + 1 ))` 动态并发，并通过 `stdbuf` + `tee` 在 Actions 实时逐行显示原始输出，同时完整写入 `download.log` / `build.log`。`make defconfig` 前 CI 启用并断言 `CONFIG_DEVEL=y`、`CONFIG_BUILD_LOG=y`，确保按包日志真正生成。并行编译失败仍保持失败结果，但会额外限时 30 分钟运行一次 `make -j1 V=s`，实时写入 `build-diagnostic.log` 以定位真实错误；不恢复或掩盖原始失败。
 - `make defconfig` 后会按清单复核源码分支与精确设备 Profile，防止旧分支静默换掉目标。
 - `custom-target` 不要求 Profile 预先存在于仓库清单；Actions 只对比上传配置与 `make defconfig` 后的通用 Target 选择，防止目标被上游改写，不含 360T7 专用限制。
 - 全部版本化 base config 默认关闭 PassWall/SSR Plus/VSSR/TinyProxy 及其代理内核/子选项;`check-all.mjs` 会在任一默认 config 出现代理 `CONFIG_PACKAGE_*=y/m` 时直接失败。config 预检把 `defconfig` 后实际被选中的代理相关符号写入 `proxy-selected.txt` 和 Summary,用户主动选择时仍可按正常依赖加入
@@ -208,10 +208,11 @@ WeiG-OpenWrt-AutoBuild/
 - **编译阶段失败** = 下载 `BUILD-LOGS-…` artifact,按顺序看:
   1. `00-SUMMARY.txt`(**先看这个**):构建参数 + 报错关键字聚合计数 + 最后出错的 make 目标;
   2. `build-metadata.txt`:VERSION、两级 commit、参数与 v2ray 最终状态;
-  3. `download.log` / `build.log`:完整原始输出;
-  4. `errors.txt` / `tail-200.txt`:报错行摘录与结尾上下文;
-  5. `package-logs.tar.gz`:某个包编译失败时看 `logs/<路径>/` 下对应日志;
-  6. `final.config`:本次真实使用的完整配置,可拿去本地复现。
+  3. `build-diagnostic.log`(**如存在**):失败后单线程 `V=s` 的优先诊断依据;
+  4. `download.log` / `build.log`:完整原始输出;
+  5. `errors.txt` / `tail-200.txt`:报错行摘录与结尾上下文;
+  6. `package-logs.tar.gz`(**如存在**):某个包编译失败时看 `logs/<路径>/` 下对应日志;
+  7. `final.config`:本次真实使用的完整配置,可拿去本地复现。
 - 常见病因对照:`Package xxx is missing` = 该源 feed 没这个包(lede/官方源勾了社区插件、或高级模式强制勾选);`No space left` / 镜像超限 = 插件太多或 stock 变体容量不足;上游当日损坏 = 同参数隔天重跑或临时换版本分支。
 
 #### 不等云编译的本地快速验证(秒级)

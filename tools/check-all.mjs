@@ -162,6 +162,7 @@ mirrorRootsOk
     ? ok('中文界面 WireGuard→Wir***ard、Tor→T*r 敏感词打码已接通')
     : bad('sensitive mask', 'WireGuard 或 Tor 的中文界面打码规则缺失');
   const css = readFileSync(join(ROOT, 'site', 'wrt', 'app.css'), 'utf8');
+  const buildWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8');
   const parser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
   const project = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
   const catalogIndex = JSON.parse(
@@ -184,6 +185,23 @@ mirrorRootsOk
   recommendedUiContract
     ? ok('推荐项:英文源文案、可关闭配置弹窗与 Catalog 状态复用已接通')
     : bad('recommended UI', '推荐项命名、弹窗或 Catalog N/M/Y/锁定状态复用缺失');
+  const submitLayoutContract = html.includes('class="submit-primary-fields"') &&
+    html.indexOf('id="lanipBox"') < html.indexOf('id="tagBox"') &&
+    css.includes('.submit-primary-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }') &&
+    css.includes('.submit-primary-fields { grid-template-columns: 1fr; }');
+  submitLayoutContract
+    ? ok('提交设置:后台登录地址左侧、构建标识右侧，手机端自动纵向排列')
+    : bad('submit settings layout', '后台登录地址/构建标识的桌面或手机布局不符合约定');
+  const failureDiagnosticsContract = buildWorkflow.includes("echo 'CONFIG_DEVEL=y' >> .config") &&
+    buildWorkflow.includes("echo 'CONFIG_BUILD_LOG=y' >> .config") &&
+    buildWorkflow.includes("grep -Fx 'CONFIG_BUILD_LOG=y' .config") &&
+    buildWorkflow.includes('id: compile') &&
+    buildWorkflow.includes("make -j1 V=s") &&
+    buildWorkflow.includes('build-diagnostic.log') &&
+    buildWorkflow.includes('实际列出的文件');
+  failureDiagnosticsContract
+    ? ok('失败诊断:DEVEL/BUILD_LOG 断言、单线程 V=s 日志与按实列出的 Artifact 已接通')
+    : bad('failure diagnostics', 'LEDE 构建日志开关、单线程诊断或 Artifact 说明缺失');
   const previewBatBytes = readFileSync(join(ROOT, 'OpenWebPage_打开网页.bat'));
   const previewBat = previewBatBytes.toString('ascii');
   const previewBatOk = !previewBatBytes.some((byte) => byte > 0x7f) &&
@@ -427,10 +445,11 @@ mirrorRootsOk
     workflow.includes('- name: Upload complete logs / 上传完整日志\n        if: always()') &&
     !workflow.includes('ci-log-filter.awk') &&
     !workflow.includes('compile_retry') &&
-    !workflow.includes('make -j1 V=s');
+    workflow.includes('make -j1 V=s') &&
+    workflow.includes('build-diagnostic.log');
   liveLogContract
-    ? ok('Actions 下载/编译 CPU+1 动态并发与原始实时日志已接通')
-    : bad('Actions live log contract', '动态并发、逐行 tee、单次下载或旧过滤/重试清理不完整');
+    ? ok('Actions 下载/编译 CPU+1 动态并发、原始实时日志与失败单线程诊断已接通')
+    : bad('Actions live log contract', '动态并发、逐行 tee、单次下载、失败诊断或旧过滤清理不完整');
   const buildLimitContract = workflow.includes('MAX_BUILDS_PER_USER') &&
     workflow.includes('Build admission refused') &&
     workflow.includes('custom-build-user-${{ needs.admission.outputs.requester }}-${{ needs.admission.outputs.slot }}') &&

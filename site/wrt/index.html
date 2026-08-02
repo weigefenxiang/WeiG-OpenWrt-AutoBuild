@@ -6,7 +6,7 @@
 <meta name="description" data-i18n="app.desc" content="OpenWrt 固件在线定制:选源码、勾插件,GitHub Actions 云编译,免费自取">
 <title>Wei.G · OpenWrt 固件在线定制</title>
 <link rel="icon" href="Wei.G.ico">
-<link rel="stylesheet" href="app.css?v=65ea671ffb">
+<link rel="stylesheet" href="app.css?v=a59af22cb8">
 </head>
 <body>
 <header class="site-header">
@@ -201,10 +201,16 @@
 
     <section class="step">
       <h2><span class="stepnum">③</span> <span data-i18n="step.submit">提交设置</span></h2>
-      <label class="field-label" for="tagBox" data-i18n="tag.label"></label>
-      <input type="text" id="tagBox" maxlength="24" data-i18n-ph="tag.placeholder">
-      <label class="field-label" for="lanipBox" data-i18n="lanip.label" style="margin-top:10px"></label>
-      <input type="text" id="lanipBox" value="192.168.1.1" inputmode="decimal" autocapitalize="off" autocorrect="off">
+      <div class="submit-primary-fields">
+        <div>
+          <label class="field-label" for="lanipBox" data-i18n="lanip.label"></label>
+          <input type="text" id="lanipBox" value="192.168.1.1" inputmode="decimal" autocapitalize="off" autocorrect="off">
+        </div>
+        <div>
+          <label class="field-label" for="tagBox" data-i18n="tag.label"></label>
+          <input type="text" id="tagBox" maxlength="24" data-i18n-ph="tag.placeholder">
+        </div>
+      </div>
       <p class="hint" data-i18n="lanip.hint"></p>
       <p class="hint" id="loginInfo"></p>
       <label class="field-label" for="rootpwBox" data-i18n="rootpw.label" style="margin-top:10px"></label>

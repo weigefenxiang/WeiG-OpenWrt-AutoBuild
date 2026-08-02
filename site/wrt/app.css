@@ -510,6 +510,7 @@ input:focus-visible { border-color: var(--accent); }
 .empty-hint { padding: 14px; }
 
 .field-label { display: block; font-size: 15px; color: var(--text2); margin: 0 0 4px; }
+.submit-primary-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .rootpw-warning { display: flex; flex-wrap: wrap; gap: 4px 10px; }
 .rootpw-warning strong { color: #dc2626; }
 .rootpw-warning span { color: #b45309; }
@@ -777,6 +778,7 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
   .site-version-action { display: none; }
   .site-footer .footer-version { display: block; }
   .risk-row { align-items: flex-start; }
+  .submit-primary-fields { grid-template-columns: 1fr; }
   .firmware-settings { grid-template-columns: 1fr; }
   .target-picker .target-field { flex: 1 1 calc(50% - 10px); }
   .target-picker .target-profile { flex-basis: 100%; }

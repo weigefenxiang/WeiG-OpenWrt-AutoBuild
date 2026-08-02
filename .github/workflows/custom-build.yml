@@ -320,8 +320,11 @@ jobs:
             cp openwrt/.config submitted.config
           fi
           cd openwrt
+          echo 'CONFIG_DEVEL=y' >> .config
           echo 'CONFIG_BUILD_LOG=y' >> .config
           make defconfig
+          grep -Fx 'CONFIG_DEVEL=y' .config || { echo 'CONFIG_DEVEL was removed by make defconfig' >&2; exit 1; }
+          grep -Fx 'CONFIG_BUILD_LOG=y' .config || { echo 'CONFIG_BUILD_LOG was removed by make defconfig' >&2; exit 1; }
           if [ "${{ steps.req.outputs.firmware_snapshot }}" = "1" ]; then
             grep -Fx "CONFIG_PACKAGE_${{ steps.req.outputs.theme }}=y" .config || {
               echo "Selected firmware theme was removed by make defconfig: ${{ steps.req.outputs.theme }}" >&2
@@ -426,6 +429,7 @@ jobs:
           fi
 
       - name: Compile / 编译(原始实时日志)
+        id: compile
         run: |
           cd openwrt
           JOBS=$(( $(nproc) + 1 ))
@@ -449,10 +453,46 @@ jobs:
           fi
           exit "$RC"
 
+      - name: Diagnose failed compile / 单线程定位失败原因
+        if: failure() && steps.compile.outcome == 'failure'
+        run: |
+          cd openwrt
+          echo "单线程诊断 / single-thread diagnosis: make -j1 V=s (30 minute limit)"
+          set +e
+          set -o pipefail
+          timeout 30m stdbuf -oL -eL make -j1 V=s 2>&1 |
+            tee "$GITHUB_WORKSPACE/build-diagnostic.log"
+          RC=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "### 🔎 失败诊断 / Failure diagnosis"
+            echo ""
+            echo "- command: \`make -j1 V=s\`"
+            echo "- exit code: \`$RC\`"
+            echo "- log: \`build-diagnostic.log\`"
+            echo "- note: this diagnostic does not change the original build result."
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$RC" -eq 124 ]; then
+            echo "::warning::单线程诊断超过 30 分钟，已停止；请查看 build-diagnostic.log。"
+          elif [ "$RC" -ne 0 ]; then
+            echo "::error::单线程诊断已记录真实错误；请查看 build-diagnostic.log。"
+          fi
+          exit 0
+
       - name: Collect failure logs / 收集失败日志
         if: failure()
         run: |
           mkdir -p failure-logs
+          cp build.log build-diagnostic.log download.log failure-logs/ 2>/dev/null || true
+          cp build-metadata.txt failure-logs/ 2>/dev/null || true
+          cp proxy-selected.txt failure-logs/ 2>/dev/null || true
+          cp submitted.config resolved.config config-defconfig.diff failure-logs/ 2>/dev/null || true
+          cp openwrt/.config failure-logs/final.config 2>/dev/null || true
+          # OpenWrt 的 CONFIG_BUILD_LOG=y 会把每个包的日志写到 openwrt/logs/ / With CONFIG_BUILD_LOG=y, OpenWrt writes per-package build logs to openwrt/logs/
+          if [ -d openwrt/logs ]; then
+            tar czf failure-logs/package-logs.tar.gz -C openwrt logs || true
+          fi
           # 00-SUMMARY 排在最前:构建参数 + 报错关键字,方便一眼定位 / 00-SUMMARY sorts first: build params + error keywords for quick triage
           {
             echo "===================== 失败总结 / FAILURE SUMMARY ====================="
@@ -467,16 +507,33 @@ jobs:
             # 离线看此文件时可凭下面的直链回到本次 run / Keep the run URL here so this file can be traced back offline
             echo "本次构建 / this run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             echo ""
-            echo "-------- 定位关键字(在 build.log 里搜这些)/ SEARCH KEYWORDS --------"
-            grep -oE 'Package [A-Za-z0-9._-]+ is missing|No rule to make target[^,]*|undefined reference to [^ ]+|error: [^;]{0,80}|Error [0-9]+' build.log 2>/dev/null | sort | uniq -c | sort -rn | head -n 20 || echo "(无法从 build.log 提取,可能编译前已失败)"
+            echo "-------- 已收集日志 / COLLECTED LOGS --------"
+            for log in build.log build-diagnostic.log package-logs.tar.gz; do
+              [ -f "failure-logs/$log" ] && echo "- $log"
+            done
+            echo ""
+            echo "-------- 定位关键字 / SEARCH KEYWORDS --------"
+            for log in build-diagnostic.log build.log; do
+              [ -s "$log" ] || continue
+              echo "[$log]"
+              grep -oE 'Package [A-Za-z0-9._-]+ is missing|No rule to make target[^,]*|undefined reference to [^ ]+|error: [^;]{0,80}|Error [0-9]+' "$log" 2>/dev/null | sort | uniq -c | sort -rn | head -n 20 || true
+            done
             echo ""
             echo "-------- 最后出错的目标 / LAST FAILING TARGETS --------"
-            grep -E 'make\[[0-9]+\].*(Error|failed)' build.log 2>/dev/null | tail -n 10 || true
+            for log in build-diagnostic.log build.log; do
+              [ -s "$log" ] || continue
+              echo "[$log]"
+              grep -E 'make\[[0-9]+\].*(Error|failed)' "$log" 2>/dev/null | tail -n 10 || true
+            done
             echo ""
             echo "-------- 报错行摘录(最后 40 条)/ ERROR LINES (last 40) --------"
-            grep -nE 'Error [0-9]+|error:|No rule to make target|failed|missing' build.log 2>/dev/null | tail -n 40 || true
+            for log in build-diagnostic.log build.log; do
+              [ -s "$log" ] || continue
+              echo "[$log]"
+              grep -nE 'Error [0-9]+|error:|No rule to make target|failed|missing' "$log" 2>/dev/null | tail -n 40 || true
+            done
             echo ""
-            echo "完整日志见本 artifact 内 build.log;各软件包日志见 package-logs.tar.gz"
+            echo "完整日志见本 artifact 内实际列出的文件。"
           } > failure-logs/00-SUMMARY.txt
           cat failure-logs/00-SUMMARY.txt >> "$GITHUB_STEP_SUMMARY" || true
           # 取件指引追加到 Summary 页(Markdown)/ Append the log-retrieval guide to the step summary page (Markdown)
@@ -489,22 +546,21 @@ jobs:
             echo '| 1 | 打开本次构建页面 / Open this run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} |'
             echo '| 2 | 拉到页面最底部 **Artifacts** 区 / Scroll to the **Artifacts** section at the very bottom |'
             echo '| 3 | 下载 `${{ steps.req.outputs.build_ref }}-BUILD-LOGS-` 开头的压缩包并解压 / Download and unzip the archive whose name starts with `${{ steps.req.outputs.build_ref }}-BUILD-LOGS-` |'
-            echo '| 4 | 先看 `00-SUMMARY.txt`,再看 `build.log` / `errors.txt` / `package-logs.tar.gz` / Read `00-SUMMARY.txt` first, then `build.log` / `errors.txt` / `package-logs.tar.gz` |'
+            echo '| 4 | 先看 `00-SUMMARY.txt`,再看 `build-diagnostic.log`（如有）/ `build.log` / `errors.txt` / `package-logs.tar.gz`（如有） / Read `00-SUMMARY.txt` first, then `build-diagnostic.log` (if present) / `build.log` / `errors.txt` / `package-logs.tar.gz` (if present) |'
             echo ''
             echo '> ⏳ 完整日志 Artifact 保留 14 天,过期需重新提交构建 / Complete log artifacts are kept for 14 days.'
           } >> "$GITHUB_STEP_SUMMARY" || true
-          cp build.log download.log failure-logs/ 2>/dev/null || true
-          cp build-metadata.txt failure-logs/ 2>/dev/null || true
-          cp proxy-selected.txt failure-logs/ 2>/dev/null || true
-          cp submitted.config resolved.config config-defconfig.diff failure-logs/ 2>/dev/null || true
-          cp openwrt/.config failure-logs/final.config 2>/dev/null || true
-          # OpenWrt 的 CONFIG_BUILD_LOG=y 会把每个包的日志写到 openwrt/logs/ / With CONFIG_BUILD_LOG=y, OpenWrt writes per-package build logs to openwrt/logs/
-          if [ -d openwrt/logs ]; then
-            tar czf failure-logs/package-logs.tar.gz -C openwrt logs || true
-          fi
           # 摘出最后 200 行与含 Error 的行,方便快速定位 / Extract the last 200 lines and the error lines for quick triage
-          tail -n 200 build.log > failure-logs/tail-200.txt 2>/dev/null || true
-          grep -nE 'Error [0-9]+|error:|No rule to make target|failed' build.log | tail -n 60 > failure-logs/errors.txt 2>/dev/null || true
+          LOG_FOR_TAIL=build.log
+          [ -s build-diagnostic.log ] && LOG_FOR_TAIL=build-diagnostic.log
+          tail -n 200 "$LOG_FOR_TAIL" > failure-logs/tail-200.txt 2>/dev/null || true
+          {
+            for log in build-diagnostic.log build.log; do
+              [ -s "$log" ] || continue
+              echo "===== $log ====="
+              grep -nE 'Error [0-9]+|error:|No rule to make target|failed|missing' "$log" | tail -n 60 || true
+            done
+          } > failure-logs/errors.txt
           echo '===== 最后 60 行 ====='
           tail -n 60 build.log 2>/dev/null || echo '(没有 build.log,可能在编译前就失败了)'
           ls -lh failure-logs
@@ -631,20 +687,30 @@ jobs:
             const fs = require('fs');
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             let errs = '';
+            const failureDir = 'failure-logs';
             try {
-              errs = fs.readFileSync('failure-logs/00-SUMMARY.txt', 'utf8').trim().split('\n').slice(0, 40).join('\n');
+              errs = fs.readFileSync(`${failureDir}/00-SUMMARY.txt`, 'utf8').trim().split('\n').slice(0, 40).join('\n');
             } catch (e) { /* 编译前就失败,没有日志 / Failed before compiling, so no error log exists */ }
+            const logFiles = [
+              ['00-SUMMARY.txt', '失败总结与定位关键字(先看这个)'],
+              ['build-diagnostic.log', '单线程 V=s 诊断日志'],
+              ['build.log', '完整并行编译输出'],
+              ['tail-200.txt', '最后 200 行'],
+              ['errors.txt', '摘出的报错行'],
+              ['package-logs.tar.gz', '各软件包日志'],
+              ['final.config', '本次实际使用的配置'],
+            ].filter(([name]) => fs.existsSync(`${failureDir}/${name}`))
+              .map(([name, description]) => `- \`${name}\` ${description}`).join('\n');
             const body = `@${context.payload.issue.user.login}\n\n❌ 构建失败或被取消。\n\n完整日志与产物:${url}\n` +
               `底部 Artifacts 里有 \`${{ steps.req.outputs.build_ref }}-BUILD-LOGS-${{ steps.req.outputs.artifact_tail }}\`(保留 14 天),内含:\n` +
-              `- \`00-SUMMARY.txt\` 失败总结与定位关键字(先看这个)\n- \`build.log\` 完整编译输出\n- \`tail-200.txt\` 最后 200 行\n- \`errors.txt\` 摘出的报错行\n` +
-              `- \`package-logs.tar.gz\` 各软件包日志\n- \`final.config\` 本次实际使用的配置\n\n` +
+              `${logFiles}\n\n` +
               (errs ? `摘录报错:\n\`\`\`\n${errs}\n\`\`\`\n\n` : '') +
               `常见原因:插件相互冲突、原厂分区容量不足(插件勾太多)、高级模式强制开启了该源没有的包、上游源码当日有问题。` +
               `可减少插件、换大分区变体、关掉高级模式或改天重试。` +
               `\n\n📥 完整日志取件 / How to get full logs\n` +
               `1. 打开本次构建页面 / Open this run:${url}\n` +
               `2. 拉到页面最底部 Artifacts 区 / Scroll to the Artifacts section at the very bottom\n` +
-              `3. 下载 \`${{ steps.req.outputs.build_ref }}-BUILD-LOGS-\` 开头的压缩包,解压后先看 \`00-SUMMARY.txt\`,再看 \`build.log\` / \`errors.txt\` / \`package-logs.tar.gz\` / Download the \`${{ steps.req.outputs.build_ref }}-BUILD-LOGS-\` archive; read \`00-SUMMARY.txt\` first.\n\n` +
+              `3. 下载 \`${{ steps.req.outputs.build_ref }}-BUILD-LOGS-\` 开头的压缩包,解压后先看 \`00-SUMMARY.txt\`,再看实际列出的日志 / Download the \`${{ steps.req.outputs.build_ref }}-BUILD-LOGS-\` archive; read \`00-SUMMARY.txt\` first, then the listed logs.\n\n` +
               `⏳ BUILD-LOGS 保留 14 天,过期需重新提交构建 / BUILD-LOGS is kept for 14 days; resubmit after it expires.`;
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
