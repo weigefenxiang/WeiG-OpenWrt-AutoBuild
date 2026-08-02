@@ -452,6 +452,8 @@ mirrorRootsOk
     js.includes('function jumpMenuBreadcrumb') &&
     js.includes('function initCatalogLocator') &&
     js.includes('function selectCatalogLocatorTarget') &&
+    js.includes('const preferredTarget = { ...values };') &&
+    js.includes('renderCatalogTargetSelectors(preferredTarget)') &&
     js.includes("if (node.profileId) {") &&
     js.includes('function syncCatalogApplications') &&
     js.includes("['Top level', ...menuBreadcrumb]") &&

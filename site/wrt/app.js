@@ -2198,11 +2198,9 @@ function renderTargetPicker(preferState = true) {
   return rows.find((r) => r.variant.id === profile);
 }
 async function selectCatalogLocatorTarget(values) {
-  const schema = MENU_CATALOG?.targetSelectors?.length
-    ? MENU_CATALOG.targetSelectors : DEFAULT_TARGET_SELECTORS;
-  targetSelectorValues = Object.fromEntries(schema.map((selector) => [selector.id, '']));
-  Object.assign(targetSelectorValues, values);
-  const selected = renderCatalogTargetSelectors(targetSelectorValues);
+  const preferredTarget = { ...values };
+  targetSelectorValues = {};
+  const selected = renderCatalogTargetSelectors(preferredTarget);
   if (!selected.target || !selected.profile) return;
   await applyCatalogTarget();
   const label = state.device?.target?.profileLabel || selected.profile.name || selected.profile.id;
