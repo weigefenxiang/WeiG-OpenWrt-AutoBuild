@@ -142,10 +142,10 @@ WeiG-OpenWrt-AutoBuild/
 - 软件源镜像由 `diy2-generic.sh` 自动兼容：旧版 opkg 源改写 `distfeeds.conf`；APK 源（25.12+）改写构建期 `VERSION_REPO`，由源码生成 `distfeeds.list`。不要把 APK 的生成文件当作源码内固定文件。
 - 构建准入默认限制每位提交者同时最多 2 个排队中或运行中的任务；第 3 个 Issue 会自动回评并关闭。仓库所有者按 GitHub 登录名识别，不受此上限限制，并为每次构建使用独立并发组，不会在本项目队列中互相等待。Fork 可在仓库 Variables 设置正整数 `MAX_BUILDS_PER_USER` 覆盖默认值。`cancel-build.yml` 只接受原 Issue 提交者的 `/cancel` 或 `/cancel-build`，先普通取消，15 秒未结束才强制取消；管理员仍可在 Actions 页面管理任意任务。
 - 根目录 `VERSION` 是仓库与网页共用的分钟级 `vYYMMDDHHmm` 版本源；`site-version.json` 是静态部署副本。Actions Summary 同时记录 VERSION、请求网页版本、定制器 commit、上游 commit 和完整输入参数。
-- 下载与编译统一使用 `JOBS=$(( $(nproc) + 1 ))` 动态并发，并通过 `stdbuf` + `tee` 在 Actions 实时逐行显示原始输出，同时完整写入 `download.log` / `build.log`。`make defconfig` 后会根据当前源码的 `tmp/.packageinfo` 拒绝已启用的 `Conflicts:` 软件包组合；网页/Issue 解析则使用 Catalog 的同一份互斥元数据提前提示。`config/001.presets/config-rules.json`（网页副本在 `site/wrt/data/`）是需人工语义选择或已知上游兼容性规则的唯一维护源：规则支持 Source/Branch/Target scope、`when.all`、`when.any`、单值或 Y/M 状态数组、`set` 与 `setPrefixes`；`prompt: always` 表示新建和导入配置都必须确认，`maintenance` 保存发现版本、证据 run 与复查条件。网页先完成规则处理和请求生成，再打开 GitHub，不预开 `about:blank`；直接上传未经网页处理的旧附件仍会明确拒绝，绝不静默改写附件。当前已登记 LEDE master + Linux 6.12 的外置 ksmbd 3.5.4 VFS API 不兼容规则，统一关闭其内核模块、服务端、LuCI 与语言包。预检拦截会标明“未进入编译”。`CONFIG_DEVEL=y`、`CONFIG_BUILD_LOG=y` 确保按包日志真正生成。并行编译失败后，CI 最多 60 分钟执行一次 `make -j1 V=s`：若该次补跑成功，构建标为“单线程恢复”并继续产出；仍失败或超时才保持失败，完整 `build-diagnostic.log` 会上传。
-- `make defconfig` 后会按清单复核源码分支与精确设备 Profile，防止旧分支静默换掉目标。
-- `custom-target` 不要求 Profile 预先存在于仓库清单；Actions 只对比上传配置与 `make defconfig` 后的通用 Target 选择，防止目标被上游改写，不含 360T7 专用限制。
-- 全部版本化 base config 默认关闭 PassWall/SSR Plus/VSSR/TinyProxy 及其代理内核/子选项;`check-all.mjs` 会在任一默认 config 出现代理 `CONFIG_PACKAGE_*=y/m` 时直接失败。config 预检把 `defconfig` 后实际被选中的代理相关符号写入 `proxy-selected.txt` 和 Summary,用户主动选择时仍可按正常依赖加入
+- 下载与编译统一使用 `JOBS=$(( $(nproc) + 1 ))` 动态并发，并通过 `stdbuf` + `tee` 在 Actions 实时逐行显示原始输出，同时完整写入 `download.log` / `build.log`。网页与 Issue 解析使用 Catalog 的 `Conflicts:` 元数据在提交前检查软件包互斥；Actions 不再运行 `make defconfig` 或基于其结果进行第二轮改写。`config/001.presets/config-rules.json`（网页副本在 `site/wrt/data/`）是需人工语义选择或已知上游兼容性规则的唯一维护源：规则支持 Source/Branch/Target scope、`when.all`、`when.any`、单值或 Y/M 状态数组、`set` 与 `setPrefixes`；`prompt: always` 表示新建和导入配置都必须确认，`maintenance` 保存发现版本、证据 run 与复查条件。网页先完成规则处理和请求生成，再打开 GitHub，不预开 `about:blank`；直接上传未经网页处理的旧附件仍会明确拒绝，绝不静默改写附件。当前已登记 LEDE master + Linux 6.12 的外置 ksmbd 3.5.4 VFS API 不兼容规则，统一关闭其内核模块、服务端、LuCI 与语言包。`CONFIG_DEVEL=y`、`CONFIG_BUILD_LOG=y` 在复制完整配置后以幂等方式启用，确保按包日志真正生成。并行编译失败后，CI 最多 60 分钟执行一次 `make -j1 V=s`：若该次补跑成功，构建标为“单线程恢复”并继续产出；仍失败或超时才保持失败，完整 `build-diagnostic.log` 会上传。
+- 解析器在克隆与编译前根据 Catalog 清单核验 Source、Branch 与精确 Target/Profile；通过后把 `submitted.config` 直接复制为 `openwrt/.config`，同时保留 `submitted.config` 与实际 `build.config` Artifact。
+- `custom-target` 不要求 Profile 预先存在于仓库清单；上传配置中的通用 Target 选择直接作为构建输入，不含 360T7 专用限制，其可用性由所选上游源码负责。
+- 全部版本化 base config 默认关闭 PassWall/SSR Plus/VSSR/TinyProxy 及其代理内核/子选项;`check-all.mjs` 会在任一默认 config 出现代理 `CONFIG_PACKAGE_*=y/m` 时直接失败。config 预检把实际开编配置中已选中的代理相关符号写入 `proxy-selected.txt` 和 Summary,用户主动选择时仍可按正常依赖加入
 - `tools/parse-request.mjs`:全字段白名单(机型/源/版本/变体/插件±前缀/原始软件包/登录地址/初始密码/时区/主题/NTP/opkg)。新手 Issue 只显示一个必填附件框并推荐网页 JSON;解析器仍接受 1~3 个 GitHub 自有附件并识别 JSON、`.config`、`config.buildinfo`,但无网页元数据头的原始配置必须先回网页加载识别。
 - Issue 正式链路不调用 `build-config.mjs`:前端 `applyToConfig()` 生成完整 config → 附件 → `submitted.config` → `openwrt/.config`;`build-config.mjs` 只保留给内部 smoke 的隐藏 `repository_dispatch` 兼容入口。
 - 时区表在 `site/wrt/data/timezones.json`,来源为 OpenWrt LuCI 的 445 项映射。组合框默认只列约 70 个常用城市并按当前 UTC 偏移从 `UTC-12` 到 `UTC+14` 排序；输入搜索时仍查询完整 445 项，`北京`/`北京时间` 只作为 `Asia/Shanghai` 搜索词，不写入显示值。首次访问且没有用户保存值或导入配置时，优先采用浏览器报告的 IANA 时区；手动选择会保存到本机。前端提交 IANA `zonename`,解析器映射并输出 POSIX `timezone`;三个 diy2 脚本用 `files/etc/uci-defaults/10-weig-timezone` 同时写入两项。控件统一为 44px 高，旧 POSIX 请求继续兼容。
@@ -154,11 +154,11 @@ WeiG-OpenWrt-AutoBuild/
 - `sync-upstream.yml` 每周六 18:37 UTC 自动同步上游并提交;`check-drift.mjs` 只检查通用 OpenWrt 分支策略并在漂移时开 issue;`mirror-upstream.yml` 每月镜像(需 `secrets.MIRROR_TOKEN`);`smoke-all.yml` 一键触发三源隐藏最小构建。
 - `site-version.yml` 监听 `site/wrt/**` 与 `VERSION` push,按内容指纹同时更新根 `VERSION` 和 `site-version.json`，由机器人一次提交；解析器继续接受旧 `vYYMMDDHH` 请求。桌面端版本号位于“加载配置”左侧，560px 以下改在页脚右侧；`github.actor` 条件防止提交循环。
 
-#### 取消内置项与 defconfig 的交互
+#### 取消内置项与直接配置构建
 
-- 开发者模式的 `-id` 会把对应 `CONFIG_PACKAGE_*` 写成显式 `# ... is not set`;OpenWrt `defconfig` 会尊重这个关闭状态。
+- 开发者模式的 `-id` 会把对应 `CONFIG_PACKAGE_*` 写成显式 `# ... is not set`；完整配置会直接用于构建，不再由项目主动执行 `make defconfig` 初始化。
 - `CONFIG_DEFAULT_*` 只提供默认值,不是强制 `select`;它可以与对应 `CONFIG_PACKAGE_*` 的显式关闭状态并存。
-- 只有两类项目会回来:被本次其他已选包作为依赖 `select` 的包会按需回补;页面标为 `locked` 的系统基础项根本不允许取消。
+- 上游构建系统仍可能按 Kconfig 依赖关系处理被其他选项 `select` 的符号；这不是项目主动运行 `make defconfig`。页面标为 `locked` 的系统基础项不允许取消。
 - 因此取消内置项时应先看依赖与风险警示,不要把“显式关闭”误解成“永远不会作为依赖加入”。
 
 ### 2.6 文档体系

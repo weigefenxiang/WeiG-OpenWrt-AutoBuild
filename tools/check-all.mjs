@@ -256,9 +256,15 @@ mirrorRootsOk
   submitLayoutContract
     ? ok('提交设置:后台登录地址左侧、构建标识右侧，手机端自动纵向排列')
     : bad('submit settings layout', '后台登录地址/构建标识的桌面或手机布局不符合约定');
-  const failureDiagnosticsContract = buildWorkflow.includes("echo 'CONFIG_DEVEL=y' >> .config") &&
-    buildWorkflow.includes("echo 'CONFIG_BUILD_LOG=y' >> .config") &&
+  const failureDiagnosticsContract = buildWorkflow.includes('set_config_flag DEVEL') &&
+    buildWorkflow.includes('set_config_flag BUILD_LOG') &&
     buildWorkflow.includes("grep -Fx 'CONFIG_BUILD_LOG=y' .config") &&
+    buildWorkflow.includes('config_policy=authoritative-no-defconfig') &&
+    buildWorkflow.includes('build.config') &&
+    !buildWorkflow.includes('make defconfig') &&
+    !buildWorkflow.includes('resolved.config') &&
+    !buildWorkflow.includes('config-defconfig.diff') &&
+    !buildWorkflow.includes('verify-resolved-target.mjs') &&
     buildWorkflow.includes('id: compile') &&
     buildWorkflow.includes('id: diagnose') &&
     buildWorkflow.includes('continue-on-error: true') &&
@@ -266,10 +272,6 @@ mirrorRootsOk
     buildWorkflow.includes("make -j1 V=s") &&
     buildWorkflow.includes('build-diagnostic.log') &&
     buildWorkflow.includes('Finalize compile result') &&
-    buildWorkflow.includes('Verify package conflicts') &&
-    buildWorkflow.includes('id: package_conflicts') &&
-    buildWorkflow.includes('verify-package-conflicts.mjs') &&
-    buildWorkflow.includes('配置预检失败，未进入编译') &&
     parser.includes('const configRuleContext = {') && parser.includes('matchingConfigRules(config, configRuleContext)') &&
     js.includes('matchingConfigRules(config)') &&
     js.includes('applyConfigRules(config, rules)') &&
@@ -406,19 +408,17 @@ mirrorRootsOk
   menuconfigImportOk
     ? ok('原生 menuconfig 配置可按设备选择行识别和提交,不依赖派生目标签名或插件')
     : bad('menuconfig import contract', '网页或 Actions 的原生设备选择行兼容逻辑缺失');
-  const verifier = readFileSync(join(ROOT, 'tools', 'verify-resolved-target.mjs'), 'utf8');
   const customTargetContract = js.includes('function customDeviceFromConfig') &&
     js.includes("id: 'custom-target'") &&
     js.includes('async function selectImportedTarget') &&
     js.includes('importedTargetVerified = false') &&
     parser.includes("['custom-target', 'catalog-target'].includes(req.device)") &&
     parser.includes('custom_target=${isCustomTarget ? 1 : 0}') &&
-    verifier.includes("process.env.CUSTOM_TARGET === '1'") &&
-    readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8')
-      .includes('EXPECTED_CONFIG_PATH="$GITHUB_WORKSPACE/submitted.config"');
+    buildWorkflow.includes('cp submitted.config openwrt/.config') &&
+    buildWorkflow.includes('config_policy=authoritative-no-defconfig');
   customTargetContract
-    ? ok('未收录 .config → Custom Target → Issue/Actions 通用防漂移链路已接通')
-    : bad('custom target contract', '网页兜底、解析器、验证器或 Actions 环境参数缺失');
+    ? ok('未收录 .config → Custom Target → Issue/Actions 直接配置链路已接通')
+    : bad('custom target contract', '网页兜底、解析器、Issue 校验或 Actions 直接配置参数缺失');
   const importedWorkspaceContract = html.includes('id="importWorkspace"') &&
     html.includes('id="importUnknownBox"') &&
     js.includes('function importedConfigMeta') &&

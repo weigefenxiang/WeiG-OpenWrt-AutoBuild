@@ -263,9 +263,9 @@ function applyI18n() {
   if ($('importReset')) $('importReset').textContent =
     uiText('恢复上传原值', '還原上傳原值', 'Restore uploaded values');
   if ($('importUnknownHint')) $('importUnknownHint').textContent = uiText(
-    'Catalog 未收录这些配置项，不自动推断依赖。关闭会写入 “is not set”；删除配置行则交给 make defconfig 决定默认值。',
-    'Catalog 未收錄這些設定項，不自動推斷相依性。關閉會寫入 “is not set”；刪除設定列則交由 make defconfig 決定預設值。',
-    'These items are not in the Catalog, so dependencies are not inferred. Disable writes “is not set”; deleting a line leaves the default to make defconfig.');
+    'Catalog 未收录这些配置项，不自动推断依赖。关闭会写入 “is not set”；删除配置行则交给所选源码的构建系统决定默认值。',
+    'Catalog 未收錄這些設定項，不自動推斷相依性。關閉會寫入 “is not set”；刪除設定列則交由所選原始碼的建置系統決定預設值。',
+    'These items are not in the Catalog, so dependencies are not inferred. Disable writes “is not set”; deleting a line leaves the default to the selected upstream build system.');
   if ($('importUnknownSearch')) $('importUnknownSearch').placeholder =
     uiText('搜索 CONFIG 名称', '搜尋 CONFIG 名稱', 'Search CONFIG symbol');
   if ($('importUnknownDisabledLabel')) $('importUnknownDisabledLabel').textContent =
@@ -2122,11 +2122,11 @@ function renderImportedWorkspace() {
   if (!importedTargetVerified) {
     targetCard.append(document.createTextNode(uiText(
       `⚠ Custom Target：${state.device.target.system} / ${state.device.target.subtarget} / ` +
-        `${state.device.target.profileLabel} 未经当前 Catalog 验证，Actions 将在 make defconfig 后核验。 `,
+        `${state.device.target.profileLabel} 未经当前 Catalog 验证，将按上传配置直接构建；是否可用由所选源码决定。 `,
       `⚠ Custom Target：${state.device.target.system} / ${state.device.target.subtarget} / ` +
-        `${state.device.target.profileLabel} 未經目前 Catalog 驗證，Actions 將在 make defconfig 後核驗。 `,
+        `${state.device.target.profileLabel} 未經目前 Catalog 驗證，將按上傳設定直接建置；是否可用由所選原始碼決定。 `,
       `⚠ Custom Target: ${state.device.target.system} / ${state.device.target.subtarget} / ` +
-        `${state.device.target.profileLabel} is not verified by the current Catalog; Actions will verify it after make defconfig. `)));
+        `${state.device.target.profileLabel} is not verified by the current Catalog; it will be built as uploaded and availability depends on the selected upstream. `)));
     const useCatalog = document.createElement('button');
     useCatalog.type = 'button';
     useCatalog.className = 'text-btn';
@@ -4192,7 +4192,7 @@ function openSubmitModal() {
   if (state.importedConfig && !importedTargetVerified) {
     const warning = document.createElement('p');
     warning.className = 'import-error';
-    warning.textContent = '⚠ Custom Target 未经当前 Catalog 验证；Actions 将在 make defconfig 后核验目标。';
+    warning.textContent = '⚠ Custom Target 未经当前 Catalog 验证；Actions 将按上传配置直接构建，是否可用由所选源码决定。';
     mb.appendChild(warning);
   }
 

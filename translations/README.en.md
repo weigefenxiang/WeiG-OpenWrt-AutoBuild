@@ -30,9 +30,9 @@ Currently the **360T7 (MT7981)** is the fully maintained device; the 200+ other 
 3. The bot replies in the issue with a link to this build; a full compilation takes about **2–3 hours**.
 4. When the build finishes, the bot comments again to notify you. Open the build page and download from **Artifacts** at the bottom:
    - `FIRMWARE-ALL-…`: all firmware and verification files; most first-time users use the file containing `factory`;
-   - `CONFIG-…`: submitted config, `make defconfig` result, and their diff for reproducibility;
+   - `CONFIG-…`: submitted config, effective build config, and build metadata for reproducibility;
    - `BUILD-LOGS-…`: complete download/build logs and error excerpts, provided on success or failure and kept for 14 days.
-5. To skip compilation, choose **Submit cloud build → Download .config only** and immediately save the complete configuration generated from the current selections (a preview not yet expanded by defconfig).
+5. To skip compilation, choose **Submit cloud build → Download .config only** and immediately save the complete configuration generated from the current selections. Actions builds directly from it and does not explicitly run `make defconfig`.
 6. The page loads `build-request.json`, `.config`, and `config.buildinfo`. Its searchable timezone field contains the complete OpenWrt/LuCI IANA list in the uniform `(UTC±HH:MM) Region/City` format. You can also select the firmware LuCI theme, NTP preset, and opkg mirror; the confirmation dialog repeats the brand, model, source, version, partition, and page version.
 
 > 💡 After flashing: point your browser at **192.168.1.1** (or the address you customized on the submit page), username **root**, **empty password** (set one immediately on first login) — only the Lean LEDE source ships with the initial password `password`.
@@ -86,7 +86,7 @@ See [ARCHITECTURE.md](../ARCHITECTURE.md) (bilingual, Chinese and English).
 
 ### Security
 
-- Issues accept 1–3 GitHub-hosted attachments and auto-detect `build-request.json`, `.config`, and `config.buildinfo`; fields, whitelists, size, and target signature are validated. The submitted full config is authoritative, and the `make defconfig` diff is retained in the artifact.
+- Issues accept 1–3 GitHub-hosted attachments and auto-detect `build-request.json`, `.config`, and `config.buildinfo`; fields, whitelists, size, and target signature are validated. The submitted full config is authoritative; Actions does not explicitly run `make defconfig`, and the effective build config is retained in the artifact.
 - The build tag is sanitized down to Chinese/English characters, digits, and hyphens, and is used only for artifact naming and display;
 - Workflow permissions are narrowed to `contents: read + issues: write`.
 

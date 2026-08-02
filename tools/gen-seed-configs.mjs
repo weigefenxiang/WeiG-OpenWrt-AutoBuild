@@ -139,7 +139,7 @@ for (const raw of [...CATALOG.rawMerged, ...(CATALOG.platforms || [])]) {
         GENERATED_HEADER,
         `# seed-device=${info.id} source=${sourceId} version=${profile.version} (${profile.branch}) profile=${id}`,
         `# upstream-profile=${profile.profile}`,
-        '# 其余符号由 make defconfig 自动展开 / everything else is expanded by make defconfig',
+        '# 其余符号按所选上游源码的构建行为处理 / remaining symbols follow the selected upstream build behavior',
       ];
       const configPath = join(dir, filename);
       const eol = existingEol(configPath);

@@ -293,34 +293,27 @@ jobs:
             cp openwrt/.config submitted.config
           fi
           cd openwrt
-          echo 'CONFIG_DEVEL=y' >> .config
-          echo 'CONFIG_BUILD_LOG=y' >> .config
-          make defconfig
-          grep -Fx 'CONFIG_DEVEL=y' .config || { echo 'CONFIG_DEVEL was removed by make defconfig' >&2; exit 1; }
-          grep -Fx 'CONFIG_BUILD_LOG=y' .config || { echo 'CONFIG_BUILD_LOG was removed by make defconfig' >&2; exit 1; }
+          set_config_flag() {
+            sed -i -E "/^(CONFIG_${1}=|# CONFIG_${1} is not set)/d" .config
+            echo "CONFIG_${1}=y" >> .config
+          }
+          set_config_flag DEVEL
+          set_config_flag BUILD_LOG
+          grep -Fx 'CONFIG_DEVEL=y' .config || { echo 'CONFIG_DEVEL is missing from the build config' >&2; exit 1; }
+          grep -Fx 'CONFIG_BUILD_LOG=y' .config || { echo 'CONFIG_BUILD_LOG is missing from the build config' >&2; exit 1; }
           if [ "${{ steps.req.outputs.firmware_snapshot }}" = "1" ]; then
             grep -Fx "CONFIG_PACKAGE_${{ steps.req.outputs.theme }}=y" .config || {
-              echo "Selected firmware theme was removed by make defconfig: ${{ steps.req.outputs.theme }}" >&2
+              echo "Selected firmware theme is missing from the submitted config: ${{ steps.req.outputs.theme }}" >&2
               exit 1
             }
           fi
-          CONFIG_ID="${{ steps.req.outputs.device }}/${{ steps.req.outputs.source }}/${{ steps.req.outputs.version }}/${{ steps.req.outputs.variant }}" \
-            CUSTOM_TARGET="${{ steps.req.outputs.custom_target }}" \
-            EXPECTED_CONFIG_PATH="$GITHUB_WORKSPACE/submitted.config" \
-            CONFIG_PATH="$PWD/.config" node "$GITHUB_WORKSPACE/tools/verify-resolved-target.mjs"
-          cp .config "$GITHUB_WORKSPACE/resolved.config"
-          diff -u "$GITHUB_WORKSPACE/submitted.config" "$GITHUB_WORKSPACE/resolved.config" \
-            > "$GITHUB_WORKSPACE/config-defconfig.diff" || true
+          cp .config "$GITHUB_WORKSPACE/build.config"
           grep '^CONFIG_TARGET_PROFILE' .config
           grep -c '^CONFIG_PACKAGE_luci-app' .config || true
 
-      - name: Verify package conflicts / 软件包互斥预检
-        id: package_conflicts
+      - name: Record effective configuration / 记录实际构建配置
         run: |
           cd openwrt
-          test -s tmp/.packageinfo
-          node "$GITHUB_WORKSPACE/tools/verify-package-conflicts.mjs" \
-            --config .config --package-info tmp/.packageinfo
           TEST_VERSION="$(tr -d '\r\n' < "$GITHUB_WORKSPACE/VERSION")"
           GEOIP_STATE="$(grep -E '^CONFIG_PACKAGE_v2ray-geoip=[ym]$' .config || echo 'disabled')"
           GEOSITE_STATE="$(grep -E '^CONFIG_PACKAGE_v2ray-geosite=[ym]$' .config || echo 'disabled')"
@@ -339,6 +332,7 @@ jobs:
             echo "version=${{ steps.req.outputs.version }}"
             echo "variant=${{ steps.req.outputs.variant }}"
             echo "request_mode=${{ steps.req.outputs.request_mode }}"
+            echo "config_policy=authoritative-no-defconfig"
             echo "config_id=${{ steps.req.outputs.config_id }}"
             echo "submitted_sha256=${{ steps.req.outputs.submitted_sha256 }}"
             echo "plugins=${{ steps.req.outputs.plugins }}"
@@ -370,14 +364,14 @@ jobs:
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload final .config / 上传最终 .config(编译失败也能拿到)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.req.outputs.build_ref }}-CONFIG-${{ steps.req.outputs.artifact_tail }}
           path: |
             openwrt/.config
             submitted.config
-            resolved.config
-            config-defconfig.diff
+            build.config
             build-metadata.txt
             firmware-settings.txt
             proxy-selected.txt
@@ -468,17 +462,6 @@ jobs:
       - name: Finalize compile result / 确认编译结果
         if: always()
         run: |
-          if [ "${{ steps.package_conflicts.outcome }}" = "failure" ]; then
-            echo "::error::配置预检失败，未进入编译；请下载 BUILD-LOGS。"
-            {
-              echo "### ⛔ 配置预检拦截 / Configuration preflight blocked"
-              echo ""
-              echo "- compilation: not started / 未开始"
-              echo "- read BUILD-LOGS/00-SUMMARY.txt or errors.txt for the exact conflict"
-              echo ""
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
           if [ "${{ steps.compile.outcome }}" = "success" ]; then
             echo "Parallel compile succeeded / 并行编译成功"
             exit 0
@@ -504,7 +487,7 @@ jobs:
           cp build.log build-diagnostic.log download.log failure-logs/ 2>/dev/null || true
           cp build-metadata.txt failure-logs/ 2>/dev/null || true
           cp proxy-selected.txt failure-logs/ 2>/dev/null || true
-          cp submitted.config resolved.config config-defconfig.diff failure-logs/ 2>/dev/null || true
+          cp submitted.config build.config failure-logs/ 2>/dev/null || true
           cp openwrt/.config failure-logs/final.config 2>/dev/null || true
           # OpenWrt 的 CONFIG_BUILD_LOG=y 会把每个包的日志写到 openwrt/logs/ / With CONFIG_BUILD_LOG=y, OpenWrt writes per-package build logs to openwrt/logs/
           if [ -d openwrt/logs ]; then
@@ -640,7 +623,7 @@ jobs:
             echo '| Artifact | 内容 / Contents |'
             echo '| --- | --- |'
             echo '| 📦 `${{ steps.req.outputs.build_ref }}-FIRMWARE-ALL-${{ steps.req.outputs.artifact_tail }}` | 全部固件与 manifest/buildinfo/sha256sums；文件保持原后缀 |'
-            echo '| ⚙️ `${{ steps.req.outputs.build_ref }}-CONFIG-${{ steps.req.outputs.artifact_tail }}` | 提交配置、defconfig 结果、差异和构建元数据 |'
+            echo '| ⚙️ `${{ steps.req.outputs.build_ref }}-CONFIG-${{ steps.req.outputs.artifact_tail }}` | 用户提交配置、实际开编配置和构建元数据 |'
             echo '| 🧾 `${{ steps.req.outputs.build_ref }}-BUILD-LOGS-${{ steps.req.outputs.artifact_tail }}` | 完整下载/编译日志；保留 14 天 |'
             echo '| 🧩 `${{ steps.req.outputs.build_ref }}-OPTIONAL-PACKAGES-${{ steps.req.outputs.artifact_tail }}` | menuconfig 选为 M：已编译但未写入固件的软件包 |'
             echo ''
@@ -689,7 +672,7 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `@${context.payload.issue.user.login}\n\n✅ 构建完成!\n\n下载 / Download:${url}\n\n- \`${{ steps.req.outputs.build_ref }}-FIRMWARE-ALL-${{ steps.req.outputs.artifact_tail }}\`:全部固件及校验资料;首次刷机通常选 \`factory\`\n- \`${{ steps.req.outputs.build_ref }}-OPTIONAL-PACKAGES-${{ steps.req.outputs.artifact_tail }}\`:menuconfig 选为 M、未写入固件的可选安装包\n- \`${{ steps.req.outputs.build_ref }}-CONFIG-${{ steps.req.outputs.artifact_tail }}\`:提交配置、defconfig 结果与差异\n- \`${{ steps.req.outputs.build_ref }}-BUILD-LOGS-${{ steps.req.outputs.artifact_tail }}\`:完整日志(14 天)\n\n\`sysupgrade\` 只用于当前固件与闪存布局兼容的升级。固件/配置保留 30 天。`,
+              body: `@${context.payload.issue.user.login}\n\n✅ 构建完成!\n\n下载 / Download:${url}\n\n- \`${{ steps.req.outputs.build_ref }}-FIRMWARE-ALL-${{ steps.req.outputs.artifact_tail }}\`:全部固件及校验资料;首次刷机通常选 \`factory\`\n- \`${{ steps.req.outputs.build_ref }}-OPTIONAL-PACKAGES-${{ steps.req.outputs.artifact_tail }}\`:menuconfig 选为 M、未写入固件的可选安装包\n- \`${{ steps.req.outputs.build_ref }}-CONFIG-${{ steps.req.outputs.artifact_tail }}\`:用户提交配置、实际开编配置和构建元数据\n- \`${{ steps.req.outputs.build_ref }}-BUILD-LOGS-${{ steps.req.outputs.artifact_tail }}\`:完整日志(14 天)\n\n\`sysupgrade\` 只用于当前固件与闪存布局兼容的升级。固件/配置保留 30 天。`,
             });
             await github.rest.issues.update({
               owner: context.repo.owner, repo: context.repo.repo,

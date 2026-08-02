@@ -39,9 +39,9 @@ OpenWrt 固件**在线定制 + 云编译**。在 [网站](https://wrt.weigeshare
 **Artifacts** 下载:
 
    - `FIRMWARE-ALL-…`:全部固件与校验资料;大多数首次刷机用户使用其中带 `factory` 的文件;
-   - `CONFIG-…`:提交配置、`make defconfig` 结果与差异,可留档复现;
+   - `CONFIG-…`:用户提交配置、实际开编配置与构建元数据,可留档复现;
    - `BUILD-LOGS-…`:完整下载/编译日志与报错摘录,成功或失败都会提供,保留 14 天。
-5. 也可以不编译：点 **提交云编译 → 仅下载 .config**，立即拿到按当前选择生成的完整配置（预览版，未经 defconfig 展开）。
+5. 也可以不编译：点 **提交云编译 → 仅下载 .config**，立即拿到按当前选择生成的完整配置；Actions 将按该配置直接构建，不主动运行 `make defconfig`。
 6. 页面可加载 `build-request.json`、`.config`、`config.buildinfo`；时区提供 OpenWrt/LuCI 完整 IANA 列表并支持搜索，统一显示为 `(UTC±HH:MM) Region/City`。页面还可选择固件 LuCI 主题、NTP 与 opkg 镜像，提交确认框会再次列出品牌、型号、源码、版本、分区及网页版本。
 
 > 💡 刷好固件后:浏览器访问
@@ -122,7 +122,7 @@ config 副本,同时对"配置里有但没收录"的插件给出警告;
 
 ### 安全
 
-- Issue 接受 1~3 个 GitHub 自有附件并自动识别 `build-request.json`、`.config`、`config.buildinfo`;请求字段、插件/软件包 id、配置格式、大小以及机型目标签名都会校验。完整配置是用户提交的权威输入,`make defconfig` 展开后的差异会随 artifact 一并保留;
+- Issue 接受 1~3 个 GitHub 自有附件并自动识别 `build-request.json`、`.config`、`config.buildinfo`;请求字段、插件/软件包 id、配置格式、大小以及机型目标签名都会校验。完整配置是用户提交的权威输入，Actions 不主动运行 `make defconfig`，实际开编配置会随 artifact 一并保留;
 - 构建标识(tag)会被清洗为中英文数字与连字符,仅用于 artifact 命名与展示;
 - workflow 权限收敛为 `contents: read + issues: write`。
 
