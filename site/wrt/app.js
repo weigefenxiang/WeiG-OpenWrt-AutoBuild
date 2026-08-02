@@ -2197,6 +2197,17 @@ function renderTargetPicker(preferState = true) {
   const profile = fillTargetSelect('targetProfile', rows, (r) => r.variant.id, (r) => r.device.target.profileLabel, current?.variant.id);
   return rows.find((r) => r.variant.id === profile);
 }
+async function selectCatalogLocatorTarget(values) {
+  const schema = MENU_CATALOG?.targetSelectors?.length
+    ? MENU_CATALOG.targetSelectors : DEFAULT_TARGET_SELECTORS;
+  targetSelectorValues = Object.fromEntries(schema.map((selector) => [selector.id, '']));
+  Object.assign(targetSelectorValues, values);
+  const selected = renderCatalogTargetSelectors(targetSelectorValues);
+  if (!selected.target || !selected.profile) return;
+  await applyCatalogTarget();
+  const label = state.device?.target?.profileLabel || selected.profile.name || selected.profile.id;
+  showToast(uiText(`已选择 ${label}`, `已選擇 ${label}`, `Selected ${label}`), 'device');
+}
 function catalogLocatorEntries(query) {
   const entries = [];
   for (const source of MENU_INDEX?.sources || []) {
@@ -2226,11 +2237,15 @@ function catalogLocatorEntries(query) {
     for (const node of nodes || []) {
       const next = { ...values, [selector.id]: node.value };
       entries.push({
-        type: selector.labelEn || selector.id,
+        type: node.profileId ? 'Target Profile' : (selector.labelEn || selector.id),
         label: node.labelEn || node.value,
         detail: Object.values(next).join(' › '),
         hay: `${selector.id} ${selector.labelEn || ''} ${node.value} ${node.labelEn || ''} ${node.labelZh || ''}`,
         run: async () => {
+          if (node.profileId) {
+            await selectCatalogLocatorTarget(next);
+            return;
+          }
           targetSelectorValues = next;
           renderCatalogTargetSelectors(next);
           await applyCatalogTarget();

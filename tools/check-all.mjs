@@ -451,6 +451,8 @@ mirrorRootsOk
     js.includes("chip.className = 'menu-translation-chip'") &&
     js.includes('function jumpMenuBreadcrumb') &&
     js.includes('function initCatalogLocator') &&
+    js.includes('function selectCatalogLocatorTarget') &&
+    js.includes("if (node.profileId) {") &&
     js.includes('function syncCatalogApplications') &&
     js.includes("['Top level', ...menuBreadcrumb]") &&
     catalogUrlBlock.indexOf('raw.githubusercontent.com') >= 0 &&
