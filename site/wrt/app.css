@@ -668,6 +668,16 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
 .modal-import-source .modal-actions { justify-content: flex-end; margin-top: 16px; }
 .modal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .modal-actions .btn { margin: 0; }
+.modal.conflict-resolver { max-width: 620px; background: color-mix(in srgb, var(--accent) 4%, var(--card)); }
+.conflict-rule { margin-top: 14px; padding: 13px; border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border)); border-radius: 12px; background: var(--card2); }
+.conflict-rule h4 { font-family: ui-monospace, Consolas, monospace; color: var(--accent-text); }
+.conflict-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 12px; }
+.conflict-option { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text); text-align: left; cursor: pointer; }
+.conflict-option:hover,.conflict-option:focus-visible,.conflict-option.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card)); outline: none; }
+.conflict-option strong,.conflict-option span { display: block; }
+.conflict-option strong { font-size: 14.5px; }
+.conflict-option span { margin-top: 3px; color: var(--text2); font-size: 13px; line-height: 1.45; }
+@media (max-width: 560px) { .conflict-options { grid-template-columns: 1fr; } }
 .summary-box {
   background: var(--card2); border-radius: var(--radius);
   padding: 10px 12px; font-size: 12.5px; line-height: 1.7; color: var(--text2);

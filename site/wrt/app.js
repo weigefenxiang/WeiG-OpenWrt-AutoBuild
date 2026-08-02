@@ -62,6 +62,7 @@ const state = {
 };
 const LANIP_RE = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/;   // 仅接受内网 IPv4 / private IPv4 only
 let DEVICES = null, PLUGINS = null, I18N = null, TIMEZONES = null, MINIMUM_BOOT = null, SOURCE_PACKAGE_RULES = null;
+const sourcePackageRuleChoices = new Map();
 let PACKAGE_MIRRORS = { presets: [{ id: 'auto', label: { 'zh-CN': '跟随源码默认', en: 'Follow source default' }, roots: {} }] };
 let MENU_INDEX = null, MENU_CATALOG = null;
 let menuCatalogKey = '', menuLoadingKey = '', menuCatalogSeq = 0, menuCatalogPromise = null;
@@ -2179,6 +2180,7 @@ function renderImportedWorkspace() {
 function clearImportedWorkspace() {
   state.importedConfig = null;
   state.importedConfigId = '';
+  sourcePackageRuleChoices.clear();
   importedConfigValues.clear();
   importedUnknownOriginal.clear();
   importedUnknownEdits.clear();
@@ -3284,11 +3286,26 @@ function sourcePackageRuleMessage(rules) {
   const messages = rules.map((rule) => rule.message?.['zh-CN'] || rule.message?.en || rule.id).join(' ');
   return uiText(messages, messages, rules.map((rule) => rule.message?.en || rule.id).join(' '));
 }
+function sourcePackageRuleResolution(rule) {
+  const resolutions = rule.resolutions || [];
+  const selected = sourcePackageRuleChoices.get(rule.id);
+  return resolutions.find((item) => item.id === selected) ||
+    resolutions.find((item) => item.recommended) || resolutions[0] || null;
+}
 function applySourcePackageRules(text, rules) {
   for (const rule of rules) {
-    for (const [symbol, value] of Object.entries(rule.replace || {})) text = setConfigSymbol(text, symbol, value);
+    const resolution = sourcePackageRuleResolution(rule);
+    for (const [symbol, value] of Object.entries(resolution?.replace || rule.replace || {})) {
+      text = setConfigSymbol(text, symbol, value);
+    }
   }
   return text;
+}
+class SourcePackageResolutionRequired extends Error {
+  constructor(rules) {
+    super(sourcePackageRuleMessage(rules));
+    this.rules = rules;
+  }
 }
 function applyMenuConfig(text) {
   if (!MENU_CATALOG) return text;
@@ -3436,7 +3453,8 @@ async function generateConfigText() {
   let config = applyToConfig(raw, effectiveSelection());
   const sourceRules = sourcePackageRuleMatches(config);
   if (sourceRules.length) {
-    if (state.importedConfig) throw new Error(sourcePackageRuleMessage(sourceRules));
+    const unresolved = sourceRules.filter((rule) => !sourcePackageRuleChoices.has(rule.id));
+    if (state.importedConfig && unresolved.length) throw new SourcePackageResolutionRequired(unresolved);
     config = applySourcePackageRules(config, sourceRules);
   }
   assertCatalogPackageConflicts(config);
@@ -3480,7 +3498,7 @@ async function downloadConfig(btn) {
   btn.disabled = true;
   btn.textContent = t('btn.download.busy');
   try {
-    const text = await generateConfigText();
+    const text = await generateResolvedConfigText();
     downloadBlob(text, 'text/plain;charset=utf-8',
       [state.device.id, localStamp(), state.source.id, state.version.id, state.variant.id].join('-') + '.config');
   } catch (err) {
@@ -3909,6 +3927,7 @@ function restoreSelections(config, payload) {
 async function importConfigFile(file) {
   const seq = ++configImportSeq;
   importingConfig = true;
+  sourcePackageRuleChoices.clear();
   beginImportLog(file);
   try {
     if (!file || file.size < 32 || file.size > 2 * 1024 * 1024) throw new Error(t('import.size'));
@@ -4005,7 +4024,7 @@ function closeModal() {
   const cancel = modalCancelHandler;
   modalCancelHandler = null;
   $('modal').hidden = true;
-  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config');
+  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'conflict-resolver');
   document.body.classList.remove('modal-open');
   if (lastFocus && lastFocus.focus) lastFocus.focus();
   if (cancel) cancel();
@@ -4020,6 +4039,89 @@ $('modal').addEventListener('keydown', (e) => {
   if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 });
+
+function localizedRuleText(row, key) {
+  const text = row?.[key] || {};
+  return uiText(text['zh-CN'] || text.en || '', text['zh-TW'] || text.en || '', text.en || '');
+}
+function openSourcePackageResolver(rules) {
+  return new Promise((resolve, reject) => {
+    openModal(uiText('处理配置冲突', '處理設定衝突', 'Resolve configuration conflict'));
+    const modal = $('modal').querySelector('.modal');
+    modal.classList.remove('modal-wide', 'modal-import-source', 'recommended-config');
+    modal.classList.add('conflict-resolver');
+    const body = $('modalBody');
+    body.textContent = '';
+    const intro = document.createElement('p');
+    intro.className = 'import-error';
+    intro.textContent = uiText('检测到互斥 TLS 后端。请选择保留哪一项；不会修改原上传文件，只有继续下载或提交时才写入修正后的配置。',
+      '偵測到互斥 TLS 後端。請選擇保留哪一項；不會修改原上傳檔案，只有繼續下載或提交時才寫入修正後的設定。',
+      'Mutually exclusive TLS backends were detected. Choose one; the uploaded file stays unchanged until the corrected configuration is downloaded or submitted.');
+    body.appendChild(intro);
+    const choices = new Map();
+    const continueButton = document.createElement('button');
+    continueButton.type = 'button';
+    continueButton.className = 'btn btn-primary';
+    continueButton.textContent = uiText('应用并继续', '套用並繼續', 'Apply and continue');
+    continueButton.disabled = true;
+    for (const rule of rules) {
+      const card = document.createElement('section');
+      card.className = 'conflict-rule';
+      const title = document.createElement('h4');
+      title.textContent = rule.id;
+      card.appendChild(title);
+      const message = document.createElement('p');
+      message.textContent = localizedRuleText(rule, 'message');
+      card.appendChild(message);
+      const options = document.createElement('div');
+      options.className = 'conflict-options';
+      for (const resolution of rule.resolutions || []) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'conflict-option';
+        const label = document.createElement('strong');
+        label.textContent = localizedRuleText(resolution, 'label');
+        const description = document.createElement('span');
+        description.textContent = localizedRuleText(resolution, 'description');
+        button.append(label, description);
+        button.addEventListener('click', () => {
+          choices.set(rule.id, resolution.id);
+          for (const sibling of options.children) sibling.classList.remove('selected');
+          button.classList.add('selected');
+          continueButton.disabled = choices.size !== rules.length;
+        });
+        options.appendChild(button);
+      }
+      card.appendChild(options);
+      body.appendChild(card);
+    }
+    const actions = document.createElement('div');
+    actions.className = 'modal-actions';
+    continueButton.addEventListener('click', () => {
+      for (const [ruleId, resolutionId] of choices) sourcePackageRuleChoices.set(ruleId, resolutionId);
+      modalCancelHandler = null;
+      closeModal();
+      resolve();
+    });
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'btn';
+    cancel.textContent = uiText('暂不处理', '暫不處理', 'Cancel');
+    cancel.addEventListener('click', closeModal);
+    actions.append(continueButton, cancel);
+    body.appendChild(actions);
+    modalCancelHandler = () => reject(new Error(uiText('已取消处理配置冲突', '已取消處理設定衝突', 'Configuration conflict resolution cancelled')));
+  });
+}
+async function generateResolvedConfigText() {
+  try {
+    return await generateConfigText();
+  } catch (error) {
+    if (!(error instanceof SourcePackageResolutionRequired)) throw error;
+    await openSourcePackageResolver(error.rules);
+    return generateConfigText();
+  }
+}
 
 function openSubmitModal() {
   const repo = targetRepo();
@@ -4084,7 +4186,7 @@ function openSubmitModal() {
       const issueWindow = window.open('about:blank', '_blank');
       button.disabled = true;
       try {
-        const config = await generateConfigText();
+        const config = await generateResolvedConfigText();
         const rawOps = state.advanced ? [...devPkgs].concat([...devRemoved].map((n) => '-' + n)) : [];
         const payload = {
           schema: 4,
@@ -4222,7 +4324,7 @@ async function runSelfTest() {
   if (!src || !cfgText || !PLUGINS) d4('fail', t('st.gen.skip'));
   else {
     try {
-      const text = await generateConfigText();
+      const text = await generateResolvedConfigText();
       const headerOk = text.includes(`# page-version=${state.siteVersion}`) &&
         text.includes(`# device=${state.device.id} source=${state.source.id} version=${state.version.id}`);
       const targets = targetLines(text);
