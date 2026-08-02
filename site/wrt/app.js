@@ -3358,6 +3358,36 @@ function applyToConfig(text, sel) {
     (sel.forced.length ? '# forced (advanced): ' + sel.forced.map((p) => p.id).join(' ') + '\n' : '') +
     (sel.removed.length ? '# removed builtin (advanced): ' + sel.removed.map((p) => p.id).join(' ') + '\n' : '') + text;
 }
+function catalogPackageConflicts(text) {
+  const states = new Map();
+  for (const match of String(text).matchAll(/^CONFIG_PACKAGE_([A-Za-z0-9_.+-]+)=([ym])$/gm)) {
+    states.set(match[1], match[2]);
+  }
+  const pairs = new Map();
+  for (const option of MENU_CATALOG?.menu?.options || []) {
+    if (!option.symbol?.startsWith('PACKAGE_')) continue;
+    const name = option.symbol.slice('PACKAGE_'.length);
+    if (states.get(name) !== 'y') continue;
+    for (const raw of option.conflicts || []) {
+      const other = String(raw).replace(/^PACKAGE_/, '');
+      if (states.get(other) !== 'y') continue;
+      const pair = [name, other].sort();
+      pairs.set(pair.join('\0'), pair);
+    }
+  }
+  return [...pairs.values()];
+}
+function assertCatalogPackageConflicts(text) {
+  const conflicts = catalogPackageConflicts(text);
+  if (!conflicts.length) return;
+  const names = conflicts.map((pair) => pair.join(' <-> ')).join('; ');
+  const ledeTls = state.source?.id === 'lede' && conflicts.some((pair) =>
+    pair.includes('libustream-openssl') && pair.includes('libustream-mbedtls'));
+  throw new Error(uiText(
+    `软件包互斥：${names}。请只保留一个后端${ledeTls ? '；LEDE 默认 OpenSSL，请使用 luci-ssl-openssl。' : '。'}`,
+    `軟體套件互斥：${names}。請只保留一個後端${ledeTls ? '；LEDE 預設 OpenSSL，請使用 luci-ssl-openssl。' : '。'}`,
+    `Package conflict: ${names}. Keep one backend${ledeTls ? '; LEDE defaults to OpenSSL, so use luci-ssl-openssl.' : '.'}`));
+}
 function resolveConfigTheme(text, fallback = true) {
   const enabled = [...String(text).matchAll(/^CONFIG_PACKAGE_(luci-theme-[A-Za-z0-9._+-]+)=y$/gm)]
     .map((match) => match[1]);
@@ -3386,7 +3416,9 @@ async function generateConfigText() {
     : state.device.id === 'catalog-target'
       ? catalogTargetConfig()
     : await (await fetchData(state.device.id + '/' + configName)).text();
-  return applyToConfig(raw, effectiveSelection());
+  const config = applyToConfig(raw, effectiveSelection());
+  assertCatalogPackageConflicts(config);
+  return config;
 }
 
 function localStamp() {

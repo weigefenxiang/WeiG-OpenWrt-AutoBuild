@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
+import { findCatalogPackageConflicts, formatPackageConflicts } from './verify-package-conflicts.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DEVICES = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'devices.json'), 'utf8'));
@@ -42,7 +43,7 @@ async function loadCatalogIndex() {
   return LOCAL_CATALOG_INDEX;
 }
 
-async function loadCatalogOption(repo, branch, symbol) {
+async function loadCatalog(repo, branch) {
   const asset = String(branch?.asset || '');
   if (!/^[A-Za-z0-9._-]+\.json\.gz$/.test(asset)) throw new Error(`Catalog 资源名非法:${asset || '(缺失)'}`);
   const urls = [
@@ -56,7 +57,7 @@ async function loadCatalogOption(repo, branch, symbol) {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const catalog = JSON.parse(gunzipSync(Buffer.from(await response.arrayBuffer())).toString('utf8'));
       if (Number(catalog?.schema || 0) < 2 || !Array.isArray(catalog?.menu?.options)) throw new Error('目录格式非法');
-      return catalog.menu.options.find((item) => item?.symbol === symbol) || null;
+      return catalog;
     } catch (error) {
       lastError = error.message;
     }
@@ -140,9 +141,10 @@ const isCustomTarget = ['custom-target', 'catalog-target'].includes(req.device);
 let device, source, version, variant;
 let catalogRepo = '';
 let catalogBranch;
+let catalogIndex;
 if (isCustomTarget) {
   if (!hasSubmittedConfig) fail('自定义 Target 必须通过 Issue 附件提交完整 .config');
-  const catalogIndex = await loadCatalogIndex();
+  catalogIndex = await loadCatalogIndex();
   catalogRepo = catalogIndex.catalogRepo || PROJECT.catalogRepository || LOCAL_CATALOG_INDEX.catalogRepo;
   const catalogSource = catalogIndex.sources.find((item) => item.id === req.source);
   const requestedBranch = String(req.branch || '');
@@ -224,6 +226,35 @@ if (hasSubmittedConfig) {
   writeFileSync(submittedOut, config, 'utf8');
 }
 
+let activeCatalog = null;
+if (hasSubmittedConfig) {
+  if (!catalogIndex) catalogIndex = await loadCatalogIndex();
+  const catalogSource = catalogIndex.sources.find((item) => item.id === source.id);
+  const branch = catalogSource?.branches?.find((item) => item.id === version.id &&
+    (!version.branch || item.branch === version.branch));
+  if (!catalogSource || !branch || branch.state === 'unavailable') {
+    console.warn(`Package conflict preflight skipped / 软件包互斥预检跳过: ${source.id}/${version.branch}`);
+  } else {
+    catalogRepo = catalogIndex.catalogRepo || PROJECT.catalogRepository || LOCAL_CATALOG_INDEX.catalogRepo;
+    catalogBranch = branch;
+    try {
+      activeCatalog = await loadCatalog(catalogRepo, catalogBranch);
+    } catch (error) {
+      console.warn(`Package conflict preflight skipped / 软件包互斥预检跳过: ${error.message}`);
+    }
+    if (activeCatalog) {
+      const conflicts = findCatalogPackageConflicts(submittedConfig, activeCatalog);
+      if (conflicts.length) {
+        const ledeTlsConflict = source.id === 'lede' && conflicts.some((pair) =>
+          pair.symbols.includes('PACKAGE_libustream-mbedtls20201210') &&
+          pair.symbols.includes('PACKAGE_libustream-openssl20201210'));
+        const hint = ledeTlsConflict ? '；LEDE 默认 OpenSSL 时请使用 luci-ssl-openssl' : '';
+        fail(`软件包互斥: ${formatPackageConflicts(conflicts)}。请只保留一个后端${hint}。`);
+      }
+    }
+  }
+}
+
 // 种子机型共用 seed 表 / seed devices share the seed plugin table
 const PLUGINS = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', device.plugins === 'seed' ? 'seed' : device.id, 'plugins.json'), 'utf8'));
 if (!Array.isArray(req.plugins)) fail('plugins 必须是数组');
@@ -288,8 +319,11 @@ if (existsSync(packageTable)) {
   if (!table.pkgs[theme] || !Object.hasOwn(table.pkgs[theme], source.id)) fail(`固件主题不在 ${device.id}/${source.id} 软件包白名单:${theme}`);
 }
 if (isCustomTarget) {
-  let catalogTheme;
-  try { catalogTheme = await loadCatalogOption(catalogRepo, catalogBranch, `PACKAGE_${theme}`); } catch (error) {
+  let catalogTheme = activeCatalog?.menu?.options?.find((item) => item?.symbol === `PACKAGE_${theme}`) || null;
+  if (!catalogTheme) try {
+    const catalog = await loadCatalog(catalogRepo, catalogBranch);
+    catalogTheme = catalog.menu.options.find((item) => item?.symbol === `PACKAGE_${theme}`) || null;
+  } catch (error) {
     fail(`无法读取 ${source.id}/${version.branch} 的 Catalog 主题清单:${error.message}`);
   }
   if (!catalogTheme || catalogTheme.kind !== 'config' || !['bool', 'tristate'].includes(catalogTheme.type)) {

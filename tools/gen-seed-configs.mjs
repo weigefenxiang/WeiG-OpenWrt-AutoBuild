@@ -2,7 +2,7 @@
 // 由版本化 device-catalog.json 生成设备、分支、Profile 与最小种子配置。
 // Generates devices, branch/profile availability and minimal seed configs.
 
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -30,6 +30,7 @@ const SOURCE_META = {
   },
   lede: {
     label: 'Lean LEDE', repo: 'coolsnowwolf/lede', diy2: 'diy2-lede.sh', loginPw: 'password',
+    sslPackage: 'luci-ssl-openssl',
   },
 };
 
@@ -37,6 +38,11 @@ const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(
 const fileSafe = (s) => String(s).replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-|-$/g, '');
 const profileId = (profile) => profile;
 const versionLabel = (version) => version;
+const existingEol = (path) => existsSync(path) && readFileSync(path, 'utf8').includes('\r\n') ? '\r\n' : '\n';
+function writeWithExistingEol(path, text) {
+  const eol = existingEol(path);
+  writeFileSync(path, String(text).replace(/\r?\n/g, eol));
+}
 
 function identity(raw) {
   if (raw.kind === 'target') {
@@ -62,7 +68,7 @@ function identity(raw) {
   };
 }
 
-function targetLines(item) {
+function targetLines(item, sourceId) {
   const target = item.target || 'mediatek';
   const archPackages = item.archPackages || 'aarch64_cortex-a53';
   return [
@@ -75,7 +81,7 @@ function targetLines(item) {
     `CONFIG_TARGET_ARCH_PACKAGES="${archPackages}"`,
     'CONFIG_PACKAGE_luci=y',
     'CONFIG_PACKAGE_luci-base=y',
-    'CONFIG_PACKAGE_luci-ssl=y',
+    `CONFIG_PACKAGE_${SOURCE_META[sourceId].sslPackage || 'luci-ssl'}=y`,
     'CONFIG_PACKAGE_luci-mod-admin-full=y',
     'CONFIG_PACKAGE_luci-theme-bootstrap=y',
   ];
@@ -136,7 +142,8 @@ for (const raw of [...CATALOG.rawMerged, ...(CATALOG.platforms || [])]) {
         '# 其余符号由 make defconfig 自动展开 / everything else is expanded by make defconfig',
       ];
       const configPath = join(dir, filename);
-      writeFileSync(configPath, header.concat(targetLines(profile)).join('\n') + '\n');
+      const eol = existingEol(configPath);
+      writeFileSync(configPath, header.concat(targetLines(profile, sourceId)).join(eol) + eol);
       generatedConfigs.add(configPath);
       variant.configs[profile.version] = filename;
       cfgCount++;
@@ -173,7 +180,7 @@ for (const raw of [...CATALOG.rawMerged, ...(CATALOG.platforms || [])]) {
 
 devices.sort((a, b) => (a.id === '360t7' ? -1 : b.id === '360t7' ? 1
   : a.brand.localeCompare(b.brand, 'zh') || a.name.localeCompare(b.name, 'zh')));
-writeFileSync(DEV_PATH, JSON.stringify({ ...CURRENT, devices }, null, 1) + '\n');
+writeWithExistingEol(DEV_PATH, JSON.stringify({ ...CURRENT, devices }, null, 1) + '\n');
 
 let stale = 0;
 function removeStaleGenerated(dir) {

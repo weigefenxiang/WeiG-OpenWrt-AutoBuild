@@ -310,6 +310,13 @@ jobs:
             > "$GITHUB_WORKSPACE/config-defconfig.diff" || true
           grep '^CONFIG_TARGET_PROFILE' .config
           grep -c '^CONFIG_PACKAGE_luci-app' .config || true
+
+      - name: Verify package conflicts / 软件包互斥预检
+        run: |
+          cd openwrt
+          test -s tmp/.packageinfo
+          node "$GITHUB_WORKSPACE/tools/verify-package-conflicts.mjs" \
+            --config .config --package-info tmp/.packageinfo
           TEST_VERSION="$(tr -d '\r\n' < "$GITHUB_WORKSPACE/VERSION")"
           GEOIP_STATE="$(grep -E '^CONFIG_PACKAGE_v2ray-geoip=[ym]$' .config || echo 'disabled')"
           GEOSITE_STATE="$(grep -E '^CONFIG_PACKAGE_v2ray-geosite=[ym]$' .config || echo 'disabled')"
@@ -400,6 +407,7 @@ jobs:
 
       - name: Compile / 编译(原始实时日志)
         id: compile
+        continue-on-error: true
         run: |
           cd openwrt
           JOBS=$(( $(nproc) + 1 ))
@@ -424,31 +432,55 @@ jobs:
           exit "$RC"
 
       - name: Diagnose failed compile / 单线程定位失败原因
-        if: failure() && steps.compile.outcome == 'failure'
+        id: diagnose
+        if: steps.compile.outcome == 'failure'
+        continue-on-error: true
+        timeout-minutes: 60
         run: |
           cd openwrt
-          echo "单线程诊断 / single-thread diagnosis: make -j1 V=s (30 minute limit)"
+          echo "单线程重试 / single-thread retry: make -j1 V=s (60 minute limit)"
           set +e
           set -o pipefail
-          timeout 30m stdbuf -oL -eL make -j1 V=s 2>&1 |
+          timeout 60m stdbuf -oL -eL make -j1 V=s 2>&1 |
             tee "$GITHUB_WORKSPACE/build-diagnostic.log"
           RC=${PIPESTATUS[0]}
           set -e
           {
-            echo "### 🔎 失败诊断 / Failure diagnosis"
+            echo "### 🔎 单线程重试 / Single-thread retry"
             echo ""
             echo "- command: \`make -j1 V=s\`"
             echo "- exit code: \`$RC\`"
             echo "- log: \`build-diagnostic.log\`"
-            echo "- note: this diagnostic does not change the original build result."
+            echo "- result: exit 0 resumes the build; a non-zero exit keeps it failed."
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$RC" -eq 124 ]; then
-            echo "::warning::单线程诊断超过 30 分钟，已停止；请查看 build-diagnostic.log。"
+            echo "::warning::单线程重试超过 60 分钟，已停止；请查看 build-diagnostic.log。"
           elif [ "$RC" -ne 0 ]; then
-            echo "::error::单线程诊断已记录真实错误；请查看 build-diagnostic.log。"
+            echo "::error::单线程重试仍失败；请查看 build-diagnostic.log。"
           fi
-          exit 0
+          exit "$RC"
+
+      - name: Finalize compile result / 确认编译结果
+        if: always()
+        run: |
+          if [ "${{ steps.compile.outcome }}" = "success" ]; then
+            echo "Parallel compile succeeded / 并行编译成功"
+            exit 0
+          fi
+          if [ "${{ steps.diagnose.outcome }}" = "success" ]; then
+            echo "::warning::并行编译失败，但单线程重试成功；构建继续。"
+            {
+              echo "### ✅ 单线程恢复 / Recovered by single-thread retry"
+              echo ""
+              echo "- parallel build: failed"
+              echo "- make -j1 V=s: succeeded"
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "::error::并行与单线程编译均失败；请下载 BUILD-LOGS。"
+          exit 1
 
       - name: Collect failure logs / 收集失败日志
         if: failure()

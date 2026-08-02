@@ -8,6 +8,11 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  findCatalogPackageConflicts,
+  findPackageInfoConflicts,
+  formatPackageConflicts,
+} from './verify-package-conflicts.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 let fail = 0;
@@ -48,6 +53,24 @@ for (const f of ['site/wrt/data/devices.json', 'site/wrt/data/i18n.json', 'site/
 
 console.log('[3/3] 一致性抽查 / consistency spot checks');
 try {
+  const conflictConfig = 'CONFIG_PACKAGE_tls-alpha=y\nCONFIG_PACKAGE_tls-beta=y\nCONFIG_PACKAGE_tls-module=m\n';
+  const packageInfoFixture = [
+    'Package: tls-alpha',
+    'Conflicts: tls-beta tls-module',
+    '',
+    'Package: tls-beta',
+  ].join('\n');
+  const catalogFixture = {
+    menu: {
+      options: [{ symbol: 'PACKAGE_tls-alpha', conflicts: ['PACKAGE_tls-beta', 'PACKAGE_tls-module'] }],
+    },
+  };
+  const directConflicts = findPackageInfoConflicts(conflictConfig, packageInfoFixture);
+  const catalogConflicts = findCatalogPackageConflicts(conflictConfig, catalogFixture);
+  formatPackageConflicts(directConflicts) === 'tls-alpha <-> tls-beta' &&
+    formatPackageConflicts(catalogConflicts) === 'tls-alpha <-> tls-beta'
+    ? ok('package conflict parser: upstream and Catalog reject y/y pairs but allow module selections')
+    : bad('package conflict parser', 'unexpected conflict result');
   const dev = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'devices.json'), 'utf8'));
   const t7 = dev.devices.find((d) => d.id === '360t7');
   const activeSources = new Set(['ImmortalWrt', 'OpenWrt', 'lede']);
@@ -199,8 +222,14 @@ mirrorRootsOk
     buildWorkflow.includes("echo 'CONFIG_BUILD_LOG=y' >> .config") &&
     buildWorkflow.includes("grep -Fx 'CONFIG_BUILD_LOG=y' .config") &&
     buildWorkflow.includes('id: compile') &&
+    buildWorkflow.includes('id: diagnose') &&
+    buildWorkflow.includes('continue-on-error: true') &&
+    buildWorkflow.includes('timeout-minutes: 60') &&
     buildWorkflow.includes("make -j1 V=s") &&
     buildWorkflow.includes('build-diagnostic.log') &&
+    buildWorkflow.includes('Finalize compile result') &&
+    buildWorkflow.includes('Verify package conflicts') &&
+    buildWorkflow.includes('verify-package-conflicts.mjs') &&
     buildWorkflow.includes('实际列出的文件');
   failureDiagnosticsContract
     ? ok('失败诊断:DEVEL/BUILD_LOG 断言、单线程 V=s 日志与按实列出的 Artifact 已接通')
@@ -274,7 +303,8 @@ mirrorRootsOk
     js.includes("errorStage: 'catalog-refresh-required'") &&
     !js.includes("filter((branch) => branch.state !== 'unavailable')") &&
     parser.includes('async function loadCatalogIndex()') &&
-    parser.includes('async function loadCatalogOption(') &&
+    parser.includes('async function loadCatalog(repo, branch)') &&
+    parser.includes('findCatalogPackageConflicts(submittedConfig, activeCatalog)') &&
     parser.includes('Catalog 不提供该源码/分支的固件主题') &&
     parser.includes('catalogBranch.state ===');
   catalogProjectContract
@@ -382,6 +412,14 @@ mirrorRootsOk
   proxyDefaults.length === 0
     ? ok(`base config: ${configFiles.length} 份,默认代理 CONFIG_PACKAGE =y/m 为 0`)
     : bad('base config 代理默认值', proxyDefaults.slice(0, 5).join(' | '));
+  const ledeSeedFiles = configFiles.filter((file) => /[\\/]lede-master-[^\\/]+\.config$/.test(file));
+  const ledeSeedTlsMismatch = ledeSeedFiles.filter((file) => {
+    const config = readFileSync(file, 'utf8');
+    return !config.includes('CONFIG_PACKAGE_luci-ssl-openssl=y') || config.includes('CONFIG_PACKAGE_luci-ssl=y');
+  });
+  ledeSeedFiles.length > 0 && ledeSeedTlsMismatch.length === 0
+    ? ok(`LEDE seed configs: ${ledeSeedFiles.length} use luci-ssl-openssl to avoid the default OpenSSL conflict`)
+    : bad('LEDE seed TLS choice', `files ${ledeSeedFiles.length}, mismatched ${ledeSeedTlsMismatch.length}`);
   const manifest = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'config-manifest.json'), 'utf8'));
   const expected = [];
   for (const device of dev.devices.filter((item) => item.enabled)) {
