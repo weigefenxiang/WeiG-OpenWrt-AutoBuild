@@ -1,5 +1,5 @@
-# 把所有构建产线走一遍:一键触发 3 个源的 360T7 最小构建,健康状况直接看各自的 run
-# Walks every build pipeline: dispatches a minimal 360T7 build per source; pipeline health shows up as 3 custom-build runs.
+# 把所有构建产线走一遍:一键触发 3 个源的 360T7 最小构建,健康状况直接看各自的 run。
+# Uses hidden repository_dispatch so Custom Build does not expose a legacy manual form.
 name: Smoke All / 全产线冒烟
 run-name: Smoke All 全产线冒烟
 
@@ -9,7 +9,7 @@ on:
     - cron: '43 20 1 * *'   # 每月 1 号 20:43 UTC,错开镜像任务且避开整点 / monthly, offset from the mirror job, odd minute
 
 permissions:
-  actions: write
+  contents: write
 
 jobs:
   dispatch:
@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Dispatch minimal build per source / 逐源触发最小构建
+      - name: Trigger hidden minimal build per source / 逐源触发隐藏最小构建
         uses: actions/github-script@v7
         with:
           script: |
@@ -28,10 +28,13 @@ jobs:
               { source: 'lede',        version: 'master', variant: 'qihoo_360t7' },
             ];
             for (const m of MATRIX) {
-              await github.rest.actions.createWorkflowDispatch({
+              await github.rest.repos.createDispatchEvent({
                 owner: context.repo.owner, repo: context.repo.repo,
-                workflow_id: 'custom-build.yml', ref: 'main',
-                inputs: { device: '360t7', source: m.source, version: m.version, variant: m.variant, plugins: '', tag: 'smoke-' + m.source },
+                event_type: 'smoke-build',
+                client_payload: {
+                  device: '360t7', source: m.source, version: m.version, variant: m.variant,
+                  plugins: '', tag: 'smoke-' + m.source,
+                },
               });
-              console.log('dispatched', m.source);
+              console.log('triggered hidden smoke build', m.source);
             }

@@ -163,6 +163,9 @@ mirrorRootsOk
     : bad('sensitive mask', 'WireGuard 或 Tor 的中文界面打码规则缺失');
   const css = readFileSync(join(ROOT, 'site', 'wrt', 'app.css'), 'utf8');
   const buildWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8');
+  const smokeWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'smoke-all.yml'), 'utf8');
+  const syncWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'sync-upstream.yml'), 'utf8');
+  const driftSentinel = readFileSync(join(ROOT, 'tools', 'check-drift.mjs'), 'utf8');
   const parser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
   const project = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
   const catalogIndex = JSON.parse(
@@ -202,6 +205,24 @@ mirrorRootsOk
   failureDiagnosticsContract
     ? ok('失败诊断:DEVEL/BUILD_LOG 断言、单线程 V=s 日志与按实列出的 Artifact 已接通')
     : bad('failure diagnostics', 'LEDE 构建日志开关、单线程诊断或 Artifact 说明缺失');
+  const hiddenSmokeContract = !buildWorkflow.includes('workflow_dispatch:') &&
+    buildWorkflow.includes('repository_dispatch:') &&
+    buildWorkflow.includes('types: [smoke-build]') &&
+    buildWorkflow.includes('github.event.client_payload.device') &&
+    parser.includes("let requestMode = 'smoke-internal';") &&
+    smokeWorkflow.includes('github.rest.repos.createDispatchEvent') &&
+    smokeWorkflow.includes("event_type: 'smoke-build'") &&
+    smokeWorkflow.includes('contents: write') &&
+    !smokeWorkflow.includes('createWorkflowDispatch');
+  hiddenSmokeContract
+    ? ok('构建入口:旧手动表单已移除，Smoke All 通过隐藏 repository_dispatch 独立触发')
+    : bad('build entrypoint', 'Custom Build 仍暴露手动 dispatch，或 Smoke All 隐藏触发链不完整');
+  const driftSentinelContract = driftSentinel.includes("const forbidden = ['lede-17.01', 'pcs-standalone-back', 'master'];") &&
+    driftSentinel.includes("names.has('main')") && !driftSentinel.includes('360T7') &&
+    !driftSentinel.includes('qihoo_360t7') && !syncWorkflow.includes('360T7');
+  driftSentinelContract
+    ? ok('上游漂移哨兵:仅保留通用 OpenWrt 分支策略，不再阻断 360T7 专用 Profile')
+    : bad('upstream drift sentinel', '360T7 专用检查仍存在，或 OpenWrt 通用分支策略缺失');
   const previewBatBytes = readFileSync(join(ROOT, 'OpenWebPage_打开网页.bat'));
   const previewBat = previewBatBytes.toString('ascii');
   const previewBatOk = !previewBatBytes.some((byte) => byte > 0x7f) &&

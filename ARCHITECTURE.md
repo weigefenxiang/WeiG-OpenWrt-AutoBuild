@@ -16,7 +16,7 @@
 ├─ ARCHITECTURE.md               # 本文档 / this document
 ├─ README.md + translations/     # 多语言说明 / multilingual READMEs
 ├─ .github/workflows/
-│  ├─ custom-build.yml           # Issue 附件权威构建 + 内部 dispatch 兼容 / authoritative Issue attachment + internal dispatch compatibility
+│  ├─ custom-build.yml           # Issue 附件权威构建 + 隐藏 smoke 兼容 / authoritative Issue attachment + hidden smoke compatibility
 │  └─ cancel-build.yml           # Issue 作者 /cancel 取消自己的构建 / Issue-author-only build cancellation
 ├─ config/<品牌>/<机型>/          # base 配置,按品牌分层 / base configs, grouped by brand
 │  └─ 360/360t7/*.config         # 360T7 源码/分支/Profile 独立配置 / per-source, branch and profile configs

@@ -3,7 +3,7 @@
 // 三种来源均通过环境变量传入,避免命令行注入 / Request inputs arrive via env vars to avoid command-line injection:
 //   - Issue 附件:REQUEST_FILE 指向网页生成的 build-request.json(权威完整 config)
 //   - 旧 Issue:ISSUE_BODY 里含 ```json 载荷(仅兼容历史请求)
-//   - dispatch:IN_DEVICE / IN_SOURCE / IN_VERSION / IN_VARIANT / IN_PLUGINS / IN_TAG(内部 smoke/admin 兼容)
+//   - repository_dispatch:IN_DEVICE / IN_SOURCE / IN_VERSION / IN_VARIANT / IN_PLUGINS / IN_TAG(隐藏内部 smoke 兼容)
 // 插件项高级模式前缀:+id 强制开启该源没有的包,-id 取消该源内置项 / advanced plugin prefixes: +id force-enables a pkg the source lacks, -id drops a builtin.
 // 校验失败以非零码退出,workflow 据此回评并终止 / Any validation failure exits non-zero so the workflow can comment back and abort.
 
@@ -65,7 +65,7 @@ async function loadCatalogOption(repo, branch, symbol) {
 }
 
 let req;
-let requestMode = 'dispatch-legacy';
+let requestMode = 'smoke-internal';
 let submittedConfig = '';
 let requestAttachmentName = '';
 const requestManifest = String(process.env.REQUEST_MANIFEST || '').trim();

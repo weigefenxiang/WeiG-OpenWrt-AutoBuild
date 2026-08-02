@@ -27,7 +27,7 @@ jobs:
       - name: Fetch upstream device catalog / 抓取上游机型目录(确定性解析)
         run: node tools/fetch-catalog.mjs
 
-      - name: "Drift sentinel: 360T7 stockPatch still upstream? / 漂移哨兵:360T7 分区替换字符串仍在上游?"
+      - name: "Drift sentinel: OpenWrt branch policy / 漂移哨兵:OpenWrt 分支策略"
         id: drift
         continue-on-error: true
         run: node tools/check-drift.mjs
@@ -39,8 +39,8 @@ jobs:
           script: |
             await github.rest.issues.create({
               owner: context.repo.owner, repo: context.repo.repo,
-              title: '[drift] 上游机型定义漂移,请核对 360T7 的 stockPatch',
-              body: `漂移哨兵在本次同步中发现上游 profile 名变化。\n详情见 run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\n请人工核对 site/wrt/data/devices.json 里 360t7 各源的 stockPatch 字符串是否需要更新(历史教训:qihoo_360-t7 曾更名为 qihoo_360t7)。`,
+                title: '[drift] OpenWrt 上游分支策略漂移,请核对目录',
+                body: `漂移哨兵发现 OpenWrt 上游分支不再符合项目策略。\n详情见 run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\n请核对 tools/device-catalog.json 与源码目录策略：应保留 main，且不应重新加入 lede-17.01、pcs-standalone-back、master。`,
               labels: ['drift'],
             });
 

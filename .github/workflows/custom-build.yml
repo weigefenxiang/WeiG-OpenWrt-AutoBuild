@@ -1,46 +1,9 @@
 name: Custom Build / 定制构建
-run-name: ${{ github.event_name == 'workflow_dispatch' && format('Build 定制 · {0} · {1} {2}/{3}', inputs.tag, inputs.source, inputs.version, inputs.variant) || github.event.issue.title }}
+run-name: ${{ github.event_name == 'repository_dispatch' && format('Smoke build · {0} {1}/{2}', github.event.client_payload.source, github.event.client_payload.version, github.event.client_payload.variant) || github.event.issue.title }}
 
 on:
-  workflow_dispatch:
-    inputs:
-      device:
-        description: "机型 id(见定制页面)"
-        required: true
-        default: "360t7"
-      source:
-        description: "源码"
-        type: choice
-        required: true
-        options: [ImmortalWrt, OpenWrt, lede]
-      version:
-        description: "版本 id(如 master / main / 25.12 / 24.10,须属于所选设备与源码)"
-        required: true
-        default: "master"
-      variant:
-        description: "精确 Profile/布局 id(如 qihoo_360t7 / qihoo_360t7-ubi,须属于所选版本)"
-        required: true
-        default: "qihoo_360t7"
-      plugins:
-        description: "插件 id,空格分隔;高级模式 +id 强制开启 / -id 取消内置"
-        required: false
-        default: ""
-      tag:
-        description: "构建标识(用于在 Actions 里找到你的固件)"
-        required: false
-        default: "anonymous"
-      lanip:
-        description: "后台登录地址(内网 IPv4)"
-        required: false
-        default: "192.168.1.1"
-      rootpw:
-        description: "初始密码(公开可见!留空=源默认;@empty=清空)"
-        required: false
-        default: ""
-      packages:
-        description: "开发者:原始软件包,空格分隔,-前缀=移除内置"
-        required: false
-        default: ""
+  repository_dispatch:
+    types: [smoke-build]
   issues:
     types: [opened]
 
@@ -55,7 +18,7 @@ permissions:
 jobs:
   admission:
     name: Admission / 构建准入
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.issue.title, '[build]')
+    if: github.event_name == 'repository_dispatch' || startsWith(github.event.issue.title, '[build]')
     runs-on: ubuntu-22.04
     timeout-minutes: 3
     outputs:
@@ -71,7 +34,16 @@ jobs:
         with:
           script: |
             const isIssue = context.eventName === 'issues';
-            const requester = isIssue ? context.payload.issue.user.login : context.actor;
+            const isSmoke = context.eventName === 'repository_dispatch';
+            const requester = isIssue ? context.payload.issue.user.login
+              : `smoke-${String(context.payload.client_payload?.source || 'internal').toLowerCase()}`;
+            if (isSmoke) {
+              core.setOutput('allowed', 'true');
+              core.setOutput('requester', requester);
+              core.setOutput('slot', '0');
+              core.notice(`Internal smoke build admitted: ${requester}`);
+              return;
+            }
             const configured = Number(process.env.MAX_BUILDS_PER_USER || '2');
             const limit = Number.isInteger(configured) && configured > 0 ? configured : 2;
             const list = async (status) => (await github.rest.actions.listWorkflowRuns({
@@ -138,15 +110,13 @@ jobs:
           SUBMITTED_CONFIG_OUT: submitted.config
           ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
-          IN_DEVICE: ${{ inputs.device }}
-          IN_SOURCE: ${{ inputs.source }}
-          IN_VERSION: ${{ inputs.version }}
-          IN_VARIANT: ${{ inputs.variant }}
-          IN_PLUGINS: ${{ inputs.plugins }}
-          IN_TAG: ${{ inputs.tag }}
-          IN_LANIP: ${{ inputs.lanip }}
-          IN_ROOTPW: ${{ inputs.rootpw }}
-          IN_PACKAGES: ${{ inputs.packages }}
+          IN_DEVICE: ${{ github.event.client_payload.device }}
+          IN_SOURCE: ${{ github.event.client_payload.source }}
+          IN_VERSION: ${{ github.event.client_payload.version }}
+          IN_VARIANT: ${{ github.event.client_payload.variant }}
+          IN_PLUGINS: ${{ github.event.client_payload.plugins }}
+          IN_TAG: ${{ github.event.client_payload.tag }}
+          IN_PACKAGES: ${{ github.event.client_payload.packages }}
         run: node tools/parse-request.mjs
 
       - name: "Comment on issue: build started / 回评 issue:构建开始"
@@ -304,7 +274,7 @@ jobs:
           if [ "${{ steps.req.outputs.authoritative_config }}" = "1" ]; then
             cp submitted.config openwrt/.config
           else
-            # workflow_dispatch is retained only for repository smoke/admin compatibility.
+            # repository_dispatch is the hidden internal smoke compatibility path.
             node tools/build-config.mjs \
               --device "${{ steps.req.outputs.device }}" \
               --source "${{ steps.req.outputs.source }}" \

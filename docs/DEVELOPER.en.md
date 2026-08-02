@@ -26,11 +26,11 @@ WeiG-OpenWrt-AutoBuild/
 ├─ ARCHITECTURE.md              ✍ structure & architecture overview (public, bilingual)
 ├─ translations/                ⚙ 10 README translations (zh-TW/en/ru/es/pt/ja/ko/de/fr/vi)
 ├─ .github/workflows/              five GitHub Actions
-│  ├─ custom-build.yml             ★ core: custom builds (issue-ops + manual dispatch; six artifact classes)
+│  ├─ custom-build.yml             ★ core: Issue builds + hidden smoke trigger; six artifact classes
 │  ├─ cancel-build.yml             lets an Issue author cancel their own build with /cancel
 │  ├─ sync-upstream.yml            weekly upstream sync: catalog/seeds/plugin tables/package page, auto-commit on diff
 │  ├─ mirror-upstream.yml          monthly upstream mirrors (anti-takedown, needs secrets.MIRROR_TOKEN)
-│  └─ smoke-all.yml                dispatches a minimal build per source (health probe)
+│  └─ smoke-all.yml                triggers a hidden minimal build per source (health probe)
 ├─ config/                      ✍ base .config single source of truth (75 brand dirs)
 │  ├─ 360/360t7/                   360T7 configs by source/branch/profile
 │  ├─ platform/x86-64-generic/     versioned config for the generic Target
@@ -65,7 +65,7 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ gen-plugins.mjs              config × meta → plugins/packages.json + README count refresh
 │  ├─ gen-i18n.mjs                 validate & merge strings → i18n.json + translation table
 │  ├─ gen-pkg-page.mjs             generates site/wrt/packages.html
-│  ├─ build-config.mjs             legacy workflow_dispatch/smoke generation only
+│  ├─ build-config.mjs             hidden smoke compatibility generation only
 │  ├─ fetch-build-request.mjs      fetches one allowlisted GitHub Issue attachment
 │  ├─ parse-request.mjs            payload parsing + full whitelist validation
 │  ├─ check-all.mjs                health check; check-drift.mjs upstream drift sentinel
@@ -126,7 +126,7 @@ Type scale: 17px body (15.5px compact via the Aa toggle); 15px pills/plugin cell
 
 ### 2.5 Build pipeline
 
-- `.github/workflows/custom-build.yml`: issue-ops + manual dispatch. Every artifact begins with the Issue/attachment request reference, for example `006_01-FIRMWARE-ALL-…`; the firmware set uses zero compression while retaining GitHub's download wrapper. Timezone, theme, NTP, and opkg are cross-checked in the submitted config, Summary, `firmware-settings.txt`, and the firmware's `/etc/weig-build-info`. Firmware/config live 30 days; complete logs live 14 days.
+- `.github/workflows/custom-build.yml`: web users build only through Issue attachments; `Smoke All` uses a hidden `repository_dispatch` compatibility trigger, so Actions no longer exposes the legacy manual parameter form. Every artifact begins with the Issue/attachment request reference, for example `006_01-FIRMWARE-ALL-…`; the firmware set uses zero compression while retaining GitHub's download wrapper. Timezone, theme, NTP, and opkg are cross-checked in the submitted config, Summary, `firmware-settings.txt`, and the firmware's `/etc/weig-build-info`. Firmware/config live 30 days; complete logs live 14 days.
 - Package-source mirrors are handled automatically by `diy2-generic.sh`: legacy opkg sources rewrite `distfeeds.conf`; APK sources (25.12+) rewrite the build-time `VERSION_REPO`, from which the source generates `distfeeds.list`. Do not treat the generated APK file as a fixed source-tree file.
 - Build admission defaults to at most two queued or running builds per requester; a third Issue is commented on and closed. A fork can override the positive-integer default through the repository Variable `MAX_BUILDS_PER_USER`. `cancel-build.yml` accepts `/cancel` or `/cancel-build` only from the originating Issue author, tries normal cancellation first, and force-cancels only if it remains active after 15 seconds. Administrators can still manage any run in Actions.
 - Root `VERSION` is the shared repository/web minute-level `vYYMMDDHHmm` source; `site-version.json` is its static-deployment copy. Actions records VERSION, the request page version, customizer commit, upstream commit, and all inputs.
@@ -134,10 +134,10 @@ Type scale: 17px body (15.5px compact via the Aa toggle); 15px pills/plugin cell
 - After `make defconfig`, CI rechecks the selected source branch and exact device profile against the manifest so an old branch cannot silently replace the target.
 - All versioned base configs disable PassWall/SSR Plus/VSSR/TinyProxy and their proxy engines/sub-options by default. `check-all.mjs` fails if any default config contains a proxy `CONFIG_PACKAGE_*=y/m`. Config preflight writes proxy-related symbols actually selected after `defconfig` to `proxy-selected.txt` and the Summary; an explicit user selection may still add its normal dependencies.
 - `tools/parse-request.mjs`: full whitelist validation, including device/source/version/variant, packages, login settings, timezone, theme, NTP and opkg. The beginner Issue exposes one required attachment field and recommends the web JSON. The parser still accepts 1–3 GitHub-hosted JSON/`.config`/`config.buildinfo` attachments, but a raw config without web metadata must be loaded on the page first.
-- The production Issue path does not call `build-config.mjs`: frontend `applyToConfig()` → complete `build-request.json` → `submitted.config` → `openwrt/.config`. `build-config.mjs` remains only for internal smoke/admin dispatch compatibility.
+- The production Issue path does not call `build-config.mjs`: frontend `applyToConfig()` → complete `build-request.json` → `submitted.config` → `openwrt/.config`. `build-config.mjs` remains only for the hidden internal smoke `repository_dispatch` compatibility path.
 - `site/wrt/data/timezones.json` carries the 445-entry OpenWrt LuCI timezone table. With an empty search, the combobox shows about 70 common cities ordered by the current offset from `UTC-12` to `UTC+14`; typing searches all 445 entries. `Beijing` and its Chinese aliases are search-only aliases for `Asia/Shanghai`. On a first visit with no saved choice or imported configuration, the browser-reported IANA timezone is selected; a manual choice is stored locally. The page submits an IANA `zonename`; the parser maps it to the POSIX `timezone`, and all three diy2 scripts write both through `files/etc/uci-defaults/10-weig-timezone`. The control remains 44px high and legacy POSIX values remain accepted.
 - The workflow-level `TZ` controls process timestamps only. Do not call `timedatectl set-timezone` on a GitHub-hosted runner: systemd may deny it and fail the dependency-install step. Firmware timezone handling is independent and remains request/diy2 driven.
-- `sync-upstream.yml` (weekly, off-peak) refreshes the catalog/seeds and auto-commits; `check-drift.mjs` opens an issue if upstream profile names drift; `mirror-upstream.yml` (monthly, needs `secrets.MIRROR_TOKEN`) mirrors upstreams; `smoke-all.yml` dispatches a minimal build per source
+- `sync-upstream.yml` (weekly, off-peak) refreshes the catalog/seeds and auto-commits; `check-drift.mjs` checks only the shared OpenWrt branch policy and opens an issue on drift; `mirror-upstream.yml` (monthly, needs `secrets.MIRROR_TOKEN`) mirrors upstreams; `smoke-all.yml` triggers a hidden minimal build per source.
 - `site-version.yml` watches `site/wrt/**` and `VERSION`, updates root `VERSION` and `site-version.json` together by content fingerprint, then bot-commits them once. Parsers still accept legacy `vYYMMDDHH` requests. Desktop shows the version immediately left of Load configuration, while screens at 560px or below keep it in the right-aligned footer. The actor condition prevents commit loops.
 
 #### Removing builtins and `defconfig`

@@ -27,11 +27,11 @@ WeiG-OpenWrt-AutoBuild/
 ├─ ARCHITECTURE.md              ✍ 目录与架构总览(公开,中英双语)
 ├─ translations/                ⚙ README 十语译文(zh-TW/en/ru/es/pt/ja/ko/de/fr/vi,工作流翻译)
 ├─ .github/workflows/              GitHub Actions 五条
-│  ├─ custom-build.yml             ★核心:定制构建(issue-ops + 手动 dispatch;六类产物)
+│  ├─ custom-build.yml             ★核心:Issue 构建 + 隐藏 smoke 触发;六类产物
 │  ├─ cancel-build.yml             Issue 提交者用 /cancel 取消自己的构建
 │  ├─ sync-upstream.yml            每周同步上游:机型目录/种子/插件表/说明页,有 diff 才自动提交
 │  ├─ mirror-upstream.yml          每月镜像上游仓库防删库(需 secrets.MIRROR_TOKEN)
-│  └─ smoke-all.yml                一键派发三源最小构建(健康巡检)
+│  └─ smoke-all.yml                一键触发三源隐藏最小构建(健康巡检)
 ├─ config/                      ✍ base .config 唯一事实源(75 个品牌目录)
 │  ├─ 360/360t7/                   360T7 按源码/分支/Profile 生成的配置
 │  ├─ platform/x86-64-generic/     通用 Target 的版本化 config
@@ -66,7 +66,7 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ gen-plugins.mjs              config × meta → plugins/packages.json + README 计数刷新
 │  ├─ gen-i18n.mjs                 校验合并词条 → i18n.json + 翻译对照表
 │  ├─ gen-pkg-page.mjs             生成 site/wrt/packages.html
-│  ├─ build-config.mjs             仅 workflow_dispatch/smoke 兼容生成
+│  ├─ build-config.mjs             仅隐藏 smoke 兼容生成
 │  ├─ fetch-build-request.mjs      下载 GitHub Issue 附件(严格域名/数量/大小)
 │  ├─ parse-request.mjs            载荷解析 + 全字段白名单校验
 │  ├─ check-all.mjs                一键体检;check-drift.mjs 上游漂移哨兵
@@ -138,7 +138,7 @@ WeiG-OpenWrt-AutoBuild/
 
 ### 2.5 构建链路
 
-- `.github/workflows/custom-build.yml`:issue-ops + 手动 dispatch；四类 Artifact 统一以 Issue/附件请求编号开头，如 `006_01-FIRMWARE-ALL-…`，其中固件全集零压缩上传但仍保留 GitHub 下载外壳。时区、主题、NTP、opkg 在提交配置、Summary、`firmware-settings.txt` 与固件内 `/etc/weig-build-info` 交叉核验；固件/config 保留 30 天，完整日志保留 14 天。
+- `.github/workflows/custom-build.yml`:网页用户只通过 Issue 附件构建；`Smoke All` 通过隐藏 `repository_dispatch` 触发兼容构建，因此 Actions 不再展示旧手动参数表单。四类 Artifact 统一以 Issue/附件请求编号开头，如 `006_01-FIRMWARE-ALL-…`，其中固件全集零压缩上传但仍保留 GitHub 下载外壳。时区、主题、NTP、opkg 在提交配置、Summary、`firmware-settings.txt` 与固件内 `/etc/weig-build-info` 交叉核验；固件/config 保留 30 天，完整日志保留 14 天。
 - 软件源镜像由 `diy2-generic.sh` 自动兼容：旧版 opkg 源改写 `distfeeds.conf`；APK 源（25.12+）改写构建期 `VERSION_REPO`，由源码生成 `distfeeds.list`。不要把 APK 的生成文件当作源码内固定文件。
 - 构建准入默认限制每位提交者同时最多 2 个排队中或运行中的任务；第 3 个 Issue 会自动回评并关闭。Fork 可在仓库 Variables 设置正整数 `MAX_BUILDS_PER_USER` 覆盖默认值。`cancel-build.yml` 只接受原 Issue 提交者的 `/cancel` 或 `/cancel-build`，先普通取消，15 秒未结束才强制取消；管理员仍可在 Actions 页面管理任意任务。
 - 根目录 `VERSION` 是仓库与网页共用的分钟级 `vYYMMDDHHmm` 版本源；`site-version.json` 是静态部署副本。Actions Summary 同时记录 VERSION、请求网页版本、定制器 commit、上游 commit 和完整输入参数。
@@ -147,11 +147,11 @@ WeiG-OpenWrt-AutoBuild/
 - `custom-target` 不要求 Profile 预先存在于仓库清单；Actions 只对比上传配置与 `make defconfig` 后的通用 Target 选择，防止目标被上游改写，不含 360T7 专用限制。
 - 全部版本化 base config 默认关闭 PassWall/SSR Plus/VSSR/TinyProxy 及其代理内核/子选项;`check-all.mjs` 会在任一默认 config 出现代理 `CONFIG_PACKAGE_*=y/m` 时直接失败。config 预检把 `defconfig` 后实际被选中的代理相关符号写入 `proxy-selected.txt` 和 Summary,用户主动选择时仍可按正常依赖加入
 - `tools/parse-request.mjs`:全字段白名单(机型/源/版本/变体/插件±前缀/原始软件包/登录地址/初始密码/时区/主题/NTP/opkg)。新手 Issue 只显示一个必填附件框并推荐网页 JSON;解析器仍接受 1~3 个 GitHub 自有附件并识别 JSON、`.config`、`config.buildinfo`,但无网页元数据头的原始配置必须先回网页加载识别。
-- Issue 正式链路不调用 `build-config.mjs`:前端 `applyToConfig()` 生成完整 config → 附件 → `submitted.config` → `openwrt/.config`;`build-config.mjs` 只保留给内部 smoke/admin 的 dispatch 兼容入口
+- Issue 正式链路不调用 `build-config.mjs`:前端 `applyToConfig()` 生成完整 config → 附件 → `submitted.config` → `openwrt/.config`;`build-config.mjs` 只保留给内部 smoke 的隐藏 `repository_dispatch` 兼容入口。
 - 时区表在 `site/wrt/data/timezones.json`,来源为 OpenWrt LuCI 的 445 项映射。组合框默认只列约 70 个常用城市并按当前 UTC 偏移从 `UTC-12` 到 `UTC+14` 排序；输入搜索时仍查询完整 445 项，`北京`/`北京时间` 只作为 `Asia/Shanghai` 搜索词，不写入显示值。首次访问且没有用户保存值或导入配置时，优先采用浏览器报告的 IANA 时区；手动选择会保存到本机。前端提交 IANA `zonename`,解析器映射并输出 POSIX `timezone`;三个 diy2 脚本用 `files/etc/uci-defaults/10-weig-timezone` 同时写入两项。控件统一为 44px 高，旧 POSIX 请求继续兼容。
 - Actions 的全局 `TZ` 只控制 Runner 进程日志时间；不要在 GitHub 托管 Runner 调用 `timedatectl set-timezone`，该操作可能因 systemd 权限被拒绝并让依赖安装步骤失败。固件时区始终由请求字段和 diy2 首启脚本写入，与 Runner 系统时区无关。
 - diy 脚本按源区分:官方源用 `diy2-openwrt.sh`,lede 用 `diy2-lede.sh`(都不能复用 ImmortalWrt 系的)
-- `sync-upstream.yml` 每周六 18:37 UTC 自动同步上游并提交;`check-drift.mjs` 漂移哨兵自动开 issue;`mirror-upstream.yml` 每月镜像(需 `secrets.MIRROR_TOKEN`);`smoke-all.yml` 一键派发三源最小构建
+- `sync-upstream.yml` 每周六 18:37 UTC 自动同步上游并提交;`check-drift.mjs` 只检查通用 OpenWrt 分支策略并在漂移时开 issue;`mirror-upstream.yml` 每月镜像(需 `secrets.MIRROR_TOKEN`);`smoke-all.yml` 一键触发三源隐藏最小构建。
 - `site-version.yml` 监听 `site/wrt/**` 与 `VERSION` push,按内容指纹同时更新根 `VERSION` 和 `site-version.json`，由机器人一次提交；解析器继续接受旧 `vYYMMDDHH` 请求。桌面端版本号位于“加载配置”左侧，560px 以下改在页脚右侧；`github.actor` 条件防止提交循环。
 
 #### 取消内置项与 defconfig 的交互
