@@ -12,6 +12,27 @@ export function configSymbolValues(text) {
   return values;
 }
 
+function setConfigSymbol(text, symbol, value) {
+  const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const line = value === 'n' ? `# CONFIG_${symbol} is not set` : `CONFIG_${symbol}=${value}`;
+  const pattern = new RegExp(`^(?:CONFIG_${escaped}=.*|# CONFIG_${escaped} is not set)$`, 'm');
+  if (pattern.test(text)) return text.replace(pattern, line);
+  return text.replace(/\s*$/, '\n') + line + '\n';
+}
+
+export function applyConfigResolution(text, resolution = {}) {
+  for (const [symbol, value] of Object.entries(resolution.set || {})) {
+    text = setConfigSymbol(text, symbol, value);
+  }
+  const values = configSymbolValues(text);
+  for (const [prefix, value] of Object.entries(resolution.setPrefixes || {})) {
+    for (const symbol of values.keys()) {
+      if (symbol.startsWith(prefix)) text = setConfigSymbol(text, symbol, value);
+    }
+  }
+  return text;
+}
+
 function scopeMatches(scope = {}, context = {}) {
   const fields = [
     ['sources', 'sourceId'], ['branches', 'branch'], ['systems', 'system'],
@@ -21,11 +42,22 @@ function scopeMatches(scope = {}, context = {}) {
     !scope[scopeKey]?.length || scope[scopeKey].includes(context[contextKey]));
 }
 
+function expectedValueMatches(actual, expected) {
+  return (Array.isArray(expected) ? expected : [expected]).includes(actual);
+}
+
+function conditionsMatch(when = {}, values) {
+  const all = Object.entries(when.all || {});
+  const any = Object.entries(when.any || {});
+  return all.every(([symbol, expected]) => expectedValueMatches(values.get(symbol), expected)) &&
+    (!any.length || any.some(([symbol, expected]) => expectedValueMatches(values.get(symbol), expected)));
+}
+
 export function matchingConfigRules(text, context = {}) {
   const values = configSymbolValues(text);
   return (RULES.rules || []).filter((rule) =>
     scopeMatches(rule.scope, context) &&
-    Object.entries(rule.when?.all || {}).every(([symbol, value]) => values.get(symbol) === value));
+    conditionsMatch(rule.when, values));
 }
 
 export { RULES as configRules };

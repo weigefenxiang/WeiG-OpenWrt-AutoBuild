@@ -13,7 +13,7 @@ import {
   findPackageInfoConflicts,
   formatPackageConflicts,
 } from './verify-package-conflicts.mjs';
-import { matchingConfigRules } from './config-rules.mjs';
+import { applyConfigResolution, configSymbolValues, matchingConfigRules } from './config-rules.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 let fail = 0;
@@ -79,15 +79,36 @@ try {
     join(ROOT, 'site', 'wrt', 'data', 'config-rules.json'), 'utf8'));
   const tlsRule = configRulesSource.rules?.find((rule) => rule.id === 'lede-tls-backend');
   const tlsChoices = tlsRule?.resolutions || [];
+  const ksmbdRule = configRulesSource.rules?.find((rule) => rule.id === 'lede-linux-6.12-ksmbd');
+  const ksmbdFixture = [
+    'CONFIG_LINUX_6_12=y',
+    'CONFIG_PACKAGE_kmod-fs-ksmbd=m',
+    'CONFIG_PACKAGE_luci-i18n-ksmbd-zh-cn=y',
+    'CONFIG_KSMBD_SMB_INSECURE_SERVER=y',
+  ].join('\n');
+  const ksmbdResolution = ksmbdRule?.resolutions?.find((item) => item.id === 'disable-ksmbd');
+  const repairedKsmbd = applyConfigResolution(ksmbdFixture, ksmbdResolution);
+  const repairedKsmbdValues = configSymbolValues(repairedKsmbd);
   JSON.stringify(configRulesSource) === JSON.stringify(configRulesPublic) &&
     matchingConfigRules(configRuleFixture, { sourceId: 'lede', branch: 'master' }).length === 1 &&
     matchingConfigRules(configRuleFixture, { sourceId: 'OpenWrt', branch: 'main' }).length === 0 &&
     tlsChoices.some((item) => item.id === 'openssl' && item.recommended &&
       item.set?.['PACKAGE_luci-ssl'] === 'n' && item.set?.['PACKAGE_luci-ssl-openssl'] === 'y') &&
     tlsChoices.some((item) => item.id === 'mbedtls' &&
-      item.set?.['PACKAGE_libustream-openssl'] === 'n' && item.set?.['PACKAGE_libustream-mbedtls'] === 'y')
-    ? ok('config rules: scoped LEDE TLS repair has maintained OpenSSL/mbedTLS choices')
-    : bad('config rules', 'public copy, scope match, or selectable repair is invalid');
+      item.set?.['PACKAGE_libustream-openssl'] === 'n' && item.set?.['PACKAGE_libustream-mbedtls'] === 'y') &&
+    matchingConfigRules(ksmbdFixture, { sourceId: 'lede', branch: 'master' })[0]?.id === ksmbdRule?.id &&
+    matchingConfigRules(ksmbdFixture, { sourceId: 'lede', branch: 'openwrt-24.10' }).length === 0 &&
+    ksmbdRule?.prompt === 'always' &&
+    ksmbdRule?.maintenance?.observedPackage === 'ksmbd 3.5.4' &&
+    /^https:\/\/github\.com\/.+\/actions\/runs\/\d+$/.test(ksmbdRule?.maintenance?.evidence || '') &&
+    ksmbdResolution?.set?.['PACKAGE_kmod-fs-ksmbd'] === 'n' &&
+    ksmbdResolution?.setPrefixes?.['PACKAGE_luci-i18n-ksmbd-'] === 'n' &&
+    repairedKsmbdValues.get('PACKAGE_kmod-fs-ksmbd') === 'n' &&
+    repairedKsmbdValues.get('PACKAGE_luci-i18n-ksmbd-zh-cn') === 'n' &&
+    repairedKsmbdValues.get('KSMBD_SMB_INSECURE_SERVER') === 'n' &&
+    !matchingConfigRules(repairedKsmbd, { sourceId: 'lede', branch: 'master' }).length
+    ? ok('config rules: TLS choices plus LEDE/Linux 6.12 ksmbd y/m guard are synchronized')
+    : bad('config rules', 'public copy, scope/any-state match, prompt, or repair data is invalid');
   const dev = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'devices.json'), 'utf8'));
   const t7 = dev.devices.find((d) => d.id === '360t7');
   const activeSources = new Set(['ImmortalWrt', 'OpenWrt', 'lede']);
@@ -253,10 +274,11 @@ mirrorRootsOk
     js.includes('matchingConfigRules(config)') &&
     js.includes('applyConfigRules(config, rules)') &&
     js.includes('openConfigRuleResolver') && js.includes('generateResolvedConfigText') &&
+    !js.includes("window.open('about:blank'") && js.includes('window.location.assign(issueUrl)') &&
     buildWorkflow.includes('实际列出的文件');
   failureDiagnosticsContract
-    ? ok('失败诊断:DEVEL/BUILD_LOG 断言、单线程 V=s 日志与按实列出的 Artifact 已接通')
-    : bad('failure diagnostics', '配置规则、构建日志开关、单线程诊断或 Artifact 说明缺失');
+    ? ok('失败诊断:配置规则先处理、Issue 不预开空白页、单线程 V=s 日志与 Artifact 已接通')
+    : bad('failure diagnostics', '配置规则、Issue 打开时序、构建日志、单线程诊断或 Artifact 说明缺失');
   const hiddenSmokeContract = !buildWorkflow.includes('workflow_dispatch:') &&
     buildWorkflow.includes('repository_dispatch:') &&
     buildWorkflow.includes('types: [smoke-build]') &&

@@ -3276,10 +3276,17 @@ function setConfigSymbol(text, symbol, value, type = 'bool') {
   if (pattern.test(text)) return text.replace(pattern, line);
   return text.replace(/\s*$/, '\n') + line + '\n';
 }
-function matchingConfigRules(text) {
+function configSymbolValues(text) {
   const values = new Map();
   for (const match of String(text).matchAll(/^CONFIG_([A-Za-z0-9_.+-]+)=([ym])$/gm)) values.set(match[1], match[2]);
   for (const match of String(text).matchAll(/^# CONFIG_([A-Za-z0-9_.+-]+) is not set$/gm)) values.set(match[1], 'n');
+  return values;
+}
+function configRuleExpectedValueMatches(actual, expected) {
+  return (Array.isArray(expected) ? expected : [expected]).includes(actual);
+}
+function matchingConfigRules(text) {
+  const values = configSymbolValues(text);
   const target = state.device?.target || {};
   const targetValue = (symbol) => String(text).match(new RegExp(`^CONFIG_${symbol}="([^"]+)"$`, 'm'))?.[1] || '';
   const scope = {
@@ -3292,7 +3299,11 @@ function matchingConfigRules(text) {
     ['subtargets', 'subtarget'], ['profiles', 'profile']];
   return (CONFIG_RULES?.rules || []).filter((rule) =>
     fields.every(([scopeKey, contextKey]) => !rule.scope?.[scopeKey]?.length || rule.scope[scopeKey].includes(scope[contextKey])) &&
-    Object.entries(rule.when?.all || {}).every(([symbol, value]) => values.get(symbol) === value));
+    Object.entries(rule.when?.all || {}).every(([symbol, expected]) =>
+      configRuleExpectedValueMatches(values.get(symbol), expected)) &&
+    (!Object.keys(rule.when?.any || {}).length ||
+      Object.entries(rule.when.any).some(([symbol, expected]) =>
+        configRuleExpectedValueMatches(values.get(symbol), expected))));
 }
 function configRuleMessage(rules) {
   const messages = rules.map((rule) => rule.message?.['zh-CN'] || rule.message?.en || rule.id).join(' ');
@@ -3309,6 +3320,12 @@ function applyConfigRules(text, rules) {
     const resolution = configRuleResolution(rule);
     for (const [symbol, value] of Object.entries(resolution?.set || rule.set || {})) {
       text = setConfigSymbol(text, symbol, value);
+    }
+    const values = configSymbolValues(text);
+    for (const [prefix, value] of Object.entries(resolution?.setPrefixes || rule.setPrefixes || {})) {
+      for (const symbol of values.keys()) {
+        if (symbol.startsWith(prefix)) text = setConfigSymbol(text, symbol, value);
+      }
     }
   }
   return text;
@@ -3465,7 +3482,8 @@ async function generateConfigText() {
     const rules = matchingConfigRules(config);
     if (!rules.length) break;
     const unresolved = rules.filter((rule) => !configRuleChoices.has(rule.id));
-    if (state.importedConfig && unresolved.length) throw new ConfigRuleResolutionRequired(unresolved);
+    const needsChoice = unresolved.filter((rule) => state.importedConfig || rule.prompt === 'always');
+    if (needsChoice.length) throw new ConfigRuleResolutionRequired(needsChoice);
     const updated = applyConfigRules(config, rules);
     if (updated === config) throw new Error(uiText('配置规则未产生修正，请检查规则文件。', '設定規則未產生修正，請檢查規則檔。', 'The configuration rule made no change; check the rule file.'));
     config = updated;
@@ -4198,7 +4216,6 @@ function openSubmitModal() {
   card('submit.m1.title', state.mode === 'self' ? t('submit.m1.descSelf') : t('submit.m1.desc'),
     'submit.m1.btn', async (event) => {
       const button = event.currentTarget;
-      const issueWindow = window.open('about:blank', '_blank');
       button.disabled = true;
       try {
         const config = await generateResolvedConfigText();
@@ -4220,10 +4237,10 @@ function openSubmitModal() {
           safeDownloadNamePart(state.version.id, 'branch'), safeDownloadNamePart(selectedTargetProfileName())].join('-') + '.json';
         downloadBlob(JSON.stringify(payload, null, 2) + '\n', 'application/json;charset=utf-8', filename);
         const issueUrl = issueSubmitUrl(repo, title, await mobileIssuePayload(payload));
-        if (issueWindow) issueWindow.location.href = issueUrl;
-        else window.open(issueUrl, '_blank', 'noopener');
+        const issueWindow = window.open(issueUrl, '_blank');
+        if (issueWindow) issueWindow.opener = null;
+        else window.location.assign(issueUrl);
       } catch (err) {
-        if (issueWindow) issueWindow.close();
         alert(t('btn.download.fail', { msg: err.message }));
       } finally {
         button.disabled = false;
