@@ -651,7 +651,7 @@ mirrorRootsOk
     js.includes('function jumpMenuBreadcrumb') &&
     js.includes('function initCatalogLocator') &&
     js.includes('function selectCatalogLocatorTarget') &&
-    js.includes('const preferredTarget = { ...values };') &&
+    js.includes('const preferredTarget = { ...values, strictCatalogTarget: true };') &&
     js.includes('renderCatalogTargetSelectors(preferredTarget)') &&
     js.includes('const INITIAL_CATALOG_TARGET =') &&
     js.includes("sourceId: 'ImmortalWrt', branch: 'openwrt-25.12'") &&
@@ -715,6 +715,8 @@ mirrorRootsOk
       html.includes('id="buildContractGrid"') &&
       js.includes('function renderBuildContract()') &&
       js.includes('function setBuildContractExpanded(expanded)') &&
+      js.includes('boardSelector') &&
+      js.includes('CONFIG_${boardSelector}=y') &&
       js.includes("arch: String(target.arch || '').trim()") &&
       js.includes('archPackages: String(target.archPackages ||') &&
       js.includes('CONFIG_ARCH=') &&

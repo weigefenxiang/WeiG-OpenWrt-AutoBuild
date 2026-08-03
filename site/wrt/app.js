@@ -149,6 +149,7 @@ const DEFAULT_TARGET_SELECTORS = [
   { id: 'profile', labelEn: 'Target Profile', labelZh: '目标配置' },
 ];
 let targetSelectorValues = {};
+let catalogTargetMismatch = false;
 const INITIAL_CATALOG_TARGET = {
   sourceId: 'ImmortalWrt', branch: 'openwrt-25.12',
   system: 'x86', subtarget: '64', profileSymbol: 'DEVICE_generic',
@@ -668,6 +669,8 @@ function renderCatalogTargetSelectors(preferred = {}) {
   let nodes = MENU_CATALOG?.targetTree?.length
     ? MENU_CATALOG.targetTree : fallbackTargetTree(MENU_CATALOG);
   const selectedNodes = new Map();
+  const strict = preferred.strictCatalogTarget === true || preferred.initialCatalogTarget === true;
+  catalogTargetMismatch = false;
   for (const selector of schema) {
     const selectId = targetControlId(selector.id);
     const preferredValue = selector.id === 'profile'
@@ -676,6 +679,14 @@ function renderCatalogTargetSelectors(preferred = {}) {
     const value = fillTargetSelect(selectId, nodes, (item) => item.value,
       (item) => item.labelEn || item.value,
       preferredValue);
+    if (strict && preferredValue && value !== preferredValue) {
+      catalogTargetMismatch = true;
+      const select = $(selectId);
+      if (select) select.value = '';
+      targetSelectorValues[selector.id] = '';
+      nodes = [];
+      continue;
+    }
     targetSelectorValues[selector.id] = value;
     const selected = nodes.find((item) => item.value === value);
     if (selected) selectedNodes.set(selector.id, selected);
@@ -689,7 +700,7 @@ function renderCatalogTargetSelectors(preferred = {}) {
   const profileId = selectedNodes.get('profile')?.profileId || targetSelectorValues.profile || '';
   const profile = target?.profiles?.find((item) => item.id === profileId) ||
     (!(target?.profiles || []).length ? { id: '', name: 'Default profile', packages: [] } : null);
-  return { target, profile, values: { ...targetSelectorValues } };
+  return { target, profile, values: { ...targetSelectorValues }, valid: !catalogTargetMismatch };
 }
 
 function catalogUrls(asset) {
@@ -1106,6 +1117,13 @@ function renderCatalogPicker(preferState = true, requested = null) {
   const preferred = targetRequest ||
     (preferState && state.device?.id === 'catalog-target' ? state.device.target : {});
   const selectedTarget = renderCatalogTargetSelectors(preferred);
+  if (!selectedTarget.valid) {
+    $('menuconfigBox').hidden = true;
+    $('menuconfigGrid').textContent = '';
+    setCatalogLoadState('error', 'Catalog target is unavailable or failed validation');
+    showCatalogStatus(branch, MENU_CATALOG);
+    return { source, branch, target: null, profile: null, invalidTarget: true };
+  }
   setCatalogLoadState('idle');
   $('menuconfigBox').hidden = false;
   showCatalogStatus(branch, MENU_CATALOG);
@@ -1135,7 +1153,7 @@ function catalogProfilePackageOps(profile) {
   return { raw, add, remove };
 }
 async function applyCatalogTarget() {
-  if (!MENU_CATALOG) return;
+  if (!MENU_CATALOG || catalogTargetMismatch) return;
   const sourceRow = selectedCatalogSource();
   const branchRow = selectedCatalogBranch(sourceRow);
   const selectedTarget = renderCatalogTargetSelectors(targetSelectorValues);
@@ -1161,6 +1179,8 @@ async function applyCatalogTarget() {
       system: target.board, systemLabel: target.name || target.board,
       subtarget: target.subtarget, subtargetLabel: target.subtargetName || target.subtarget || 'Default',
       targetSelector: profile.targetSelector || target.contract?.targetSelector || '',
+      boardSelector: profile.boardSelector || target.contract?.boardSelector ||
+        `TARGET_${target.board}`,
       profileSelector: profile.selector || '',
       profile: profile.id.replace(/^DEVICE_/, ''), profileSymbol: profile.id,
       profileLabel: profile.name || profile.id || 'Default profile',
@@ -2394,7 +2414,7 @@ function renderTargetPicker(preferState = true) {
 }
 async function selectCatalogLocatorTarget(values) {
   catalogInitialTargetPending = false;
-  const preferredTarget = { ...values };
+  const preferredTarget = { ...values, strictCatalogTarget: true };
   targetSelectorValues = {};
   const selected = renderCatalogTargetSelectors(preferredTarget);
   if (!selected.target || !selected.profile) return;
@@ -3610,6 +3630,7 @@ function catalogTargetConfig() {
     `TARGET_${target.system}${target.subtarget ? `_${target.subtarget}` : ''}`;
   const profileSymbol = target.profileSymbol || (target.profile ? `DEVICE_${target.profile}` : '');
   const profileSelector = target.profileSelector || `${targetSelector}_${profileSymbol}`;
+  const boardSelector = target.boardSelector || `TARGET_${target.system}`;
   const arch = String(target.arch || '').trim();
   const archPackages = String(target.archPackages || '').trim();
   if (!arch || !/^[A-Za-z0-9_+-]+$/.test(arch)) {
@@ -3619,6 +3640,7 @@ function catalogTargetConfig() {
     throw new Error('Catalog target is missing a valid package architecture');
   }
   const lines = [
+    ...(boardSelector && boardSelector !== targetSelector ? [`CONFIG_${boardSelector}=y`] : []),
     `CONFIG_${targetSelector}=y`,
     `CONFIG_${profileSelector}=y`,
     `CONFIG_${arch}=y`,
