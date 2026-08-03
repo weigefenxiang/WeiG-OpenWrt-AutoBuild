@@ -725,6 +725,12 @@ async function responseJson(response, compressed) {
 }
 async function refreshMenuIndex() {
   try {
+    const previousSourceId = $('targetSource')?.value || '';
+    const previousBranchId = $('targetBranch')?.value || '';
+    const previousSource = MENU_INDEX?.sources?.find((item) => item.id === previousSourceId);
+    const previousBranch = previousSource?.branches?.find((item) => item.id === previousBranchId);
+    const previousCatalogKey = menuCatalogKey;
+    const previousCatalogAsset = previousBranch?.asset || '';
     const localSources = MENU_INDEX?.sources || [];
     const remote = await fetchCatalogJson('index.json');
     const index = stableCatalogIndex(remote.data);
@@ -742,9 +748,19 @@ async function refreshMenuIndex() {
       index.loadedFrom = remote.url;
       MENU_INDEX = index;
       if (!importingConfig) {
-        MENU_CATALOG = null;
-        menuCatalogKey = '';
+        const activeSource = index.sources.find((item) => item.id === previousSourceId);
+        const activeBranch = activeSource?.branches?.find((item) => item.id === previousBranchId);
+        const sameCatalog = Boolean(
+          MENU_CATALOG && previousCatalogKey && activeBranch &&
+          previousCatalogKey === `${activeSource.id}/${activeBranch.branch}` &&
+          previousCatalogAsset === (activeBranch.asset || ''),
+        );
+        if (!sameCatalog) {
+          MENU_CATALOG = null;
+          menuCatalogKey = '';
+        }
         renderDevices();
+        renderCatalogLocatorResults();
       }
     }
   } catch (e) { /* 独立目录尚未发布时继续使用仓库内回退清单 */ }
@@ -876,6 +892,7 @@ function setCatalogLoadState(mode, error = '') {
     $('menuconfigBox').hidden = true;
   }
   renderCatalogLoadState();
+  renderCatalogLocatorResults();
 }
 function retryCatalogLoad() {
   if (catalogLoadMode !== 'error') return;
@@ -1083,6 +1100,7 @@ function renderCatalogPicker(preferState = true, requested = null) {
   $('menuconfigBox').hidden = false;
   showCatalogStatus(branch, MENU_CATALOG);
   renderMenuconfig();
+  renderCatalogLocatorResults();
   return { source, branch, target: selectedTarget.target, profile: selectedTarget.profile };
 }
 function catalogSourceObject(source, branch) {
@@ -2344,44 +2362,67 @@ function catalogLocatorEntries(query) {
   }
   return entries.filter((entry) => String(entry.hay).toLowerCase().includes(query)).slice(0, 80);
 }
+function renderCatalogLocatorResults() {
+  const input = $('catalogLocator');
+  const results = $('catalogLocatorResults');
+  if (!input || !results) return;
+  const query = input.value.trim().toLowerCase();
+  results.textContent = '';
+  if (query.length < 2) {
+    results.hidden = true;
+    return;
+  }
+  if (catalogLoadMode === 'loading') {
+    const loading = document.createElement('p');
+    loading.className = 'hint catalog-locator-loading';
+    loading.textContent = uiText('正在加载 Target 数据…', '正在載入 Target 資料…', 'Loading Target data…');
+    results.appendChild(loading);
+    results.hidden = false;
+    return;
+  }
+  if (!MENU_CATALOG) {
+    const empty = document.createElement('p');
+    empty.className = 'hint';
+    empty.textContent = catalogLoadMode === 'error'
+      ? uiText('Catalog 加载失败，请重试。', 'Catalog 載入失敗，請重試。', 'Catalog failed to load. Retry.')
+      : t('search.empty');
+    results.appendChild(empty);
+    results.hidden = false;
+    return;
+  }
+  for (const entry of catalogLocatorEntries(query)) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'catalog-locator-item';
+    const label = document.createElement('span');
+    label.textContent = entry.label;
+    const detail = document.createElement('small');
+    detail.textContent = `${entry.type} · ${entry.detail}`;
+    button.append(label, detail);
+    button.onclick = async () => {
+      results.hidden = true;
+      results.textContent = '';
+      input.value = '';
+      await entry.run();
+    };
+    results.appendChild(button);
+  }
+  if (!results.children.length) {
+    const empty = document.createElement('p');
+    empty.className = 'hint';
+    empty.textContent = t('search.empty');
+    results.appendChild(empty);
+  }
+  results.hidden = false;
+}
 function initCatalogLocator() {
   const input = $('catalogLocator');
   const results = $('catalogLocatorResults');
   if (!input || !results) return;
   const close = () => { results.hidden = true; results.textContent = ''; };
-  input.oninput = () => {
-    const query = input.value.trim().toLowerCase();
-    results.textContent = '';
-    if (query.length < 2) {
-      results.hidden = true;
-      return;
-    }
-    for (const entry of catalogLocatorEntries(query)) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'catalog-locator-item';
-      const label = document.createElement('span');
-      label.textContent = entry.label;
-      const detail = document.createElement('small');
-      detail.textContent = `${entry.type} · ${entry.detail}`;
-      button.append(label, detail);
-      button.onclick = async () => {
-        close();
-        input.value = '';
-        await entry.run();
-      };
-      results.appendChild(button);
-    }
-    if (!results.children.length) {
-      const empty = document.createElement('p');
-      empty.className = 'hint';
-      empty.textContent = t('search.empty');
-      results.appendChild(empty);
-    }
-    results.hidden = false;
-  };
+  input.oninput = renderCatalogLocatorResults;
   input.onfocus = () => {
-    if (input.value.trim().length >= 2) input.dispatchEvent(new Event('input'));
+    if (input.value.trim().length >= 2) renderCatalogLocatorResults();
   };
   document.addEventListener('pointerdown', (event) => {
     if (!event.target.closest('.catalog-locator')) close();
