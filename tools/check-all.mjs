@@ -19,6 +19,7 @@ import {
   missingBuildRequirements,
   sourceBuildRequirements,
 } from './source-build-requirements.mjs';
+import { verifyNormalizedConfigText } from './config-normalization.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 let fail = 0;
@@ -245,6 +246,11 @@ mirrorRootsOk
     profile: 'DEVICE_generic',
   };
   const requirementFixture = 'CONFIG_TARGET_x86=y\nCONFIG_TARGET_BOARD="x86"\n';
+  const normalizationFixture = 'CONFIG_TARGET_x86=y\nCONFIG_PACKAGE_demo=m\n';
+  const normalizationGood = verifyNormalizedConfigText(normalizationFixture,
+    `${normalizationFixture}CONFIG_BINUTILS_VERSION_2_44=y\n`);
+  const normalizationBad = verifyNormalizedConfigText(normalizationFixture,
+    'CONFIG_TARGET_x86=y\n# CONFIG_PACKAGE_demo is not set\n');
   const missingRequirements = missingBuildRequirements(requirementFixture, requirementContext);
   const requirementResolved = applyBuildRequirements(requirementFixture, missingRequirements);
   const requirementIds = sourceBuildRequirements.requirements?.map((row) => row.id) || [];
@@ -259,7 +265,9 @@ mirrorRootsOk
     js.includes('enforceBuildRequirements: true') &&
     js.includes('openBuildRequirementResolver') &&
     parser.includes('missingBuildRequirements(config, configRuleContext)') &&
-    !buildWorkflow.includes('make defconfig');
+    !buildWorkflow.includes('make defconfig') &&
+    normalizationGood.valid && normalizationGood.addedCount === 1 &&
+    !normalizationBad.valid && normalizationBad.changed[0]?.symbol === 'PACKAGE_demo';
   sourceRequirementsOk
     ? ok('source build requirements: one JSON, explicit web acceptance, and Issue rejection are connected')
     : bad('source build requirements', 'JSON schema/copy, web resolver, parser guard, or no-defconfig contract is invalid');
@@ -294,7 +302,11 @@ mirrorRootsOk
   const failureDiagnosticsContract = buildWorkflow.includes('set_config_flag DEVEL') &&
     buildWorkflow.includes('set_config_flag BUILD_LOG') &&
     buildWorkflow.includes("grep -Fx 'CONFIG_BUILD_LOG=y' .config") &&
-    buildWorkflow.includes('config_policy=authoritative-no-defconfig') &&
+    buildWorkflow.includes('config_policy=authoritative-upstream-kconfig-normalized-no-make-defconfig') &&
+    buildWorkflow.includes('verify-config-normalization.mjs') &&
+    buildWorkflow.includes('normalized.config') &&
+    buildWorkflow.includes('config-normalization.json') &&
+    buildWorkflow.includes('config-normalization.diff') &&
     buildWorkflow.includes('build.config') &&
     !buildWorkflow.includes('make defconfig') &&
     !buildWorkflow.includes('resolved.config') &&
@@ -450,7 +462,7 @@ mirrorRootsOk
     parser.includes("['custom-target', 'catalog-target'].includes(req.device)") &&
     parser.includes('custom_target=${isCustomTarget ? 1 : 0}') &&
     buildWorkflow.includes('cp submitted.config openwrt/.config') &&
-    buildWorkflow.includes('config_policy=authoritative-no-defconfig');
+    buildWorkflow.includes('config_policy=authoritative-upstream-kconfig-normalized-no-make-defconfig');
   customTargetContract
     ? ok('未收录 .config → Custom Target → Issue/Actions 直接配置链路已接通')
     : bad('custom target contract', '网页兜底、解析器、Issue 校验或 Actions 直接配置参数缺失');
