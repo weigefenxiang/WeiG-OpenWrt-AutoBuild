@@ -138,6 +138,8 @@ WeiG-OpenWrt-AutoBuild/
 
 ### 2.5 构建链路
 
+- Catalog Target 的 `archPackages`、Target/Profile 与 Profile 必需包是一个原子构建契约。网页将架构写入 `CONFIG_TARGET_ARCH_PACKAGES`、自动加入 Profile 必需包，并在主屏展示 Source/Branch、Target System/Subtarget、Profile、架构、Catalog 提交和已选项；`parse-request.mjs` 按同一 Catalog 再核对架构与每个必需包，缺失或不一致直接拒绝。不要用旧的设备表推断架构，也不要恢复 `make defconfig`。
+
 - `.github/workflows/custom-build.yml`:网页用户只通过 Issue 附件构建；`Smoke All` 通过隐藏 `repository_dispatch` 触发兼容构建，因此 Actions 不再展示旧手动参数表单。四类 Artifact 统一以 Issue/附件请求编号开头，如 `006_01-FIRMWARE-ALL-…`，其中固件全集零压缩上传但仍保留 GitHub 下载外壳。时区、主题、NTP、opkg 在提交配置、Summary、`firmware-settings.txt` 与固件内 `/etc/weig-build-info` 交叉核验；固件/config 保留 30 天，完整日志保留 14 天。
 - 软件源镜像由 `diy2-generic.sh` 自动兼容：旧版 opkg 源改写 `distfeeds.conf`；APK 源（25.12+）改写构建期 `VERSION_REPO`，由源码生成 `distfeeds.list`。不要把 APK 的生成文件当作源码内固定文件。
 - 构建准入默认限制每位提交者同时最多 2 个排队中或运行中的任务；第 3 个 Issue 会自动回评并关闭。仓库所有者按 GitHub 登录名识别，不受此上限限制，并为每次构建使用独立并发组，不会在本项目队列中互相等待。Fork 可在仓库 Variables 设置正整数 `MAX_BUILDS_PER_USER` 覆盖默认值。`cancel-build.yml` 只接受原 Issue 提交者的 `/cancel` 或 `/cancel-build`，先普通取消，15 秒未结束才强制取消；管理员仍可在 Actions 页面管理任意任务。

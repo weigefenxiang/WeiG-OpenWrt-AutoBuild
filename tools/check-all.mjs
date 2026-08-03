@@ -680,10 +680,22 @@ mirrorRootsOk
     css.includes('.menuconfig-package-name{min-width:0;overflow:hidden') &&
     css.includes('.menuconfig-child') &&
     existsSync(join(ROOT, 'site', 'wrt', 'data', 'menuconfig-index.json'));
-  menuconfigContract
-    ? ok('多源码 Catalog → 英文禁译文、手机单列/译文标签、滚动直显与可跳面包屑已接通')
-    : bad('menuconfig catalog contract', '动态 Target、英语译文门禁、手机单列/译文标签、面包屑或 choice 缺失');
-  const versionContract = versionWorkflow.includes('"site/wrt/**"') &&
+    menuconfigContract
+      ? ok('多源码 Catalog → 英文禁译文、手机单列/译文标签、滚动直显与可跳面包屑已接通')
+      : bad('menuconfig catalog contract', '动态 Target、英语译文门禁、手机单列/译文标签、面包屑或 choice 缺失');
+    const buildContractUi = html.includes('id="buildContract"') &&
+      html.includes('id="buildContractGrid"') &&
+      js.includes('function renderBuildContract()') &&
+      js.includes('archPackages: String(target.archPackages ||') &&
+      js.includes('CONFIG_TARGET_ARCH_PACKAGES') &&
+      js.includes('enforceCatalogProfilePackages') &&
+      parser.includes('catalogArchPackages') &&
+      parser.includes('CONFIG_TARGET_ARCH_PACKAGES 与 Catalog 不一致') &&
+      buildWorkflow.includes('catalog_arch_packages');
+    buildContractUi
+      ? ok('Catalog Target 构建契约:架构/必需包/主屏信息与 Actions 校验已接通')
+      : bad('Catalog build contract', '架构、Profile 必需包、主屏信息或 Issue/Actions 校验缺失');
+    const versionContract = versionWorkflow.includes('"site/wrt/**"') &&
     versionWorkflow.includes('"VERSION"') &&
     versionWorkflow.includes("github.actor != 'github-actions[bot]'") &&
     versionWorkflow.includes('permissions:') &&

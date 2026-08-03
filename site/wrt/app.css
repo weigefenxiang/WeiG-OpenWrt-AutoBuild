@@ -249,6 +249,20 @@ input:focus-visible { border-color: var(--accent); }
 .target-picker .target-subtarget{flex:.8 1 140px}
 .target-picker .target-profile{flex:1.8 1 260px}
 .target-picker .target-extra{flex:1 1 180px}
+.build-contract{margin-top:12px;padding:12px;border:1px solid color-mix(in srgb,var(--accent) 38%,var(--border));border-radius:11px;background:color-mix(in srgb,var(--accent) 7%,var(--card));}
+.build-contract-head{display:flex;align-items:center;gap:10px;min-width:0;margin-bottom:10px;color:var(--text)}
+.build-contract-head strong{font-size:15px;white-space:nowrap}
+.build-contract-head .hint{margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.build-contract-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.build-contract-row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:var(--card2)}
+.build-contract-key{color:var(--text2);font-size:13px;min-width:0}
+.build-contract-row code{max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font:600 13px ui-monospace,Consolas,monospace}
+.build-contract-list{margin-top:9px;padding-top:9px;border-top:1px solid color-mix(in srgb,var(--border) 75%,transparent);color:var(--text2);font-size:13px}
+.build-contract-list>strong{display:block;margin-bottom:6px;color:var(--text)}
+.build-contract-chips{display:flex;flex-wrap:wrap;gap:5px}
+.build-contract-chip{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 7px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:6px;background:color-mix(in srgb,var(--accent) 10%,var(--card2));color:var(--accent);font:12px ui-monospace,Consolas,monospace}
+.menuconfig-option.catalog-profile-required{border-color:color-mix(in srgb,var(--accent) 42%,var(--border));background:color-mix(in srgb,var(--accent) 6%,var(--card2))}
+.catalog-profile-required .kconfig-tri button:not(:disabled){color:var(--accent)}
 .catalog-load-state{display:flex;flex:1.8 1 300px;align-items:center;justify-content:center;gap:9px;height:44px;padding:0 12px;border:1px dashed color-mix(in srgb,var(--accent) 45%,var(--border));border-radius:9px;background:color-mix(in srgb,var(--accent) 6%,var(--card));color:var(--text2);font:inherit}
 .catalog-load-state[data-state=loading]{cursor:wait}
 .catalog-load-state[data-state=error]{border-color:color-mix(in srgb,var(--danger) 55%,var(--border));color:var(--danger);cursor:pointer}
@@ -376,6 +390,10 @@ input:focus-visible { border-color: var(--accent); }
   .menu-tooltip{max-height:min(42vh,280px);overflow:auto}
   .import-summary{align-items:flex-start;flex-direction:column}
   .import-unknown-row{grid-template-columns:1fr}
+  .build-contract-grid{grid-template-columns:1fr}
+  .build-contract-head{align-items:flex-start;flex-direction:column;gap:3px}
+  .build-contract-head .hint{margin-left:0;max-width:100%}
+  .build-contract-row code{max-width:58%}
 }
 .target-picker[hidden] { display: none; }
 .target-picker label { min-width: 0; color: var(--text2); font-size: 15px; font-weight: 650; }

@@ -150,7 +150,7 @@ const INITIAL_CATALOG_TARGET = {
   system: 'x86', subtarget: '64', profileSymbol: 'DEVICE_generic',
 };
 let catalogInitialTargetPending = true;
-const DATA_CACHE_VERSION = 'v18-source-build-requirements';
+const DATA_CACHE_VERSION = 'v19-catalog-build-contract';
 const NTP_PRESETS = {
   cn: ['ntp.aliyun.com', 'time1.cloud.tencent.com', 'cn.ntp.org.cn', 'cn.pool.ntp.org'],
   global: ['0.openwrt.pool.ntp.org', '1.openwrt.pool.ntp.org', '2.openwrt.pool.ntp.org', '3.openwrt.pool.ntp.org'],
@@ -1052,7 +1052,7 @@ function initialCatalogTargetRequest() {
 }
 function isCatalogTargetSymbol(symbol, catalog = MENU_CATALOG) {
   if (menuTargetSymbols.has(symbol)) return true;
-  if (/^TARGET_(?:BOARD|SUBTARGET|PROFILE)$/.test(symbol)) return true;
+  if (/^TARGET_(?:BOARD|SUBTARGET|PROFILE|ARCH_PACKAGES)$/.test(symbol)) return true;
   return !menuTargetSymbols.size && (catalog?.targets || []).some((target) =>
     symbol === `TARGET_${target.board}` || symbol === `TARGET_${target.board}_${target.subtarget}`);
 }
@@ -1138,6 +1138,8 @@ async function applyCatalogTarget() {
       subtarget: target.subtarget, subtargetLabel: target.subtargetName || target.subtarget,
       profile: profile.id.replace(/^DEVICE_/, ''), profileSymbol: profile.id,
       profileLabel: profile.name || profile.id || 'Default profile',
+      archPackages: String(target.archPackages || '').trim(),
+      profilePackages: [...new Set((profile.packages || []).map((pkg) => String(pkg).trim()).filter(Boolean))],
       extra: Object.fromEntries(Object.entries(selectedTarget.values)
         .filter(([key]) => !['system', 'subtarget', 'profile'].includes(key))),
     },
@@ -1155,8 +1157,87 @@ async function applyCatalogTarget() {
   }
   state.device = device;
   syncCatalogApplications();
+  for (const pkg of device.target.profilePackages) {
+    const option = menuOptionBySymbol.get(`PACKAGE_${pkg}`);
+    if (option) setMenuValueQuiet(option, 'y');
+  }
   activateTargetRecord(record);
   renderMenuconfig();
+  renderBuildContract();
+}
+
+function contractText(zh, en) {
+  return state.lang === 'zh-CN' ? zh : en;
+}
+function renderContractList(element, title, items, empty) {
+  if (!element) return;
+  element.textContent = '';
+  const heading = document.createElement('strong');
+  heading.textContent = title;
+  element.appendChild(heading);
+  const content = document.createElement('div');
+  content.className = 'build-contract-chips';
+  if (!items.length) {
+    const none = document.createElement('span');
+    none.className = 'hint';
+    none.textContent = empty;
+    content.appendChild(none);
+  } else {
+    for (const item of items) {
+      const chip = document.createElement('code');
+      chip.className = 'build-contract-chip';
+      chip.textContent = item;
+      chip.title = item;
+      content.appendChild(chip);
+    }
+  }
+  element.appendChild(content);
+}
+function renderBuildContract() {
+  const box = $('buildContract');
+  if (!box) return;
+  const target = state.device?.id === 'catalog-target' ? state.device.target : null;
+  if (!target || !MENU_CATALOG) {
+    box.hidden = true;
+    return;
+  }
+  const source = selectedCatalogSource();
+  const branch = selectedCatalogBranch(source);
+  const profilePackages = [...new Set(target.profilePackages || [])];
+  const selected = effectiveSelection();
+  const selectedNames = selected.all.map((item) => item.id);
+  const commit = String(MENU_CATALOG.source?.commit || '').slice(0, 8) || 'unknown';
+  $('buildContractTitle').textContent = contractText('当前构建契约', 'Current build contract');
+  $('buildContractCatalog').textContent = `${contractText('Catalog 提交', 'Catalog commit')} ${commit}`;
+  const grid = $('buildContractGrid');
+  grid.textContent = '';
+  const rows = [
+    [contractText('源码 / 分支', 'Source / Branch'), `${source?.label || state.source?.id || '-'} / ${branch?.branch || state.version?.branch || '-'}`],
+    [contractText('Target System / Subtarget', 'Target System / Subtarget'), `${target.systemLabel || target.system} / ${target.subtargetLabel || target.subtarget}`],
+    [contractText('Target Profile', 'Target Profile'), target.profileLabel || target.profileSymbol || '-'],
+    [contractText('软件包架构', 'Package architecture'), target.archPackages || contractText('Catalog 未提供', 'Missing from Catalog')],
+  ];
+  for (const [label, value] of rows) {
+    const row = document.createElement('div');
+    row.className = 'build-contract-row';
+    const key = document.createElement('span');
+    key.className = 'build-contract-key';
+    key.textContent = label;
+    const val = document.createElement('code');
+    val.textContent = value;
+    val.title = value;
+    row.append(key, val);
+    grid.appendChild(row);
+  }
+  renderContractList($('buildContractProfilePackages'),
+    contractText('Profile 必需软件包（自动加入）', 'Profile required packages (added automatically)'),
+    profilePackages, contractText('无额外必需包', 'No additional profile packages'));
+  const shownSelected = selectedNames.slice(0, 24);
+  if (selectedNames.length > shownSelected.length) shownSelected.push(`+${selectedNames.length - shownSelected.length}`);
+  renderContractList($('buildContractSelection'),
+    contractText('已选插件', 'Selected plugins'), shownSelected,
+    contractText('尚未选择插件', 'No plugins selected'));
+  box.hidden = false;
 }
 
 function simpleKconfigDefault(option) {
@@ -1734,7 +1815,10 @@ function renderMenuOption(option, showPath = false) {
   const childCount = menuNestedCounts.get(option.symbol) || 0;
   const row = document.createElement('div');
   const packageName = option.symbol.startsWith('PACKAGE_') ? option.symbol.slice(8) : '';
+  const profileRequired = packageName && state.device?.id === 'catalog-target' &&
+    (state.device.target?.profilePackages || []).includes(packageName);
   row.className = `menuconfig-option${packageName ? ' package-option' : ''}${childCount ? ' has-children' : ''}`;
+  if (profileRequired) row.classList.add('catalog-profile-required');
   const prompt = document.createElement('span');
   prompt.className = packageName ? 'menuconfig-package' : 'menuconfig-prompt';
   const name = document.createElement('span');
@@ -1779,6 +1863,10 @@ function renderMenuOption(option, showPath = false) {
       button.type = 'button';
       button.textContent = stateValue.toUpperCase();
       button.className = value === stateValue ? 'active' : '';
+      if (profileRequired) {
+        button.disabled = stateValue !== 'y';
+        button.title = 'Required by the selected Target Profile';
+      }
       button.onclick = () => setMenuValue(option, stateValue, childCount > 0 && stateValue !== 'n');
       tri.appendChild(button);
     }
@@ -3251,6 +3339,7 @@ function updateStats() {
   fill.className = 'cap-fill' + (pct >= 100 ? ' over' : pct >= 75 ? ' warn' : '');
   $('capText').textContent = t('bar.capacity', { pct }) + (pct >= 100 ? ' ' + t('bar.capacity.over') : '');
   updateGroupBadges();
+  renderBuildContract();
 }
 
 /* ============ 已选清单 / Selected list ============ */
@@ -3456,11 +3545,16 @@ function applyImportedUnknownEdits(text) {
 function catalogTargetConfig() {
   const target = state.device.target;
   const profile = target.profileSymbol || (target.profile ? `DEVICE_${target.profile}` : '');
+  const archPackages = String(target.archPackages || '').trim();
+  if (!archPackages || !/^[A-Za-z0-9._+-]+$/.test(archPackages)) {
+    throw new Error('Catalog target is missing a valid package architecture');
+  }
   const lines = [
     `CONFIG_TARGET_${target.system}=y`,
     `CONFIG_TARGET_${target.system}_${target.subtarget}=y`,
     `CONFIG_TARGET_BOARD="${target.system}"`,
     `CONFIG_TARGET_SUBTARGET="${target.subtarget}"`,
+    `CONFIG_TARGET_ARCH_PACKAGES="${archPackages}"`,
   ];
   if (profile) {
     lines.splice(2, 0, `CONFIG_TARGET_${target.system}_${target.subtarget}_${profile}=y`);
@@ -3469,6 +3563,15 @@ function catalogTargetConfig() {
   lines.push('');
   let text = lines.join('\n');
   return applyMenuConfig(text);
+}
+function enforceCatalogProfilePackages(text) {
+  const target = state.device?.target;
+  if (state.device?.id !== 'catalog-target' || !target) return text;
+  for (const pkg of target.profilePackages || []) {
+    if (!/^[A-Za-z0-9._+@-]+$/.test(pkg)) throw new Error(`Catalog profile package is invalid: ${pkg}`);
+    text = setConfigSymbol(text, `PACKAGE_${pkg}`, 'y', 'bool');
+  }
+  return text;
 }
 function applyToConfig(text, sel) {
   const src = state.source.id;
@@ -3576,6 +3679,7 @@ async function generateConfigText({ enforceBuildRequirements = false } = {}) {
       ? catalogTargetConfig()
       : await (await fetchData(state.device.id + '/' + configName)).text();
   let config = applyToConfig(raw, effectiveSelection());
+  if (!state.importedConfig) config = enforceCatalogProfilePackages(config);
   for (let pass = 0; pass < 16; pass++) {
     const rules = matchingConfigRules(config);
     if (!rules.length) break;
@@ -3723,7 +3827,7 @@ function showImportError(error) {
 }
 function targetLines(text) {
   return text.replace(/\r\n/g, '\n').split('\n').filter((line) =>
-    /^CONFIG_TARGET_(?:BOARD|SUBTARGET|PROFILE)=/.test(line) ||
+    /^CONFIG_TARGET_(?:BOARD|SUBTARGET|PROFILE|ARCH_PACKAGES)=/.test(line) ||
     /^CONFIG_TARGET_.*_DEVICE_.*=y$/.test(line)).sort();
 }
 function importedConfigMeta(text, fileName, payload) {

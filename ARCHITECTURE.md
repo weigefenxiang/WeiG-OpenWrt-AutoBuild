@@ -63,6 +63,8 @@ An uploaded config waits for the matching source/branch catalog before restoring
 
 ## 构建链路 / Build pipeline
 
+Catalog Target 的 `archPackages`、Target/Profile 与 Profile 必需包是一个不可拆分的构建契约：网页将架构写入 `CONFIG_TARGET_ARCH_PACKAGES` 并自动加入 Profile 必需包，解析器按同一分支 Catalog 逐项复核；缺失、架构不匹配或 Catalog 无法读取时直接拒绝请求 / A Catalog Target treats `archPackages`, Target/Profile, and Profile-required packages as one atomic build contract: the page writes `CONFIG_TARGET_ARCH_PACKAGES` and adds the required Profile packages, while the parser rechecks every field against the same branch Catalog and rejects missing data, architecture mismatches, or unavailable Catalog data.
+
 1. 页面先按 `source-build-requirements.json` 匹配 Source/Branch/Target 必需项，用户明确应用后才下载含完整 `.config` 的 `build-request.json` 并打开 Issue；解析器用同一 JSON 二次拒绝缺项请求 / the page first matches Source/Branch/Target requirements from `source-build-requirements.json`; only after explicit acceptance does it download a request containing the complete `.config` and open the Issue, while the parser rejects omissions using the same JSON
 2. 新手 Issue 只有一个必填附件框:上传网页生成的 `build-request.json` 即可;已有 `.config` / `config.buildinfo` 先由网页识别并包装。解析器仍兼容带网页元数据头的原始配置 / the beginner Issue has one required attachment field: upload the web-generated `build-request.json`; existing configs are identified and wrapped by the page first, while the parser remains compatible with raw configs carrying web metadata
 3. 克隆所选源码@所选分支 → diy 脚本 → feeds → 直接复制 `submitted.config` 为构建 `.config`；项目永远不运行 `make defconfig`，仓库 base config 不参与 Issue 重建 / clone source@branch, run diy and feeds, then copy `submitted.config` directly as the build `.config`; the project never runs `make defconfig`, and repository base configs do not regenerate Issue builds

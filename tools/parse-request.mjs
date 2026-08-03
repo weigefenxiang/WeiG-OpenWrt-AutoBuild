@@ -29,6 +29,14 @@ const PACKAGE_MIRRORS = JSON.parse(
   readFileSync(join(ROOT, 'site', 'wrt', 'data', 'package-mirrors.json'), 'utf8'));
 
 function fail(msg) { console.error('校验失败: ' + msg); process.exit(1); }
+function configStringValue(text, symbol) {
+  const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return String(text).match(new RegExp(`^CONFIG_${escaped}="([^"]*)"$`, 'm'))?.[1] || '';
+}
+function configEnabled(text, symbol) {
+  const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^CONFIG_${escaped}=y$`, 'm').test(String(text));
+}
 async function loadCatalogIndex() {
   const repo = PROJECT.catalogRepository || LOCAL_CATALOG_INDEX.catalogRepo;
   const urls = [
@@ -249,6 +257,8 @@ if (hasSubmittedConfig) {
 }
 
 let activeCatalog = null;
+let catalogArchPackages = '';
+let catalogProfilePackages = [];
 if (hasSubmittedConfig) {
   if (!catalogIndex) catalogIndex = await loadCatalogIndex();
   const catalogSource = catalogIndex.sources.find((item) => item.id === source.id);
@@ -271,6 +281,34 @@ if (hasSubmittedConfig) {
       }
     }
   }
+}
+if (isCustomTarget) {
+  if (!activeCatalog) fail(`无法读取 ${source.id}/${version.branch} 的 Catalog，不能验证 Target/Profile 构建契约`);
+  const contractContext = {
+    system: configStringValue(submittedConfig, 'TARGET_BOARD'),
+    subtarget: configStringValue(submittedConfig, 'TARGET_SUBTARGET'),
+    profile: configStringValue(submittedConfig, 'TARGET_PROFILE'),
+  };
+  const catalogTarget = activeCatalog.targets?.find((item) =>
+    item.board === contractContext.system && item.subtarget === contractContext.subtarget);
+  const catalogProfile = catalogTarget?.profiles?.find((item) =>
+    item.id === (contractContext.profile.startsWith('DEVICE_')
+      ? contractContext.profile : `DEVICE_${contractContext.profile}`));
+  if (!catalogTarget || !catalogProfile) {
+    fail(`Catalog 中没有匹配的 Target/Profile：${contractContext.system}/${contractContext.subtarget}/${contractContext.profile}`);
+  }
+  const expectedArch = String(catalogTarget.archPackages || '').trim();
+  const actualArch = configStringValue(submittedConfig, 'TARGET_ARCH_PACKAGES');
+  if (!expectedArch || actualArch !== expectedArch) {
+    fail(`CONFIG_TARGET_ARCH_PACKAGES 与 Catalog 不一致：config=${actualArch || '(missing)'}，Catalog=${expectedArch || '(missing)'}`);
+  }
+  const missingProfilePackages = (catalogProfile.packages || []).filter((pkg) =>
+    !configEnabled(submittedConfig, `PACKAGE_${pkg}`));
+  if (missingProfilePackages.length) {
+    fail(`Target Profile 必需软件包缺失：${missingProfilePackages.join(', ')}；请重新从网页下载该 Target/Profile 配置`);
+  }
+  catalogArchPackages = expectedArch;
+  catalogProfilePackages = [...new Set(catalogProfile.packages || [])];
 }
 
 // 种子机型共用 seed 表 / seed devices share the seed plugin table
@@ -415,6 +453,8 @@ const out = [
   `packages=${packages.join(' ')}`,
   `advanced=${advanced}`,
   `custom_target=${isCustomTarget ? 1 : 0}`,
+  `catalog_arch_packages=${catalogArchPackages}`,
+  `catalog_profile_packages=${catalogProfilePackages.join(' ')}`,
   `request_mode=${requestMode}`,
   `authoritative_config=${hasSubmittedConfig ? 1 : 0}`,
   `config_id=${configId}`,
