@@ -70,6 +70,7 @@ let MENU_INDEX = null, MENU_CATALOG = null;
 let menuCatalogKey = '', menuLoadingKey = '', menuCatalogSeq = 0, menuCatalogPromise = null;
 let catalogLoadMode = 'idle', catalogLoadError = '';
 let menuPath = null, menuParent = '', menuExpanded = false, menuSelectedExpanded = false;
+let buildContractExpanded = false;
 let menuVisibleLimit = 80, menuHistory = [], menuBreadcrumb = [];
 const menuValues = new Map();
 const menuTouched = new Set();
@@ -476,6 +477,7 @@ async function init() {
     renderFirmwareSettings();
     initDeviceFold();
     initMenuconfigControls();
+    initBuildContractControls();
     initCatalogLocator();
     $('minimumBootToggle').checked = state.minimumBoot;
     initMinimumBoot();
@@ -1193,6 +1195,20 @@ function renderContractList(element, title, items, empty) {
   }
   element.appendChild(content);
 }
+function setBuildContractExpanded(expanded) {
+  buildContractExpanded = Boolean(expanded);
+  const toggle = $('buildContractToggle');
+  const body = $('buildContractBody');
+  if (!toggle || !body) return;
+  toggle.setAttribute('aria-expanded', String(buildContractExpanded));
+  body.hidden = !buildContractExpanded;
+}
+function initBuildContractControls() {
+  const toggle = $('buildContractToggle');
+  if (!toggle) return;
+  setBuildContractExpanded(false);
+  toggle.addEventListener('click', () => setBuildContractExpanded(!buildContractExpanded));
+}
 function renderBuildContract() {
   const box = $('buildContract');
   if (!box) return;
@@ -1237,6 +1253,7 @@ function renderBuildContract() {
   renderContractList($('buildContractSelection'),
     contractText('已选插件', 'Selected plugins'), shownSelected,
     contractText('尚未选择插件', 'No plugins selected'));
+  setBuildContractExpanded(buildContractExpanded);
   box.hidden = false;
 }
 

@@ -684,8 +684,12 @@ mirrorRootsOk
       ? ok('多源码 Catalog → 英文禁译文、手机单列/译文标签、滚动直显与可跳面包屑已接通')
       : bad('menuconfig catalog contract', '动态 Target、英语译文门禁、手机单列/译文标签、面包屑或 choice 缺失');
     const buildContractUi = html.includes('id="buildContract"') &&
+      html.includes('id="buildContractToggle"') &&
+      html.includes('aria-expanded="false" aria-controls="buildContractBody"') &&
+      html.includes('id="buildContractBody" hidden') &&
       html.includes('id="buildContractGrid"') &&
       js.includes('function renderBuildContract()') &&
+      js.includes('function setBuildContractExpanded(expanded)') &&
       js.includes('archPackages: String(target.archPackages ||') &&
       js.includes('CONFIG_TARGET_ARCH_PACKAGES') &&
       js.includes('enforceCatalogProfilePackages') &&

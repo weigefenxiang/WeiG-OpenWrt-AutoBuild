@@ -6,7 +6,7 @@
 <meta name="description" data-i18n="app.desc" content="OpenWrt 固件在线定制:选源码、勾插件,GitHub Actions 云编译,免费自取">
 <title>Wei.G · OpenWrt 固件在线定制</title>
 <link rel="icon" href="Wei.G.ico">
-<link rel="stylesheet" href="app.css?v=00cc99d22d">
+<link rel="stylesheet" href="app.css?v=50306b870c">
 </head>
 <body>
 <header class="site-header">
@@ -90,12 +90,18 @@
         </div>
         <section class="build-contract" id="buildContract" hidden aria-live="polite">
           <div class="build-contract-head">
-            <strong id="buildContractTitle">Current build contract</strong>
-            <span class="hint" id="buildContractCatalog"></span>
+            <button class="build-contract-toggle" id="buildContractToggle" type="button"
+              aria-expanded="false" aria-controls="buildContractBody">
+              <strong id="buildContractTitle">Current build contract</strong>
+              <span class="hint" id="buildContractCatalog"></span>
+              <span class="build-contract-chevron" aria-hidden="true">⌄</span>
+            </button>
           </div>
-          <div class="build-contract-grid" id="buildContractGrid"></div>
-          <div class="build-contract-list" id="buildContractProfilePackages"></div>
-          <div class="build-contract-list" id="buildContractSelection"></div>
+          <div class="build-contract-body" id="buildContractBody" hidden>
+            <div class="build-contract-grid" id="buildContractGrid"></div>
+            <div class="build-contract-list" id="buildContractProfilePackages"></div>
+            <div class="build-contract-list" id="buildContractSelection"></div>
+          </div>
         </section>
         <div class="catalog-locator">
           <div class="catalog-locator-row">
@@ -301,6 +307,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <noscript><p class="wrap" style="padding:2rem 0">本页面需要启用 JavaScript 才能使用。/ JavaScript is required.</p></noscript>
-<script src="app.js?v=ac03533ae9"></script>
+<script src="app.js?v=574b349baf"></script>
 </body>
 </html>

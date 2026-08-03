@@ -250,9 +250,13 @@ input:focus-visible { border-color: var(--accent); }
 .target-picker .target-profile{flex:1.8 1 260px}
 .target-picker .target-extra{flex:1 1 180px}
 .build-contract{margin-top:12px;padding:12px;border:1px solid color-mix(in srgb,var(--accent) 38%,var(--border));border-radius:11px;background:color-mix(in srgb,var(--accent) 7%,var(--card));}
-.build-contract-head{display:flex;align-items:center;gap:10px;min-width:0;margin-bottom:10px;color:var(--text)}
-.build-contract-head strong{font-size:15px;white-space:nowrap}
-.build-contract-head .hint{margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.build-contract-head{min-width:0;color:var(--text)}
+.build-contract-toggle{display:flex;align-items:center;gap:10px;width:100%;min-width:0;padding:0;border:0;background:transparent;color:var(--text);text-align:left;cursor:pointer}
+.build-contract-toggle strong{font-size:15px;white-space:nowrap}
+.build-contract-toggle .hint{margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.build-contract-chevron{flex:none;color:var(--text3);transition:transform .15s}
+.build-contract-toggle[aria-expanded=true] .build-contract-chevron{transform:rotate(180deg)}
+.build-contract-body{margin-top:10px}
 .build-contract-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
 .build-contract-row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:var(--card2)}
 .build-contract-key{color:var(--text2);font-size:13px;min-width:0}
@@ -391,8 +395,9 @@ input:focus-visible { border-color: var(--accent); }
   .import-summary{align-items:flex-start;flex-direction:column}
   .import-unknown-row{grid-template-columns:1fr}
   .build-contract-grid{grid-template-columns:1fr}
-  .build-contract-head{align-items:flex-start;flex-direction:column;gap:3px}
-  .build-contract-head .hint{margin-left:0;max-width:100%}
+  .build-contract-toggle{align-items:flex-start;flex-wrap:wrap;gap:3px 8px}
+  .build-contract-toggle strong{flex:1 1 calc(100% - 32px);min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .build-contract-toggle .hint{order:3;flex:1 1 calc(100% - 32px);margin-left:0;max-width:100%;white-space:nowrap}
   .build-contract-row code{max-width:58%}
 }
 .target-picker[hidden] { display: none; }
