@@ -1140,6 +1140,7 @@ async function applyCatalogTarget() {
       subtarget: target.subtarget, subtargetLabel: target.subtargetName || target.subtarget,
       profile: profile.id.replace(/^DEVICE_/, ''), profileSymbol: profile.id,
       profileLabel: profile.name || profile.id || 'Default profile',
+      arch: String(target.arch || '').trim(),
       archPackages: String(target.archPackages || '').trim(),
       profilePackages: [...new Set((profile.packages || []).map((pkg) => String(pkg).trim()).filter(Boolean))],
       extra: Object.fromEntries(Object.entries(selectedTarget.values)
@@ -1231,7 +1232,8 @@ function renderBuildContract() {
     [contractText('源码 / 分支', 'Source / Branch'), `${source?.label || state.source?.id || '-'} / ${branch?.branch || state.version?.branch || '-'}`],
     [contractText('Target System / Subtarget', 'Target System / Subtarget'), `${target.systemLabel || target.system} / ${target.subtargetLabel || target.subtarget}`],
     [contractText('Target Profile', 'Target Profile'), target.profileLabel || target.profileSymbol || '-'],
-    [contractText('软件包架构', 'Package architecture'), target.archPackages || contractText('Catalog 未提供', 'Missing from Catalog')],
+    [contractText('构建架构 / 软件包架构', 'Build / package architecture'),
+      `${target.arch || contractText('Catalog 未提供', 'Missing from Catalog')} / ${target.archPackages || contractText('Catalog 未提供', 'Missing from Catalog')}`],
   ];
   for (const [label, value] of rows) {
     const row = document.createElement('div');
@@ -3562,13 +3564,19 @@ function applyImportedUnknownEdits(text) {
 function catalogTargetConfig() {
   const target = state.device.target;
   const profile = target.profileSymbol || (target.profile ? `DEVICE_${target.profile}` : '');
+  const arch = String(target.arch || '').trim();
   const archPackages = String(target.archPackages || '').trim();
+  if (!arch || !/^[A-Za-z0-9_+-]+$/.test(arch)) {
+    throw new Error('Catalog target is missing a valid build architecture');
+  }
   if (!archPackages || !/^[A-Za-z0-9._+-]+$/.test(archPackages)) {
     throw new Error('Catalog target is missing a valid package architecture');
   }
   const lines = [
     `CONFIG_TARGET_${target.system}=y`,
     `CONFIG_TARGET_${target.system}_${target.subtarget}=y`,
+    `CONFIG_${arch}=y`,
+    `CONFIG_ARCH="${arch}"`,
     `CONFIG_TARGET_BOARD="${target.system}"`,
     `CONFIG_TARGET_SUBTARGET="${target.subtarget}"`,
     `CONFIG_TARGET_ARCH_PACKAGES="${archPackages}"`,

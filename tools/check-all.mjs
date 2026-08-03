@@ -690,11 +690,16 @@ mirrorRootsOk
       html.includes('id="buildContractGrid"') &&
       js.includes('function renderBuildContract()') &&
       js.includes('function setBuildContractExpanded(expanded)') &&
+      js.includes("arch: String(target.arch || '').trim()") &&
       js.includes('archPackages: String(target.archPackages ||') &&
+      js.includes('CONFIG_ARCH=') &&
       js.includes('CONFIG_TARGET_ARCH_PACKAGES') &&
       js.includes('enforceCatalogProfilePackages') &&
+      parser.includes('catalogArch') &&
       parser.includes('catalogArchPackages') &&
+      parser.includes('CONFIG_ARCH 与 Catalog 不一致') &&
       parser.includes('CONFIG_TARGET_ARCH_PACKAGES 与 Catalog 不一致') &&
+      buildWorkflow.includes('catalog_arch') &&
       buildWorkflow.includes('catalog_arch_packages');
     buildContractUi
       ? ok('Catalog Target 构建契约:架构/必需包/主屏信息与 Actions 校验已接通')
