@@ -326,7 +326,7 @@ jobs:
         run: |
           cd openwrt
           TEST_VERSION="$(tr -d '\r\n' < "$GITHUB_WORKSPACE/VERSION")"
-          NORMALIZATION_ADDED="$(node -p \"JSON.parse(require('fs').readFileSync('$GITHUB_WORKSPACE/config-normalization.json', 'utf8')).addedCount\")"
+          NORMALIZATION_ADDED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).addedCount' "$GITHUB_WORKSPACE/config-normalization.json")"
           GEOIP_STATE="$(grep -E '^CONFIG_PACKAGE_v2ray-geoip=[ym]$' .config || echo 'disabled')"
           GEOSITE_STATE="$(grep -E '^CONFIG_PACKAGE_v2ray-geosite=[ym]$' .config || echo 'disabled')"
           PROXY_RE='^CONFIG_PACKAGE_.*(passwall|ssr|vssr|shadowsocks|v2ray|xray|trojan|tinyproxy|brook|haproxy|pdnsd|kcptun|simple-obfs|chinadns|dns2socks|ipt2socks|microsocks|naiveproxy|redsocks|openclash|homeproxy).*=([ym])$'

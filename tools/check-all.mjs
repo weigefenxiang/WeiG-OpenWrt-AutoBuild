@@ -592,6 +592,12 @@ mirrorRootsOk
   firmwareSettingsContract
     ? ok('请求编号 Artifact 前缀与时区/主题/NTP/opkg 固件内审计链已接通')
     : bad('firmware settings contract', '请求编号、提交快照、DIY、主题或 opkg 核验缺失');
+  const normalizationMetadataContract = workflow.includes(
+    `NORMALIZATION_ADDED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).addedCount' "$GITHUB_WORKSPACE/config-normalization.json")"`,
+  ) && !workflow.includes('node -p \\"');
+  normalizationMetadataContract
+    ? ok('配置归一化计数使用 Shell 安全参数读取，括号表达式不会被 Bash 误解析')
+    : bad('normalization metadata shell contract', 'Node 表达式未安全引用或仍含错误的反斜杠引号');
   const liveLogContract = workflow.includes('JOBS=$(( $(nproc) + 1 ))') &&
     workflow.includes('stdbuf -oL -eL make download -j"$JOBS" 2>&1 |') &&
     workflow.includes('stdbuf -oL -eL make -j"$JOBS" 2>&1 |') &&
