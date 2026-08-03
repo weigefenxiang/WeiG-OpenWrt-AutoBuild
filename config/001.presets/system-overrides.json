@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "id": "build-diagnostics",
+  "description": "System-owned build diagnostics options. These are not user selections and must be audited separately.",
+  "overrides": [
+    {
+      "symbol": "DEVEL",
+      "value": "y",
+      "reason": "BUILD_LOG is exposed by upstream Kconfig under DEVEL."
+    },
+    {
+      "symbol": "BUILD_LOG",
+      "value": "y",
+      "reason": "Keep per-package build logs available for failure diagnosis."
+    }
+  ]
+}

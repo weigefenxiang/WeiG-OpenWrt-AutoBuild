@@ -19,7 +19,7 @@ import {
   missingBuildRequirements,
   sourceBuildRequirements,
 } from './source-build-requirements.mjs';
-import { verifyNormalizedConfigText } from './config-normalization.mjs';
+import { applyConfigOverrides, verifyConfigLayers } from './config-overrides.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 let fail = 0;
@@ -52,7 +52,7 @@ for (const f of ['site/wrt/data/devices.json', 'site/wrt/data/i18n.json', 'site/
   'site/wrt/data/package-mirrors.json', 'site/wrt/data/config-rules.json',
   'site/wrt/data/source-build-requirements.json',
   'config/001.presets/minimum-boot.json', 'config/001.presets/config-rules.json',
-  'config/001.presets/source-build-requirements.json',
+  'config/001.presets/source-build-requirements.json', 'config/001.presets/system-overrides.json',
   'tools/plugins-meta.json', 'tools/plugin-sizes.json', 'tools/i18n-source.json',
   'tools/i18n-translations.json', 'tools/plugins-i18n.json', 'tools/device-catalog.json',
   'tools/package-baseline-360t7.json']) {
@@ -246,11 +246,14 @@ mirrorRootsOk
     profile: 'DEVICE_generic',
   };
   const requirementFixture = 'CONFIG_TARGET_x86=y\nCONFIG_TARGET_BOARD="x86"\n';
-  const normalizationFixture = 'CONFIG_TARGET_x86=y\nCONFIG_PACKAGE_demo=m\n';
-  const normalizationGood = verifyNormalizedConfigText(normalizationFixture,
-    `${normalizationFixture}CONFIG_BINUTILS_VERSION_2_44=y\n`);
-  const normalizationBad = verifyNormalizedConfigText(normalizationFixture,
-    'CONFIG_TARGET_x86=y\n# CONFIG_PACKAGE_demo is not set\n');
+  const systemOverrideRules = JSON.parse(readFileSync(
+    join(ROOT, 'config', '001.presets', 'system-overrides.json'), 'utf8'));
+  const systemOverrideInput = 'CONFIG_TARGET_x86=y\n# CONFIG_DEVEL is not set\n';
+  const systemOverrideApplied = applyConfigOverrides(systemOverrideInput, systemOverrideRules);
+  const systemOverrideReport = verifyConfigLayers(
+    systemOverrideInput, systemOverrideApplied.outputText, systemOverrideRules);
+  const undeclaredChangeReport = verifyConfigLayers(
+    systemOverrideInput, `${systemOverrideApplied.outputText}CONFIG_PACKAGE_bad=y\n`, systemOverrideRules);
   const missingRequirements = missingBuildRequirements(requirementFixture, requirementContext);
   const requirementResolved = applyBuildRequirements(requirementFixture, missingRequirements);
   const requirementIds = sourceBuildRequirements.requirements?.map((row) => row.id) || [];
@@ -266,8 +269,8 @@ mirrorRootsOk
     js.includes('openBuildRequirementResolver') &&
     parser.includes('missingBuildRequirements(config, configRuleContext)') &&
     !buildWorkflow.includes('make defconfig') &&
-    normalizationGood.valid && normalizationGood.addedCount === 1 &&
-    !normalizationBad.valid && normalizationBad.changed[0]?.symbol === 'PACKAGE_demo';
+    systemOverrideReport.valid && systemOverrideApplied.applied.length === 2 &&
+    !undeclaredChangeReport.valid && undeclaredChangeReport.unexpected[0]?.symbol === 'PACKAGE_bad';
   sourceRequirementsOk
     ? ok('source build requirements: one JSON, explicit web acceptance, and Issue rejection are connected')
     : bad('source build requirements', 'JSON schema/copy, web resolver, parser guard, or no-defconfig contract is invalid');
@@ -299,14 +302,12 @@ mirrorRootsOk
   submitLayoutContract
     ? ok('提交设置:后台登录地址左侧、构建标识右侧，手机端自动纵向排列')
     : bad('submit settings layout', '后台登录地址/构建标识的桌面或手机布局不符合约定');
-  const failureDiagnosticsContract = buildWorkflow.includes('set_config_flag DEVEL') &&
-    buildWorkflow.includes('set_config_flag BUILD_LOG') &&
+  const failureDiagnosticsContract = buildWorkflow.includes('apply-config-overrides.mjs') &&
+    buildWorkflow.includes('system-overrides.json') &&
     buildWorkflow.includes("grep -Fx 'CONFIG_BUILD_LOG=y' .config") &&
-    buildWorkflow.includes('config_policy=authoritative-no-defconfig') &&
-    buildWorkflow.includes('verify-config-normalization.mjs') &&
-    buildWorkflow.includes('normalized.config') &&
-    buildWorkflow.includes('config-normalization.json') &&
-    buildWorkflow.includes('config-normalization.diff') &&
+    buildWorkflow.includes('config_policy=authoritative-no-defconfig-with-declared-overrides') &&
+    buildWorkflow.includes('config-overrides.json') &&
+    buildWorkflow.includes('config-overrides.diff') &&
     buildWorkflow.includes('build.config') &&
     !buildWorkflow.includes('make defconfig') &&
     !buildWorkflow.includes('conf --defconfig') &&
@@ -466,7 +467,7 @@ mirrorRootsOk
     parser.includes("['custom-target', 'catalog-target'].includes(req.device)") &&
     parser.includes('custom_target=${isCustomTarget ? 1 : 0}') &&
     buildWorkflow.includes('cp submitted.config openwrt/.config') &&
-    buildWorkflow.includes('config_policy=authoritative-no-defconfig') &&
+    buildWorkflow.includes('config_policy=authoritative-no-defconfig-with-declared-overrides') &&
     !buildWorkflow.includes('conf --defconfig');
   customTargetContract
     ? ok('未收录 .config → Custom Target → Issue/Actions 直接配置链路已接通')
@@ -593,11 +594,11 @@ mirrorRootsOk
     ? ok('请求编号 Artifact 前缀与时区/主题/NTP/opkg 固件内审计链已接通')
     : bad('firmware settings contract', '请求编号、提交快照、DIY、主题或 opkg 核验缺失');
   const normalizationMetadataContract = workflow.includes(
-    `NORMALIZATION_ADDED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).addedCount' "$GITHUB_WORKSPACE/config-normalization.json")"`,
+    `OVERRIDES_APPLIED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).applied.length' "$GITHUB_WORKSPACE/config-overrides.json")"`,
   ) && !workflow.includes('node -p \\"');
   normalizationMetadataContract
-    ? ok('配置归一化计数使用 Shell 安全参数读取，括号表达式不会被 Bash 误解析')
-    : bad('normalization metadata shell contract', 'Node 表达式未安全引用或仍含错误的反斜杠引号');
+    ? ok('系统覆盖计数使用 Shell 安全参数读取，括号表达式不会被 Bash 误解析')
+    : bad('override metadata shell contract', 'Node 表达式未安全引用或仍含错误的反斜杠引号');
   const liveLogContract = workflow.includes('JOBS=$(( $(nproc) + 1 ))') &&
     workflow.includes('stdbuf -oL -eL make download -j"$JOBS" 2>&1 |') &&
     workflow.includes('stdbuf -oL -eL make -j"$JOBS" 2>&1 |') &&

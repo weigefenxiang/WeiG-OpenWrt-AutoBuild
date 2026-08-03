@@ -294,12 +294,12 @@ jobs:
             cp openwrt/.config submitted.config
           fi
           cd openwrt
-          set_config_flag() {
-            sed -i -E "/^(CONFIG_${1}=|# CONFIG_${1} is not set)/d" .config
-            echo "CONFIG_${1}=y" >> .config
-          }
-          set_config_flag DEVEL
-          set_config_flag BUILD_LOG
+          node "$GITHUB_WORKSPACE/tools/apply-config-overrides.mjs" \
+            --input "$GITHUB_WORKSPACE/submitted.config" \
+            --rules "$GITHUB_WORKSPACE/config/001.presets/system-overrides.json" \
+            --output .config \
+            --report "$GITHUB_WORKSPACE/config-overrides.json" \
+            --diff "$GITHUB_WORKSPACE/config-overrides.diff"
           grep -Fx 'CONFIG_DEVEL=y' .config || { echo 'CONFIG_DEVEL is missing from the build config' >&2; exit 1; }
           grep -Fx 'CONFIG_BUILD_LOG=y' .config || { echo 'CONFIG_BUILD_LOG is missing from the build config' >&2; exit 1; }
           if [ "${{ steps.req.outputs.firmware_snapshot }}" = "1" ]; then
@@ -308,16 +308,6 @@ jobs:
               exit 1
             }
           fi
-          # Keep the submitted file authoritative. Do not run a source default
-          # configuration command here: on some branches it selects the
-          # upstream default Target and rewrites a valid submitted profile.
-          cp .config "$GITHUB_WORKSPACE/pre-normalization.config"
-          cp "$GITHUB_WORKSPACE/pre-normalization.config" "$GITHUB_WORKSPACE/normalized.config"
-          node "$GITHUB_WORKSPACE/tools/verify-config-normalization.mjs" \
-            --input "$GITHUB_WORKSPACE/submitted.config" \
-            --normalized "$GITHUB_WORKSPACE/normalized.config" \
-            --report "$GITHUB_WORKSPACE/config-normalization.json" \
-            --diff "$GITHUB_WORKSPACE/config-normalization.diff"
           cp .config "$GITHUB_WORKSPACE/build.config"
           grep '^CONFIG_TARGET_PROFILE' .config
           grep -c '^CONFIG_PACKAGE_luci-app' .config || true
@@ -326,7 +316,7 @@ jobs:
         run: |
           cd openwrt
           TEST_VERSION="$(tr -d '\r\n' < "$GITHUB_WORKSPACE/VERSION")"
-          NORMALIZATION_ADDED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).addedCount' "$GITHUB_WORKSPACE/config-normalization.json")"
+          OVERRIDES_APPLIED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).applied.length' "$GITHUB_WORKSPACE/config-overrides.json")"
           GEOIP_STATE="$(grep -E '^CONFIG_PACKAGE_v2ray-geoip=[ym]$' .config || echo 'disabled')"
           GEOSITE_STATE="$(grep -E '^CONFIG_PACKAGE_v2ray-geosite=[ym]$' .config || echo 'disabled')"
           PROXY_RE='^CONFIG_PACKAGE_.*(passwall|ssr|vssr|shadowsocks|v2ray|xray|trojan|tinyproxy|brook|haproxy|pdnsd|kcptun|simple-obfs|chinadns|dns2socks|ipt2socks|microsocks|naiveproxy|redsocks|openclash|homeproxy).*=([ym])$'
@@ -347,9 +337,9 @@ jobs:
             echo "catalog_arch_packages=${{ steps.req.outputs.catalog_arch_packages }}"
             echo "catalog_profile_packages=${{ steps.req.outputs.catalog_profile_packages }}"
             echo "request_mode=${{ steps.req.outputs.request_mode }}"
-            echo "config_policy=authoritative-no-defconfig"
-            echo "config_normalization=verified"
-            echo "config_normalization_added=$NORMALIZATION_ADDED"
+            echo "config_policy=authoritative-no-defconfig-with-declared-overrides"
+            echo "config_overrides=verified"
+            echo "config_overrides_applied=$OVERRIDES_APPLIED"
             echo "config_id=${{ steps.req.outputs.config_id }}"
             echo "submitted_sha256=${{ steps.req.outputs.submitted_sha256 }}"
             echo "plugins=${{ steps.req.outputs.plugins }}"
@@ -388,10 +378,8 @@ jobs:
           path: |
             openwrt/.config
             submitted.config
-            pre-normalization.config
-            normalized.config
-            config-normalization.json
-            config-normalization.diff
+            config-overrides.json
+            config-overrides.diff
             build.config
             build-metadata.txt
             firmware-settings.txt
@@ -508,7 +496,7 @@ jobs:
           cp build.log build-diagnostic.log download.log failure-logs/ 2>/dev/null || true
           cp build-metadata.txt failure-logs/ 2>/dev/null || true
           cp proxy-selected.txt failure-logs/ 2>/dev/null || true
-          cp submitted.config pre-normalization.config normalized.config config-normalization.json config-normalization.diff build.config failure-logs/ 2>/dev/null || true
+          cp submitted.config config-overrides.json config-overrides.diff build.config failure-logs/ 2>/dev/null || true
           cp openwrt/.config failure-logs/final.config 2>/dev/null || true
           # OpenWrt 的 CONFIG_BUILD_LOG=y 会把每个包的日志写到 openwrt/logs/ / With CONFIG_BUILD_LOG=y, OpenWrt writes per-package build logs to openwrt/logs/
           if [ -d openwrt/logs ]; then
