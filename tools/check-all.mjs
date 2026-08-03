@@ -369,6 +369,9 @@ mirrorRootsOk
     html.includes('id="sourceStep"') && js.includes('function targetRecords()') &&
     js.includes("d.kind === 'target'") &&
     js.includes('function renderCatalogTargetSelectors') &&
+    js.includes('target.systemName || target.board') &&
+    js.includes('target.subtargetLabel || target.subtargetName') &&
+    js.includes("(node.aliasesEn || []).join(' ')") &&
     js.includes('const TARGET_FIELD_I18N =') &&
     js.includes('(item) => item.labelEn || item.value') &&
     js.includes('DEFAULT_TARGET_SELECTORS') &&

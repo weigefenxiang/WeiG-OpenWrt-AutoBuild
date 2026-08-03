@@ -643,16 +643,16 @@ function fallbackTargetTree(catalog) {
   for (const target of catalog?.targets || []) {
     let system = systems.find((item) => item.value === target.board);
     if (!system) {
-      system = { value: target.board, labelEn: target.name || target.board, children: [] };
+      system = { value: target.board, labelEn: target.systemName || target.board, children: [] };
       systems.push(system);
     }
     system.children.push({
       value: target.subtarget || 'default',
-      labelEn: target.subtargetName || target.subtarget || 'Default',
+      labelEn: target.subtargetLabel || target.subtargetName || target.subtarget || 'Default',
       targetId: target.id,
       children: (target.profiles || []).filter((profile) => profile.selectable !== false).map((profile) => ({
         value: profile.id, labelEn: profile.name || profile.id, profileId: profile.id,
-        selector: profile.selector,
+        selector: profile.selector, aliasesEn: profile.aliases || [],
       })),
     });
   }
@@ -2413,7 +2413,7 @@ function catalogLocatorEntries(query) {
         type: node.profileId ? 'Target Profile' : (selector.labelEn || selector.id),
         label: node.labelEn || node.value,
         detail: Object.values(next).join(' › '),
-        hay: `${selector.id} ${selector.labelEn || ''} ${node.value} ${node.labelEn || ''} ${node.labelZh || ''}`,
+        hay: `${selector.id} ${selector.labelEn || ''} ${node.value} ${node.labelEn || ''} ${node.labelZh || ''} ${(node.aliasesEn || []).join(' ')}`,
         run: async () => {
           if (node.profileId) {
             await selectCatalogLocatorTarget(next);
