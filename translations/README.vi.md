@@ -30,9 +30,9 @@ Hiện tại **360T7 (MT7981)** là thiết bị được bảo trì đầy đ�
 3. Bot sẽ trả lời trong issue kèm liên kết của bản dựng lần này, biên dịch trọn bộ mất khoảng **2~3 giờ**.
 4. Khi bản dựng hoàn tất, bot sẽ bình luận thông báo; mở trang bản dựng và tải xuống ở mục **Artifacts** cuối trang:
    - `FIRMWARE-ALL-…`: toàn bộ firmware và dữ liệu kiểm tra; khi nạp lần đầu thường dùng tệp có `factory`;
-   - `CONFIG-…`: cấu hình đã gửi, kết quả `make defconfig` và phần khác biệt;
+   - `CONFIG-…`: cấu hình đã gửi, cấu hình build thực tế và siêu dữ liệu;
    - `BUILD-LOGS-…`: log đầy đủ và lỗi trích xuất, có cả khi thành công lẫn thất bại trong 14 ngày.
-5. Nếu không cần biên dịch, chọn **Gửi bản dựng đám mây → Chỉ tải .config** để lưu ngay cấu hình đầy đủ hiện tại trước khi defconfig mở rộng.
+5. Nếu không cần biên dịch, chọn **Gửi bản dựng đám mây → Chỉ tải .config**. Bản build thật không bao giờ chạy `make defconfig`. Trước khi tải yêu cầu build, trang hiển thị các tùy chọn bắt buộc của nguồn trong `config/001.presets/source-build-requirements.json` và chỉ áp dụng sau khi người dùng xác nhận rõ ràng. JSON thiếu mục sẽ bị bộ phân tích Issue từ chối.
 6. Trang nạp được `build-request.json`, `.config` và `config.buildinfo`. Trường múi giờ tìm kiếm toàn bộ danh sách IANA của OpenWrt/LuCI theo định dạng thống nhất `(UTC±HH:MM) Region/City`; đồng thời có thể chọn giao diện LuCI, NTP và máy chủ opkg.
 
 > 💡 Sau khi flash firmware xong: dùng trình duyệt truy cập **192.168.1.1** (hoặc địa chỉ bạn đã tùy chỉnh ở trang gửi), tên đăng nhập **root**; **mật khẩu để trống** (lần đăng nhập đầu tiên hãy đặt mật khẩu ngay) — riêng nguồn Lean LEDE có mật khẩu ban đầu là `password`.
@@ -86,7 +86,7 @@ Xem [ARCHITECTURE.md](../ARCHITECTURE.md) (song ngữ Trung - Anh).
 
 ### Bảo mật
 
-- Issue nhận 1–3 tệp đính kèm do GitHub lưu trữ và tự nhận dạng `build-request.json`, `.config`, `config.buildinfo`; trường dữ liệu, danh sách cho phép, kích thước và chữ ký đích đều được kiểm tra. Cấu hình đầy đủ đã gửi là đầu vào chính thức và phần khác biệt `make defconfig` được lưu lại.
+- Issue nhận 1–3 tệp đính kèm do GitHub lưu trữ và tự nhận dạng `build-request.json`, `.config`, `config.buildinfo`; trường dữ liệu, danh sách cho phép, kích thước, chữ ký đích và tùy chọn bắt buộc của nguồn đều được kiểm tra. Cấu hình đầy đủ đã gửi là đầu vào chính thức và không bao giờ bị thay bằng `make defconfig`.
 - Mã định danh bản dựng (tag) sẽ được làm sạch, chỉ giữ lại chữ Trung, chữ Latinh, chữ số và dấu gạch nối, chỉ dùng để đặt tên artifact và hiển thị;
 - Quyền của workflow được thu hẹp còn `contents: read + issues: write`.
 

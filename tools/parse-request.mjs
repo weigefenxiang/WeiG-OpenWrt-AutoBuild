@@ -14,6 +14,10 @@ import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { findCatalogPackageConflicts, formatPackageConflicts } from './verify-package-conflicts.mjs';
 import { matchingConfigRules } from './config-rules.mjs';
+import {
+  formatMissingBuildRequirements,
+  missingBuildRequirements,
+} from './source-build-requirements.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DEVICES = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'devices.json'), 'utf8'));
@@ -232,6 +236,11 @@ if (hasSubmittedConfig) {
   const configRuleViolations = matchingConfigRules(config, configRuleContext);
   if (configRuleViolations.length) {
     fail(configRuleViolations.map((rule) => rule.message?.['zh-CN'] || rule.message?.en || rule.id).join(' '));
+  }
+  const missingRequirements = missingBuildRequirements(config, configRuleContext);
+  if (missingRequirements.length) {
+    fail(`构建必需配置缺失：${formatMissingBuildRequirements(missingRequirements)}。` +
+      '请返回网页应用必需项后重新下载并提交 JSON；Actions 不会自动修改配置，也不会执行 make defconfig。');
   }
   if (!config.endsWith('\n')) config += '\n';
   submittedSha256 = createHash('sha256').update(config).digest('hex');

@@ -30,9 +30,9 @@ OpenWrt 韌體**線上客製 + 雲端編譯**。在網頁上選原始碼、選�
 3. 機器人會在 issue 裡回覆本次建置的連結,整機編譯約 **2~3 小時**。
 4. 建置完成後機器人會回覆通知,打開建置頁面,在底部 **Artifacts** 下載:
    - `FIRMWARE-ALL-…`:全部韌體與校驗資料;多數首次刷機使用其中帶 `factory` 的檔案;
-   - `CONFIG-…`:送出設定、`make defconfig` 結果與差異,可留存重現;
+   - `CONFIG-…`:送出設定、實際開編設定與建置中繼資料，可留存重現;
    - `BUILD-LOGS-…`:完整下載/編譯日誌與錯誤摘要,成功或失敗都會提供,保留 14 天。
-5. 若不需要編譯，可點 **送出雲端編譯 → 僅下載 .config**，立即取得依目前選擇產生的完整設定（預覽版，尚未經 defconfig 展開）。
+5. 若不需要編譯，可點 **送出雲端編譯 → 僅下載 .config**。正式建置永遠不會執行 `make defconfig`；下載建置請求 JSON 前，頁面會依 `config/001.presets/source-build-requirements.json` 顯示目前原始碼必需的設定項目，只有使用者明確套用後才允許下載。繞過頁面提交缺項 JSON，也會被 Issue 解析器拒絕。
 6. 頁面可載入 `build-request.json`、`.config`、`config.buildinfo`；時區提供 OpenWrt/LuCI 完整 IANA 清單並支援搜尋，統一顯示為 `(UTC±HH:MM) Region/City`。也可選擇韌體 LuCI 主題、NTP 與 opkg 鏡像，確認框會再次列出品牌、型號、原始碼、版本、分割區與網頁版本。
 
 > 💡 刷好韌體後:瀏覽器連到 **192.168.1.1**(或你在提交頁自訂的位址),使用者名稱 **root**;**密碼為空**(首次登入請立即設定)——只有 Lean LEDE 來源的初始密碼是 `password`。
@@ -86,7 +86,7 @@ OpenWrt 韌體**線上客製 + 雲端編譯**。在網頁上選原始碼、選�
 
 ### 安全
 
-- Issue 接受 1~3 個 GitHub 自有附件並自動辨識 `build-request.json`、`.config`、`config.buildinfo`;欄位、白名單、大小與機型目標簽章都會驗證。完整設定是權威輸入,`make defconfig` 的差異會保存在 artifact。
+- Issue 接受 1~3 個 GitHub 自有附件並自動辨識 `build-request.json`、`.config`、`config.buildinfo`;欄位、白名單、大小、機型目標簽章與原始碼必需項都會驗證。完整設定是權威輸入，永遠不會被 `make defconfig` 取代。
 - 建置識別名稱(tag)會被清洗為中英文、數字與連字號,僅用於 artifact 命名與顯示;
 - workflow 權限收斂為 `contents: read + issues: write`。
 

@@ -30,9 +30,9 @@ Actuellement, le **360T7 (MT7981)** est le modèle en maintenance complète ; le
 3. Le robot répondra dans l'Issue avec le lien de ce build ; une compilation complète prend environ **2 à 3 heures**.
 4. Une fois le build terminé, le robot vous en informe par un commentaire ; ouvrez la page du build et téléchargez, en bas, sous **Artifacts** :
    - `FIRMWARE-ALL-…` : tous les firmwares et données de contrôle ; pour une première installation, utilisez généralement le fichier contenant `factory` ;
-   - `CONFIG-…` : configuration envoyée, résultat de `make defconfig` et différences ;
+   - `CONFIG-…` : configuration envoyée, configuration réellement compilée et métadonnées ;
    - `BUILD-LOGS-…` : journaux complets et erreurs, disponibles en cas de réussite ou d’échec pendant 14 jours.
-5. Sans compilation, choisissez **Envoyer la compilation cloud → Télécharger uniquement .config** pour enregistrer immédiatement la configuration complète actuelle avant son expansion par defconfig.
+5. Sans compilation, choisissez **Envoyer la compilation cloud → Télécharger uniquement .config**. Un vrai build n’exécute jamais `make defconfig`. Avant le téléchargement d’une requête, la page affiche les options obligatoires de la source définies dans `config/001.presets/source-build-requirements.json` et ne les applique qu’après confirmation explicite. Le parseur de l’Issue refuse tout JSON incomplet.
 6. La page charge `build-request.json`, `.config` et `config.buildinfo`. Le champ de fuseau recherche la liste IANA complète d’OpenWrt/LuCI au format uniforme `(UTC±HH:MM) Region/City` ; thème LuCI, NTP et miroir opkg sont également sélectionnables.
 
 > 💡 Une fois le firmware flashé : accédez dans votre navigateur à **192.168.1.1** (ou à l'adresse que vous avez personnalisée sur la page de soumission), nom d'utilisateur **root** ; **mot de passe vide** (définissez-en un immédiatement à la première connexion) — seule la source Lean LEDE a pour mot de passe initial `password`.
@@ -86,7 +86,7 @@ Voir [ARCHITECTURE.md](../ARCHITECTURE.md) (bilingue chinois-anglais).
 
 ### Sécurité
 
-- Les Issues acceptent 1 à 3 pièces jointes hébergées par GitHub et détectent `build-request.json`, `.config` et `config.buildinfo` ; champs, listes autorisées, taille et signature cible sont validés. La configuration complète envoyée fait autorité et la différence `make defconfig` est conservée.
+- Les Issues acceptent 1 à 3 pièces jointes hébergées par GitHub et détectent `build-request.json`, `.config` et `config.buildinfo` ; champs, listes autorisées, taille, signature cible et options obligatoires de la source sont validés. La configuration complète envoyée fait autorité et n’est jamais remplacée par `make defconfig`.
 - L'identifiant de build (tag) est assaini pour ne conserver que caractères chinois, lettres, chiffres et traits d'union, et n'est utilisé que pour le nommage et l'affichage des artifacts ;
 - Les permissions du workflow sont restreintes à `contents: read + issues: write`.
 

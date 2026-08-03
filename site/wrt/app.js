@@ -61,8 +61,10 @@ const state = {
   importedConfigId: '',
 };
 const LANIP_RE = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/;   // 仅接受内网 IPv4 / private IPv4 only
-let DEVICES = null, PLUGINS = null, I18N = null, TIMEZONES = null, MINIMUM_BOOT = null, CONFIG_RULES = null;
+let DEVICES = null, PLUGINS = null, I18N = null, TIMEZONES = null, MINIMUM_BOOT = null,
+  CONFIG_RULES = null, BUILD_REQUIREMENTS = null;
 const configRuleChoices = new Map();
+const acceptedBuildRequirements = new Set();
 let PACKAGE_MIRRORS = { presets: [{ id: 'auto', label: { 'zh-CN': '跟随源码默认', en: 'Follow source default' }, roots: {} }] };
 let MENU_INDEX = null, MENU_CATALOG = null;
 let menuCatalogKey = '', menuLoadingKey = '', menuCatalogSeq = 0, menuCatalogPromise = null;
@@ -148,7 +150,7 @@ const INITIAL_CATALOG_TARGET = {
   system: 'x86', subtarget: '64', profileSymbol: 'DEVICE_generic',
 };
 let catalogInitialTargetPending = true;
-const DATA_CACHE_VERSION = 'v17-defaults-mirrors';
+const DATA_CACHE_VERSION = 'v18-source-build-requirements';
 const NTP_PRESETS = {
   cn: ['ntp.aliyun.com', 'time1.cloud.tencent.com', 'cn.ntp.org.cn', 'cn.pool.ntp.org'],
   global: ['0.openwrt.pool.ntp.org', '1.openwrt.pool.ntp.org', '2.openwrt.pool.ntp.org', '3.openwrt.pool.ntp.org'],
@@ -450,11 +452,13 @@ async function init() {
         if (/^https?:\/\//.test(PROJECT.blogUrl || '')) link.href = PROJECT.blogUrl;
       });
     } catch (e) { /* old deployments keep the built-in project defaults */ }
-    [DEVICES, CONFIG_MANIFEST, TIMEZONES, MENU_INDEX, MINIMUM_BOOT, PACKAGE_MIRRORS, CONFIG_RULES] = await Promise.all([
+    [DEVICES, CONFIG_MANIFEST, TIMEZONES, MENU_INDEX, MINIMUM_BOOT, PACKAGE_MIRRORS, CONFIG_RULES,
+      BUILD_REQUIREMENTS] = await Promise.all([
       loadJson('devices.json'), loadJson('config-manifest.json'), loadJson('timezones.json'),
       loadJson('menuconfig-index.json'), loadJson('minimum-boot.json'),
       loadJson('package-mirrors.json').catch(() => PACKAGE_MIRRORS),
       loadJson('config-rules.json'),
+      loadJson('source-build-requirements.json'),
     ]);
     initializeTimezone();
     MENU_INDEX = stableCatalogIndex(MENU_INDEX);
@@ -3336,6 +3340,59 @@ class ConfigRuleResolutionRequired extends Error {
     this.rules = rules;
   }
 }
+class BuildRequirementResolutionRequired extends Error {
+  constructor(requirements) {
+    super(uiText('构建配置缺少当前源码的必需项。', '建置設定缺少目前原始碼的必要項目。',
+      'The build configuration is missing required options for this source.'));
+    this.requirements = requirements;
+  }
+}
+function requirementScopeMatches(scope = {}, context = {}) {
+  const fields = [
+    ['sources', 'sourceId'], ['branches', 'branch'], ['systems', 'system'],
+    ['subtargets', 'subtarget'], ['profiles', 'profile'],
+  ];
+  return fields.every(([scopeKey, contextKey]) =>
+    !scope[scopeKey]?.length || scope[scopeKey].includes('*') || scope[scopeKey].includes(context[contextKey]));
+}
+function configStringValue(text, symbol) {
+  const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return String(text).match(new RegExp(`^CONFIG_${escaped}="([^"]*)"$`, 'm'))?.[1] || '';
+}
+function currentBuildRequirementContext(text) {
+  return {
+    sourceId: state.source?.id || '',
+    branch: state.version?.branch || state.version?.id || '',
+    system: configStringValue(text, 'TARGET_BOARD') || state.device?.target?.system || '',
+    subtarget: configStringValue(text, 'TARGET_SUBTARGET') || state.device?.target?.subtarget || '',
+    profile: configStringValue(text, 'TARGET_PROFILE') || state.device?.target?.profileSymbol || '',
+  };
+}
+function matchingBuildRequirements(text) {
+  const context = currentBuildRequirementContext(text);
+  return (BUILD_REQUIREMENTS?.requirements || []).filter((requirement) =>
+    requirementScopeMatches(requirement.scope, context));
+}
+function missingBuildRequirements(text) {
+  return matchingBuildRequirements(text).map((requirement) => ({
+    ...requirement,
+    missingOptions: (requirement.options || []).filter((option) =>
+      configSymbolValue(text, option.symbol) !== option.value),
+  })).filter((requirement) => requirement.missingOptions.length);
+}
+function applyAcceptedBuildRequirements(text) {
+  for (const requirement of matchingBuildRequirements(text)) {
+    if (!acceptedBuildRequirements.has(requirement.id)) continue;
+    for (const option of requirement.options || []) {
+      text = setConfigSymbol(text, option.symbol, option.value);
+      if (menuOptionBySymbol.has(option.symbol)) {
+        menuValues.set(option.symbol, option.value);
+        menuTouched.add(option.symbol);
+      }
+    }
+  }
+  return text;
+}
 function applyMenuConfig(text) {
   if (!MENU_CATALOG) return text;
   for (const symbol of menuTouched) {
@@ -3461,7 +3518,7 @@ function configFirmwareSettings(text) {
     ntp: state.ntp, opkg: state.opkg };
 }
 
-async function generateConfigText() {
+async function generateConfigText({ enforceBuildRequirements = false } = {}) {
   if (state.device.id === 'catalog-target') {
     const source = selectedCatalogSource();
     const branch = selectedCatalogBranch(source);
@@ -3490,6 +3547,11 @@ async function generateConfigText() {
   }
   if (matchingConfigRules(config).length) throw new Error(uiText('配置规则循环超过 16 次，请检查规则文件。', '設定規則循環超過 16 次，請檢查規則檔。', 'Configuration rules exceeded 16 passes; check the rule file.'));
   assertCatalogPackageConflicts(config);
+  if (enforceBuildRequirements) {
+    config = applyAcceptedBuildRequirements(config);
+    const missing = missingBuildRequirements(config);
+    if (missing.length) throw new BuildRequirementResolutionRequired(missing);
+  }
   return config;
 }
 
@@ -4145,13 +4207,76 @@ function openConfigRuleResolver(rules) {
     modalCancelHandler = () => reject(new Error(uiText('已取消处理配置规则', '已取消處理設定規則', 'Configuration rule resolution cancelled')));
   });
 }
-async function generateResolvedConfigText() {
+function openBuildRequirementResolver(requirements) {
+  return new Promise((resolve, reject) => {
+    openModal(uiText('应用构建必需项', '套用建置必要項目', 'Apply required build options'));
+    const modal = $('modal').querySelector('.modal');
+    modal.classList.remove('modal-wide', 'modal-import-source', 'recommended-config');
+    modal.classList.add('config-rule-resolver');
+    const body = $('modalBody');
+    body.textContent = '';
+    const intro = document.createElement('p');
+    intro.className = 'import-error';
+    intro.textContent = uiText(
+      '当前源码要求以下配置项。只有明确应用后才能下载构建请求 JSON；Actions 不会自动修改，也不会执行 make defconfig。',
+      '目前原始碼要求以下設定項目。只有明確套用後才能下載建置請求 JSON；Actions 不會自動修改，也不會執行 make defconfig。',
+      'The selected source requires these options. Apply them explicitly before downloading the build-request JSON. Actions will not modify them or run make defconfig.');
+    body.appendChild(intro);
+    for (const requirement of requirements) {
+      const card = document.createElement('section');
+      card.className = 'config-rule';
+      const title = document.createElement('h4');
+      title.textContent = localizedRuleText(requirement, 'title') || requirement.id;
+      const description = document.createElement('p');
+      description.textContent = localizedRuleText(requirement, 'description');
+      const options = document.createElement('div');
+      options.className = 'config-rule-options';
+      for (const option of requirement.missingOptions || []) {
+        const row = document.createElement('div');
+        row.className = 'config-rule-option selected';
+        const label = document.createElement('strong');
+        label.textContent = `CONFIG_${option.symbol}=${option.value}`;
+        const detail = document.createElement('span');
+        detail.textContent = localizedRuleText(option, 'label');
+        row.append(label, detail);
+        options.appendChild(row);
+      }
+      card.append(title, description, options);
+      body.appendChild(card);
+    }
+    const actions = document.createElement('div');
+    actions.className = 'modal-actions';
+    const apply = document.createElement('button');
+    apply.type = 'button';
+    apply.className = 'btn btn-primary';
+    apply.textContent = uiText('应用必需项并继续', '套用必要項目並繼續', 'Apply required options and continue');
+    apply.addEventListener('click', () => {
+      for (const requirement of requirements) acceptedBuildRequirements.add(requirement.id);
+      modalCancelHandler = null;
+      closeModal();
+      resolve();
+    });
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'btn';
+    cancel.textContent = uiText('取消，不下载 JSON', '取消，不下載 JSON', 'Cancel without downloading JSON');
+    cancel.addEventListener('click', closeModal);
+    actions.append(apply, cancel);
+    body.appendChild(actions);
+    modalCancelHandler = () => reject(new Error(uiText(
+      '未应用构建必需项，已取消下载 JSON。', '未套用建置必要項目，已取消下載 JSON。',
+      'Required build options were not applied; JSON download was cancelled.')));
+  });
+}
+async function generateResolvedConfigText(options = {}) {
   while (true) {
     try {
-      return await generateConfigText();
+      return await generateConfigText(options);
     } catch (error) {
-      if (!(error instanceof ConfigRuleResolutionRequired)) throw error;
-      await openConfigRuleResolver(error.rules);
+      if (error instanceof ConfigRuleResolutionRequired) await openConfigRuleResolver(error.rules);
+      else if (error instanceof BuildRequirementResolutionRequired) {
+        await openBuildRequirementResolver(error.requirements);
+      } else throw error;
     }
   }
 }
@@ -4218,7 +4343,7 @@ function openSubmitModal() {
       const button = event.currentTarget;
       button.disabled = true;
       try {
-        const config = await generateResolvedConfigText();
+        const config = await generateResolvedConfigText({ enforceBuildRequirements: true });
         const rawOps = state.advanced ? [...devPkgs].concat([...devRemoved].map((n) => '-' + n)) : [];
         const payload = {
           schema: 4,

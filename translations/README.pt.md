@@ -30,9 +30,9 @@ Atualmente o **360T7 (MT7981)** é o modelo com manutenção completa; os mais d
 3. O bot responderá na Issue com o link deste build; a compilação completa leva cerca de **2 a 3 horas**.
 4. Quando o build terminar, o bot avisará em um novo comentário. Abra a página do build e baixe na seção **Artifacts**, no final da página:
    - `FIRMWARE-ALL-…`: todos os firmwares e dados de verificação; na primeira instalação normalmente use o arquivo com `factory`;
-   - `CONFIG-…`: configuração enviada, resultado de `make defconfig` e diferenças;
+   - `CONFIG-…`: configuração enviada, configuração realmente compilada e metadados;
    - `BUILD-LOGS-…`: logs completos e erros, disponíveis no sucesso ou falha por 14 dias.
-5. Para não compilar, escolha **Enviar compilação na nuvem → Baixar apenas .config** e salve imediatamente a configuração completa atual, ainda não expandida pelo defconfig.
+5. Para não compilar, escolha **Enviar compilação na nuvem → Baixar apenas .config**. Um build real nunca executa `make defconfig`. Antes de baixar a solicitação, a página mostra as opções obrigatórias da fonte em `config/001.presets/source-build-requirements.json` e só as aplica após confirmação explícita. O parser da Issue rejeita JSON incompleto.
 6. A página carrega `build-request.json`, `.config` e `config.buildinfo`. O campo de fuso horário pesquisa a lista IANA completa do OpenWrt/LuCI no formato uniforme `(UTC±HH:MM) Region/City`; também permite escolher tema LuCI, NTP e espelho opkg.
 
 > 💡 Depois de gravar o firmware: acesse **192.168.1.1** no navegador (ou o endereço que você personalizou na página de envio), usuário **root**; **a senha fica em branco** (defina uma imediatamente no primeiro login) — apenas na fonte Lean LEDE a senha inicial é `password`.
@@ -86,7 +86,7 @@ Veja [ARCHITECTURE.md](../ARCHITECTURE.md) (bilíngue, chinês e inglês).
 
 ### Segurança
 
-- Issues aceitam 1–3 anexos hospedados no GitHub e detectam `build-request.json`, `.config` e `config.buildinfo`; campos, listas permitidas, tamanho e assinatura do alvo são validados. A configuração completa enviada é a entrada autoritativa e a diferença de `make defconfig` é preservada.
+- Issues aceitam 1–3 anexos hospedados no GitHub e detectam `build-request.json`, `.config` e `config.buildinfo`; campos, listas permitidas, tamanho, assinatura do alvo e opções obrigatórias da fonte são validados. A configuração completa enviada é a entrada autoritativa e nunca é substituída por `make defconfig`.
 - O identificador de build (tag) é sanitizado para conter apenas caracteres chineses e latinos, dígitos e hífens, sendo usado somente para nomear e exibir o artifact;
 - As permissões do workflow são restritas a `contents: read + issues: write`.
 

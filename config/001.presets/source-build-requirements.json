@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "requirements": [
+    {
+      "id": "valid-dot-config",
+      "scope": {
+        "sources": ["*"]
+      },
+      "title": {
+        "zh-CN": "有效构建配置",
+        "zh-TW": "有效建置設定",
+        "en": "Valid build configuration"
+      },
+      "description": {
+        "zh-CN": "上游必须识别这是已经确认的 .config，否则会尝试打开交互式 menuconfig，云端没有终端因而无法构建。",
+        "zh-TW": "上游必須識別這是已確認的 .config，否則會嘗試開啟互動式 menuconfig；雲端沒有終端，因此無法建置。",
+        "en": "The upstream must recognize an accepted .config. Otherwise it opens interactive menuconfig, which cannot run without a cloud terminal."
+      },
+      "options": [
+        {
+          "symbol": "HAVE_DOT_CONFIG",
+          "value": "y",
+          "label": {
+            "zh-CN": "确认现有 .config",
+            "zh-TW": "確認現有 .config",
+            "en": "Accept the existing .config"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -30,9 +30,9 @@ OpenWrt 펌웨어 **온라인 커스터마이징 + 클라우드 빌드**. 웹 �
 3. 봇이 Issue에 이번 빌드의 링크를 답글로 남기며, 전체 컴파일에는 약 **2~3시간**이 걸립니다.
 4. 빌드가 완료되면 봇이 댓글로 알려 줍니다. 빌드 페이지를 열고 하단의 **Artifacts**에서 다운로드하세요:
    - `FIRMWARE-ALL-…`: 모든 펌웨어와 검증 자료. 최초 설치는 보통 이름에 `factory`가 있는 파일을 사용합니다;
-   - `CONFIG-…`: 제출 설정, `make defconfig` 결과와 차이;
+   - `CONFIG-…`: 제출한 설정, 실제 빌드 설정 및 빌드 메타데이터;
    - `BUILD-LOGS-…`: 전체 다운로드/빌드 로그와 오류 발췌. 성공과 실패 모두 제공하며 14일 보관합니다.
-5. 빌드하지 않으려면 **클라우드 빌드 제출 → .config만 다운로드**를 선택해 현재 선택으로 만든 전체 설정(defconfig 확장 전)을 즉시 저장할 수 있습니다.
+5. 빌드하지 않으려면 **클라우드 빌드 제출 → .config만 다운로드**를 선택합니다. 실제 빌드는 `make defconfig`를 절대 실행하지 않습니다. 빌드 요청을 다운로드하기 전에 `config/001.presets/source-build-requirements.json`의 필수 항목을 표시하고 명시적으로 확인한 뒤에만 적용합니다. 필수 항목이 빠진 JSON은 Issue 파서가 거부합니다.
 6. `build-request.json`, `.config`, `config.buildinfo`를 불러올 수 있습니다. 시간대는 OpenWrt/LuCI 전체 IANA 목록을 검색하며 `(UTC±HH:MM) Region/City` 형식으로 통일됩니다. LuCI 테마, NTP, opkg 미러도 선택할 수 있습니다.
 
 > 💡 펌웨어를 플래싱한 뒤: 브라우저에서 **192.168.1.1**(또는 제출 페이지에서 직접 지정한 주소)로 접속하세요. 사용자 이름은 **root**, **비밀번호는 비어 있습니다**(첫 로그인 시 즉시 설정하세요). 단, Lean LEDE 소스만 초기 비밀번호가 `password`입니다.
@@ -86,7 +86,7 @@ OpenWrt 펌웨어 **온라인 커스터마이징 + 클라우드 빌드**. 웹 �
 
 ### 보안
 
-- Issue는 GitHub 첨부 파일 1~3개를 받고 `build-request.json`, `.config`, `config.buildinfo`를 자동 판별합니다. 필드, 허용 목록, 크기, 대상 서명을 검증하며 제출한 전체 설정을 기준으로 삼고 `make defconfig` 차이도 보관합니다.
+- Issue는 GitHub 첨부 파일 1~3개를 받고 `build-request.json`, `.config`, `config.buildinfo`를 자동 판별합니다. 필드, 허용 목록, 크기, 대상 서명과 소스 필수 항목을 검증하며 제출한 전체 설정을 기준으로 삼고 `make defconfig`로 대체하지 않습니다.
 - 빌드 식별자(tag)는 중문/영문 문자, 숫자, 하이픈만 남도록 정제되며, artifact 이름 지정과 표시에만 사용됩니다.
 - workflow 권한은 `contents: read + issues: write`로 최소화되어 있습니다.
 

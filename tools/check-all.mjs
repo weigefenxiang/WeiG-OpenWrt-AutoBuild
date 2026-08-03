@@ -14,6 +14,11 @@ import {
   formatPackageConflicts,
 } from './verify-package-conflicts.mjs';
 import { applyConfigResolution, configSymbolValues, matchingConfigRules } from './config-rules.mjs';
+import {
+  applyBuildRequirements,
+  missingBuildRequirements,
+  sourceBuildRequirements,
+} from './source-build-requirements.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 let fail = 0;
@@ -44,7 +49,9 @@ for (const f of ['site/wrt/data/devices.json', 'site/wrt/data/i18n.json', 'site/
   'site/wrt/data/menuconfig-index.json', 'site/wrt/data/menuconfig-demo.json',
   'site/wrt/data/project.json', 'site/wrt/data/minimum-boot.json',
   'site/wrt/data/package-mirrors.json', 'site/wrt/data/config-rules.json',
+  'site/wrt/data/source-build-requirements.json',
   'config/001.presets/minimum-boot.json', 'config/001.presets/config-rules.json',
+  'config/001.presets/source-build-requirements.json',
   'tools/plugins-meta.json', 'tools/plugin-sizes.json', 'tools/i18n-source.json',
   'tools/i18n-translations.json', 'tools/plugins-i18n.json', 'tools/device-catalog.json',
   'tools/package-baseline-360t7.json']) {
@@ -228,6 +235,34 @@ mirrorRootsOk
   const syncWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'sync-upstream.yml'), 'utf8');
   const driftSentinel = readFileSync(join(ROOT, 'tools', 'check-drift.mjs'), 'utf8');
   const parser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
+  const requirementsPublic = JSON.parse(readFileSync(
+    join(ROOT, 'site', 'wrt', 'data', 'source-build-requirements.json'), 'utf8'));
+  const requirementContext = {
+    sourceId: 'lede',
+    branch: 'master',
+    system: 'x86',
+    subtarget: 'legacy',
+    profile: 'DEVICE_generic',
+  };
+  const requirementFixture = 'CONFIG_TARGET_x86=y\nCONFIG_TARGET_BOARD="x86"\n';
+  const missingRequirements = missingBuildRequirements(requirementFixture, requirementContext);
+  const requirementResolved = applyBuildRequirements(requirementFixture, missingRequirements);
+  const requirementIds = sourceBuildRequirements.requirements?.map((row) => row.id) || [];
+  const sourceRequirementsOk = sourceBuildRequirements.schema === 1 &&
+    JSON.stringify(sourceBuildRequirements) === JSON.stringify(requirementsPublic) &&
+    requirementIds.length > 0 && new Set(requirementIds).size === requirementIds.length &&
+    sourceBuildRequirements.requirements.every((row) => Array.isArray(row.options) && row.options.length > 0 &&
+      row.options.every((option) => /^[A-Z0-9_]+$/.test(option.symbol) && ['n', 'm', 'y'].includes(option.value))) &&
+    missingRequirements.some((row) => row.missingOptions.some((option) => option.symbol === 'HAVE_DOT_CONFIG')) &&
+    missingBuildRequirements(requirementResolved, requirementContext).length === 0 &&
+    js.includes("loadJson('source-build-requirements.json')") &&
+    js.includes('enforceBuildRequirements: true') &&
+    js.includes('openBuildRequirementResolver') &&
+    parser.includes('missingBuildRequirements(config, configRuleContext)') &&
+    !buildWorkflow.includes('make defconfig');
+  sourceRequirementsOk
+    ? ok('source build requirements: one JSON, explicit web acceptance, and Issue rejection are connected')
+    : bad('source build requirements', 'JSON schema/copy, web resolver, parser guard, or no-defconfig contract is invalid');
   const project = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
   const catalogIndex = JSON.parse(
     readFileSync(join(ROOT, 'site', 'wrt', 'data', 'menuconfig-index.json'), 'utf8'));
