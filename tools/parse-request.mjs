@@ -309,14 +309,11 @@ if (isCustomTarget) {
   if (!expectedArchPackages || actualArchPackages !== expectedArchPackages) {
     fail(`CONFIG_TARGET_ARCH_PACKAGES 与 Catalog 不一致：config=${actualArchPackages || '(missing)'}，Catalog=${expectedArchPackages || '(missing)'}`);
   }
-  const missingProfilePackages = (catalogProfile.packages || []).filter((pkg) =>
-    !configEnabled(submittedConfig, `PACKAGE_${pkg}`));
-  if (missingProfilePackages.length) {
-    fail(`Target Profile 必需软件包缺失：${missingProfilePackages.join(', ')}；请重新从网页下载该 Target/Profile 配置`);
-  }
   catalogArch = expectedBuildArch;
   catalogArchPackages = expectedArchPackages;
-  catalogProfilePackages = [...new Set(catalogProfile.packages || [])];
+  catalogProfilePackages = [...new Set(
+    catalogProfile.packagesAdd || (catalogProfile.packages || []).filter((pkg) => !String(pkg).startsWith('-')),
+  )];
 }
 
 // 种子机型共用 seed 表 / seed devices share the seed plugin table

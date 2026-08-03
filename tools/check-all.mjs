@@ -629,6 +629,8 @@ mirrorRootsOk
     js.includes('function renderCatalogPicker') &&
     js.includes('function catalogBranchLabel') &&
     js.includes('function buildMenuIndexes') &&
+    js.includes('const targetSelector = target.targetSelector || target.contract?.targetSelector') &&
+    js.includes('profile.selector || profile.profileSelector') &&
     js.includes("option.path?.[0] !== 'Target Devices'") &&
     js.includes('const MENU_PAGE_SIZE = 80') &&
     js.includes('function applyMenuTranslation') &&
@@ -709,6 +711,8 @@ mirrorRootsOk
       js.includes('enforceCatalogProfilePackages') &&
       parser.includes('catalogArch') &&
       parser.includes('catalogArchPackages') &&
+      parser.includes('packagesAdd') &&
+      !parser.includes('missingProfilePackages') &&
       parser.includes('CONFIG_ARCH 与 Catalog 不一致') &&
       parser.includes('CONFIG_TARGET_ARCH_PACKAGES 与 Catalog 不一致') &&
       buildWorkflow.includes('catalog_arch') &&

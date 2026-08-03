@@ -647,11 +647,12 @@ function fallbackTargetTree(catalog) {
       systems.push(system);
     }
     system.children.push({
-      value: target.subtarget,
-      labelEn: target.subtargetName || target.subtarget,
+      value: target.subtarget || 'default',
+      labelEn: target.subtargetName || target.subtarget || 'Default',
       targetId: target.id,
-      children: (target.profiles || []).map((profile) => ({
+      children: (target.profiles || []).filter((profile) => profile.selectable !== false).map((profile) => ({
         value: profile.id, labelEn: profile.name || profile.id, profileId: profile.id,
+        selector: profile.selector,
       })),
     });
   }
@@ -912,10 +913,13 @@ function addMenuIndex(map, key, value) {
 function buildMenuIndexes(catalog) {
   menuTargetSymbols = new Set(['TARGET_BOARD', 'TARGET_SUBTARGET', 'TARGET_PROFILE']);
   for (const target of catalog.targets || []) {
-    menuTargetSymbols.add(`TARGET_${target.board}`);
-    menuTargetSymbols.add(`TARGET_${target.board}_${target.subtarget}`);
+    const targetSelector = target.targetSelector || target.contract?.targetSelector ||
+      `TARGET_${target.board}${target.subtarget ? `_${target.subtarget}` : ''}`;
+    menuTargetSymbols.add(targetSelector);
     for (const profile of target.profiles || []) {
-      menuTargetSymbols.add(`TARGET_${target.board}_${target.subtarget}_${profile.id}`);
+      menuTargetSymbols.add(profile.selector || profile.profileSelector ||
+        `${targetSelector}_${profile.id}`);
+      if (profile.targetSelector) menuTargetSymbols.add(profile.targetSelector);
     }
   }
   const options = (catalog.menu.options || []).filter((option) =>
@@ -1118,6 +1122,14 @@ function catalogSourceObject(source, branch) {
     variants: [],
   };
 }
+function catalogProfilePackageOps(profile) {
+  const raw = [...new Set((profile?.packages || []).map((pkg) => String(pkg).trim()).filter(Boolean))];
+  const add = [...new Set((profile?.packagesAdd || raw.filter((pkg) => !pkg.startsWith('-')))
+    .map((pkg) => String(pkg).replace(/^\+/, '').trim()).filter(Boolean))];
+  const remove = [...new Set((profile?.packagesRemove || raw.filter((pkg) => pkg.startsWith('-'))
+    .map((pkg) => pkg.slice(1))).map((pkg) => String(pkg).trim()).filter(Boolean))];
+  return { raw, add, remove };
+}
 async function applyCatalogTarget() {
   if (!MENU_CATALOG) return;
   const sourceRow = selectedCatalogSource();
@@ -1126,6 +1138,7 @@ async function applyCatalogTarget() {
   const { target, profile } = selectedTarget;
   if (!target || !profile) return;
   const source = catalogSourceObject(sourceRow, branchRow);
+  const packageOps = catalogProfilePackageOps(profile);
   const variant = {
     id: profile.id || 'default', profile: profile.id, name: profile.name || profile.id || 'Default profile',
     note: target.name, capacity: 4096, versions: [branchRow.id],
@@ -1137,12 +1150,16 @@ async function applyCatalogTarget() {
     dir: 'platform/catalog-target', note: 'Menuconfig catalog target',
     target: {
       system: target.board, systemLabel: target.name || target.board,
-      subtarget: target.subtarget, subtargetLabel: target.subtargetName || target.subtarget,
+      subtarget: target.subtarget, subtargetLabel: target.subtargetName || target.subtarget || 'Default',
+      targetSelector: profile.targetSelector || target.contract?.targetSelector || '',
+      profileSelector: profile.selector || '',
       profile: profile.id.replace(/^DEVICE_/, ''), profileSymbol: profile.id,
       profileLabel: profile.name || profile.id || 'Default profile',
       arch: String(target.arch || '').trim(),
       archPackages: String(target.archPackages || '').trim(),
-      profilePackages: [...new Set((profile.packages || []).map((pkg) => String(pkg).trim()).filter(Boolean))],
+      profilePackages: packageOps.raw,
+      profilePackagesAdd: packageOps.add,
+      profilePackagesRemove: packageOps.remove,
       extra: Object.fromEntries(Object.entries(selectedTarget.values)
         .filter(([key]) => !['system', 'subtarget', 'profile'].includes(key))),
     },
@@ -1160,9 +1177,13 @@ async function applyCatalogTarget() {
   }
   state.device = device;
   syncCatalogApplications();
-  for (const pkg of device.target.profilePackages) {
+  for (const pkg of device.target.profilePackagesAdd || []) {
     const option = menuOptionBySymbol.get(`PACKAGE_${pkg}`);
     if (option) setMenuValueQuiet(option, 'y');
+  }
+  for (const pkg of device.target.profilePackagesRemove || []) {
+    const option = menuOptionBySymbol.get(`PACKAGE_${pkg}`);
+    if (option) setMenuValueQuiet(option, 'n');
   }
   activateTargetRecord(record);
   renderMenuconfig();
@@ -1220,7 +1241,8 @@ function renderBuildContract() {
   }
   const source = selectedCatalogSource();
   const branch = selectedCatalogBranch(source);
-  const profilePackages = [...new Set(target.profilePackages || [])];
+  const profilePackages = [...new Set(target.profilePackagesAdd || target.profilePackages || [])]
+    .filter((pkg) => !String(pkg).startsWith('-'));
   const selected = effectiveSelection();
   const selectedNames = selected.all.map((item) => item.id);
   const commit = String(MENU_CATALOG.source?.commit || '').slice(0, 8) || 'unknown';
@@ -3563,7 +3585,10 @@ function applyImportedUnknownEdits(text) {
 }
 function catalogTargetConfig() {
   const target = state.device.target;
-  const profile = target.profileSymbol || (target.profile ? `DEVICE_${target.profile}` : '');
+  const targetSelector = target.targetSelector ||
+    `TARGET_${target.system}${target.subtarget ? `_${target.subtarget}` : ''}`;
+  const profileSymbol = target.profileSymbol || (target.profile ? `DEVICE_${target.profile}` : '');
+  const profileSelector = target.profileSelector || `${targetSelector}_${profileSymbol}`;
   const arch = String(target.arch || '').trim();
   const archPackages = String(target.archPackages || '').trim();
   if (!arch || !/^[A-Za-z0-9_+-]+$/.test(arch)) {
@@ -3573,18 +3598,15 @@ function catalogTargetConfig() {
     throw new Error('Catalog target is missing a valid package architecture');
   }
   const lines = [
-    `CONFIG_TARGET_${target.system}=y`,
-    `CONFIG_TARGET_${target.system}_${target.subtarget}=y`,
+    `CONFIG_${targetSelector}=y`,
+    `CONFIG_${profileSelector}=y`,
     `CONFIG_${arch}=y`,
     `CONFIG_ARCH="${arch}"`,
     `CONFIG_TARGET_BOARD="${target.system}"`,
-    `CONFIG_TARGET_SUBTARGET="${target.subtarget}"`,
     `CONFIG_TARGET_ARCH_PACKAGES="${archPackages}"`,
   ];
-  if (profile) {
-    lines.splice(2, 0, `CONFIG_TARGET_${target.system}_${target.subtarget}_${profile}=y`);
-    lines.push(`CONFIG_TARGET_PROFILE="${profile}"`);
-  }
+  if (target.subtarget) lines.push(`CONFIG_TARGET_SUBTARGET="${target.subtarget}"`);
+  if (profileSymbol) lines.push(`CONFIG_TARGET_PROFILE="${profileSymbol}"`);
   lines.push('');
   let text = lines.join('\n');
   return applyMenuConfig(text);
@@ -3592,9 +3614,14 @@ function catalogTargetConfig() {
 function enforceCatalogProfilePackages(text) {
   const target = state.device?.target;
   if (state.device?.id !== 'catalog-target' || !target) return text;
-  for (const pkg of target.profilePackages || []) {
+  for (const pkg of target.profilePackagesAdd || target.profilePackages || []) {
+    if (String(pkg).startsWith('-')) continue;
     if (!/^[A-Za-z0-9._+@-]+$/.test(pkg)) throw new Error(`Catalog profile package is invalid: ${pkg}`);
     text = setConfigSymbol(text, `PACKAGE_${pkg}`, 'y', 'bool');
+  }
+  for (const pkg of target.profilePackagesRemove || []) {
+    if (!/^[A-Za-z0-9._+@-]+$/.test(pkg)) throw new Error(`Catalog profile removal is invalid: ${pkg}`);
+    text = setConfigSymbol(text, `PACKAGE_${pkg}`, 'n', 'bool');
   }
   return text;
 }
