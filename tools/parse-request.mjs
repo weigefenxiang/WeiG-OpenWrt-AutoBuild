@@ -298,6 +298,15 @@ if (isCustomTarget) {
   if (!catalogTarget || !catalogProfile) {
     fail(`Catalog 中没有匹配的 Target/Profile：${contractContext.system}/${contractContext.subtarget}/${contractContext.profile}`);
   }
+  const targetDeviceSymbols = [...submittedConfig.matchAll(
+    /^CONFIG_TARGET_[A-Za-z0-9_.+-]+_DEVICE_[A-Za-z0-9_.+-]+=y$/gm,
+  )].map((match) => match[0]);
+  const expectedTargetDevice = `CONFIG_${catalogProfile.selector ||
+    catalogProfile.profileSelector ||
+    `TARGET_${contractContext.system}_${contractContext.subtarget}_DEVICE_${catalogProfile.id.replace(/^DEVICE_/, '')}`}=y`;
+  if (targetDeviceSymbols.length !== 1 || targetDeviceSymbols[0] !== expectedTargetDevice) {
+    fail(`Target/Profile 配置必须只启用一个且与 Catalog 一致：config=${targetDeviceSymbols.join(', ') || '(missing)'}，Catalog=${expectedTargetDevice}`);
+  }
   const expectedBuildArch = String(catalogTarget.arch || '').trim();
   const actualBuildArch = configStringValue(submittedConfig, 'ARCH');
   if (!expectedBuildArch || actualBuildArch !== expectedBuildArch ||

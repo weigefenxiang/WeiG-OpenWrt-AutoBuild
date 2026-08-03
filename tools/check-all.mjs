@@ -302,13 +302,14 @@ mirrorRootsOk
   const failureDiagnosticsContract = buildWorkflow.includes('set_config_flag DEVEL') &&
     buildWorkflow.includes('set_config_flag BUILD_LOG') &&
     buildWorkflow.includes("grep -Fx 'CONFIG_BUILD_LOG=y' .config") &&
-    buildWorkflow.includes('config_policy=authoritative-upstream-kconfig-normalized-no-make-defconfig') &&
+    buildWorkflow.includes('config_policy=authoritative-no-defconfig') &&
     buildWorkflow.includes('verify-config-normalization.mjs') &&
     buildWorkflow.includes('normalized.config') &&
     buildWorkflow.includes('config-normalization.json') &&
     buildWorkflow.includes('config-normalization.diff') &&
     buildWorkflow.includes('build.config') &&
     !buildWorkflow.includes('make defconfig') &&
+    !buildWorkflow.includes('conf --defconfig') &&
     !buildWorkflow.includes('resolved.config') &&
     !buildWorkflow.includes('config-defconfig.diff') &&
     !buildWorkflow.includes('verify-resolved-target.mjs') &&
@@ -465,7 +466,8 @@ mirrorRootsOk
     parser.includes("['custom-target', 'catalog-target'].includes(req.device)") &&
     parser.includes('custom_target=${isCustomTarget ? 1 : 0}') &&
     buildWorkflow.includes('cp submitted.config openwrt/.config') &&
-    buildWorkflow.includes('config_policy=authoritative-upstream-kconfig-normalized-no-make-defconfig');
+    buildWorkflow.includes('config_policy=authoritative-no-defconfig') &&
+    !buildWorkflow.includes('conf --defconfig');
   customTargetContract
     ? ok('未收录 .config → Custom Target → Issue/Actions 直接配置链路已接通')
     : bad('custom target contract', '网页兜底、解析器、Issue 校验或 Actions 直接配置参数缺失');

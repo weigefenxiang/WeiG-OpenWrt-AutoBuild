@@ -74,6 +74,9 @@ let buildContractExpanded = false;
 let menuVisibleLimit = 80, menuHistory = [], menuBreadcrumb = [];
 const menuValues = new Map();
 const menuTouched = new Set();
+// Profile packages are applied automatically by the Catalog. Keep their symbols
+// separate so changing Target/Profile cannot leak the previous target's packages.
+const catalogProfilePackageSymbols = new Set();
 const menuImportedOriginal = new Map();
 const menuImportedNonDefault = new Set();
 const importedConfigValues = new Map();
@@ -1010,6 +1013,7 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
     buildMenuIndexes(catalog);
     menuValues.clear();
     menuTouched.clear();
+    catalogProfilePackageSymbols.clear();
     minimumBootOriginal.clear();
     minimumBootTouchedOriginal.clear();
     menuImportedOriginal.clear();
@@ -1139,6 +1143,11 @@ async function applyCatalogTarget() {
   if (!target || !profile) return;
   const source = catalogSourceObject(sourceRow, branchRow);
   const packageOps = catalogProfilePackageOps(profile);
+  const previousTarget = state.device?.id === 'catalog-target' ? state.device.target : null;
+  const previousKey = previousTarget
+    ? [state.source?.id, state.version?.id, previousTarget.targetSelector,
+      previousTarget.profileSelector, previousTarget.arch, previousTarget.archPackages].join('|')
+    : '';
   const variant = {
     id: profile.id || 'default', profile: profile.id, name: profile.name || profile.id || 'Default profile',
     note: target.name, capacity: 4096, versions: [branchRow.id],
@@ -1168,8 +1177,18 @@ async function applyCatalogTarget() {
   DEVICES.devices = DEVICES.devices.filter((item) => item.id !== device.id);
   DEVICES.devices.push(device);
   const record = { device, source, version: source.versions[0], variant };
+  const nextKey = [sourceRow.id, branchRow.id, device.target.targetSelector,
+    device.target.profileSelector, device.target.arch, device.target.archPackages].join('|');
+  const targetChanged = Boolean(previousKey && previousKey !== nextKey);
+  if (targetChanged) {
+    for (const pkg of catalogProfilePackageSymbols) {
+      menuTouched.delete(`PACKAGE_${pkg}`);
+      menuValues.delete(`PACKAGE_${pkg}`);
+    }
+    catalogProfilePackageSymbols.clear();
+  }
   if (state.device?.id !== device.id || state.source?.id !== source.id ||
-      state.version?.id !== branchRow.id || state.variant?.id !== variant.id) {
+      state.version?.id !== branchRow.id || state.variant?.id !== variant.id || targetChanged) {
     state.source = record.source;
     state.version = record.version;
     state.variant = record.variant;
@@ -1178,10 +1197,12 @@ async function applyCatalogTarget() {
   state.device = device;
   syncCatalogApplications();
   for (const pkg of device.target.profilePackagesAdd || []) {
+    catalogProfilePackageSymbols.add(pkg);
     const option = menuOptionBySymbol.get(`PACKAGE_${pkg}`);
     if (option) setMenuValueQuiet(option, 'y');
   }
   for (const pkg of device.target.profilePackagesRemove || []) {
+    catalogProfilePackageSymbols.add(pkg);
     const option = menuOptionBySymbol.get(`PACKAGE_${pkg}`);
     if (option) setMenuValueQuiet(option, 'n');
   }
