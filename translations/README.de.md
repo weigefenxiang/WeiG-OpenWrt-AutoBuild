@@ -25,14 +25,15 @@ Derzeit ist der **360T7 (MT7981)** das vollständig gepflegte Modell; die übrig
 
 ## Für Anwender: So passen Sie die Firmware an
 
-1. Öffnen Sie die Anpassungsseite, wählen Sie nacheinander **Quellcode → Partitionsvariante → Plugins** und geben Sie eine „Build-Kennung“ ein (Ihr Spitzname, mit dem Sie Ihre Firmware später wiederfinden).
+1. Öffnen Sie die Anpassungsseite, wählen Sie **Source → Branch → Target System → Subtarget → Target Profile → Plugins** und geben Sie eine Build-Kennung ein.
 2. Klicke auf **Cloud-Build senden → Anfrage herunterladen und GitHub öffnen**. Lade nur die soeben erzeugte `build-request.json` hoch und klicke auf **Create**; Gerät, Quelle, Version und Partition müssen nicht eingegeben werden. Eine vorhandene `.config` oder `config.buildinfo` zuerst auf der Webseite laden, damit das Gerät erkannt wird.
 3. Der Bot antwortet im Issue mit dem Link zu diesem Build; die komplette Kompilierung dauert etwa **2–3 Stunden**.
 4. Nach Abschluss des Builds benachrichtigt der Bot Sie per Kommentar. Öffnen Sie die Build-Seite und laden Sie unten unter **Artifacts** herunter:
-   - `FIRMWARE-ALL-…`: alle Firmware- und Prüfdaten; für die Erstinstallation meist die Datei mit `factory` verwenden;
-   - `CONFIG-…`: eingereichte Konfiguration, tatsächlich verwendete Build-Konfiguration und Metadaten;
-   - `BUILD-LOGS-…`: vollständige Download-/Build-Protokolle und Fehler, bei Erfolg oder Fehlschlag 14 Tage verfügbar.
-5. Ohne Kompilierung wählst du **Cloud-Build senden → Nur .config herunterladen**. Ein echter Build führt niemals `make defconfig` aus. Vor dem Download einer Build-Anfrage zeigt die Seite die für die Quelle erforderlichen Optionen aus `config/001.presets/source-build-requirements.json`; sie werden nur nach ausdrücklicher Bestätigung angewendet. Unvollständige JSON-Dateien werden vom Issue-Parser abgelehnt.
+   - `Zeitstempel-Originalname.img.gz`: jedes finale Image direkt und ohne ZIP; beim ersten Flashen meist `factory`;
+   - `Zeitstempel-CONFIG`: eingereichte/effektive Konfigurationen und Metadaten;
+   - `Zeitstempel-BUILD-LOGS`: vollständige Protokolle und Fehler, 14 Tage verfügbar;
+   - `Zeitstempel-OPTIONAL-PACKAGES` / `Zeitstempel-FIRMWARE-OTHER`: M-Pakete und Begleitdateien.
+5. Ohne Kompilierung wählst du **Cloud-Build senden → Nur .config herunterladen**. Actions führt `make defconfig` nur aus, wenn **Defconfig** ausdrücklich aktiviert wurde; andernfalls bleibt die vollständige `.config` maßgeblich. Erforderliche Quelloptionen werden vor dem Download angezeigt und nur nach Bestätigung angewendet.
 6. Die Seite lädt `build-request.json`, `.config` und `config.buildinfo`. Das Zeitzonenfeld durchsucht die vollständige IANA-Liste von OpenWrt/LuCI im einheitlichen Format `(UTC±HH:MM) Region/City`; außerdem sind LuCI-Theme, NTP und opkg-Spiegel wählbar.
 
 > 💡 Nach dem Flashen der Firmware: Rufen Sie im Browser **192.168.1.1** auf (oder die Adresse, die Sie auf der Absendeseite angepasst haben), Benutzername **root**; **das Passwort ist leer** (bitte setzen Sie beim ersten Login sofort eines) – nur bei der Quelle Lean LEDE lautet das Anfangspasswort `password`.
@@ -86,7 +87,7 @@ Siehe [ARCHITECTURE.md](../ARCHITECTURE.md) (zweisprachig Chinesisch/Englisch).
 
 ### Sicherheit
 
-- Issues akzeptieren 1–3 auf GitHub gehostete Anhänge und erkennen `build-request.json`, `.config` und `config.buildinfo`; Felder, Positivlisten, Größe, Zielsignatur und erforderliche Quelloptionen werden geprüft. Die vollständige eingereichte Konfiguration ist maßgeblich und wird niemals durch `make defconfig` ersetzt.
+- Issues akzeptieren 1–3 auf GitHub gehostete Anhänge und erkennen `build-request.json`, `.config` und `config.buildinfo`; Felder, Positivlisten, Größe, Zielsignatur und erforderliche Quelloptionen werden geprüft. Die vollständige Konfiguration ist standardmäßig maßgeblich; nur bei ausdrücklich aktiviertem Defconfig läuft `make defconfig` einmal mit Schutzprüfung für Target, Profile, Architektur und Pflichtpakete.
 - Die Build-Kennung (tag) wird auf chinesische und lateinische Zeichen, Ziffern und Bindestriche bereinigt und ausschließlich für die artifact-Benennung und die Anzeige verwendet;
 - Die Workflow-Berechtigungen sind auf `contents: read + issues: write` beschränkt.
 
@@ -100,7 +101,7 @@ Unser Dank gilt allen Open-Source-Projekten und Autoren, die direkt oder indirek
 
 - **Quellcode**: [OpenWrt](https://github.com/openwrt/openwrt) · [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede)
 - **Infrastruktur**: [GitHub Actions](https://github.com/features/actions) (Cloud-Kompilierung) · [Cloudflare Pages](https://pages.cloudflare.com/) (Hosting der Backup-Seite)
-- **allen Autoren der <!--plugin-count-->226<!--/plugin-count--> LuCI-Plugins** sowie den Ökosystem-Projekten wie LuCI, Hexo und dem Butterfly-Theme;
+- **allen Autoren der <!--plugin-count-->242<!--/plugin-count--> LuCI-Plugins** sowie den Ökosystem-Projekten wie LuCI, Hexo und dem Butterfly-Theme;
 - jedem Nutzer, der ein Issue eingereicht, ein Problem gemeldet oder einen Star vergeben hat.
 
 Dieses Projekt orchestriert die genannten Projekte lediglich; alle Rechte verbleiben bei den jeweiligen Autoren.

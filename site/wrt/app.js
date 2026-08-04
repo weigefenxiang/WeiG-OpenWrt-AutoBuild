@@ -69,6 +69,7 @@ const acceptedBuildRequirements = new Set();
 let PACKAGE_MIRRORS = { presets: [{ id: 'auto', label: { 'zh-CN': '跟随源码默认', en: 'Follow source default' }, roots: {} }] };
 let MENU_INDEX = null, MENU_CATALOG = null;
 let menuCatalogKey = '', menuLoadingKey = '', menuCatalogSeq = 0, menuCatalogPromise = null;
+let menuCatalogAbortController = null, menuIndexAbortController = null;
 let catalogLoadMode = 'idle', catalogLoadError = '';
 let menuPath = null, menuParent = '', menuExpanded = false, menuSelectedExpanded = false;
 let buildContractExpanded = false;
@@ -241,12 +242,18 @@ function pDesc(p) {
 
 /* V8c:体积人性化显示,输入单位为 MB / V8c: human-readable size, input value in MB */
 function fmtSize(mb) {
-  mb = Number(mb) || 0;
-  if (mb >= 1000) return (Math.round(mb / 100) / 10) + ' GB';   // 一位小数,整数时自然去掉 .0 / one decimal; trailing .0 drops naturally
-  if (mb >= 0.95) return (Math.round(mb * 10) / 10) + ' MB';
-  const kb = mb * 1024;
-  if (kb >= 1) return Math.round(kb) + ' KB';
-  return Math.max(0, Math.round(kb * 1024)) + ' B';
+  const value = Math.max(0, Number(mb) || 0);
+  const format = (number, unit) => {
+    if (!number) return `0 ${unit}`;
+    const exponent = Math.floor(Math.log10(Math.abs(number)));
+    const decimals = exponent >= 0 ? Math.max(0, 2 - exponent) : Math.min(3, 2 - exponent);
+    return `${number.toFixed(decimals)} ${unit}`;
+  };
+  if (value >= 1000) return format(value / 1024, 'GB');
+  if (value >= 1) return format(value, 'MB');
+  const kb = value * 1024;
+  if (kb >= 1) return format(kb, 'KB');
+  return format(kb * 1024, 'B');
 }
 
 function applyI18n() {
@@ -560,6 +567,7 @@ async function switchDevice(dev, first, notify = false) {
   updateStats();
   updateLoginInfo();
   updateDevpkgBox();
+  updateSubmitGate();
   if (!first && notify) showToast(t('toast.deviceSwitched', { name: dev.name }), 'device');
 }
 
@@ -718,8 +726,9 @@ function renderCatalogTargetSelectors(preferred = {}) {
 
 function catalogUrls(asset) {
   return [
-    `https://raw.githubusercontent.com/${MENU_CATALOG_REPO}/catalog-data/${asset}`,
+    `./catalog-data/${asset}`,
     `https://cdn.jsdelivr.net/gh/${MENU_CATALOG_REPO}@catalog-data/${asset}`,
+    `https://raw.githubusercontent.com/${MENU_CATALOG_REPO}/catalog-data/${asset}`,
   ];
 }
 function stableCatalogIndex(index) {
@@ -730,21 +739,70 @@ function stableCatalogIndex(index) {
   })).filter((source) => source.branches.length);
   return { ...index, sources };
 }
-async function fetchCatalogJson(asset, compressed = false, minSchema = 2) {
+const CATALOG_CACHE_NAME = 'wrt-catalog-cache-v1';
+function catalogCacheKey(asset, expected = {}) {
+  const revision = String(expected.hash || expected.commit || 'latest').replace(/[^A-Za-z0-9._-]/g, '_');
+  return `./catalog-cache/${asset}?revision=${revision}`;
+}
+async function sha256Hex(buffer) {
+  if (!globalThis.crypto?.subtle) return '';
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', buffer);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+async function validateCatalogAsset(response, expected = {}) {
+  if (!expected || (!expected.hash && !expected.bytes)) return;
+  const bytes = await response.clone().arrayBuffer();
+  if (expected.bytes && Number(expected.bytes) !== bytes.byteLength) {
+    throw new Error(`catalog byte length mismatch: ${bytes.byteLength} != ${expected.bytes}`);
+  }
+  if (expected.hash) {
+    const actual = await sha256Hex(bytes);
+    if (actual && actual !== String(expected.hash)) throw new Error('catalog compressed hash mismatch');
+  }
+}
+async function readCatalogCache(asset, compressed, minSchema, expected = {}) {
+  if (typeof caches === 'undefined') return null;
+  const cache = await caches.open(CATALOG_CACHE_NAME);
+  const request = new Request(catalogCacheKey(asset, expected));
+  const cached = await cache.match(request);
+  if (!cached) return null;
+  try {
+    await validateCatalogAsset(cached, expected);
+    const data = await responseJson(cached, compressed);
+    if (Number(data?.schema || 0) < minSchema) return null;
+    return { data, url: `cache:${request.url}` };
+  } catch { /* corrupted/stale cache: continue with the network tiers */ }
+  return null;
+}
+async function fetchCatalogJson(asset, compressed = false, minSchema = 2, signal, expected = {}) {
   const errors = [];
+  const cache = typeof caches === 'undefined' ? null : await caches.open(CATALOG_CACHE_NAME).catch(() => null);
+  // A branch asset is immutable by its catalog hash/byte contract.  Prefer a
+  // cache entry keyed by that exact contract; an older hash can never satisfy
+  // the request and therefore falls through to the network tiers.
+  if (expected?.hash || expected?.bytes) {
+    const cached = await readCatalogCache(asset, compressed, minSchema, expected);
+    if (cached) return cached;
+  }
   for (const url of catalogUrls(asset)) {
     try {
-      const response = await fetch(url, { cache: 'no-store' });
+      const response = await fetch(url, { cache: 'no-store', signal });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      await validateCatalogAsset(response, expected);
+      const copy = response.clone();
       const data = await responseJson(response, compressed);
       if (Number(data?.schema || 0) < minSchema) {
         throw new Error(`stale schema ${data?.schema || 0}`);
       }
+      if (cache) await cache.put(new Request(catalogCacheKey(asset, expected)), copy).catch(() => {});
       return { data, url };
     } catch (error) {
+      if (error?.name === 'AbortError') throw error;
       errors.push(`${url}: ${error.message}`);
     }
   }
+  const cached = await readCatalogCache(asset, compressed, minSchema, expected);
+  if (cached) return cached;
   throw new Error(`Catalog asset unavailable: ${asset}\n${errors.join('\n')}`);
 }
 async function responseJson(response, compressed) {
@@ -754,15 +812,23 @@ async function responseJson(response, compressed) {
   return JSON.parse(await new Response(stream).text());
 }
 async function refreshMenuIndex() {
+  menuIndexAbortController?.abort();
+  const abortController = new AbortController();
+  menuIndexAbortController = abortController;
   try {
     const previousSourceId = $('targetSource')?.value || '';
     const previousBranchId = $('targetBranch')?.value || '';
     const previousSource = MENU_INDEX?.sources?.find((item) => item.id === previousSourceId);
     const previousBranch = previousSource?.branches?.find((item) => item.id === previousBranchId);
+    const previousCatalogContract = previousBranch ? {
+      hash: String(previousBranch.hash || previousBranch.sha256 || previousBranch.compressedSha256 || ''),
+      bytes: String(previousBranch.bytes || previousBranch.size || previousBranch.compressedBytes || ''),
+      commit: String(previousBranch.commit || ''),
+    } : null;
     const previousCatalogKey = menuCatalogKey;
     const previousCatalogAsset = previousBranch?.asset || '';
     const localSources = MENU_INDEX?.sources || [];
-    const remote = await fetchCatalogJson('index.json');
+    const remote = await fetchCatalogJson('index.json', false, 2, abortController.signal);
     const index = stableCatalogIndex(remote.data);
     if (index.schema >= 2 && Array.isArray(index.sources) && index.sources.length) {
       for (const source of localSources) {
@@ -780,10 +846,18 @@ async function refreshMenuIndex() {
       if (!importingConfig) {
         const activeSource = index.sources.find((item) => item.id === previousSourceId);
         const activeBranch = activeSource?.branches?.find((item) => item.id === previousBranchId);
+        const activeCatalogContract = activeBranch ? {
+          hash: String(activeBranch.hash || activeBranch.sha256 || activeBranch.compressedSha256 || ''),
+          bytes: String(activeBranch.bytes || activeBranch.size || activeBranch.compressedBytes || ''),
+          commit: String(activeBranch.commit || ''),
+        } : null;
+        const sameCatalogContract = previousCatalogContract && activeCatalogContract &&
+          ['hash', 'bytes', 'commit'].every((field) =>
+            previousCatalogContract[field] === activeCatalogContract[field]);
         const sameCatalog = Boolean(
           MENU_CATALOG && previousCatalogKey && activeBranch &&
           previousCatalogKey === `${activeSource.id}/${activeBranch.branch}` &&
-          previousCatalogAsset === (activeBranch.asset || ''),
+          previousCatalogAsset === (activeBranch.asset || '') && sameCatalogContract,
         );
         if (!sameCatalog) {
           MENU_CATALOG = null;
@@ -794,6 +868,9 @@ async function refreshMenuIndex() {
       }
     }
   } catch (e) { /* 独立目录尚未发布时继续使用仓库内回退清单 */ }
+  finally {
+    if (menuIndexAbortController === abortController) menuIndexAbortController = null;
+  }
 }
 function selectedCatalogSource() {
   return MENU_INDEX?.sources.find((item) => item.id === $('targetSource').value) || MENU_INDEX?.sources[0];
@@ -923,6 +1000,7 @@ function setCatalogLoadState(mode, error = '') {
   }
   renderCatalogLoadState();
   renderCatalogLocatorResults();
+  updateSubmitGate();
 }
 function retryCatalogLoad() {
   if (catalogLoadMode !== 'error') return;
@@ -1016,6 +1094,9 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
   const key = `${source.id}/${branch.branch}`;
   if (menuCatalogKey === key && MENU_CATALOG) return MENU_CATALOG;
   if (menuLoadingKey === key && menuCatalogPromise) return menuCatalogPromise;
+  menuCatalogAbortController?.abort();
+  const abortController = new AbortController();
+  menuCatalogAbortController = abortController;
   menuLoadingKey = key;
   const seq = ++menuCatalogSeq;
   setCatalogLoadState('loading');
@@ -1024,14 +1105,15 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
   menuCatalogPromise = (async () => {
     let catalog;
     try {
-      const remote = await fetchCatalogJson(branch.asset, true);
+      const remote = await fetchCatalogJson(branch.asset, true, 2, abortController.signal, branch);
       catalog = remote.data;
       catalog.loadedFrom = remote.url;
     } catch (remoteError) {
-      if (!branch.fallback) throw remoteError;
+      const exactRevision = branch.hash || branch.bytes || branch.compressedSha256 || branch.compressedBytes;
+      if (!branch.fallback || exactRevision) throw remoteError;
       catalog = await loadJson(branch.fallback);
     }
-    if (seq !== menuCatalogSeq) return null;
+    if (seq !== menuCatalogSeq || abortController.signal.aborted) return null;
     MENU_CATALOG = catalog;
     menuCatalogKey = key;
     buildMenuIndexes(catalog);
@@ -1073,6 +1155,7 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
     if (seq === menuCatalogSeq) {
       menuLoadingKey = '';
       menuCatalogPromise = null;
+      menuCatalogAbortController = null;
     }
   });
   return menuCatalogPromise;
@@ -1242,6 +1325,7 @@ async function applyCatalogTarget() {
   activateTargetRecord(record);
   renderMenuconfig();
   renderBuildContract();
+  updateSubmitGate();
 }
 
 function contractText(zh, en) {
@@ -1391,18 +1475,25 @@ function kconfigExpr(expression) {
   };
   return or();
 }
+function optionDependencyVariants(option) {
+  const variants = Array.isArray(option?.dependsVariants) && option.dependsVariants.length
+    ? option.dependsVariants : [option?.depends || []];
+  return variants.map((group) => (Array.isArray(group) ? group : [group]).filter((expression) =>
+    !(/\s/.test(String(expression)) && !/[&|=!<>]/.test(String(expression)))));
+}
 function optionVisible(option) {
-  return (option.depends || []).every((expression) => kconfigExpr(expression) > 0);
+  return optionDependencyVariants(option).some((group) =>
+    group.every((expression) => kconfigExpr(expression) > 0));
 }
 function optionMaxLevel(option) {
-  return (option.depends || []).reduce((level, expression) =>
-    Math.min(level, kconfigExpr(expression)), 2);
+  return Math.max(0, ...optionDependencyVariants(option).map((group) =>
+    group.reduce((level, expression) => Math.min(level, kconfigExpr(expression)), 2)));
 }
 function syncMenuToCurated(option, value) {
   if (!option.symbol.startsWith('PACKAGE_') || !PLUGINS?.plugins || !state.source) return false;
   const packageName = option.symbol.slice('PACKAGE_'.length);
   const plugin = PLUGINS.plugins.find((item) =>
-    (item.pkgs?.[state.source.id] || item.pkg) === packageName);
+    curatedPackageCandidates(item).includes(packageName));
   if (!plugin) return false;
   const builtin = pluginState(plugin) === 'builtin';
   if (value === 'y') {
@@ -1416,14 +1507,25 @@ function syncMenuToCurated(option, value) {
 }
 function syncCuratedToMenu(plugin, value) {
   if (!MENU_CATALOG?.menu?.options || !state.source) return;
-  const packageName = plugin.pkgs?.[state.source.id] || plugin.pkg;
-  const option = menuOptionBySymbol.get(`PACKAGE_${packageName}`);
+  const option = curatedPackageCandidates(plugin)
+    .map((packageName) => menuOptionBySymbol.get(`PACKAGE_${packageName}`))
+    .find(Boolean);
   if (option) setMenuValue(option, value);
 }
 function curatedMenuOption(plugin) {
   if (!MENU_CATALOG?.menu?.options || !state.source) return null;
-  const packageName = plugin.pkgs?.[state.source.id] || plugin.pkg;
-  return packageName ? menuOptionBySymbol.get(`PACKAGE_${packageName}`) || null : null;
+  return curatedPackageCandidates(plugin)
+    .map((packageName) => menuOptionBySymbol.get(`PACKAGE_${packageName}`))
+    .find(Boolean) || null;
+}
+function curatedPackageCandidates(plugin) {
+  if (!plugin) return [];
+  const sourcePackage = plugin.pkgs?.[state.source?.id];
+  return [...new Set([
+    ...(plugin.catalogCandidates || []),
+    sourcePackage,
+    plugin.pkg,
+  ].filter((name) => typeof name === 'string' && /^[A-Za-z0-9_.+@-]+$/.test(name)))];
 }
 function syncCatalogApplications() {
   if (state.device?.id !== 'catalog-target' || !PLUGINS?.plugins) return;
@@ -1507,6 +1609,27 @@ function setMenuValue(option, value, openChildren = false) {
 function minimumBootRows() {
   if (!MINIMUM_BOOT) return [];
   return [...(MINIMUM_BOOT.items || []), ...(MINIMUM_BOOT.firewallBackend?.candidates || [])];
+}
+function minimumBootAudit() {
+  const enabled = state.minimumBoot === true;
+  const requested = [];
+  if (enabled) {
+    for (const item of minimumBootRows()) {
+      const option = minimumBootOption(item);
+      if (!option) continue;
+      const value = menuValues.get(item.symbol) ?? simpleKconfigDefault(option);
+      if (!['n', 'm', 'y'].includes(value)) continue;
+      requested.push({ symbol: item.symbol, value });
+    }
+  }
+  return {
+    recommended: {
+      enabled,
+      preset: `minimum-boot-v${MINIMUM_BOOT?.version || 1}`,
+      requested,
+    },
+    defconfig: { enabled: state.useDefconfig === true },
+  };
 }
 function minimumBootHelp(item) {
   const lang = state.lang === 'zh-CN' ? 'zh-CN' : 'en';
@@ -1725,11 +1848,12 @@ function renderMinimumBoot() {
   const config = $('minimumBootConfig');
   if (config) config.hidden = !state.minimumBoot;
   renderMinimumBootModal();
+  updateSubmitGate();
 }
 function initDefconfig() {
   const toggle = $('defconfigToggle');
   if (!toggle) return;
-  toggle.onchange = () => { state.useDefconfig = toggle.checked; };
+  toggle.onchange = () => { state.useDefconfig = toggle.checked; updateSubmitGate(); };
   toggle.checked = state.useDefconfig;
 }
 function initMinimumBoot() {
@@ -1747,6 +1871,7 @@ function initMinimumBoot() {
       renderMenuconfig();
       renderGroups();
       updateStats();
+      updateSubmitGate();
     }
   };
   $('minimumBootConfig').onclick = openMinimumBootModal;
@@ -2993,6 +3118,7 @@ function renderFirmwareSettings() {
   const opkgEntries = packageMirrorEntries(state.source.id);
   if (!opkgEntries.some(([id]) => id === state.opkg)) state.opkg = 'auto';
   state.opkg = fillSelect('opkgBox', opkgEntries, state.opkg);
+  updateSubmitGate();
 }
 function setFirmwareTheme(theme) {
   state.theme = theme;
@@ -3044,12 +3170,17 @@ function updateLoginInfo() {
 /* ============ 插件列表 / Plugin list ============ */
 function pluginState(p) {
   if (p.builtin && p.builtin[state.source.id]) return 'builtin';
+  if (p.catalogOnly) {
+    if (state.device?.id !== 'catalog-target' || !MENU_CATALOG) return 'unavailable';
+    const option = curatedMenuOption(p);
+    return option && optionVisible(option) ? 'ok' : 'unavailable';
+  }
   if (state.device?.id === 'catalog-target' && MENU_CATALOG) {
     const option = curatedMenuOption(p);
     return option && optionVisible(option) ? 'ok' : 'unavailable';
   }
   if (state.source.append) return 'ok';   // append 模式产线:所有插件按追加方式可勾 / append-mode source: every plugin is selectable by appending
-  if (!p.pkgs[state.source.id]) return 'unavailable';
+  if (!p.pkgs?.[state.source.id] && !p.pkg) return 'unavailable';
   return 'ok';
 }
 const byId = (id) => PLUGINS.plugins.find((x) => x.id === id);
@@ -3058,7 +3189,7 @@ const byId = (id) => PLUGINS.plugins.find((x) => x.id === id);
 function searchHay(p) {
   const row = PLUG_I18N && PLUG_I18N.plugins && PLUG_I18N.plugins[p.id];
   const nm = row && row.name;
-  return [p.id, p.name, p.desc || '', (state.source && p.pkgs[state.source.id]) || p.pkg || '',
+  return [p.id, p.name, p.desc || '', (state.source && p.pkgs?.[state.source.id]) || p.pkg || '',
     (nm && nm[FALLBACK]) || '', (nm && nm[state.lang]) || ''].join(' ').toLowerCase();
 }
 
@@ -3246,7 +3377,7 @@ function renderPlugin(p) {
   const detail = (st === 'builtin' ? t('plugin.builtin')
     : st === 'unavailable' ? t('plugin.unavailable')
     : pDesc(p)) + (p.warn ? '\n' + t(p.warn) : '');
-  const pkg = p.pkgs[state.source.id] || p.pkg;
+  const pkg = p.pkgs?.[state.source.id] || p.pkg || p.catalogCandidates?.[0] || p.id;
   nameBtn.title = detail;
   nameBtn.addEventListener('click', (e) => {
     e.preventDefault();
@@ -4318,6 +4449,7 @@ async function importConfigFile(file) {
     restoreSelections(state.importedConfig, payload);
     finishImportLog('success');
     showToast(t('import.ok', { id: configId }));
+    updateSubmitGate();
   } finally {
     if (seq === configImportSeq) importingConfig = false;
   }
@@ -4355,6 +4487,29 @@ function issueSubmitUrl(repo, title, body = '') {
   const params = new URLSearchParams({ template: 'custom-build.yml', title });
   if (body) params.set('body', body);
   return 'https://github.com/' + repo + '/issues/new?' + params;
+}
+function submitReadiness() {
+  const isCatalog = state.device?.id === 'catalog-target';
+  const checks = [
+    ['target', Boolean(state.device && state.source && state.version && state.variant)],
+    ['catalog', !isCatalog || Boolean(MENU_CATALOG && catalogLoadMode === 'idle')],
+    ['menuconfig', !isCatalog || Boolean(MENU_CATALOG && menuOptionBySymbol.size)],
+    ['theme', Boolean($('fwThemeBox')?.options?.length && $('fwThemeBox')?.value)],
+    ['recommended', !state.minimumBoot || Boolean(MINIMUM_BOOT && minimumBootRows().length)],
+    ['defconfig', typeof state.useDefconfig === 'boolean'],
+  ];
+  return { ok: checks.every(([, ok]) => ok), missing: checks.filter(([, ok]) => !ok).map(([name]) => name) };
+}
+function updateSubmitGate() {
+  const button = $('submitBtn');
+  if (!button) return;
+  const readiness = submitReadiness();
+  button.disabled = !readiness.ok;
+  button.setAttribute('aria-disabled', String(!readiness.ok));
+  button.title = readiness.ok ? '' : uiText(
+    `请等待构建参数就绪：${readiness.missing.join('、')}`,
+    `請等待建置參數就緒：${readiness.missing.join('、')}`,
+    `Waiting for build stages: ${readiness.missing.join(', ')}`);
 }
 async function mobileIssuePayload(payload) {
   if (!mobileIssueClient()) return '';
@@ -4482,9 +4637,9 @@ function openBuildRequirementResolver(requirements) {
     const intro = document.createElement('p');
     intro.className = 'import-error';
     intro.textContent = uiText(
-      '当前源码要求以下配置项。只有明确应用后才能下载构建请求 JSON；Actions 不会自动修改，也不会执行 make defconfig。',
-      '目前原始碼要求以下設定項目。只有明確套用後才能下載建置請求 JSON；Actions 不會自動修改，也不會執行 make defconfig。',
-      'The selected source requires these options. Apply them explicitly before downloading the build-request JSON. Actions will not modify them or run make defconfig.');
+      '当前源码要求以下配置项。只有明确应用后才能下载构建请求 JSON；Actions 不会替你静默修改，只有勾选 Defconfig 时才会运行一次 make defconfig。',
+      '目前原始碼要求以下設定項目。只有明確套用後才能下載建置請求 JSON；Actions 不會替你靜默修改，只有勾選 Defconfig 時才會執行一次 make defconfig。',
+      'The selected source requires these options. Apply them explicitly before downloading the build-request JSON. Actions never changes them silently and runs make defconfig once only when Defconfig is selected.');
     body.appendChild(intro);
     for (const requirement of requirements) {
       const card = document.createElement('section');
@@ -4546,6 +4701,15 @@ async function generateResolvedConfigText(options = {}) {
 }
 
 function openSubmitModal() {
+  const readiness = submitReadiness();
+  if (!readiness.ok) {
+    updateSubmitGate();
+    showToast(uiText(
+      `尚未就绪：${readiness.missing.join('、')}`,
+      `尚未就緒：${readiness.missing.join('、')}`,
+      `Not ready: ${readiness.missing.join(', ')}`));
+    return;
+  }
   const repo = targetRepo();
   if (!repo) { alert(t('owner.required')); $('ownerBox').focus(); return; }
   const sel = effectiveSelection();
@@ -4618,6 +4782,7 @@ function openSubmitModal() {
           branch: state.version.branch,
           variant: state.variant.id, plugins, tag, lanip: state.lanip, config,
           use_defconfig: state.useDefconfig === true,
+          audit: minimumBootAudit(),
           firmware: configFirmwareSettings(config),
         };
         if (['custom-target', 'catalog-target'].includes(state.device.id)) payload.customTarget = state.device.target;
@@ -4882,3 +5047,4 @@ $('themeBtn').addEventListener('click', () => {
 applyTheme(themeMode);
 
 init();
+updateSubmitGate();

@@ -25,14 +25,15 @@ OpenWrt ファームウェアの**オンラインカスタマイズ + クラウ�
 
 ## ユーザー向け:ファームウェアのカスタマイズ方法
 
-1. カスタマイズページを開き、**ソースコード → パーティションバリアント → プラグイン** の順に選択し、「ビルド識別子」(自分のファームウェアを見つけるためのニックネーム)を入力します。
+1. ページを開き、**Source → Branch → Target System → Subtarget → Target Profile → プラグイン** の順に選び、ビルド識別子を入力します。
 2. **クラウドビルドを送信 → リクエストをダウンロードして GitHub を開く** を押します。ダウンロードされた `build-request.json` だけをアップロードして **Create** を押してください。機種・ソース・バージョン・パーティションの入力は不要です。既存の `.config` または `config.buildinfo` は、先にウェブページで読み込んで機種を識別してください。
 3. ボットが Issue 内に今回のビルドへのリンクを返信します。フルビルドには約 **2〜3 時間**かかります。
 4. ビルド完了後、ボットがコメントで通知します。ビルドページを開き、下部の **Artifacts** からダウンロードしてください:
-   - `FIRMWARE-ALL-…`:全ファームウェアと検証資料。初回書き込みでは通常 `factory` を含むファイルを使います;
-   - `CONFIG-…`:送信設定、実際のビルド設定、ビルドメタデータ;
-   - `BUILD-LOGS-…`:完全なダウンロード/ビルドログとエラー抜粋。成功・失敗とも提供され、14日間保持されます。
-5. ビルドしない場合は **クラウドビルドを送信 → .config のみダウンロード** を選びます。実際のビルドでは `make defconfig` を一切実行しません。ビルド要求をダウンロードする前に、`config/001.presets/source-build-requirements.json` の必須項目を表示し、明示的な確認後だけ適用します。不足した JSON は Issue パーサーが拒否します。
+   - `時刻-元ファイル名.img.gz`:各最終イメージを ZIP なしで直接取得します。初回は通常 `factory` を使います;
+   - `時刻-CONFIG`:送信/実効設定とメタデータ;
+   - `時刻-BUILD-LOGS`:完全なログとエラー。14日間保持されます;
+   - `時刻-OPTIONAL-PACKAGES` / `時刻-FIRMWARE-OTHER`:M パッケージと補助資料。
+5. ビルドしない場合は **クラウドビルドを送信 → .config のみダウンロード** を選びます。Actions はユーザーが **Defconfig** を明示的に有効化した場合のみ `make defconfig` を実行し、それ以外では完全な `.config` を正本として扱います。必須項目は確認後だけ適用されます。
 6. `build-request.json`、`.config`、`config.buildinfo` を読み込めます。時刻帯は OpenWrt/LuCI の完全な IANA リストを検索でき、`(UTC±HH:MM) Region/City` 形式で統一表示されます。LuCI テーマ、NTP、opkg ミラーも選択できます。
 
 > 💡 ファームウェア書き込み後:ブラウザで **192.168.1.1**(または送信ページでカスタマイズしたアドレス)にアクセスします。ユーザー名は **root**、**パスワードは空**です(初回ログイン時にすぐ設定してください)。Lean LEDE ソースのみ、初期パスワードは `password` です。
@@ -86,7 +87,7 @@ OpenWrt ファームウェアの**オンラインカスタマイズ + クラウ�
 
 ### セキュリティ
 
-- Issue は GitHub 上の添付を1～3個受け付け、`build-request.json`、`.config`、`config.buildinfo` を自動判定します。項目、許可リスト、サイズ、対象署名、ソース必須項目を検証し、送信された完全設定を正本として `make defconfig` で置き換えません。
+- Issue は GitHub 上の添付を1～3個受け付け、`build-request.json`、`.config`、`config.buildinfo` を自動判定します。完全設定を既定の正本とし、Defconfig を明示的に有効化した場合だけ `make defconfig` を1回実行して Target、Profile、アーキテクチャ、必須パッケージを保護検証します。
 - ビルド識別子(tag)は中国語・英数字とハイフンのみにサニタイズされ、artifact の命名と表示にのみ使用されます。
 - workflow の権限は `contents: read + issues: write` に絞り込まれています。
 
@@ -100,7 +101,7 @@ OpenWrt ファームウェアの**オンラインカスタマイズ + クラウ�
 
 - **ソースコード**:[OpenWrt](https://github.com/openwrt/openwrt) · [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede)
 - **インフラストラクチャ**:[GitHub Actions](https://github.com/features/actions)(クラウドビルド)· [Cloudflare Pages](https://pages.cloudflare.com/)(予備サイトのホスティング)
-- **<!--plugin-count-->226<!--/plugin-count--> 個の LuCI プラグインのすべての作者**、および LuCI、Hexo、Butterfly テーマなどのエコシステムプロジェクト。
+- **<!--plugin-count-->242<!--/plugin-count--> 個の LuCI プラグインのすべての作者**、および LuCI、Hexo、Butterfly テーマなどのエコシステムプロジェクト。
 - Issue を送信し、問題を報告し、Star を付けてくださったすべてのユーザーの皆さん。
 
 本プロジェクトは上記プロジェクトをオーケストレーションして呼び出しているに過ぎず、著作権は各作者に帰属します。

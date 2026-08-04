@@ -51,9 +51,11 @@ for (const device of DEVICES.devices) {
 // 种子机型共用一张 append 模式插件表 + 拷贝各自种子 config 到 data/ / seed devices share one append-mode plugin table; their seed configs are copied to data/
 const seedPlugins = META.plugins.map((p) => {
   const e = { id: p.id, name: p.name, group: p.group, desc: p.desc, size: pluginSizeMB(p, null), pkgs: {},
-    pkg: p.pkgs ? Object.values(p.pkgs)[0] : 'luci-app-' + p.id };
+    pkg: p.catalogCandidates?.[0] || (p.pkgs ? Object.values(p.pkgs)[0] : 'luci-app-' + p.id) };
   if (p.hot) e.hot = true;
   if (p.requires) e.requires = p.requires;
+  if (p.catalogOnly) e.catalogOnly = true;
+  if (p.catalogCandidates) e.catalogCandidates = p.catalogCandidates;
   return e;
 });
 mkdirSync(join(ROOT, 'site', 'wrt', 'data', 'seed'), { recursive: true });
@@ -120,10 +122,13 @@ for (const device of DEVICES.devices) {
     }
     // 没有任何源提供也保留条目(高级模式可强制勾选),pkg 用默认包名兜底 / entry is kept even if no source provides it (advanced mode can force it); pkg falls back to the default name
     const entry = { id: p.id, name: p.name, group: p.group, desc: p.desc, size: pluginSizeMB(p, device.id), pkgs };
-    entry.pkg = (p.pkgs && (p.pkgs[sources[0]] || Object.values(p.pkgs)[0])) || 'luci-app-' + p.id;
+    entry.pkg = p.catalogCandidates?.[0] ||
+      ((p.pkgs && (p.pkgs[sources[0]] || Object.values(p.pkgs)[0])) || 'luci-app-' + p.id);
     if (p.hot) entry.hot = true;
     if (p.warn) entry.warn = p.warn;     // 资源警告词条 key(如 Docker)/ resource-warning i18n key (e.g. Docker)
     if (p.locked) entry.locked = true;   // 必选项:任何模式下都不可取消 / required items can never be unchecked, even in advanced mode
+    if (p.catalogOnly) entry.catalogOnly = true;
+    if (p.catalogCandidates) entry.catalogCandidates = p.catalogCandidates;
     if (Object.keys(builtin).length) entry.builtin = builtin;
     if (p.requires) entry.requires = p.requires;
     plugins.push(entry);
@@ -245,8 +250,19 @@ for (const device of DEVICES.devices) {
   const piErrors = [];
   const piWarnings = [];
   for (const p of META.plugins) {
-    const e = PI.plugins[p.id];
-    if (!e || !e.desc || !e.desc.en) { piErrors.push(`${p.id}: 缺 desc.en`); continue; }
+    // 新增插件先沿用元数据的中英文原文作为明确回退，不阻断 Catalog/插件索引生成；
+    // 翻译轮转可在后续批次只更新 tools/plugins-i18n.json。
+    // New plugins fall back to metadata text until a translation rotation fills them.
+    const raw = PI.plugins[p.id] || {};
+    const fallbackName = Object.fromEntries(PI_LANGS.map((l) => [l, p.nameEn || p.id]));
+    const fallbackDesc = Object.fromEntries(PI_LANGS.map((l) => [l, p.descEn || p.id]));
+    const e = {
+      name: { ...fallbackName, ...(raw.name || {}) },
+      desc: { ...fallbackDesc, ...(raw.desc || {}) },
+    };
+    if (!PI.plugins[p.id]) piWarnings.push(`${p.id}: 未有独立译文，已使用 plugins-meta 回退`);
+    else if (!raw.desc?.en || !raw.name?.en) piWarnings.push(`${p.id}: 英文译文不完整，已使用 plugins-meta 回退`);
+    PI.plugins[p.id] = e;
     for (const l of PI_LANGS) {
       if (!e.desc[l]) piErrors.push(`${p.id}: 缺 desc.${l}`);
       if (!e.name || !e.name[l]) piErrors.push(`${p.id}: 缺 name.${l}`);

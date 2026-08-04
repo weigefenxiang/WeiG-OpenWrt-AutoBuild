@@ -1988,6 +1988,214 @@
    "pkg": "luci-app-usteer"
   },
   {
+   "id": "adguardhome",
+   "name": "AdGuard Home",
+   "group": "广告过滤与DNS",
+   "desc": "Catalog 收录时提供的 AdGuard Home 软件包",
+   "size": 8,
+   "pkgs": {},
+   "pkg": "luci-app-adguardhome",
+   "catalogOnly": true,
+   "catalogCandidates": [
+    "luci-app-adguardhome"
+   ]
+  },
+  {
+   "id": "antiblock",
+   "name": "Antiblock",
+   "group": "广告过滤与DNS",
+   "desc": "Catalog 收录时提供的域名解锁与过滤工具",
+   "size": 1,
+   "pkgs": {},
+   "pkg": "luci-app-antiblock",
+   "catalogOnly": true,
+   "catalogCandidates": [
+    "luci-app-antiblock"
+   ]
+  },
+  {
+   "id": "chrony",
+   "name": "Chrony 时间同步",
+   "group": "系统工具",
+   "desc": "Catalog 收录时提供的高精度 NTP 时间同步服务",
+   "size": 2,
+   "pkgs": {},
+   "pkg": "luci-app-chrony",
+   "catalogOnly": true,
+   "catalogCandidates": [
+    "luci-app-chrony"
+   ]
+  },
+  {
+   "id": "csshnpd",
+   "name": "CSHNPd",
+   "group": "内网穿透与组网",
+   "desc": "Catalog 收录时提供的 SSH 穿透服务",
+   "size": 1,
+   "pkgs": {},
+   "pkg": "luci-app-csshnpd",
+   "catalogOnly": true,
+   "catalogCandidates": [
+    "luci-app-csshnpd"
+   ]
+  },
+  {
+   "id": "email",
+   "name": "Email 邮件服务",
+   "group": "系统工具",
+   "desc": "Catalog 收录时提供的邮件服务组件",
+   "size": 2,
+   "pkgs": {},
+   "pkg": "luci-app-email",
+   "catalogOnly": true,
+   "catalogCandidates": [
+    "luci-app-email"
+   ]
+  },
+  {
+   "id": "filemanager",
+   "name": "文件管理器",
+   "group": "存储与下载",
+   "desc": "Catalog 收录时提供的网页文件管理工具",
+   "size": 2,
+   "pkgs": {},
+   "pkg": "luci-app-filemanager",
+   "catalogOnly": true,
+   "catalogCandidates": [
+    "luci-app-filemanager"
+   ]
+  },
+  {
+   "id": "irqbalance",
+   "name": "IRQ Balance",
+   "group": "系统工具",
+   "desc": "Catalog 收录时提供的中断负载均衡服务",
+   "size": 1,
+   "pkgs": {},
+   "pkg": "luci-app-irqbalance",
+   "catalogOnly": true,
+   "catalogCandidates": [
+    "luci-app-irqbalance"
+   ]
+  },
+  {
+   "id": "openlist",
+   "name": "OpenList 文件列表",
+   "group": "存储与下载",
+   "desc": "Catalog 收录时提供的多云文件列表服务",
+   "size": 10,
+   "pkgs": {},
+   "pkg": "luci-app-openlist",
+   "catalogOnly": true,
+   "catalogCandidates": [
+    "luci-app-openlist"
+   ]
+  },
+  {
+   "id": "openthread",
+   "name": "OpenThread",
+   "group": "内网穿透与组网",
+   "desc": "Catalog 收录时提供的 Thread 网络组件",
+   "size": 3,
+   "pkgs": {},
+   "pkg": "luci-app-openthread",
+   "catalogOnly": true,
+   "catalogCandidates": [
+    "luci-app-openthread"
+   ]
+  },
+  {
+   "id": "package-manager",
+   "name": "Package Manager",
+   "group": "系统工具",
+   "desc": "Catalog 收录时提供的软件包管理界面",
+   "size": 1,
+   "pkgs": {},
+   "pkg": "luci-app-package-manager",
+   "catalogOnly": true,
+   "catalogCandidates": [
+    "luci-app-package-manager"
+   ]
+  },
+  {
+   "id": "radicale3",
+   "name": "Radicale 3",
+   "group": "存储与下载",
+   "desc": "Catalog 收录时提供的日历和通讯录同步服务",
+   "size": 8,
+   "pkgs": {},
+   "pkg": "luci-app-radicale3",
+   "catalogOnly": true,
+   "catalogCandidates": [
+    "luci-app-radicale3"
+   ]
+  },
+  {
+   "id": "rustdesk-server",
+   "name": "RustDesk Server",
+   "group": "内网穿透与组网",
+   "desc": "Catalog 收录时提供的远程桌面中继服务",
+   "size": 12,
+   "pkgs": {},
+   "pkg": "luci-app-rustdesk-server",
+   "catalogOnly": true,
+   "catalogCandidates": [
+    "luci-app-rustdesk-server"
+   ]
+  },
+  {
+   "id": "strongswan-swanctl",
+   "name": "strongSwan swanctl",
+   "group": "内网穿透与组网",
+   "desc": "Catalog 收录时提供的 IPsec swanctl 管理工具",
+   "size": 5,
+   "pkgs": {},
+   "pkg": "luci-app-strongswan-swanctl",
+   "catalogOnly": true,
+   "catalogCandidates": [
+    "luci-app-strongswan-swanctl"
+   ]
+  },
+  {
+   "id": "tailscale-community",
+   "name": "Tailscale Community",
+   "group": "内网穿透与组网",
+   "desc": "Catalog 收录时提供的 Tailscale 社区版组件",
+   "size": 8,
+   "pkgs": {},
+   "pkg": "luci-app-tailscale-community",
+   "catalogOnly": true,
+   "catalogCandidates": [
+    "luci-app-tailscale-community"
+   ]
+  },
+  {
+   "id": "ustreamer",
+   "name": "uStreamer",
+   "group": "多媒体与外设",
+   "desc": "Catalog 收录时提供的轻量摄像头串流服务",
+   "size": 2,
+   "pkgs": {},
+   "pkg": "luci-app-ustreamer",
+   "catalogOnly": true,
+   "catalogCandidates": [
+    "luci-app-ustreamer"
+   ]
+  },
+  {
+   "id": "wifihistory",
+   "name": "WiFi History",
+   "group": "监控统计",
+   "desc": "Catalog 收录时提供的 WiFi 连接历史记录",
+   "size": 1,
+   "pkgs": {},
+   "pkg": "luci-app-wifihistory",
+   "catalogOnly": true,
+   "catalogCandidates": [
+    "luci-app-wifihistory"
+   ]
+  },
+  {
    "id": "busybox",
    "name": "BusyBox 基础命令",
    "group": "系统基础",

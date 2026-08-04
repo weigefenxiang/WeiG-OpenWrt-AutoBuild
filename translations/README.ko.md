@@ -25,14 +25,15 @@ OpenWrt 펌웨어 **온라인 커스터마이징 + 클라우드 빌드**. 웹 �
 
 ## 사용자라면: 펌웨어 커스터마이징 방법
 
-1. 커스터마이징 페이지를 열고 **소스 → 파티션 변형 → 플러그인** 순서로 선택한 뒤, "빌드 식별자"(펌웨어를 찾을 때 쓰이는 여러분의 닉네임)를 입력합니다.
+1. 페이지를 열고 **Source → Branch → Target System → Subtarget → Target Profile → 플러그인** 순서로 선택한 뒤 빌드 식별자를 입력합니다.
 2. **클라우드 빌드 제출 → 요청 다운로드 및 GitHub 열기**를 누르세요. 방금 받은 `build-request.json` 하나만 업로드하고 **Create**를 누르면 되며 기기, 소스, 버전, 파티션을 입력할 필요가 없습니다. 기존 `.config` 또는 `config.buildinfo`는 먼저 웹페이지에서 불러와 기기를 식별하세요.
 3. 봇이 Issue에 이번 빌드의 링크를 답글로 남기며, 전체 컴파일에는 약 **2~3시간**이 걸립니다.
 4. 빌드가 완료되면 봇이 댓글로 알려 줍니다. 빌드 페이지를 열고 하단의 **Artifacts**에서 다운로드하세요:
-   - `FIRMWARE-ALL-…`: 모든 펌웨어와 검증 자료. 최초 설치는 보통 이름에 `factory`가 있는 파일을 사용합니다;
-   - `CONFIG-…`: 제출한 설정, 실제 빌드 설정 및 빌드 메타데이터;
-   - `BUILD-LOGS-…`: 전체 다운로드/빌드 로그와 오류 발췌. 성공과 실패 모두 제공하며 14일 보관합니다.
-5. 빌드하지 않으려면 **클라우드 빌드 제출 → .config만 다운로드**를 선택합니다. 실제 빌드는 `make defconfig`를 절대 실행하지 않습니다. 빌드 요청을 다운로드하기 전에 `config/001.presets/source-build-requirements.json`의 필수 항목을 표시하고 명시적으로 확인한 뒤에만 적용합니다. 필수 항목이 빠진 JSON은 Issue 파서가 거부합니다.
+   - `시간-원본이름.img.gz`: 각 최종 이미지를 ZIP 없이 직접 받습니다. 최초 플래시는 보통 `factory`를 사용합니다;
+   - `시간-CONFIG`: 제출/실효 설정과 메타데이터;
+   - `시간-BUILD-LOGS`: 전체 로그와 오류이며 14일 보관합니다;
+   - `시간-OPTIONAL-PACKAGES` / `시간-FIRMWARE-OTHER`:M 패키지와 보조 자료입니다.
+5. 빌드하지 않으려면 **클라우드 빌드 제출 → .config만 다운로드**를 선택합니다. Actions는 사용자가 **Defconfig**를 명시적으로 켠 경우에만 `make defconfig`를 실행하며, 그 외에는 전체 `.config`가 권위 입력입니다. 필수 항목은 확인 후에만 적용됩니다.
 6. `build-request.json`, `.config`, `config.buildinfo`를 불러올 수 있습니다. 시간대는 OpenWrt/LuCI 전체 IANA 목록을 검색하며 `(UTC±HH:MM) Region/City` 형식으로 통일됩니다. LuCI 테마, NTP, opkg 미러도 선택할 수 있습니다.
 
 > 💡 펌웨어를 플래싱한 뒤: 브라우저에서 **192.168.1.1**(또는 제출 페이지에서 직접 지정한 주소)로 접속하세요. 사용자 이름은 **root**, **비밀번호는 비어 있습니다**(첫 로그인 시 즉시 설정하세요). 단, Lean LEDE 소스만 초기 비밀번호가 `password`입니다.
@@ -86,7 +87,7 @@ OpenWrt 펌웨어 **온라인 커스터마이징 + 클라우드 빌드**. 웹 �
 
 ### 보안
 
-- Issue는 GitHub 첨부 파일 1~3개를 받고 `build-request.json`, `.config`, `config.buildinfo`를 자동 판별합니다. 필드, 허용 목록, 크기, 대상 서명과 소스 필수 항목을 검증하며 제출한 전체 설정을 기준으로 삼고 `make defconfig`로 대체하지 않습니다.
+- Issue는 GitHub 첨부 파일 1~3개를 받고 `build-request.json`, `.config`, `config.buildinfo`를 자동 판별합니다. 전체 설정이 기본 권위 입력이며, Defconfig를 명시적으로 켠 경우에만 `make defconfig`를 한 번 실행하고 Target, Profile, 아키텍처와 필수 패키지를 보호 검증합니다.
 - 빌드 식별자(tag)는 중문/영문 문자, 숫자, 하이픈만 남도록 정제되며, artifact 이름 지정과 표시에만 사용됩니다.
 - workflow 권한은 `contents: read + issues: write`로 최소화되어 있습니다.
 
@@ -100,7 +101,7 @@ OpenWrt 펌웨어 **온라인 커스터마이징 + 클라우드 빌드**. 웹 �
 
 - **소스**: [OpenWrt](https://github.com/openwrt/openwrt) · [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede)
 - **인프라**: [GitHub Actions](https://github.com/features/actions)(클라우드 빌드) · [Cloudflare Pages](https://pages.cloudflare.com/)(백업 사이트 호스팅)
-- **<!--plugin-count-->226<!--/plugin-count-->개 LuCI 플러그인의 모든 작성자**, 그리고 LuCI, Hexo, Butterfly 테마 등 생태계 프로젝트.
+- **<!--plugin-count-->242<!--/plugin-count-->개 LuCI 플러그인의 모든 작성자**, 그리고 LuCI, Hexo, Butterfly 테마 등 생태계 프로젝트.
 - Issue를 제출하고, 문제를 알려 주고, Star를 눌러 주신 모든 사용자 한 분 한 분.
 
 이 프로젝트는 위 프로젝트들을 오케스트레이션하여 호출할 뿐이며, 저작권은 각 작성자에게 있습니다.

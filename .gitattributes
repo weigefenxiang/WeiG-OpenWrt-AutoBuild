@@ -1,0 +1,27 @@
+* text=auto
+
+# Scripts must keep the line endings required by their native shell.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.sh text eol=lf
+
+# Repository data and source files are platform-neutral.
+*.css text eol=lf
+*.html text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.mjs text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.config text eol=lf
+VERSION text eol=lf
+
+# Binary assets must never be normalized.
+*.gz binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.webp binary

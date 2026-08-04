@@ -25,14 +25,15 @@ Actualmente, el **360T7 (MT7981)** es el modelo con mantenimiento completo; los 
 
 ## Soy usuario: cómo personalizar el firmware
 
-1. Abre la página de personalización, selecciona en orden **código fuente → variante de partición → plugins** y escribe un «identificador de compilación» (tu apodo, que sirve para localizar tu firmware).
+1. Abre la página y elige **Source → Branch → Target System → Subtarget → Target Profile → plugins**; después escribe un identificador de compilación.
 2. Pulsa **Enviar compilación en la nube → Descargar solicitud y abrir GitHub**. Sube únicamente el `build-request.json` recién descargado y pulsa **Create**; no hay que rellenar dispositivo, fuente, versión ni partición. Carga antes en la web cualquier `.config` o `config.buildinfo` existente para identificar el equipo.
 3. El bot responderá en el Issue con el enlace de esta compilación; la compilación completa tarda aproximadamente **2~3 horas**.
 4. Cuando la compilación termine, el bot lo notificará con otro comentario; abre la página de la compilación y descarga desde **Artifacts**, en la parte inferior:
-   - `FIRMWARE-ALL-…`: todos los firmwares y datos de verificación; la primera instalación suele usar el archivo con `factory`;
-   - `CONFIG-…`: configuración enviada, configuración realmente compilada y metadatos;
-   - `BUILD-LOGS-…`: registros completos y errores, disponibles tanto si funciona como si falla durante 14 días.
-5. Si no quieres compilar, elige **Enviar compilación en la nube → Descargar solo .config**. Una compilación real nunca ejecuta `make defconfig`. Antes de descargar una solicitud, la página muestra las opciones obligatorias de la fuente definidas en `config/001.presets/source-build-requirements.json` y solo las aplica tras una confirmación explícita. El parser del Issue rechaza los JSON incompletos.
+   - `fecha-nombre-original.img.gz`: cada imagen final se descarga directamente y sin ZIP; la primera instalación suele usar `factory`;
+   - `fecha-CONFIG`: configuraciones enviada/efectiva y metadatos;
+   - `fecha-BUILD-LOGS`: registros completos y errores, disponibles 14 días;
+   - `fecha-OPTIONAL-PACKAGES` / `fecha-FIRMWARE-OTHER`: paquetes M y archivos auxiliares.
+5. Si no quieres compilar, elige **Enviar compilación en la nube → Descargar solo .config**. Actions solo ejecuta `make defconfig` cuando el usuario activa **Defconfig**; de lo contrario, la `.config` completa sigue siendo la entrada autoritativa. Las opciones obligatorias se muestran y solo se aplican tras confirmación.
 6. La página carga `build-request.json`, `.config` y `config.buildinfo`. La zona horaria ofrece búsqueda en la lista IANA completa de OpenWrt/LuCI con formato uniforme `(UTC±HH:MM) Region/City`, además del tema LuCI, NTP y el espejo opkg.
 
 > 💡 Después de flashear el firmware: accede desde el navegador a **192.168.1.1** (o a la dirección que hayas personalizado en la página de envío), con el usuario **root** y la **contraseña vacía** (establécela inmediatamente en el primer inicio de sesión); solo la fuente Lean LEDE tiene como contraseña inicial `password`.
@@ -86,7 +87,7 @@ Consulta [ARCHITECTURE.md](../ARCHITECTURE.md) (bilingüe chino-inglés).
 
 ### Seguridad
 
-- Los Issues aceptan 1–3 adjuntos alojados en GitHub y detectan `build-request.json`, `.config` y `config.buildinfo`; se validan campos, listas permitidas, tamaño, firma de destino y opciones obligatorias de la fuente. La configuración completa enviada es la entrada autoritativa y nunca se sustituye con `make defconfig`.
+- Los Issues aceptan 1–3 adjuntos alojados en GitHub y detectan `build-request.json`, `.config` y `config.buildinfo`; se validan campos, listas permitidas, tamaño, firma de destino y opciones obligatorias de la fuente. La configuración completa es la entrada autoritativa por defecto; `make defconfig` solo se ejecuta una vez si Defconfig se activa expresamente, con protección de Target, Profile, arquitectura y paquetes obligatorios.
 - El identificador de compilación (tag) se sanea para admitir solo caracteres chinos, letras latinas, números y guiones, y se usa únicamente para nombrar y mostrar el artifact;
 - Los permisos del workflow se limitan a `contents: read + issues: write`.
 
@@ -100,7 +101,7 @@ Gracias a todos los proyectos de código abierto y a los autores que han contrib
 
 - **Código fuente**: [OpenWrt](https://github.com/openwrt/openwrt) · [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede)
 - **Infraestructura**: [GitHub Actions](https://github.com/features/actions) (compilación en la nube) · [Cloudflare Pages](https://pages.cloudflare.com/) (alojamiento del sitio de respaldo)
-- **Todos los autores de los <!--plugin-count-->226<!--/plugin-count--> plugins de LuCI**, así como LuCI, Hexo, el tema Butterfly y demás proyectos del ecosistema;
+- **Todos los autores de los <!--plugin-count-->242<!--/plugin-count--> plugins de LuCI**, así como LuCI, Hexo, el tema Butterfly y demás proyectos del ecosistema;
 - Y cada usuario que envía un Issue, reporta problemas o deja una estrella (Star).
 
 Este proyecto se limita a orquestar e invocar los proyectos mencionados; los derechos de autor pertenecen a sus respectivos autores.

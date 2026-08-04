@@ -25,14 +25,15 @@ Currently the **360T7 (MT7981)** is the fully maintained device; the 200+ other 
 
 ## I'm a user: how do I customize firmware
 
-1. Open the customization page, choose **source → partition variant → plugins** in order, and fill in a "build tag" (your nickname, used to find your firmware later).
+1. Open the customization page, choose **Source → Branch → Target System → Subtarget → Target Profile → plugins**, and enter a build tag for locating the result.
 2. Click **Submit cloud build → Download request and open GitHub**. On the page that opens, upload only the newly downloaded `build-request.json`, then click **Create**. No device, source, version, or partition fields are required (GitHub login required). For an existing `.config` or `config.buildinfo`, load it on the web page first so the target can be identified.
 3. The bot replies in the issue with a link to this build; a full compilation takes about **2–3 hours**.
 4. When the build finishes, the bot comments again to notify you. Open the build page and download from **Artifacts** at the bottom:
-   - `FIRMWARE-ALL-…`: all firmware and verification files; most first-time users use the file containing `factory`;
-   - `CONFIG-…`: submitted config, effective build config, and build metadata for reproducibility;
-   - `BUILD-LOGS-…`: complete download/build logs and error excerpts, provided on success or failure and kept for 14 days.
-5. To skip compilation, choose **Submit cloud build → Download .config only** and save the generated configuration. A real build never runs `make defconfig`. Before a build-request JSON can be downloaded, the page lists the options required by the selected source from `config/001.presets/source-build-requirements.json` and applies them only after explicit confirmation. A JSON that bypasses the page and omits them is rejected by the Issue parser.
+   - `timestamp-original-name.img.gz`: each final image is a direct, ZIP-free Artifact; first-time flashing usually uses a `factory` image;
+   - `timestamp-CONFIG`: submitted/effective configs and reproducibility metadata;
+   - `timestamp-BUILD-LOGS`: complete logs and error excerpts, kept for 14 days;
+   - `timestamp-OPTIONAL-PACKAGES` / `timestamp-FIRMWARE-OTHER`: M packages and supporting manifest, buildinfo, and checksum files.
+5. To skip compilation, choose **Submit cloud build → Download .config only**. Actions runs `make defconfig` only when the user explicitly enables **Defconfig**; otherwise the complete submitted `.config` remains authoritative. Before downloading a request, required source options are shown from `config/001.presets/source-build-requirements.json` and applied only after confirmation. Requests that bypass the page and omit them are rejected.
 6. The page loads `build-request.json`, `.config`, and `config.buildinfo`. Its searchable timezone field contains the complete OpenWrt/LuCI IANA list in the uniform `(UTC±HH:MM) Region/City` format. You can also select the firmware LuCI theme, NTP preset, and opkg mirror; the confirmation dialog repeats the brand, model, source, version, partition, and page version.
 
 > 💡 After flashing: point your browser at **192.168.1.1** (or the address you customized on the submit page), username **root**, **empty password** (set one immediately on first login) — only the Lean LEDE source ships with the initial password `password`.
@@ -86,7 +87,7 @@ See [ARCHITECTURE.md](../ARCHITECTURE.md) (bilingual, Chinese and English).
 
 ### Security
 
-- Issues accept 1–3 GitHub-hosted attachments and auto-detect `build-request.json`, `.config`, and `config.buildinfo`; fields, whitelists, size, target signature, and source-required options are validated. The submitted full config is authoritative; Actions never runs `make defconfig`, and the effective build config is retained in the artifact.
+- Issues accept 1–3 GitHub-hosted attachments and auto-detect `build-request.json`, `.config`, and `config.buildinfo`; fields, whitelists, size, target signature, and source-required options are validated. The submitted full config is authoritative by default; Actions runs `make defconfig` once only when Defconfig is explicitly selected, then guards Target/Profile/architecture and required packages. The effective build config is retained in the artifact.
 - The build tag is sanitized down to Chinese/English characters, digits, and hyphens, and is used only for artifact naming and display;
 - Workflow permissions are narrowed to `contents: read + issues: write`.
 
@@ -100,7 +101,7 @@ Thanks to all the open-source projects and authors who contributed to this proje
 
 - **Sources**: [OpenWrt](https://github.com/openwrt/openwrt) · [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede)
 - **Infrastructure**: [GitHub Actions](https://github.com/features/actions) (cloud builds) · [Cloudflare Pages](https://pages.cloudflare.com/) (backup site hosting)
-- **All authors of the <!--plugin-count-->226<!--/plugin-count--> LuCI plugins**, as well as ecosystem projects such as LuCI, Hexo, and the Butterfly theme;
+- **All authors of the <!--plugin-count-->242<!--/plugin-count--> LuCI plugins**, as well as ecosystem projects such as LuCI, Hexo, and the Butterfly theme;
 - Every user who submits an issue, reports a problem, or gives a Star.
 
 This project merely orchestrates and invokes the projects above; all copyrights belong to their respective authors.

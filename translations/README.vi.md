@@ -25,14 +25,15 @@ Hiện tại **360T7 (MT7981)** là thiết bị được bảo trì đầy đ�
 
 ## Tôi là người dùng: cách tùy chỉnh firmware
 
-1. Mở trang tùy chỉnh, lần lượt chọn **mã nguồn → biến thể phân vùng → plugin**, điền một "mã định danh bản dựng" (biệt danh của bạn, dùng để tìm firmware).
+1. Mở trang, lần lượt chọn **Source → Branch → Target System → Subtarget → Target Profile → plugin**, rồi nhập mã định danh bản dựng.
 2. Nhấn **Gửi bản dựng đám mây → Tải yêu cầu và mở GitHub**. Chỉ tải lên `build-request.json` vừa được tạo rồi nhấn **Create**; không phải nhập thiết bị, nguồn, phiên bản hay phân vùng. Với `.config` hoặc `config.buildinfo` có sẵn, hãy nạp vào trang trước để nhận diện thiết bị.
 3. Bot sẽ trả lời trong issue kèm liên kết của bản dựng lần này, biên dịch trọn bộ mất khoảng **2~3 giờ**.
 4. Khi bản dựng hoàn tất, bot sẽ bình luận thông báo; mở trang bản dựng và tải xuống ở mục **Artifacts** cuối trang:
-   - `FIRMWARE-ALL-…`: toàn bộ firmware và dữ liệu kiểm tra; khi nạp lần đầu thường dùng tệp có `factory`;
-   - `CONFIG-…`: cấu hình đã gửi, cấu hình build thực tế và siêu dữ liệu;
-   - `BUILD-LOGS-…`: log đầy đủ và lỗi trích xuất, có cả khi thành công lẫn thất bại trong 14 ngày.
-5. Nếu không cần biên dịch, chọn **Gửi bản dựng đám mây → Chỉ tải .config**. Bản build thật không bao giờ chạy `make defconfig`. Trước khi tải yêu cầu build, trang hiển thị các tùy chọn bắt buộc của nguồn trong `config/001.presets/source-build-requirements.json` và chỉ áp dụng sau khi người dùng xác nhận rõ ràng. JSON thiếu mục sẽ bị bộ phân tích Issue từ chối.
+   - `thời-gian-tên-gốc.img.gz`: từng ảnh cuối được tải trực tiếp, không bọc ZIP; lần flash đầu thường dùng `factory`;
+   - `thời-gian-CONFIG`: cấu hình đã gửi/thực tế và siêu dữ liệu;
+   - `thời-gian-BUILD-LOGS`: log đầy đủ và lỗi, giữ 14 ngày;
+   - `thời-gian-OPTIONAL-PACKAGES` / `thời-gian-FIRMWARE-OTHER`: gói M và tài liệu phụ.
+5. Nếu không cần biên dịch, chọn **Gửi bản dựng đám mây → Chỉ tải .config**. Actions chỉ chạy `make defconfig` khi người dùng chủ động bật **Defconfig**; nếu không, `.config` đầy đủ vẫn là đầu vào có thẩm quyền. Tùy chọn bắt buộc chỉ được áp dụng sau khi xác nhận.
 6. Trang nạp được `build-request.json`, `.config` và `config.buildinfo`. Trường múi giờ tìm kiếm toàn bộ danh sách IANA của OpenWrt/LuCI theo định dạng thống nhất `(UTC±HH:MM) Region/City`; đồng thời có thể chọn giao diện LuCI, NTP và máy chủ opkg.
 
 > 💡 Sau khi flash firmware xong: dùng trình duyệt truy cập **192.168.1.1** (hoặc địa chỉ bạn đã tùy chỉnh ở trang gửi), tên đăng nhập **root**; **mật khẩu để trống** (lần đăng nhập đầu tiên hãy đặt mật khẩu ngay) — riêng nguồn Lean LEDE có mật khẩu ban đầu là `password`.
@@ -86,7 +87,7 @@ Xem [ARCHITECTURE.md](../ARCHITECTURE.md) (song ngữ Trung - Anh).
 
 ### Bảo mật
 
-- Issue nhận 1–3 tệp đính kèm do GitHub lưu trữ và tự nhận dạng `build-request.json`, `.config`, `config.buildinfo`; trường dữ liệu, danh sách cho phép, kích thước, chữ ký đích và tùy chọn bắt buộc của nguồn đều được kiểm tra. Cấu hình đầy đủ đã gửi là đầu vào chính thức và không bao giờ bị thay bằng `make defconfig`.
+- Issue nhận 1–3 tệp đính kèm do GitHub lưu trữ và tự nhận dạng `build-request.json`, `.config`, `config.buildinfo`; trường dữ liệu, danh sách cho phép, kích thước, chữ ký đích và tùy chọn bắt buộc đều được kiểm tra. Cấu hình đầy đủ là đầu vào chính thức theo mặc định; `make defconfig` chỉ chạy một lần khi Defconfig được bật rõ ràng, kèm kiểm tra bảo vệ Target, Profile, kiến trúc và gói bắt buộc.
 - Mã định danh bản dựng (tag) sẽ được làm sạch, chỉ giữ lại chữ Trung, chữ Latinh, chữ số và dấu gạch nối, chỉ dùng để đặt tên artifact và hiển thị;
 - Quyền của workflow được thu hẹp còn `contents: read + issues: write`.
 
@@ -100,7 +101,7 @@ Cảm ơn tất cả các dự án mã nguồn mở và các tác giả đã đ�
 
 - **Mã nguồn**: [OpenWrt](https://github.com/openwrt/openwrt) · [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede)
 - **Hạ tầng**: [GitHub Actions](https://github.com/features/actions) (biên dịch đám mây) · [Cloudflare Pages](https://pages.cloudflare.com/) (lưu trữ trang dự phòng)
-- **Toàn bộ tác giả của <!--plugin-count-->226<!--/plugin-count--> plugin LuCI**, cùng các dự án hệ sinh thái như LuCI, Hexo, theme Butterfly;
+- **Toàn bộ tác giả của <!--plugin-count-->242<!--/plugin-count--> plugin LuCI**, cùng các dự án hệ sinh thái như LuCI, Hexo, theme Butterfly;
 - Mỗi người dùng đã gửi issue, phản hồi vấn đề và nhấn Star.
 
 Dự án này chỉ điều phối và gọi tới các dự án nêu trên, bản quyền thuộc về các tác giả tương ứng.

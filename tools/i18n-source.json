@@ -145,7 +145,7 @@
   "device.sources": "可用产线:{list}",
   "help.btn": "说明",
   "help.title": "使用说明",
-  "help.body": "① 选品牌、型号、源码、版本和分区。官方名称是 \"Qihoo 360T7 (UBI)\";UBI/108M 布局必须与 U-Boot 和当前闪存分区一致\n② 勾选需要的插件。灰色表示当前源码不提供;\"开发者模式\"可强制修改底层软件包,风险自担\n③ 填构建标识和固件设置后提交 Issue;也可加载或下载 JSON、.config、config.buildinfo\n④ Actions 完成后下载 FIRMWARE-ALL、CONFIG 和 BUILD-LOGS;固件/配置保留 30 天,日志保留 14 天\n⑤ 首刷通常用 factory;sysupgrade 只适用于机型和分区布局都兼容的升级。不确定就不要刷",
+  "help.body": "① 依次选择 Source、Branch、Target System、Subtarget 和 Target Profile；各项必须来自同一份 Catalog\n② 勾选需要的插件；灰色表示当前 Catalog 不提供，推荐项和 Defconfig 的实际处理会写入构建日志\n③ 等待 Target 与 menuconfig 加载完成，再填写固件设置并提交 Issue；也可加载 JSON、.config 或 config.buildinfo\n④ Actions 完成后，直接下载单独的“时间戳-原文件名.img.gz”；CONFIG、BUILD-LOGS、OPTIONAL-PACKAGES、FIRMWARE-OTHER 是分类资料。固件/配置保留 30 天，日志保留 14 天\n⑤ 首刷通常用 factory；sysupgrade 只适用于设备和分区布局都兼容的升级。不确定就不要刷",
   "help.link.ubi": "官方:Qihoo 360T7 (UBI) 转换说明",
   "help.link.layout": "社区:360T7 108M UBI 分区说明",
   "group.系统基础": "系统基础",

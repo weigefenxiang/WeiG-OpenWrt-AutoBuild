@@ -28,7 +28,7 @@ OpenWrt 固件**在线定制 + 云编译**。在 [网站](https://wrt.weigeshare
 
 ## 我是用户:怎么定制固件
 
-1. 打开 [定制页面](https://wrt.weigeshare.cc.cd/) ,依次选择 **品牌 → 型号 → 源码 → 插件** ,填输入一个"构建标识"(你的昵称,方便定位固件)。
+1. 打开 [定制页面](https://wrt.weigeshare.cc.cd/)，依次选择 **Source → Branch → Target System → Subtarget → Target Profile → 插件**，再填写“构建标识”（方便定位固件）。
 
 2. 点 **提交云编译 → 下载请求并打开 GitHub**，在跳转后的页面只上传刚下载的 `build-request.json`，再点 **Create**；不需要填写机型、源码、版本或分区参数（需登录 GitHub 账号）。已有 `.config` 或 `config.buildinfo` 请先在网页点“加载配置”，识别机型后再提交。
 
@@ -38,10 +38,11 @@ OpenWrt 固件**在线定制 + 云编译**。在 [网站](https://wrt.weigeshare
 
 **Artifacts** 下载:
 
-   - `FIRMWARE-ALL-…`:全部固件与校验资料;大多数首次刷机用户使用其中带 `factory` 的文件;
-   - `CONFIG-…`:用户提交配置、实际开编配置与构建元数据,可留档复现;
-   - `BUILD-LOGS-…`:完整下载/编译日志与报错摘录,成功或失败都会提供,保留 14 天。
-5. 也可以不编译：点 **提交云编译 → 仅下载 .config**，立即拿到按当前选择生成的配置。正式构建永远不会执行 `make defconfig`；下载构建请求 JSON 前，网页会按 `config/001.presets/source-build-requirements.json` 显示当前源码必须具备的配置项，只有用户明确应用后才允许下载。绕过网页提交缺项 JSON，也会在 Issue 解析阶段被拒绝。
+   - `时间戳-原文件名.img.gz`:每个最终镜像独立下载，不套 ZIP；首次刷机通常选择含 `factory` 的文件；
+   - `时间戳-CONFIG`:用户提交配置、实际开编配置与构建元数据，可留档复现；
+   - `时间戳-BUILD-LOGS`:完整下载/编译日志与报错摘录，成功或失败都会提供，保留 14 天；
+   - `时间戳-OPTIONAL-PACKAGES` / `时间戳-FIRMWARE-OTHER`:M 软件包，以及 manifest、buildinfo、校验和等辅助资料。
+5. 也可以不编译：点 **提交云编译 → 仅下载 .config**，立即拿到按当前选择生成的配置。只有用户主动勾选 **Defconfig** 时，Actions 才执行一次 `make defconfig`；未勾选时完整 `.config` 保持权威输入。下载构建请求 JSON 前，网页会按 `config/001.presets/source-build-requirements.json` 显示当前源码必须具备的配置项，只有用户明确应用后才允许下载。绕过网页提交缺项 JSON，也会在 Issue 解析阶段被拒绝。
 6. 页面可加载 `build-request.json`、`.config`、`config.buildinfo`；时区提供 OpenWrt/LuCI 完整 IANA 列表并支持搜索，统一显示为 `(UTC±HH:MM) Region/City`。页面还可选择固件 LuCI 主题、NTP 与 opkg 镜像，提交确认框会再次列出品牌、型号、源码、版本、分区及网页版本。
 
 > 💡 刷好固件后:浏览器访问
@@ -122,7 +123,7 @@ config 副本,同时对"配置里有但没收录"的插件给出警告;
 
 ### 安全
 
-- Issue 接受 1~3 个 GitHub 自有附件并自动识别 `build-request.json`、`.config`、`config.buildinfo`;请求字段、插件/软件包 id、配置格式、大小、机型目标签名及源码必需项都会校验。完整配置是用户提交的权威输入，Actions 永远不执行 `make defconfig`，实际开编配置会随 artifact 一并保留;
+- Issue 接受 1~3 个 GitHub 自有附件并自动识别 `build-request.json`、`.config`、`config.buildinfo`;请求字段、插件/软件包 id、配置格式、大小、机型目标签名及源码必需项都会校验。完整配置默认是用户提交的权威输入；只有用户主动勾选 Defconfig 时 Actions 才执行一次 `make defconfig` 并校验 Target/Profile/架构与必需包，实际开编配置会随 artifact 一并保留;
 - 构建标识(tag)会被清洗为中英文数字与连字符,仅用于 artifact 命名与展示;
 - workflow 权限收敛为 `contents: read + issues: write`。
 

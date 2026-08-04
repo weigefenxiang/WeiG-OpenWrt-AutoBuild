@@ -12,7 +12,7 @@ env:
 
 permissions:
   contents: read
-  actions: read
+  actions: write
   issues: write
 
 jobs:
@@ -92,7 +92,10 @@ jobs:
     concurrency:
       group: custom-build-user-${{ needs.admission.outputs.requester }}-${{ needs.admission.outputs.slot }}
       cancel-in-progress: false
-      queue: max
+    outputs:
+      firmware_matrix: ${{ steps.firmware_manifest.outputs.matrix }}
+      bridge_artifact_id: ${{ steps.raw_bridge.outputs.artifact-id }}
+      build_ref: ${{ steps.req.outputs.build_ref }}
 
     steps:
       - name: Checkout / 检出代码
@@ -111,6 +114,7 @@ jobs:
         env:
           REQUEST_MANIFEST: ${{ github.event_name == 'issues' && 'request-attachments.json' || '' }}
           SUBMITTED_CONFIG_OUT: submitted.config
+          RECOMMENDED_AUDIT_OUT: recommended-audit.json
           ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           IN_DEVICE: ${{ github.event.client_payload.device }}
@@ -325,6 +329,10 @@ jobs:
             --output .config \
             --report "$GITHUB_WORKSPACE/config-overrides.json" \
             --diff "$GITHUB_WORKSPACE/config-overrides.diff"
+          node "$GITHUB_WORKSPACE/tools/audit-recommended.mjs" \
+            --requested "$GITHUB_WORKSPACE/recommended-audit.json" \
+            --config .config \
+            --report "$GITHUB_WORKSPACE/recommended-report.json"
           grep -Fx 'CONFIG_DEVEL=y' .config || { echo 'CONFIG_DEVEL is missing from the build config' >&2; exit 1; }
           grep -Fx 'CONFIG_BUILD_LOG=y' .config || { echo 'CONFIG_BUILD_LOG is missing from the build config' >&2; exit 1; }
           if [ "${{ steps.req.outputs.firmware_snapshot }}" = "1" ]; then
@@ -343,6 +351,9 @@ jobs:
           TEST_VERSION="$(tr -d '\r\n' < "$GITHUB_WORKSPACE/VERSION")"
           OVERRIDES_APPLIED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).applied.length' "$GITHUB_WORKSPACE/config-overrides.json")"
           DEFCONFIG_CHANGES="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).changedCount || 0' "$GITHUB_WORKSPACE/defconfig-report.json")"
+          RECOMMENDED_REQUESTED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).counts?.requested || 0' "$GITHUB_WORKSPACE/recommended-report.json")"
+          RECOMMENDED_APPLIED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).counts?.applied || 0' "$GITHUB_WORKSPACE/recommended-report.json")"
+          RECOMMENDED_SKIPPED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).counts?.skipped || 0' "$GITHUB_WORKSPACE/recommended-report.json")"
           GEOIP_STATE="$(grep -E '^CONFIG_PACKAGE_v2ray-geoip=[ym]$' .config || echo 'disabled')"
           GEOSITE_STATE="$(grep -E '^CONFIG_PACKAGE_v2ray-geosite=[ym]$' .config || echo 'disabled')"
           PROXY_RE='^CONFIG_PACKAGE_.*(passwall|ssr|vssr|shadowsocks|v2ray|xray|trojan|tinyproxy|brook|haproxy|pdnsd|kcptun|simple-obfs|chinadns|dns2socks|ipt2socks|microsocks|naiveproxy|redsocks|openclash|homeproxy).*=([ym])$'
@@ -365,6 +376,10 @@ jobs:
             echo "request_mode=${{ steps.req.outputs.request_mode }}"
             echo "use_defconfig=${{ steps.req.outputs.use_defconfig }}"
             echo "defconfig_changes=$DEFCONFIG_CHANGES"
+            echo "recommended_enabled=${{ steps.req.outputs.recommended_enabled }}"
+            echo "recommended_requested=$RECOMMENDED_REQUESTED"
+            echo "recommended_applied=$RECOMMENDED_APPLIED"
+            echo "recommended_skipped=$RECOMMENDED_SKIPPED"
             if [ "${{ steps.req.outputs.use_defconfig }}" = "1" ]; then
               echo "config_policy=target-locked-defconfig-with-declared-overrides"
             else
@@ -391,6 +406,15 @@ jobs:
             echo "proxy_selected_count=$PROXY_COUNT"
           } | tee "$GITHUB_WORKSPACE/build-metadata.txt"
           {
+            echo "#### 推荐项审计 / Recommended audit"
+            echo ""
+            echo "- requested / 请求: `$RECOMMENDED_REQUESTED`"
+            echo "- applied / 已应用: `$RECOMMENDED_APPLIED`"
+            echo "- skipped / 跳过: `$RECOMMENDED_SKIPPED`"
+            echo "- 详细报告 / details: `recommended-report.json` (CONFIG artifact)"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          {
             echo "### 🔎 配置预检 / Config preflight"
             echo ""
             echo "- v2ray-geoip: \`$GEOIP_STATE\`"
@@ -404,9 +428,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload final .config / 上传最终 .config(编译失败也能拿到)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.req.outputs.build_ref }}-CONFIG-${{ steps.req.outputs.artifact_tail }}
+          name: ${{ steps.req.outputs.build_ref }}-CONFIG
           path: |
             openwrt/.config
             submitted.config
@@ -419,6 +443,8 @@ jobs:
             defconfig.log
             build.config
             build-metadata.txt
+            recommended-audit.json
+            recommended-report.json
             firmware-settings.txt
             proxy-selected.txt
           include-hidden-files: true
@@ -533,7 +559,7 @@ jobs:
           cp build.log build-diagnostic.log download.log failure-logs/ 2>/dev/null || true
           cp build-metadata.txt failure-logs/ 2>/dev/null || true
           cp proxy-selected.txt failure-logs/ 2>/dev/null || true
-          cp submitted.config config-overrides.json config-overrides.diff pre-defconfig.config defconfig.config defconfig.diff defconfig-report.json defconfig.log build.config failure-logs/ 2>/dev/null || true
+          cp submitted.config config-overrides.json config-overrides.diff recommended-audit.json recommended-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig-report.json defconfig.log build.config failure-logs/ 2>/dev/null || true
           cp openwrt/.config failure-logs/final.config 2>/dev/null || true
           # OpenWrt 的 CONFIG_BUILD_LOG=y 会把每个包的日志写到 openwrt/logs/ / With CONFIG_BUILD_LOG=y, OpenWrt writes per-package build logs to openwrt/logs/
           if [ -d openwrt/logs ]; then
@@ -611,7 +637,7 @@ jobs:
           tail -n 60 build.log 2>/dev/null || echo '(没有 build.log,可能在编译前就失败了)'
           ls -lh failure-logs
           # 在步骤日志末尾指明取件入口 / Point users at the artifact and where to find retrieval steps
-          echo "📤 artifact:${{ steps.req.outputs.build_ref }}-BUILD-LOGS-${{ steps.req.outputs.artifact_tail }} —— 完整日志将上传,取件方法见 issue 回评/Summary 页 / Full logs will be uploaded; see the issue comment or Summary"
+          echo "📤 artifact:${{ steps.req.outputs.build_ref }}-BUILD-LOGS —— 完整日志将上传,取件方法见 issue 回评/Summary 页 / Full logs will be uploaded; see the issue comment or Summary"
 
       - name: Collect menuconfig M packages / 收集 menuconfig 的 M 软件包
         if: success()
@@ -627,20 +653,29 @@ jobs:
         run: |
           set -euo pipefail
           ROOT="$GITHUB_WORKSPACE/artifact-staging"
-          FIRMWARE="$ROOT/FIRMWARE-ALL"
+          FIRMWARE="$ROOT/FIRMWARE-OTHER"
+          RAW="$ROOT/RAW-IMG-GZ"
           LOGS="$ROOT/BUILD-LOGS"
-          mkdir -p "$FIRMWARE" "$LOGS"
+          mkdir -p "$FIRMWARE" "$RAW" "$LOGS"
 
           shopt -s nullglob
           for file in openwrt/bin/targets/*/*/*; do
             [ -f "$file" ] || continue
-            cp -a "$file" "$FIRMWARE/"
+            base="$(basename "$file")"
+            if [[ "$base" == *.img.gz ]]; then
+              cp -a "$file" "$RAW/${{ steps.req.outputs.build_ref }}-$base"
+            else
+              cp -a "$file" "$FIRMWARE/${{ steps.req.outputs.build_ref }}-$base"
+            fi
           done
+          if compgen -G "$RAW/*.img.gz" >/dev/null; then
+            (cd "$RAW" && sha256sum -- *.img.gz) > "$FIRMWARE/${{ steps.req.outputs.build_ref }}-sha256sums-img-gz.txt"
+          fi
           if [ -s firmware-settings.txt ]; then
-            cp firmware-settings.txt "$FIRMWARE/00-BUILD-SETTINGS.txt"
+            cp firmware-settings.txt "$FIRMWARE/${{ steps.req.outputs.build_ref }}-00-BUILD-SETTINGS.txt"
           fi
           printf '%s\n' \
-            '固件全集 / ALL FIRMWARE FILES' \
+            '其他固件与构建资料 / OTHER FIRMWARE AND BUILD FILES' \
             '首次刷机通常使用 factory；sysupgrade 仅用于当前固件与闪存布局兼容的升级。' \
             'First flash usually uses factory. Use sysupgrade only for a compatible installed firmware and flash layout.' \
             'initramfs 用于临时启动/救援；manifest、buildinfo、sha256sums 仅用于核对。' \
@@ -661,17 +696,16 @@ jobs:
             echo '## 📦 固件下载与安装选择 / Firmware download guide'
             echo ''
             echo '> [!IMPORTANT]'
-            echo '> 下载 `${{ steps.req.outputs.build_ref }}-FIRMWARE-ALL-*`。首次刷机通常用 `factory`；`sysupgrade` 只适用于当前固件和闪存布局兼容的升级。'
-            echo '> Download `${{ steps.req.outputs.build_ref }}-FIRMWARE-ALL-*`. First flash usually uses `factory`; use `sysupgrade` only for a compatible installed firmware and flash layout.'
-            echo '> GitHub 会提供 ZIP 下载外壳；这里使用零压缩上传，内部固件保持原文件与原后缀。'
-            echo '> GitHub provides the ZIP download wrapper; upload uses zero compression and preserves every original firmware file and suffix.'
+            echo '> 最终 `.img.gz` 固件按 `${{ steps.req.outputs.build_ref }}-原文件名.img.gz` 逐个上传，不解压、不套 ZIP；首次刷机通常用 `factory`。'
+            echo '> Final `.img.gz` images are uploaded one by one as `${{ steps.req.outputs.build_ref }}-original-name.img.gz`, without decompression or a ZIP wrapper. First flash usually uses `factory`.'
             echo ''
             echo '| Artifact | 内容 / Contents |'
             echo '| --- | --- |'
-            echo '| 📦 `${{ steps.req.outputs.build_ref }}-FIRMWARE-ALL-${{ steps.req.outputs.artifact_tail }}` | 全部固件与 manifest/buildinfo/sha256sums；文件保持原后缀 |'
-            echo '| ⚙️ `${{ steps.req.outputs.build_ref }}-CONFIG-${{ steps.req.outputs.artifact_tail }}` | 用户提交配置、实际开编配置和构建元数据 |'
-            echo '| 🧾 `${{ steps.req.outputs.build_ref }}-BUILD-LOGS-${{ steps.req.outputs.artifact_tail }}` | 完整下载/编译日志；保留 14 天 |'
-            echo '| 🧩 `${{ steps.req.outputs.build_ref }}-OPTIONAL-PACKAGES-${{ steps.req.outputs.artifact_tail }}` | menuconfig 选为 M：已编译但未写入固件的软件包 |'
+            echo '| 📦 `${{ steps.req.outputs.build_ref }}-*.img.gz` | 可直接下载的最终固件；一个文件对应一个 Artifact |'
+            echo '| 📁 `${{ steps.req.outputs.build_ref }}-FIRMWARE-OTHER` | manifest、buildinfo、校验和及其他非 `.img.gz` 文件 |'
+            echo '| ⚙️ `${{ steps.req.outputs.build_ref }}-CONFIG` | 用户提交配置、实际开编配置和构建元数据 |'
+            echo '| 🧾 `${{ steps.req.outputs.build_ref }}-BUILD-LOGS` | 完整下载/编译日志；保留 14 天 |'
+            echo '| 🧩 `${{ steps.req.outputs.build_ref }}-OPTIONAL-PACKAGES` | menuconfig 选为 M：已编译但未写入固件的软件包 |'
             echo ''
             echo '> [!WARNING]'
             echo '> `sysupgrade` 不是通用更新包。不确定机型、当前固件或布局时不要刷。 / `sysupgrade` is not a universal updater.'
@@ -680,89 +714,134 @@ jobs:
             echo ''
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload all firmware / 上传全部固件
-        if: success()
-        uses: actions/upload-artifact@v4
+      - name: Build raw firmware manifest / 生成原始固件清单
+        id: firmware_manifest
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          json="$(find artifact-staging/RAW-IMG-GZ -maxdepth 1 -type f -printf '%f\n' 2>/dev/null | sort | jq -Rsc 'split("\n") | map(select(length > 0)) | if length == 0 then [{name:"__none__", enabled:false}] else map({name:., enabled:true}) end')"
+          echo "matrix=$json" >> "$GITHUB_OUTPUT"
+          if find artifact-staging/RAW-IMG-GZ -maxdepth 1 -type f -name '*.img.gz' -print -quit 2>/dev/null | grep -q .; then
+            echo "has_raw=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_raw=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload raw firmware bridge / 上传原始固件桥接包
+        id: raw_bridge
+        if: success() && steps.firmware_manifest.outputs.has_raw == 'true'
+        uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.req.outputs.build_ref }}-FIRMWARE-ALL-${{ steps.req.outputs.artifact_tail }}
-          path: artifact-staging/FIRMWARE-ALL/
+          name: ${{ steps.req.outputs.build_ref }}-RAW-BRIDGE
+          path: artifact-staging/RAW-IMG-GZ/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload other firmware / 上传其他固件文件
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.req.outputs.build_ref }}-FIRMWARE-OTHER
+          path: artifact-staging/FIRMWARE-OTHER/
           if-no-files-found: error
           compression-level: 0
           retention-days: 30
 
       - name: Upload complete logs / 上传完整日志
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.req.outputs.build_ref }}-BUILD-LOGS-${{ steps.req.outputs.artifact_tail }}
+          name: ${{ steps.req.outputs.build_ref }}-BUILD-LOGS
           path: artifact-staging/BUILD-LOGS/
           if-no-files-found: warn
           retention-days: 14
 
       - name: Upload optional M packages / 上传可选 M 软件包
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.req.outputs.build_ref }}-OPTIONAL-PACKAGES-${{ steps.req.outputs.artifact_tail }}
+          name: ${{ steps.req.outputs.build_ref }}-OPTIONAL-PACKAGES
           path: optional-packages/
           if-no-files-found: warn
           compression-level: 0
           retention-days: 30
 
-      - name: "Comment on issue: success & close / 回评 issue:构建成功并关闭"
-        if: github.event_name == 'issues' && success()
+  publish-firmware:
+    name: Publish raw firmware / 发布原始固件
+    needs: build
+    if: needs.build.result == 'success'
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        file: ${{ fromJSON(needs.build.outputs.firmware_matrix || '[{"name":"__none__","enabled":false}]') }}
+    steps:
+      - name: Download raw bridge / 下载原始固件桥接包
+        if: matrix.file.enabled == true
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.build_ref }}-RAW-BRIDGE
+          path: raw-bridge
+
+      - name: Upload one raw .img.gz / 逐个上传原始 .img.gz
+        if: matrix.file.enabled == true
+        uses: actions/upload-artifact@v7
+        with:
+          path: raw-bridge/${{ matrix.file.name }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
+
+  cleanup-raw-bridge:
+    name: Cleanup raw bridge / 清理原始桥接包
+    needs: [build, publish-firmware]
+    if: always() && needs.build.outputs.bridge_artifact_id != ''
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Delete this run's bridge artifact / 删除本次桥接 Artifact
+        continue-on-error: true
         uses: actions/github-script@v7
+        env:
+          BRIDGE_ARTIFACT_ID: ${{ needs.build.outputs.bridge_artifact_id }}
         with:
           script: |
-            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `@${context.payload.issue.user.login}\n\n✅ 构建完成!\n\n下载 / Download:${url}\n\n- \`${{ steps.req.outputs.build_ref }}-FIRMWARE-ALL-${{ steps.req.outputs.artifact_tail }}\`:全部固件及校验资料;首次刷机通常选 \`factory\`\n- \`${{ steps.req.outputs.build_ref }}-OPTIONAL-PACKAGES-${{ steps.req.outputs.artifact_tail }}\`:menuconfig 选为 M、未写入固件的可选安装包\n- \`${{ steps.req.outputs.build_ref }}-CONFIG-${{ steps.req.outputs.artifact_tail }}\`:用户提交配置、实际开编配置和构建元数据\n- \`${{ steps.req.outputs.build_ref }}-BUILD-LOGS-${{ steps.req.outputs.artifact_tail }}\`:完整日志(14 天)\n\n\`sysupgrade\` 只用于当前固件与闪存布局兼容的升级。固件/配置保留 30 天。`,
-            });
-            await github.rest.issues.update({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.issue.number, state: 'closed', state_reason: 'completed',
+            await github.rest.actions.deleteArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: Number(process.env.BRIDGE_ARTIFACT_ID),
             });
 
-      - name: "Comment on issue: failure & close / 回评 issue:构建失败(附日志)并关闭"
-        if: github.event_name == 'issues' && steps.req.outcome == 'success' && (failure() || cancelled())
+  notify:
+    name: Final result / 最终结果
+    needs: [admission, build, publish-firmware, cleanup-raw-bridge]
+    if: always() && github.event_name == 'issues' && needs.build.outputs.build_ref != ''
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Comment final result / 回评最终结果
         uses: actions/github-script@v7
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          PUBLISH_RESULT: ${{ needs.publish-firmware.result }}
+          BUILD_REF: ${{ needs.build.outputs.build_ref }}
         with:
           script: |
-            const fs = require('fs');
+            const ok = process.env.BUILD_RESULT === 'success' && process.env.PUBLISH_RESULT === 'success';
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            let errs = '';
-            const failureDir = 'failure-logs';
-            try {
-              errs = fs.readFileSync(`${failureDir}/00-SUMMARY.txt`, 'utf8').trim().split('\n').slice(0, 40).join('\n');
-            } catch (e) { /* 编译前就失败,没有日志 / Failed before compiling, so no error log exists */ }
-            const logFiles = [
-              ['00-SUMMARY.txt', '失败总结与定位关键字(先看这个)'],
-              ['build-diagnostic.log', '单线程 V=s 诊断日志'],
-              ['build.log', '完整并行编译输出'],
-              ['tail-200.txt', '最后 200 行'],
-              ['errors.txt', '摘出的报错行'],
-              ['package-logs.tar.gz', '各软件包日志'],
-              ['final.config', '本次实际使用的配置'],
-            ].filter(([name]) => fs.existsSync(`${failureDir}/${name}`))
-              .map(([name, description]) => `- \`${name}\` ${description}`).join('\n');
-            const body = `@${context.payload.issue.user.login}\n\n❌ 构建失败或被取消。\n\n完整日志与产物:${url}\n` +
-              `底部 Artifacts 里有 \`${{ steps.req.outputs.build_ref }}-BUILD-LOGS-${{ steps.req.outputs.artifact_tail }}\`(保留 14 天),内含:\n` +
-              `${logFiles}\n\n` +
-              (errs ? `摘录报错:\n\`\`\`\n${errs}\n\`\`\`\n\n` : '') +
-              `常见原因:插件相互冲突、原厂分区容量不足(插件勾太多)、高级模式强制开启了该源没有的包、上游源码当日有问题。` +
-              `可减少插件、换大分区变体、关掉高级模式或改天重试。` +
-              `\n\n📥 完整日志取件 / How to get full logs\n` +
-              `1. 打开本次构建页面 / Open this run:${url}\n` +
-              `2. 拉到页面最底部 Artifacts 区 / Scroll to the Artifacts section at the very bottom\n` +
-              `3. 下载 \`${{ steps.req.outputs.build_ref }}-BUILD-LOGS-\` 开头的压缩包,解压后先看 \`00-SUMMARY.txt\`,再看实际列出的日志 / Download the \`${{ steps.req.outputs.build_ref }}-BUILD-LOGS-\` archive; read \`00-SUMMARY.txt\` first, then the listed logs.\n\n` +
-              `⏳ BUILD-LOGS 保留 14 天,过期需重新提交构建 / BUILD-LOGS is kept for 14 days; resubmit after it expires.`;
+            const ref = process.env.BUILD_REF;
+            const body = ok
+              ? `@${context.payload.issue.user.login}\n\n✅ 构建和固件发布全部完成。\n\n下载 / Download: ${url}\n\n- 每个 \`${ref}-*.img.gz\` 是可直接下载的独立 Artifact，不解压、不套 ZIP。\n- \`${ref}-CONFIG\`、\`${ref}-BUILD-LOGS\`、\`${ref}-OPTIONAL-PACKAGES\`、\`${ref}-FIRMWARE-OTHER\` 为分类资料（没有对应内容时可能不生成）。\n\n首次刷机通常选 \`factory\`；\`sysupgrade\` 只用于当前固件与闪存布局兼容的升级。`
+              : `@${context.payload.issue.user.login}\n\n❌ 构建或原始固件发布失败。\n\nBuild: ${process.env.BUILD_RESULT}; raw publish: ${process.env.PUBLISH_RESULT}\n\n请打开本次 Actions 查看 \`${ref}-CONFIG\` 与 \`${ref}-BUILD-LOGS\`：${url}`;
             await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.issue.number, body,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
             });
             await github.rest.issues.update({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.issue.number, state: 'closed', state_reason: 'not_planned',
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed',
+              state_reason: ok ? 'completed' : 'not_planned',
             });

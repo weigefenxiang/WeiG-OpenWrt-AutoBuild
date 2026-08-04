@@ -37,6 +37,34 @@ function configEnabled(text, symbol) {
   const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`^CONFIG_${escaped}=y$`, 'm').test(String(text));
 }
+function normalizeAudit(raw) {
+  const audit = raw && typeof raw === 'object' ? raw : {};
+  const recommended = audit.recommended && typeof audit.recommended === 'object'
+    ? audit.recommended : {};
+  const enabled = recommended.enabled === true;
+  const preset = String(recommended.preset || '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 64);
+  const requested = Array.isArray(recommended.requested) ? recommended.requested : [];
+  if (requested.length > 64) fail('推荐项审计 requested 超过 64 项');
+  const seen = new Set();
+  const rows = [];
+  for (const row of requested) {
+    if (!row || typeof row !== 'object' ||
+        !/^PACKAGE_[A-Za-z0-9_.+@-]{1,96}$/.test(String(row.symbol || '')) ||
+        !['n', 'm', 'y'].includes(String(row.value || ''))) {
+      fail(`推荐项审计格式非法: ${JSON.stringify(row)}`);
+    }
+    const symbol = String(row.symbol);
+    if (seen.has(symbol)) continue;
+    seen.add(symbol);
+    rows.push({ symbol, value: String(row.value) });
+  }
+  const defconfig = audit.defconfig && typeof audit.defconfig === 'object'
+    ? audit.defconfig : {};
+  return {
+    recommended: { enabled, preset, requested: enabled ? rows : [] },
+    defconfig: { enabled: defconfig.enabled === true },
+  };
+}
 async function loadCatalogIndex() {
   const repo = PROJECT.catalogRepository || LOCAL_CATALOG_INDEX.catalogRepo;
   const urls = [
@@ -68,7 +96,18 @@ async function loadCatalog(repo, branch) {
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const catalog = JSON.parse(gunzipSync(Buffer.from(await response.arrayBuffer())).toString('utf8'));
+      const compressed = Buffer.from(await response.arrayBuffer());
+      const expectedBytes = Number(branch?.bytes || branch?.compressedBytes || 0);
+      const expectedHash = String(branch?.hash || branch?.compressedSha256 || '').toLowerCase();
+      if (!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0 || !/^[a-f0-9]{64}$/.test(expectedHash)) {
+        throw new Error(`Catalog index lacks an exact compressed bytes/hash contract: ${asset}`);
+      }
+      if (compressed.length !== expectedBytes) {
+        throw new Error(`Catalog compressed bytes mismatch: ${compressed.length} != ${expectedBytes}`);
+      }
+      const actualHash = createHash('sha256').update(compressed).digest('hex');
+      if (actualHash !== expectedHash) throw new Error(`Catalog compressed hash mismatch: ${actualHash} != ${expectedHash}`);
+      const catalog = JSON.parse(gunzipSync(compressed).toString('utf8'));
       if (Number(catalog?.schema || 0) < 2 || !Array.isArray(catalog?.menu?.options)) throw new Error('目录格式非法');
       return catalog;
     } catch (error) {
@@ -82,6 +121,7 @@ let req;
 let requestMode = 'smoke-internal';
 let submittedConfig = '';
 let requestAttachmentName = '';
+let recommendationAudit = { recommended: { enabled: false, preset: '', requested: [] }, defconfig: { enabled: false } };
 const requestManifest = String(process.env.REQUEST_MANIFEST || '').trim();
 const requestFile = String(process.env.REQUEST_FILE || '').trim();
 const issueBody = String(process.env.ISSUE_BODY || '');
@@ -150,8 +190,16 @@ if (requestManifest) {
   };
 }
 
+recommendationAudit = normalizeAudit(req.audit);
+
 const hasSubmittedConfig = requestMode.startsWith('issue-') && !requestMode.includes('inline');
-const useDefconfig = req.use_defconfig === true;
+const requestDefconfig = typeof req.use_defconfig === 'boolean' ? req.use_defconfig : null;
+const auditDefconfig = req.audit?.defconfig && typeof req.audit.defconfig.enabled === 'boolean'
+  ? req.audit.defconfig.enabled : null;
+if (requestDefconfig !== null && auditDefconfig !== null && requestDefconfig !== auditDefconfig) {
+  fail('defconfig 开关与 audit.defconfig.enabled 不一致');
+}
+const useDefconfig = requestDefconfig ?? auditDefconfig ?? false;
 const isCustomTarget = ['custom-target', 'catalog-target'].includes(req.device);
 let device, source, version, variant;
 let catalogRepo = '';
@@ -250,7 +298,7 @@ if (hasSubmittedConfig) {
   const missingRequirements = missingBuildRequirements(config, configRuleContext);
   if (!useDefconfig && missingRequirements.length) {
     fail(`构建必需配置缺失：${formatMissingBuildRequirements(missingRequirements)}。` +
-      '请返回网页应用必需项后重新下载并提交 JSON；Actions 不会自动修改配置，也不会执行 make defconfig。');
+      '请返回网页应用必需项后重新下载并提交 JSON；当前请求未勾选 Defconfig，Actions 不会静默修改配置或运行 make defconfig。');
   }
   if (!config.endsWith('\n')) config += '\n';
   submittedSha256 = createHash('sha256').update(config).digest('hex');
@@ -350,7 +398,6 @@ const issueTitleRef = String(process.env.ISSUE_TITLE || '')
   .match(/^\[build\]\s+([^\s·]+)(?:\s+·|\s*$)/)?.[1] || '';
 const attachmentRef = requestAttachmentName.match(/^([A-Za-z0-9]+_[A-Za-z0-9]+)[.-]/)?.[1] || '';
 const buildRef = cleanIdentity(req.requestId || attachmentRef || issueTitleRef || tag) || tag;
-const artifactTail = buildRef === tag ? device.id : `${tag}-${device.id}`;
 
 // 后台登录地址:仅内网 IPv4,非法即回落默认,防注入 / admin LAN IP: private IPv4 only, falls back to default — injection-safe
 const lanip = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/.test(String(req.lanip || ''))
@@ -440,7 +487,6 @@ if (rawPkgs.length) {
 
 const out = [
   `device=${device.id}`,
-  `brand=${device.brand}`,
   `source=${source.id}`,
   `version=${version.id}`,
   `branch=${version.branch}`,
@@ -451,7 +497,6 @@ const out = [
   `plugins=${items.join(' ')}`,
   `tag=${tag}`,
   `build_ref=${buildRef}`,
-  `artifact_tail=${artifactTail}`,
   `lanip=${lanip}`,
   `rootpw=${rootpw}`,
   `page_version=${pageVersion}`,
@@ -467,9 +512,8 @@ const out = [
   `opkg_mirror=${opkgMirror}`,
   `firmware_snapshot=${hasFirmwareSnapshot ? 1 : 0}`,
   `use_defconfig=${useDefconfig ? 1 : 0}`,
+  `recommended_enabled=${recommendationAudit.recommended.enabled ? 1 : 0}`,
   `packages=${packages.join(' ')}`,
-  `advanced=${advanced}`,
-  `custom_target=${isCustomTarget ? 1 : 0}`,
   `catalog_arch=${catalogArch}`,
   `catalog_arch_packages=${catalogArchPackages}`,
   `catalog_profile_packages=${catalogProfilePackages.join(' ')}`,
@@ -480,5 +524,9 @@ const out = [
   `summary=${tag} · ${device.name} · ${source.label} ${version.label} · ${variant.name} · ${items.length} 个插件 · ${pageVersion}` +
     (advanced ? `(含 ${advanced} 项高级模式操作)` : ''),
 ];
+const auditOut = String(process.env.RECOMMENDED_AUDIT_OUT || 'recommended-audit.json');
+writeFileSync(auditOut, JSON.stringify(recommendationAudit) + '\n', 'utf8');
 if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, out.join('\n') + '\n');
-console.log(out.join('\n'));
+// rootpw is intentionally retained only in GITHUB_OUTPUT for the workflow;
+// never echo it into the public Actions log.
+console.log(out.filter((line) => !line.startsWith('rootpw=')).join('\n'));

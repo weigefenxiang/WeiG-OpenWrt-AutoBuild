@@ -34,6 +34,20 @@ const walkFiles = (dir, suffix, out = []) => {
   return out;
 };
 const PROXY_PACKAGE_RE = /^CONFIG_PACKAGE_.*(?:passwall|ssr|vssr|tinyproxy|shadowsocks|v2ray|xray|trojan|brook|gost|haproxy|pdnsd-alt|kcptun|simple-obfs|chinadns|dns2socks|dns2tcp|ipt2socks|microsocks|naiveproxy|redsocks|openclash|homeproxy|sing-box|tuic|hysteria|polipo|squid|ssocks|speederv2|udp2raw|tor).*=[ym]$/i;
+function formatSizeContract(mb) {
+  const value = Math.max(0, Number(mb) || 0);
+  const format = (number, unit) => {
+    if (!number) return `0 ${unit}`;
+    const exponent = Math.floor(Math.log10(Math.abs(number)));
+    const decimals = exponent >= 0 ? Math.max(0, 2 - exponent) : Math.min(3, 2 - exponent);
+    return `${number.toFixed(decimals)} ${unit}`;
+  };
+  if (value >= 1000) return format(value / 1024, 'GB');
+  if (value >= 1) return format(value, 'MB');
+  const kb = value * 1024;
+  if (kb >= 1) return format(kb, 'KB');
+  return format(kb * 1024, 'B');
+}
 
 console.log('[1/3] JS 语法检查 / syntax check (node --check)');
 const scripts = [join(ROOT, 'site', 'wrt', 'app.js'),
@@ -154,13 +168,14 @@ try {
   miss.length === 0 && langIds.length === 11
     ? ok(`i18n: ${keys.length} 词条 × 11 语完整`)
     : bad('i18n.json', '11 语缺词条: ' + miss.slice(0, 5).join(','));
-  const pluginI18n = JSON.parse(readFileSync(join(ROOT, 'tools', 'plugins-i18n.json'), 'utf8')).plugins;
+  const pluginMeta = JSON.parse(readFileSync(join(ROOT, 'tools', 'plugins-meta.json'), 'utf8')).plugins;
+  const pluginI18n = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'plugins-i18n.json'), 'utf8')).plugins;
   const pluginLangs = ['zh-TW', 'en', 'ru', 'es', 'pt', 'ja', 'ko', 'de', 'fr', 'vi'];
   const pluginMissing = Object.entries(pluginI18n).filter(([, row]) =>
     pluginLangs.some((lang) => !row.name?.[lang] || !row.desc?.[lang]));
-  Object.keys(pluginI18n).length === 226 && pluginMissing.length === 0
-    ? ok('精选插件:226 项名称/用途 × 11 语完整(含独立繁中)')
-    : bad('plugins-i18n.json', `条目 ${Object.keys(pluginI18n).length},缺译 ${pluginMissing.length}`);
+  Object.keys(pluginI18n).length === pluginMeta.length && pluginMissing.length === 0
+    ? ok(`精选插件:${pluginMeta.length} 项名称/用途 × 11 语完整(含独立繁中或英文回退)`)
+    : bad('plugins-i18n.json', `条目 ${Object.keys(pluginI18n).length}/${pluginMeta.length},缺译 ${pluginMissing.length}`);
   const t7PluginRows = JSON.parse(
     readFileSync(join(ROOT, 'site', 'wrt', 'data', '360t7', 'plugins.json'), 'utf8')).plugins;
   const missingPluginFallbacks = t7PluginRows.filter((plugin) =>
@@ -168,7 +183,16 @@ try {
   missingPluginFallbacks.length === 0
     ? ok('360T7 精选插件均有安全包名兜底')
     : bad('360t7 plugin package fallback', missingPluginFallbacks.map((p) => p.id).join(','));
-  const pluginMeta = JSON.parse(readFileSync(join(ROOT, 'tools', 'plugins-meta.json'), 'utf8')).plugins;
+  const catalogOnlyMeta = pluginMeta.filter((plugin) => plugin.catalogOnly);
+  const catalogOnlyInvalid = catalogOnlyMeta.filter((metaRow) => {
+    const generated = t7PluginRows.find((plugin) => plugin.id === metaRow.id);
+    const expected = metaRow.catalogCandidates?.[0];
+    return !generated || generated.catalogOnly !== true || !/^luci-app-[A-Za-z0-9_.+@-]+$/.test(expected || '') ||
+      generated.pkg !== expected || JSON.stringify(generated.catalogCandidates || []) !== JSON.stringify(metaRow.catalogCandidates);
+  });
+  catalogOnlyMeta.length === 16 && catalogOnlyInvalid.length === 0
+    ? ok('Catalog-only 精选项:16 项均绑定唯一 LuCI PACKAGE_ 符号，运行时由 Catalog 门禁')
+    : bad('catalog-only package mapping', catalogOnlyInvalid.map((p) => p.id).join(',') || `count=${catalogOnlyMeta.length}`);
   const networkMagicIds = ['ipsec-vpnd', 'openvpn', 'openvpn-server', 'softether', 'softethervpn', 'wireguard'];
   const networkMagicOk = networkMagicIds.every((id) =>
     pluginMeta.find((plugin) => plugin.id === id)?.group === '魔法与加速' &&
@@ -277,6 +301,7 @@ mirrorRootsOk
     ? ok('source build requirements: one JSON, explicit web acceptance, and Issue rejection are connected')
     : bad('source build requirements', 'JSON schema/copy, web resolver, parser guard, or Defconfig branch contract is invalid');
   const project = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
+  const catalogMirror = readFileSync(join(ROOT, 'tools', 'fetch-catalog-mirror.mjs'), 'utf8');
   const catalogIndex = JSON.parse(
     readFileSync(join(ROOT, 'site', 'wrt', 'data', 'menuconfig-index.json'), 'utf8'));
   const assetHash = (name) => createHash('sha256')
@@ -287,6 +312,13 @@ mirrorRootsOk
   assetVersionOk
     ? ok('前端 CSS/JS 查询版本与文件内容指纹一致')
     : bad('frontend asset cache bust', 'index.html 的 app.css/app.js 查询版本未按内容指纹更新');
+  const catalogMirrorContract = catalogMirror.includes("project.catalogRepository") &&
+    catalogMirror.includes('Catalog asset is missing bytes/hash contract') &&
+    catalogMirror.includes('Catalog compressed SHA-256 mismatch') &&
+    !catalogMirror.includes('raw.githubusercontent.com/weigefenxiang/');
+  catalogMirrorContract
+    ? ok('VPS Catalog 镜像按 project.json 配置仓库并校验每个压缩资产')
+    : bad('Catalog mirror contract', '镜像仓库仍写死或缺少 bytes/hash 校验');
   const recommendedUiContract = html.includes('id="minimumBootToggle"') &&
     html.includes('id="defconfigToggle"') &&
     html.includes('id="minimumBootConfig"') && !html.includes('id="minimumBootPanel"') &&
@@ -307,6 +339,15 @@ mirrorRootsOk
   submitLayoutContract
     ? ok('提交设置:后台登录地址左侧、构建标识右侧，手机端自动纵向排列')
     : bad('submit settings layout', '后台登录地址/构建标识的桌面或手机布局不符合约定');
+  const submitGateContract = html.includes('id="submitBtn" data-i18n="btn.submit" disabled') &&
+    js.includes('function submitReadiness()') &&
+    js.includes('function updateSubmitGate()') &&
+    js.includes('Waiting for build stages:') &&
+    js.includes('if (!readiness.ok) {') &&
+    !js.includes('setInterval(updateSubmitGate');
+  submitGateContract
+    ? ok('提交门禁:Target/Catalog/menuconfig/theme/recommended/defconfig 阶段就绪后才可提交')
+    : bad('submit readiness gate', '提交按钮未按构建阶段状态禁用或缺少事件驱动门禁');
   const failureDiagnosticsContract = buildWorkflow.includes('apply-config-overrides.mjs') &&
     buildWorkflow.includes('system-overrides.json') &&
     buildWorkflow.includes("grep -Fx 'CONFIG_BUILD_LOG=y' .config") &&
@@ -410,6 +451,8 @@ mirrorRootsOk
     !js.includes("filter((branch) => branch.state !== 'unavailable')") &&
     parser.includes('async function loadCatalogIndex()') &&
     parser.includes('async function loadCatalog(repo, branch)') &&
+    parser.includes('Catalog index lacks an exact compressed bytes/hash contract') &&
+    parser.includes("String(branch?.hash || branch?.compressedSha256 || '').toLowerCase()") &&
     parser.includes('findCatalogPackageConflicts(submittedConfig, activeCatalog)') &&
     parser.includes('Catalog 不提供该源码/分支的固件主题') &&
     parser.includes('catalogBranch.state ===');
@@ -472,7 +515,6 @@ mirrorRootsOk
     js.includes('async function selectImportedTarget') &&
     js.includes('importedTargetVerified = false') &&
     parser.includes("['custom-target', 'catalog-target'].includes(req.device)") &&
-    parser.includes('custom_target=${isCustomTarget ? 1 : 0}') &&
     buildWorkflow.includes('cp submitted.config openwrt/.config') &&
     buildWorkflow.includes('use_defconfig=') &&
     buildWorkflow.includes('verify-defconfig.mjs');
@@ -500,7 +542,7 @@ mirrorRootsOk
   const badReadmes = readmes.filter((name) => {
     const text = readFileSync(join(ROOT, 'translations', name), 'utf8');
     return (text.match(/^#{1,3} /gm) || []).length !== zhHeadings ||
-      !text.includes('<!--plugin-count-->226<!--/plugin-count-->') ||
+      !text.includes(`<!--plugin-count-->${pluginMeta.length}<!--/plugin-count-->`) ||
       !text.includes('build-request.json') || !text.includes('(UTC±HH:MM) Region/City');
   });
   readmes.length === 10 && badReadmes.length === 0
@@ -572,15 +614,26 @@ mirrorRootsOk
     ? ok('手机 GitHub App 正文压缩请求 → 权威 config 校验链已接通')
     : bad('mobile Issue request contract', '网页压缩载荷、Actions 解压或工作流入口缺失');
   const artifactContract = [
-    'FIRMWARE-ALL', 'CONFIG-', 'BUILD-LOGS', 'OPTIONAL-PACKAGES-',
+    'actions/upload-artifact@v7',
+    'actions/download-artifact@v8',
+    'archive: false',
+    'firmware_matrix ||',
+    '-RAW-BRIDGE',
+    '-FIRMWARE-OTHER',
+    '-CONFIG',
+    '-BUILD-LOGS',
+    '-OPTIONAL-PACKAGES',
     'tools/collect-optional-packages.mjs',
-    'compression-level: 0',
-    'retention-days: 14', 'retention-days: 30',
-    '${{ steps.req.outputs.build_ref }}-FIRMWARE-ALL-${{ steps.req.outputs.artifact_tail }}',
+    'retention-days: 14',
+    'retention-days: 30',
+    'artifact_id:',
   ];
-  artifactContract.every((token) => workflow.includes(token))
-    ? ok('Actions 四类 Artifact、M 软件包、零压缩与 14/30 天保留期已接通')
-    : bad('Actions artifact contract', '产物分类或保留期缺失');
+  const obsoleteArtifactContract = ['FIRMWARE-ALL', 'artifact_tail'];
+  artifactContract.every((token) => workflow.includes(token)) &&
+      obsoleteArtifactContract.every((token) => !workflow.includes(token)) &&
+      obsoleteArtifactContract.every((token) => !requestParser.includes(token))
+    ? ok('Actions 独立 .img.gz、分类资料、桥接清理与 14/30 天保留期已接通')
+    : bad('Actions artifact contract', '独立固件发布、分类、清理或旧产物链仍有问题');
   const firmwareSettingsContract = workflow.includes('ISSUE_TITLE: ${{ github.event.issue.title }}') &&
     workflow.includes('Verify firmware settings / 核验固件设置') &&
     workflow.includes('firmware-settings.txt') &&
@@ -626,7 +679,8 @@ mirrorRootsOk
     workflow.includes('`owner-${context.runId}`') &&
     workflow.includes('Repository owner build admitted without queue') &&
     workflow.includes('custom-build-user-${{ needs.admission.outputs.requester }}-${{ needs.admission.outputs.slot }}') &&
-    workflow.includes('queue: max') &&
+    workflow.includes('cancel-in-progress: false') &&
+    !/^\s+queue:/m.test(workflow) &&
     workflow.includes('/cancel') &&
     cancelWorkflow.includes('issue_comment:') &&
     cancelWorkflow.includes("['/cancel', '/cancel-build']") &&
@@ -670,8 +724,14 @@ mirrorRootsOk
     js.includes("if (node.profileId) {") &&
     js.includes('function syncCatalogApplications') &&
     js.includes("['Top level', ...menuBreadcrumb]") &&
-    catalogUrlBlock.indexOf('raw.githubusercontent.com') >= 0 &&
-    catalogUrlBlock.indexOf('raw.githubusercontent.com') < catalogUrlBlock.indexOf('cdn.jsdelivr.net') &&
+    catalogUrlBlock.indexOf('./catalog-data/') >= 0 &&
+    catalogUrlBlock.indexOf('./catalog-data/') < catalogUrlBlock.indexOf('cdn.jsdelivr.net') &&
+    catalogUrlBlock.indexOf('cdn.jsdelivr.net') < catalogUrlBlock.indexOf('raw.githubusercontent.com') &&
+    js.includes('catalogCacheKey') &&
+    js.includes('validateCatalogAsset') &&
+    js.includes('if (!branch.fallback || exactRevision) throw remoteError;') &&
+    js.includes('menuCatalogAbortController?.abort()') &&
+    js.includes('menuIndexAbortController?.abort()') &&
     js.includes('promptZh') &&
     js.includes("branch.state === 'unavailable'") &&
     css.includes('.catalog-stale') &&
@@ -709,9 +769,17 @@ mirrorRootsOk
     css.includes('.menuconfig-state-help') &&
     css.includes('.catalog-load-spinner') &&
     css.includes('@keyframes catalog-spin') &&
-    css.includes('grid-template-columns:minmax(260px,1.5fr) minmax(140px,1fr)') &&
+    css.replace(/\s+/g, ' ').includes('grid-template-columns:minmax(260px,1.5fr) minmax(140px,1fr)') &&
     css.includes('.menuconfig-package-name{min-width:0;overflow:hidden') &&
     css.includes('.menuconfig-child') &&
+    js.includes('function fmtSize(mb)') &&
+    js.includes('Math.floor(Math.log10(Math.abs(number)))') &&
+    formatSizeContract(0.00048828125) === '512 B' &&
+    formatSizeContract(0.5) === '512 KB' &&
+    formatSizeContract(1) === '1.00 MB' &&
+    formatSizeContract(12.34) === '12.3 MB' &&
+    formatSizeContract(123.4) === '123 MB' &&
+    formatSizeContract(1023) === '0.999 GB' &&
     existsSync(join(ROOT, 'site', 'wrt', 'data', 'menuconfig-index.json'));
     menuconfigContract
       ? ok('多源码 Catalog → 英文禁译文、手机单列/译文标签、滚动直显与可跳面包屑已接通')
@@ -759,9 +827,11 @@ mirrorRootsOk
     requestParser.includes('v\\d{8}(?:\\d{2})?') &&
     configBuilder.includes('v\\d{8}(?:\\d{2})?') &&
     js.includes('^v\\d{10}$') &&
-    html.indexOf('id="siteVersion"') < html.indexOf('id="importBtn"') &&
-    html.includes('id="siteVersionFooter"') &&
-    css.includes('.site-version-action { display: none; }');
+    html.indexOf('id="siteVersion"') > html.indexOf('id="submitBtn"') &&
+    !html.includes('id="siteVersionMobile"') &&
+    !html.includes('id="siteVersionFooter"') &&
+    css.includes('.site-version-action { order: 0; }') &&
+    css.includes('.site-version-action { order: 3;');
   versionContract
     ? ok('根 VERSION/网页副本共用分钟版本、旧八位兼容与双端显示已接通')
     : bad('site version contract', '分钟时间戳、旧版兼容、Actions 防循环或双端显示位置缺失');
