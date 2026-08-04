@@ -6,7 +6,7 @@
 <meta name="description" data-i18n="app.desc" content="OpenWrt 固件在线定制:选源码、勾插件,GitHub Actions 云编译,免费自取">
 <title>Wei.G · OpenWrt 固件在线定制</title>
 <link rel="icon" href="Wei.G.ico">
-<link rel="stylesheet" href="app.css?v=50306b870c">
+<link rel="stylesheet" href="app.css?v=66816bbf25">
 </head>
 <body>
 <header class="site-header">
@@ -113,6 +113,10 @@
               <span id="minimumBootLabel">Recommended</span>
             </label>
             <button class="recommended-config-btn" id="minimumBootConfig" type="button" hidden>Configure</button>
+            <label class="defconfig-switch" id="defconfigSwitch" title="">
+              <input type="checkbox" id="defconfigToggle" checked>
+              <span id="defconfigLabel">Defconfig</span>
+            </label>
           </div>
           <div class="catalog-locator-results" id="catalogLocatorResults" hidden></div>
         </div>
@@ -307,6 +311,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <noscript><p class="wrap" style="padding:2rem 0">本页面需要启用 JavaScript 才能使用。/ JavaScript is required.</p></noscript>
-<script src="app.js?v=714d777e42"></script>
+<script src="app.js?v=6f7fcc8044"></script>
 </body>
 </html>

@@ -54,6 +54,7 @@ const state = {
   timezone: '',
   theme: '@base',
   minimumBoot: true,
+  useDefconfig: true,
   ntp: 'cn',
   opkg: 'auto',
   siteVersion: 'v----------',
@@ -292,6 +293,16 @@ function applyI18n() {
     uiText('推荐项', '推薦項', 'Recommended');
   if ($('minimumBootConfig')) $('minimumBootConfig').textContent =
     uiText('配置', '設定', 'Configure');
+  const defconfigHelp = uiText(
+    '根据当前 Target / Subtarget / Profile 解析 Kconfig 默认值和依赖，补齐设备基准配置（驱动、分区、UBI 等），降低缺失配置导致构建失败或固件不可用的风险。仍须确认机型，不能保证绝对防砖。',
+    '依目前 Target / Subtarget / Profile 解析 Kconfig 默认值与依赖，补齐设备基准设定（驱动、分区、UBI 等），降低设定缺失导致建置失败或固件不可用的风险。仍须确认机型，不能保证绝对防砖。',
+    'Resolve Kconfig defaults and dependencies for the selected Target / Subtarget / Profile to fill the device baseline (drivers, partitions, UBI, and more). This lowers the risk of missing settings, but you must still verify the device; it cannot guarantee safe flashing.');
+  if ($('defconfigLabel')) $('defconfigLabel').textContent = 'Defconfig';
+  if ($('defconfigSwitch')) {
+    $('defconfigSwitch').title = defconfigHelp;
+    $('defconfigSwitch').dataset.help = defconfigHelp;
+    $('defconfigSwitch').setAttribute('aria-label', defconfigHelp);
+  }
   renderCatalogLoadState();
   $('advLabel').title = t('adv.title');
   // Fork 提示内嵌两个链接,不能整段 textContent,需拆分文案后用 DOM 节点拼装 / The fork hint embeds two links, so the text is split and assembled from DOM nodes instead of one textContent
@@ -485,6 +496,8 @@ async function init() {
     initCatalogLocator();
     $('minimumBootToggle').checked = state.minimumBoot;
     initMinimumBoot();
+    $('defconfigToggle').checked = state.useDefconfig;
+    initDefconfig();
     applyI18n();
     $('advMode').checked = state.advanced;
     resetAdvGrey();   // V10:门禁行随记忆的开发者模式显隐,但永远从未勾开始 / V10: gate row follows the remembered developer mode, but always starts unticked
@@ -1713,6 +1726,12 @@ function renderMinimumBoot() {
   if (config) config.hidden = !state.minimumBoot;
   renderMinimumBootModal();
 }
+function initDefconfig() {
+  const toggle = $('defconfigToggle');
+  if (!toggle) return;
+  toggle.onchange = () => { state.useDefconfig = toggle.checked; };
+  toggle.checked = state.useDefconfig;
+}
 function initMinimumBoot() {
   $('minimumBootToggle').onchange = async () => {
     state.minimumBoot = $('minimumBootToggle').checked;
@@ -2372,6 +2391,8 @@ function renderImportedWorkspace() {
 function clearImportedWorkspace() {
   state.importedConfig = null;
   state.importedConfigId = '';
+  state.useDefconfig = true;
+  if ($('defconfigToggle')) $('defconfigToggle').checked = true;
   configRuleChoices.clear();
   importedConfigValues.clear();
   importedUnknownOriginal.clear();
@@ -3787,7 +3808,7 @@ async function generateConfigText({ enforceBuildRequirements = false } = {}) {
   }
   if (matchingConfigRules(config).length) throw new Error(uiText('配置规则循环超过 16 次，请检查规则文件。', '設定規則循環超過 16 次，請檢查規則檔。', 'Configuration rules exceeded 16 passes; check the rule file.'));
   assertCatalogPackageConflicts(config);
-  if (enforceBuildRequirements) {
+  if (enforceBuildRequirements && !state.useDefconfig) {
     config = applyAcceptedBuildRequirements(config);
     const missing = missingBuildRequirements(config);
     if (missing.length) throw new BuildRequirementResolutionRequired(missing);
@@ -4279,9 +4300,12 @@ async function importConfigFile(file) {
     }
     text = text.replace(/\r\n/g, '\n');
     state.minimumBoot = false;
+    state.useDefconfig = payload && typeof payload.use_defconfig === 'boolean'
+      ? payload.use_defconfig : false;
     minimumBootOriginal.clear();
     minimumBootTouchedOriginal.clear();
     $('minimumBootToggle').checked = false;
+    if ($('defconfigToggle')) $('defconfigToggle').checked = state.useDefconfig;
     const configId = await selectImportedTarget(text, file.name, payload);
     if (seq !== configImportSeq) return;
     if (!configId) {
@@ -4593,6 +4617,7 @@ function openSubmitModal() {
           device: state.device.id, source: state.source.id, version: state.version.id,
           branch: state.version.branch,
           variant: state.variant.id, plugins, tag, lanip: state.lanip, config,
+          use_defconfig: state.useDefconfig === true,
           firmware: configFirmwareSettings(config),
         };
         if (['custom-target', 'catalog-target'].includes(state.device.id)) payload.customTarget = state.device.target;

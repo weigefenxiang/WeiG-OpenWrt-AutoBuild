@@ -277,6 +277,7 @@ input:focus-visible { border-color: var(--accent); }
 .catalog-locator-row{display:flex;align-items:center;gap:10px}
 .catalog-locator-row>input{flex:1;min-width:0;height:42px;padding:0 12px;border:1px solid var(--border);border-radius:9px;background:var(--card);color:var(--text);font:inherit}
 .minimum-boot-switch{display:flex;align-items:center;gap:7px;min-height:42px;padding:0 13px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:9px;background:color-mix(in srgb,var(--accent) 8%,var(--card));color:var(--text);font-weight:600;white-space:nowrap;cursor:pointer}
+.defconfig-switch{display:flex;align-items:center;gap:7px;min-height:42px;padding:0 12px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:9px;background:color-mix(in srgb,var(--accent) 8%,var(--card));color:var(--text);font-weight:600;white-space:nowrap;cursor:pointer}
 .recommended-config-btn{min-height:42px;padding:0 12px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:9px;background:var(--card2);color:var(--accent);font:inherit;font-weight:600;cursor:pointer}
 .recommended-config-btn:hover,.recommended-config-btn:focus-visible{background:color-mix(in srgb,var(--accent) 13%,var(--card2))}
 .minimum-boot-item{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;min-height:46px;padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:var(--card)}
@@ -358,6 +359,7 @@ input:focus-visible { border-color: var(--accent); }
   .catalog-locator-row{align-items:stretch;flex-wrap:wrap}
   .catalog-locator-row>input{flex:1 1 100%}
   .minimum-boot-switch{flex:0 0 auto;min-height:38px}
+  .defconfig-switch{flex:0 0 auto;min-height:38px}
   .recommended-config-btn{min-height:38px}
   .menuconfig-toggle{gap:7px}.menuconfig-toggle strong{font-size:15px}.menuconfig-toggle .hint{font-size:12px}
   .menuconfig-grid{grid-template-columns:minmax(0,1fr)}

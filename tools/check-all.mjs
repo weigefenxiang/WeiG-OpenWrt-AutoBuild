@@ -266,14 +266,16 @@ mirrorRootsOk
     missingBuildRequirements(requirementResolved, requirementContext).length === 0 &&
     js.includes("loadJson('source-build-requirements.json')") &&
     js.includes('enforceBuildRequirements: true') &&
+    js.includes('enforceBuildRequirements && !state.useDefconfig') &&
     js.includes('openBuildRequirementResolver') &&
     parser.includes('missingBuildRequirements(config, configRuleContext)') &&
-    !buildWorkflow.includes('make defconfig') &&
+    parser.includes('if (!useDefconfig && missingRequirements.length)') &&
+    parser.includes('use_defconfig=') &&
     systemOverrideReport.valid && systemOverrideApplied.applied.length === 2 &&
     !undeclaredChangeReport.valid && undeclaredChangeReport.unexpected[0]?.symbol === 'PACKAGE_bad';
   sourceRequirementsOk
     ? ok('source build requirements: one JSON, explicit web acceptance, and Issue rejection are connected')
-    : bad('source build requirements', 'JSON schema/copy, web resolver, parser guard, or no-defconfig contract is invalid');
+    : bad('source build requirements', 'JSON schema/copy, web resolver, parser guard, or Defconfig branch contract is invalid');
   const project = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
   const catalogIndex = JSON.parse(
     readFileSync(join(ROOT, 'site', 'wrt', 'data', 'menuconfig-index.json'), 'utf8'));
@@ -286,9 +288,12 @@ mirrorRootsOk
     ? ok('前端 CSS/JS 查询版本与文件内容指纹一致')
     : bad('frontend asset cache bust', 'index.html 的 app.css/app.js 查询版本未按内容指纹更新');
   const recommendedUiContract = html.includes('id="minimumBootToggle"') &&
+    html.includes('id="defconfigToggle"') &&
     html.includes('id="minimumBootConfig"') && !html.includes('id="minimumBootPanel"') &&
     js.includes("uiText('推荐项', '推薦項', 'Recommended')") &&
-    js.includes('function openMinimumBootModal()') && js.includes('function renderMenuOption(option, showPath = false)') &&
+    js.includes('function openMinimumBootModal()') &&
+    js.includes('useDefconfig: true') && js.includes('use_defconfig: state.useDefconfig') &&
+    js.includes('function renderMenuOption(option, showPath = false)') &&
     js.includes('function catalogSelectLock(option)') && js.includes('function catalogSelectLockValue(option, lockedBy)') &&
     js.includes(".filter((stateValue) => stateValue === 'n' || kconfigLevel(stateValue) <= maxLevel)") &&
     js.includes("'# recommended: '");
@@ -305,12 +310,14 @@ mirrorRootsOk
   const failureDiagnosticsContract = buildWorkflow.includes('apply-config-overrides.mjs') &&
     buildWorkflow.includes('system-overrides.json') &&
     buildWorkflow.includes("grep -Fx 'CONFIG_BUILD_LOG=y' .config") &&
-    buildWorkflow.includes('config_policy=authoritative-no-defconfig-with-declared-overrides') &&
+    buildWorkflow.includes('config_policy=target-locked-defconfig-with-declared-overrides') &&
+    buildWorkflow.includes('use_defconfig=') &&
+    buildWorkflow.includes('verify-defconfig.mjs') &&
+    buildWorkflow.includes('pre-defconfig.config') &&
+    buildWorkflow.includes('defconfig-report.json') &&
     buildWorkflow.includes('config-overrides.json') &&
     buildWorkflow.includes('config-overrides.diff') &&
     buildWorkflow.includes('build.config') &&
-    !buildWorkflow.includes('make defconfig') &&
-    !buildWorkflow.includes('conf --defconfig') &&
     !buildWorkflow.includes('resolved.config') &&
     !buildWorkflow.includes('config-defconfig.diff') &&
     !buildWorkflow.includes('verify-resolved-target.mjs') &&
@@ -467,8 +474,8 @@ mirrorRootsOk
     parser.includes("['custom-target', 'catalog-target'].includes(req.device)") &&
     parser.includes('custom_target=${isCustomTarget ? 1 : 0}') &&
     buildWorkflow.includes('cp submitted.config openwrt/.config') &&
-    buildWorkflow.includes('config_policy=authoritative-no-defconfig-with-declared-overrides') &&
-    !buildWorkflow.includes('conf --defconfig');
+    buildWorkflow.includes('use_defconfig=') &&
+    buildWorkflow.includes('verify-defconfig.mjs');
   customTargetContract
     ? ok('未收录 .config → Custom Target → Issue/Actions 直接配置链路已接通')
     : bad('custom target contract', '网页兜底、解析器、Issue 校验或 Actions 直接配置参数缺失');

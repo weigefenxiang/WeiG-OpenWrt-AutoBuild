@@ -146,10 +146,12 @@ if (requestManifest) {
     variant: process.env.IN_VARIANT,
     plugins: (process.env.IN_PLUGINS || '').split(/\s+/).filter(Boolean),
     tag: process.env.IN_TAG,
+    use_defconfig: process.env.IN_USE_DEFCONFIG === '1' || process.env.IN_USE_DEFCONFIG === 'true',
   };
 }
 
 const hasSubmittedConfig = requestMode.startsWith('issue-') && !requestMode.includes('inline');
+const useDefconfig = req.use_defconfig === true;
 const isCustomTarget = ['custom-target', 'catalog-target'].includes(req.device);
 let device, source, version, variant;
 let catalogRepo = '';
@@ -246,7 +248,7 @@ if (hasSubmittedConfig) {
     fail(configRuleViolations.map((rule) => rule.message?.['zh-CN'] || rule.message?.en || rule.id).join(' '));
   }
   const missingRequirements = missingBuildRequirements(config, configRuleContext);
-  if (missingRequirements.length) {
+  if (!useDefconfig && missingRequirements.length) {
     fail(`构建必需配置缺失：${formatMissingBuildRequirements(missingRequirements)}。` +
       '请返回网页应用必需项后重新下载并提交 JSON；Actions 不会自动修改配置，也不会执行 make defconfig。');
   }
@@ -464,6 +466,7 @@ const out = [
   `opkg_id=${opkgId}`,
   `opkg_mirror=${opkgMirror}`,
   `firmware_snapshot=${hasFirmwareSnapshot ? 1 : 0}`,
+  `use_defconfig=${useDefconfig ? 1 : 0}`,
   `packages=${packages.join(' ')}`,
   `advanced=${advanced}`,
   `custom_target=${isCustomTarget ? 1 : 0}`,
