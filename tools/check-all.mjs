@@ -249,6 +249,7 @@ mirrorRootsOk
   : bad('package-mirrors.json', '镜像 ID、根路径或来源映射不符合安全格式');
   const html = readFileSync(join(ROOT, 'site', 'wrt', 'index.html'), 'utf8');
   const js = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
+  const genPlugins = readFileSync(join(ROOT, 'tools', 'gen-plugins.mjs'), 'utf8');
   const sensitiveMaskContract = js.includes("'wireguard'") && js.includes("'tor'") &&
     js.includes("/^wireguard$/i.test(w)") && js.includes("w.slice(0, 3) + '***' + w.slice(-3)");
   sensitiveMaskContract
@@ -416,8 +417,11 @@ mirrorRootsOk
     html.includes('id="targetBranchLabel">Branch</span>') &&
     !html.includes('Source — 源码') &&
     !html.includes('id="deviceModeBtn"') && !html.includes('id="brandPicker"') &&
-    html.includes('id="sourceStep"') && js.includes('function targetRecords()') &&
-    js.includes("d.kind === 'target'") &&
+    html.includes('id="sourceStep"') &&
+    !js.includes('function targetRecords()') &&
+    !js.includes('function renderTargetPicker(') &&
+    !js.includes("loadJson('devices.json')") &&
+    !js.includes("loadJson('config-manifest.json')") &&
     js.includes('function renderCatalogTargetSelectors') &&
     js.includes('target.systemName || target.board') &&
     js.includes('target.subtargetLabel || target.subtargetName') &&
@@ -583,6 +587,29 @@ mirrorRootsOk
   missingConfigs.length === 0 && extraConfigs.length === 0
     ? ok(`config manifest: ${expected.length} 个精确 device/source/version/variant 组合`)
     : bad('config-manifest.json', `缺 ${missingConfigs.length},多 ${extraConfigs.length}`);
+  const manifestRows = Object.values(manifest.configs);
+  const manifestPathsOk = manifestRows.every((row) =>
+    typeof row.sourcePath === 'string' && existsSync(join(ROOT, row.sourcePath)) &&
+    !Object.prototype.hasOwnProperty.call(row, 'publicPath'));
+  manifestPathsOk
+    ? ok('config manifest:仅保留存在的权威 sourcePath，公共 publicPath 已退役')
+    : bad('config manifest paths', '存在缺失 sourcePath、无效文件或残留 publicPath');
+  const publicDataRoot = join(ROOT, 'site', 'wrt', 'data');
+  const publicConfigFiles = walkFiles(publicDataRoot, '.config');
+  const publicDataDirs = readdirSync(publicDataRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+  const expectedPublicDataDirs = [
+    'seed',
+    ...dev.devices
+      .filter((device) => device.enabled === true && device.plugins !== 'seed')
+      .map((device) => device.id),
+  ].sort();
+  const publicDataContract = publicConfigFiles.length === 0 &&
+    JSON.stringify(publicDataDirs) === JSON.stringify(expectedPublicDataDirs) &&
+    !genPlugins.includes('copyFileSync') && !genPlugins.includes('publicPath:');
+  publicDataContract
+    ? ok('网页 data:仅保留 seed/360t7 插件索引，公共 .config 副本为 0')
+    : bad('public data retirement', `config=${publicConfigFiles.length}, dirs=${publicDataDirs.join(',')}`);
   const issueForm = readFileSync(join(ROOT, '.github', 'ISSUE_TEMPLATE', 'custom-build.yml'), 'utf8');
   const workflow = readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8')
     .replace(/\r\n/g, '\n');
@@ -835,8 +862,9 @@ mirrorRootsOk
   versionContract
     ? ok('根 VERSION/网页副本共用分钟版本、旧八位兼容与双端显示已接通')
     : bad('site version contract', '分钟时间戳、旧版兼容、Actions 防循环或双端显示位置缺失');
-  const selfTestContract = js.includes("state.device.plugins === 'seed' ? 'seed/plugins.json'") &&
+  const selfTestContract = js.includes("const path2 = 'seed/plugins.json'") &&
     js.includes("state.device?.id === 'catalog-target'") &&
+    js.includes("state.device?.id === 'custom-target' && state.importedConfig") &&
     js.includes('const text = await generateResolvedConfigText()') &&
     js.includes('const targets = targetLines(text)') &&
     js.includes('function safeDownloadNamePart') &&
@@ -846,8 +874,8 @@ mirrorRootsOk
     js.includes("const title = '[build] ' + requestStamp + '/' + requestTargetProfilePart() + '/' + state.source.id + '/' + state.version.id + '/' + selectedTargetProfileName()") &&
     js.includes("const filename = [requestStamp, requestTargetProfilePart(true), safeDownloadNamePart(state.source.id, 'source')");
   selfTestContract
-    ? ok('网页自检使用真实 Catalog/base 路径与 .config 生成演算')
-    : bad('web self-test contract', '种子数据路径、Catalog 配置或真实生成演算缺失');
+    ? ok('网页自检使用 Catalog/上传配置与真实 .config 生成演算')
+    : bad('web self-test contract', '种子数据路径、Catalog/上传配置或真实生成演算缺失');
   const devpkgContract = html.includes('id="devpkgToggle"') &&
     html.includes('id="devpkgBody" hidden') &&
     html.includes('id="devpkgStatus"') &&

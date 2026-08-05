@@ -1,6 +1,6 @@
 /*
  * OpenWrt 固件在线定制器前端脚本,由 site/wrt/index.html 直接加载 / Front-end script of the online firmware customizer, loaded directly by site/wrt/index.html.
- * 机型/插件/文案数据全部来自 data/ 下的 JSON,带多级 CDN 回退与 localStorage 缓存 / All device/plugin/i18n data comes from JSON under data/, with tiered CDN fallback and localStorage caching.
+ * Catalog/插件/文案数据来自 data/ 下的 JSON,带多级 CDN 回退与 localStorage 缓存 / Catalog/plugin/i18n data comes from JSON under data/, with tiered CDN fallback and localStorage caching.
  * 无构建步骤、无第三方依赖,以原生 ES 语法直接在浏览器运行 / No build step, no third-party deps; runs as plain native ES in the browser.
  */
 'use strict';
@@ -62,7 +62,7 @@ const state = {
   importedConfigId: '',
 };
 const LANIP_RE = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/;   // 仅接受内网 IPv4 / private IPv4 only
-let DEVICES = null, PLUGINS = null, I18N = null, TIMEZONES = null, MINIMUM_BOOT = null,
+let PLUGINS = null, I18N = null, TIMEZONES = null, MINIMUM_BOOT = null,
   CONFIG_RULES = null, BUILD_REQUIREMENTS = null;
 const configRuleChoices = new Map();
 const acceptedBuildRequirements = new Set();
@@ -179,7 +179,7 @@ function packageMirrorEntries(sourceId = state.source?.id) {
     .map((preset) => [preset.id, preset.label?.[state.lang === 'zh-CN' ? 'zh-CN' : 'en'] || preset.label?.en || preset.id]);
 }
 let PLUG_I18N = null;                  // 插件名/说明多语言表,非中文界面按需加载 / plugin name/desc i18n table, lazy-loaded for non-Chinese UIs
-let CONFIG_MANIFEST = null;
+let pluginDataPath = '';                  // 当前插件索引来源，避免跨设备误复用 / current plugin-index source; prevents cross-device cache reuse
 let plugI18nLoading = false;           // 防止重复请求 / guards against duplicate fetches
 let PKGDATA = null;                    // 开发者模式的全量软件包表,按需加载 / raw package table, lazy-loaded in developer mode
 const devPkgs = new Set();             // 开发者勾选编入的原始包 / raw packages to build in (=y)
@@ -327,7 +327,15 @@ function applyI18n() {
   }
   hint.appendChild(mkA('https://github.com/' + OFFICIAL_REPO + '#fork-自建', t('mode.self.tutorial')));
   applyThemeIcon();
-  if (PLUGINS) { renderDevices(); renderSources(); renderGroups(); updateStats(); updateLoginInfo(); }
+  if (PLUGINS) {
+    renderDevices();
+    if (state.device && state.source) {
+      renderSources();
+      renderGroups();
+      updateStats();
+      updateLoginInfo();
+    }
+  }
   if ($('deviceFold')) $('deviceFold').textContent = t($('devicePicker').hidden ? 'fold.show' : 'fold.hide');
   updateDeviceSummary();
   renderFirmwareSettings();
@@ -475,9 +483,9 @@ async function init() {
         if (/^https?:\/\//.test(PROJECT.blogUrl || '')) link.href = PROJECT.blogUrl;
       });
     } catch (e) { /* old deployments keep the built-in project defaults */ }
-    [DEVICES, CONFIG_MANIFEST, TIMEZONES, MENU_INDEX, MINIMUM_BOOT, PACKAGE_MIRRORS, CONFIG_RULES,
+    [PLUGINS, TIMEZONES, MENU_INDEX, MINIMUM_BOOT, PACKAGE_MIRRORS, CONFIG_RULES,
       BUILD_REQUIREMENTS] = await Promise.all([
-      loadJson('devices.json'), loadJson('config-manifest.json'), loadJson('timezones.json'),
+      loadJson('seed/plugins.json'), loadJson('timezones.json'),
       loadJson('menuconfig-index.json'), loadJson('minimum-boot.json'),
       loadJson('package-mirrors.json').catch(() => PACKAGE_MIRRORS),
       loadJson('config-rules.json'),
@@ -492,9 +500,8 @@ async function init() {
     document.querySelectorAll('.site-version-value').forEach((node) => {
       node.textContent = state.siteVersion;
     });
-    const first = DEVICES.devices.find((d) => d.enabled === true && d.kind === 'target')
-      || DEVICES.devices.find((d) => d.enabled === true) || DEVICES.devices[0];
-    await switchDevice(first, true);
+    resetPluginWorkspace(PLUGINS, 'seed/plugins.json');
+    renderDevices();
     renderModes();
     renderFirmwareSettings();
     initDeviceFold();
@@ -512,7 +519,6 @@ async function init() {
     $('form').hidden = false;
     $('actionbar').hidden = false;
     if (localStorage.getItem('wrt_risk') !== 'ok') $('riskBar').hidden = false;
-    updateStats();
     refreshMenuIndex();
   } catch (err) {
     $('loading').textContent = (I18N ? t('loading.fail', { msg: err.message }) : '加载失败: ' + err.message);
@@ -547,20 +553,26 @@ function renderLangSel() {
   };
 }
 
-let switchSeq = 0;
-async function switchDevice(dev, first, notify = false) {
-  const seq = ++switchSeq;
-  state.device = dev;
-  const data = await loadJson(dev.plugins === 'seed' ? 'seed/plugins.json' : dev.id + '/plugins.json');
-  if (seq !== switchSeq) return;
+function resetPluginWorkspace(data, path) {
   PLUGINS = data;
+  pluginDataPath = path;
   state.sel.clear();
   state.removed.clear();
   devPkgs.clear();
   devRemoved.clear();
-  PKGDATA = null;   // 软件包表按机型加载 / package table is per-device
+  PKGDATA = null;
   collapsed.clear();
-  PLUGINS.groups.forEach((g) => collapsed.add(g));
+  for (const group of PLUGINS?.groups || []) collapsed.add(group);
+}
+
+let switchSeq = 0;
+async function switchDevice(dev, first, notify = false) {
+  const seq = ++switchSeq;
+  state.device = dev;
+  const path = dev.plugins === 'seed' ? 'seed/plugins.json' : dev.id + '/plugins.json';
+  const data = PLUGINS && pluginDataPath === path ? PLUGINS : await loadJson(path);
+  if (seq !== switchSeq) return;
+  resetPluginWorkspace(data, path);
   renderDevices();
   renderSources();
   renderGroups();
@@ -571,20 +583,6 @@ async function switchDevice(dev, first, notify = false) {
   if (!first && notify) showToast(t('toast.deviceSwitched', { name: dev.name }), 'device');
 }
 
-/* 通用 Target 兼容回退记录；在线目录正常时由独立 Catalog 提供。 */
-function targetRecords() {
-  const rows = [];
-  for (const device of DEVICES.devices.filter((d) => d.kind === 'target' && d.enabled === true)) {
-    for (const source of device.sources || []) {
-      for (const version of source.versions || []) {
-        for (const variant of (source.variants || []).filter((v) => !v.versions || v.versions.includes(version.id))) {
-          rows.push({ device, source, version, variant });
-        }
-      }
-    }
-  }
-  return rows;
-}
 function fillTargetSelect(id, rows, valueOf, labelOf, preferred) {
   const select = $(id);
   if (!select) return '';
@@ -1290,8 +1288,6 @@ async function applyCatalogTarget() {
     },
     sources: [source],
   };
-  DEVICES.devices = DEVICES.devices.filter((item) => item.id !== device.id);
-  DEVICES.devices.push(device);
   const record = { device, source, version: source.versions[0], variant };
   const nextKey = [sourceRow.id, branchRow.id, device.target.targetSelector,
     device.target.profileSelector, device.target.arch, device.target.archPackages].join('|');
@@ -1670,12 +1666,7 @@ function configSymbolValue(text, symbol) {
   return match?.[1] || 'n';
 }
 async function currentBaseConfigText() {
-  if (state.importedConfig) return state.importedConfig;
-  if (state.device?.id === 'catalog-target') return '';
-  const configName = state.variant?.configs?.[state.version?.id] || state.variant?.config || state.source?.config;
-  if (!configName) return '';
-  try { return await (await fetchData(`${state.device.id}/${configName}`)).text(); }
-  catch (error) { return ''; }
+  return state.importedConfig || '';
 }
 async function applyMinimumBootPreset(readBase = true) {
   if (!state.minimumBoot || !MENU_CATALOG) return;
@@ -2539,25 +2530,6 @@ function resetImportedChanges() {
   showToast(uiText('已恢复上传配置的原始值', '已還原上傳設定的原始值',
     'Restored the original uploaded settings'));
 }
-function renderTargetPicker(preferState = true) {
-  ensureTargetSelectorControls(DEFAULT_TARGET_SELECTORS);
-  let rows = targetRecords();
-  const current = preferState ? (rows.find((r) => r.device.id === state.device?.id &&
-    (!state.source || r.source.id === state.source.id) &&
-    (!state.version || r.version.id === state.version.id) &&
-    (!state.variant || r.variant.id === state.variant.id)) ||
-    rows.find((r) => r.device.id === state.device?.id)) : null;
-  const source = fillTargetSelect('targetSource', rows, (r) => r.source.id, (r) => r.source.label, current?.source.id);
-  rows = rows.filter((r) => r.source.id === source);
-  const branch = fillTargetSelect('targetBranch', rows, (r) => r.version.id, (r) => r.version.branch, current?.version.id);
-  rows = rows.filter((r) => r.version.id === branch);
-  const system = fillTargetSelect('targetSystem', rows, (r) => r.device.target.system, (r) => r.device.target.systemLabel, current?.device.target.system);
-  rows = rows.filter((r) => r.device.target.system === system);
-  const subtarget = fillTargetSelect('targetSubtarget', rows, (r) => r.device.target.subtarget, (r) => r.device.target.subtargetLabel, current?.device.target.subtarget);
-  rows = rows.filter((r) => r.device.target.subtarget === subtarget);
-  const profile = fillTargetSelect('targetProfile', rows, (r) => r.variant.id, (r) => r.device.target.profileLabel, current?.variant.id);
-  return rows.find((r) => r.variant.id === profile);
-}
 async function selectCatalogLocatorTarget(values) {
   catalogInitialTargetPending = false;
   const preferredTarget = { ...values, strictCatalogTarget: true };
@@ -2765,39 +2737,37 @@ function renderDevices() {
     updateDeviceSummary();
     return;
   }
-  const usingCatalog = !!MENU_INDEX?.sources?.length;
-  if (!usingCatalog) setCatalogLoadState('idle');
-  const selected = usingCatalog ? renderCatalogPicker() : renderTargetPicker();
+  if (!MENU_INDEX?.sources?.length) {
+    setCatalogLoadState('error', 'No usable Catalog sources are available');
+    $('menuconfigGrid').textContent = '';
+    $('menuconfigPanel').hidden = true;
+    updateDeviceSummary();
+    updateSubmitGate();
+    return;
+  }
+  renderCatalogPicker();
   $('targetPicker').onchange = async (event) => {
     const select = event.target.closest('select');
     if (!select || !select.closest('#targetPicker')) return;
     const id = select.id;
-      catalogInitialTargetPending = false;
-      if (state.importedConfig) {
-        if (!confirm('切换 Target 会退出上传配置工作区，并改为网页新建配置。继续吗？')) {
-          renderDevices();
-          return;
-        }
-        clearImportedWorkspace();
-      }
-      if (usingCatalog) {
-        if (id === 'targetSource' || id === 'targetBranch') {
-          MENU_CATALOG = null;
-          menuCatalogKey = '';
-          menuLoadingKey = '';
-          renderCatalogPicker(false);
-        } else {
-          renderCatalogPicker(false);
-          await applyCatalogTarget();
-        }
+    catalogInitialTargetPending = false;
+    if (state.importedConfig) {
+      if (!confirm('切换 Target 会退出上传配置工作区，并改为网页新建配置。继续吗？')) {
+        renderDevices();
         return;
       }
-      const record = renderTargetPicker(false);
-      if (!record) return;
-      if (record.device.id !== state.device.id) await switchDevice(record.device, false, true);
-      activateTargetRecord(record);
+      clearImportedWorkspace();
+    }
+    if (id === 'targetSource' || id === 'targetBranch') {
+      MENU_CATALOG = null;
+      menuCatalogKey = '';
+      menuLoadingKey = '';
+      renderCatalogPicker(false);
+    } else {
+      renderCatalogPicker(false);
+      await applyCatalogTarget();
+    }
   };
-  if (!usingCatalog && selected && selected.device.id !== state.device.id) switchDevice(selected.device);
   updateDeviceSummary();
 }
 
@@ -2805,11 +2775,11 @@ function updateDeviceSummary() {
   if (!state.device || !$('deviceSummary')) return;
   $('deviceSummary').textContent = state.device.kind === 'target'
     ? t('device.targetSelected', {
-      source: state.source ? state.source.label : state.device.sources[0].label,
-      branch: state.version ? state.version.branch : state.device.sources[0].versions[0].branch,
-      system: state.device.target.systemLabel,
-      subtarget: state.device.target.subtargetLabel,
-      profile: state.device.target.profileLabel,
+      source: state.source?.label || state.device.sources?.[0]?.label || 'Catalog',
+      branch: state.version?.branch || state.device.sources?.[0]?.versions?.[0]?.branch || '',
+      system: state.device.target?.systemLabel || state.device.target?.system || 'Target',
+      subtarget: state.device.target?.subtargetLabel || state.device.target?.subtarget || '',
+      profile: state.device.target?.profileLabel || state.device.target?.profile || '',
     })
     : t('device.selected', { brand: state.device.brand, model: state.device.name });
 }
@@ -3919,12 +3889,15 @@ async function generateConfigText({ enforceBuildRequirements = false } = {}) {
     }
   }
   const configId = [state.device.id, state.source.id, state.version.id, state.variant.id].join('/');
-  const configName = state.variant.configs?.[state.version.id] || state.variant.config || state.source.config;
-  const raw = state.importedConfig && (state.importedConfigId === configId || ['custom-target', 'catalog-target'].includes(state.device.id))
-    ? state.importedConfig
-    : state.device.id === 'catalog-target'
-      ? catalogTargetConfig()
-      : await (await fetchData(state.device.id + '/' + configName)).text();
+  let raw;
+  if (state.importedConfig &&
+      (state.importedConfigId === configId || ['custom-target', 'catalog-target'].includes(state.device.id))) {
+    raw = state.importedConfig;
+  } else if (state.device.id === 'catalog-target') {
+    raw = catalogTargetConfig();
+  } else {
+    throw new Error('This workspace requires an uploaded authoritative .config');
+  }
   let config = applyToConfig(raw, effectiveSelection());
   if (!state.importedConfig) config = enforceCatalogProfilePackages(config);
   for (let pass = 0; pass < 16; pass++) {
@@ -4871,9 +4844,7 @@ async function runSelfTest() {
   d1(missing.length ? 'fail' : 'ok', missing.length ? t('st.browser.fail', { list: missing.join('、') }) : t('st.browser.ok'));
 
   const d2 = addRow(t('st.data'));
-  const path2 = state.device
-    ? (state.device.plugins === 'seed' ? 'seed/plugins.json' : state.device.id + '/plugins.json')
-    : 'devices.json';
+  const path2 = 'seed/plugins.json';
   const tiers = [];
   for (const [i, u] of dataUrls(path2).entries()) {
     const r = await timedFetch(u, 6000);
@@ -4899,12 +4870,12 @@ async function runSelfTest() {
       d3('fail', `${t('st.config.fail')} · ${error.message}`);
     }
   }
-  else {
-    for (const [i, u] of dataUrls(state.device.id + '/' + src.config).entries()) {
-      const r = await timedFetch(u, 10000);
-      if (r.ok) { cfgText = r.text; tierHit = TIER_NAMES[i] + ' · ' + r.ms + 'ms · ' + Math.round(r.size / 1024) + 'KB'; break; }
-    }
-    d3(cfgText ? 'ok' : 'fail', cfgText ? t('st.config.ok', { tier: tierHit }) : t('st.config.fail'));
+  else if (state.device?.id === 'custom-target' && state.importedConfig) {
+    cfgText = state.importedConfig;
+    tierHit = uiText('已上传权威配置', '已上傳權威設定', 'Uploaded authoritative config');
+    d3('ok', t('st.config.ok', { tier: tierHit }));
+  } else {
+    d3('fail', t('st.config.noData'));
   }
 
   const d4 = addRow(t('st.gen'));

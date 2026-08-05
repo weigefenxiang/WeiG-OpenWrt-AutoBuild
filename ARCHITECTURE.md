@@ -25,11 +25,12 @@
 │  ├─ index.html / app.css / app.js
 │  └─ data/                      # 页面与 CI 共用的数据 / data shared by page and CI
 │     ├─ project.json            # Fork 只需改这一份仓库参数 / one-file fork settings
-│     ├─ devices.json            # 机型注册表(177 台,版本/Profile 矩阵) / 177-device registry with branch/profile matrix
+│     ├─ devices.json            # CI/历史请求注册表(网页不加载) / CI and legacy-request registry (not loaded by the page)
 │     ├─ menuconfig-index.json   # 独立 menuconfig 目录的本地入口与回退 / local entry and fallback for the external menuconfig catalog
 │     ├─ i18n.json               # 11 语言 UI 词条(fallback: en) / 11-language UI strings
 │     ├─ timezones.json          # 445 个 LuCI IANA→POSIX 时区映射 / 445 LuCI IANA-to-POSIX timezone mappings
-│     └─ <机型>/plugins.json      # 每启用机型的插件表(生成物) / per-enabled-device plugin table (generated)
+│     ├─ seed/plugins.json       # Catalog/custom-target 共用插件表 / shared Catalog/custom-target plugin table
+│     └─ 360t7/{plugins,packages}.json # 完整维护机型索引 / full-maintenance device indexes
 └─ tools/                        # Node 工具链 / Node tooling
    ├─ plugins-meta.json          # 插件元数据,人工维护 / plugin metadata, hand-maintained
    ├─ plugin-sizes.json          # 360T7 官方包体积快照 / official-package size snapshot for 360T7
@@ -50,13 +51,13 @@
 ## 数据流 / Data flow
 
 ```
-config/*.config + plugins-meta.json + plugin-sizes.json ──gen-plugins──▶ site/wrt/data/<机型>/plugins.json
+config/*.config + plugins-meta.json + plugin-sizes.json ──gen-plugins──▶ site/wrt/data/seed/plugins.json + 360t7/{plugins,packages}.json
 i18n-source.json + i18n-translations.json ──gen-i18n──▶ site/wrt/data/i18n.json
 上游分支 makefile ──fetch-catalog──▶ 分支/Profile 目录 ──gen-seed-configs──▶ devices.json + 独立种子 config
 独立 WeiG-OpenWrt-Menuconfig-Catalog 按清单扫描 ImmortalWrt、OpenWrt、Lean LEDE 与 hanwckf 兼容源的 Config.in/.targetinfo/.packageinfo ──▶ 按 Kconfig symbol 合并重复定义并发布 schema 驱动的 Target 选择器、完整菜单树和轻量 catalog-data 分片 ──▶ 页面动态处理“无选项则隐藏、单选项则自动选中、多选项才显示下拉框”，未来出现额外 Target 层级也无需改死 HTML。Target 字段和值始终显示上游英文，当前语言译文仅在悬停/聚焦/轻触时出现，非中文语言不回退中文；五列使用 Profile 优先的弹性宽度。Advanced menuconfig 和 Selected options 均可折叠；当前菜单层按实际内容高度展开，超过视口上限才进入内部滚动，普通项每批直接渲染 80 项，Kconfig choice 保留直接选值下拉框，分类卡片与普通选项行使用不同背景，手机选项文字限制为一至两行，所有面包屑祖先可直接跳转。网页按精确 commit/hash/bytes 契约从浏览器缓存、同源镜像、jsDelivr、GitHub raw 依次读取，存在精确契约时绝不回退到旧本地分片；统一定位框覆盖源码、分支、Target、菜单路径和 symbol，精选 Applications 按软件包符号与 Kconfig 双向关联。Catalog 按分支验证，成功分支立即覆盖滚动数据，失败或损坏分支保留上次成功分片并标记 stale；完整 Release 仍只在全部分支成功时更新
 The separate WeiG-OpenWrt-Menuconfig-Catalog scans manifest-selected ImmortalWrt, OpenWrt, Lean LEDE, and hanwckf compatibility branches, merges duplicate Kconfig definitions by symbol, then publishes schema-driven Target selectors, the full menu tree, and compact catalog-data shards. The page hides empty selectors, auto-selects a single value, shows a dropdown only for multiple values, and can render future Target levels without hard-coded HTML. Target fields and values always show upstream English, current-locale text is hover/focus/tap-only, and non-Chinese locales never fall back to Chinese; fluid field widths prioritize Profile. Advanced menuconfig and Selected options remain collapsible. An open level grows to actual content height and becomes an internal scroller only past the viewport cap; ordinary options render directly in batches of 80, Kconfig choices keep direct selects, category cards and ordinary option rows use distinct backgrounds, mobile option text is clamped to one or two lines, and every ancestor breadcrumb is clickable. The browser follows the exact commit/hash/bytes contract and tries cache, same-origin mirror, jsDelivr, then GitHub raw; an exact contract is never satisfied by an old local shard. One locator covers sources, branches, Targets, menu paths and symbols; curated Applications join Kconfig by package symbol. Catalog results are validated per branch: valid branches replace their rolling data immediately, while failed or corrupt branches retain their last-good shard as `stale`; the complete Release updates only when every branch succeeds.
-页面保留旧设备注册表和初始 config 仅用于配置导入与历史请求兼容;新请求按 Target 生成完整 `build-request.json`,Issue 构建以其中 `.config` 为权威输入。
-The page retains the legacy device registry and base configs only for imports and historical-request compatibility. New Target requests export a complete `build-request.json`, whose `.config` remains authoritative for Issue builds.
+网页不再加载旧设备注册表或公共 base config;`devices.json`、`config-manifest.json` 与 `config/` 权威配置仅由 CI、生成工具和历史请求兼容链使用。新请求按 Target 生成完整 `build-request.json`,Issue 构建以其中 `.config` 为权威输入。
+The page no longer loads the legacy device registry or public base configs. `devices.json`, `config-manifest.json`, and authoritative configs under `config/` are retained only for CI, generators, and legacy-request compatibility. New Target requests export a complete `build-request.json`, whose `.config` remains authoritative for Issue builds.
 上传配置先等待对应源码/分支 Catalog,再恢复 Target 和已知 menuconfig;Catalog 未收录项保留在分页的导入工作区中,可修改、关闭、删除行或恢复原值。未收录 Target 保持为明确的 `custom-target`,不再静默切换到目录首项。Catalog 以源码英文为权威名称，人工表维护精选应用 11 语，发布阶段按英文内容指纹复用翻译缓存并增量补译所有菜单层级、choice 和普通选项；缺译回退英文并写入覆盖报告，翻译故障不阻断目录发布。
 An uploaded config waits for the matching source/branch catalog before restoring the Target and known menuconfig values. Uncatalogued symbols remain editable in a paged import workspace, while an unknown Target stays an explicit `custom-target` instead of silently falling back to the first catalog entry. Upstream English is authoritative; reviewed tables carry curated Applications in 11 languages, while the publish stage reuses content-keyed translations and incrementally translates menu levels, choices, and ordinary options. Missing locales fall back to English and remain visible in coverage reports; translation failures do not block catalog publication.
 ```

@@ -47,12 +47,11 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ packages.html             ⚙ package reference page (by gen-pkg-page, 11 languages embedded, works offline)
 │  ├─ Wei.G.ico + Wei.G-favicon_little.png   site icons
 │  └─ data/                        runtime data shared by the page and CI
-│     ├─ devices.json           ✍⚙ 176 devices + 1 generic Target generated from upstream branch/profile data
+│     ├─ devices.json           ✍⚙ CI/legacy-request registry: 176 devices + 1 generic Target (not loaded by the page)
 │     ├─ i18n.json              ⚙ 11-language UI strings (by gen-i18n)
 │     ├─ timezones.json         ✍ 445 LuCI IANA-to-POSIX timezone mappings
-│     ├─ 360t7/                 ⚙ plugins.json (242) + packages.json (4736 raw symbols) + config copies
-│     ├─ seed/                  ⚙ shared plugins.json for seed devices
-│     └─ <model-or-platform>/…  ⚙ config copies for devices and generic Targets
+│     ├─ 360t7/                 ⚙ plugins.json (242) + packages.json (4736 raw symbols)
+│     └─ seed/                  ⚙ shared plugins.json for Catalog/custom-target
 ├─ tools/                          Node tooling (≥18, zero npm deps)
 │  ├─ plugins-meta.json         ✍ plugin metadata (name/group/desc/size/hot/requires/locked/warn/pkgs/exclude)
 │  ├─ plugin-sizes.json         ⚙ official-package size snapshot for 360T7 (218 entries; meta fallback)
@@ -111,7 +110,8 @@ Type scale: 17px body (15.5px compact via the Aa toggle); 15px pills/plugin cell
 
 ### 2.4 Devices
 
-- Registry: `site/wrt/data/devices.json` (only 360T7 is fully maintained; all other devices are seed configs, plugins enabled by appending)
+- Registry: `site/wrt/data/devices.json` (used only by CI, generators, and legacy-request compatibility; the page no longer loads it. Only 360T7 is fully maintained; all other devices are seed configs.)
+- Public web data under `site/wrt/data/` must not contain `.config` files. Authoritative base configs live only under `config/`; `gen-plugins.mjs` removes old public copies and generates plugin/package indexes.
 - Device catalog: `tools/device-catalog.json`, rebuilt by parsing real `TARGET_DEVICES` and `Device/*` inheritance per branch; `node tools/gen-seed-configs.mjs` then creates an independent minimal config for every source/branch/profile.
 - The page builds Target controls from the Catalog `targetSelectors`/`targetTree` schema instead of hard-coding five levels: an empty selector is hidden, a single value is selected and compacted automatically, multiple values get a dropdown, and future upstream levels are appended automatically. The five fields use fluid widths: Source/System/Subtarget stay compact, Branch is medium, Profile receives the most spare width, and extra levels or narrow screens wrap automatically. Field names and values always show upstream English; current-locale text is tooltip/tap-only and a non-Chinese locale never falls back to Chinese. The manifest currently covers stable ImmortalWrt releases, allowed OpenWrt branches, Lean LEDE, and the hanwckf `openwrt-21.02` compatibility source. The brand/device registry remains only for legacy imports and historical requests. Advanced menuconfig removes duplicate `Target Devices`, starts collapsed, and follows the real menu tree. An open level grows to its actual content height and only becomes an internal scroller past the viewport cap; ordinary options render directly in batches of 80 and load on scroll, while only genuine Kconfig choices use selects. Accent category cards and lighter independent option rows make the hierarchy clear. Ancestor breadcrumbs are clickable, so thousands of options do not make the desktop or mobile page grow without bound.
 - Importing `.config`, JSON, or `config.buildinfo` resolves metadata, filename hints, and `CONFIG_TARGET_*`, waits for the matching source/branch catalog, and only then restores the Target/menuconfig state. An uncatalogued Target remains an explicit `custom-target`; uncatalogued symbols stay in a paged workspace where they can be edited, disabled, removed, or restored.

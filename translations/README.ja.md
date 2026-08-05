@@ -67,7 +67,7 @@ OpenWrt ファームウェアの**オンラインカスタマイズ + クラウ�
 
 1. 4 つの base config に、そのパッケージの `# CONFIG_PACKAGE_luci-app-xxx is not set` 行がすでに存在することを確認します(なければ、そのソースの feeds にこのパッケージが存在しないということなので、先に diy スクリプトで feed を追加し、base config を更新する必要があります)。
 2. `tools/plugins-meta.json` の `plugins` 配列にエントリを 1 件追加します:`{ "id": "xxx", "name": "中文名", "group": "分组", "desc": "一句话说明", "size": 2, "hot": false }`(パッケージ名が `luci-app-` + サフィックスの形式と異なる場合や、3 ソース間で名前が異なる場合は `pkgs` フィールドで明示的にマッピングします。luci-app 層の前提プラグインがある場合は `requires: ["前置id"]` を追加すると、ページ上で自動的に連動してチェックされます)。
-3. `node tools/gen-plugins.mjs` を実行します。スクリプトが `site/wrt/data/360t7/plugins.json` を再生成して base config のコピーを同期し、あわせて「設定には存在するが未収録」のプラグインについて警告を出します。
+3. `node tools/gen-plugins.mjs` を実行します。スクリプトが `site/wrt/data/360t7/plugins.json` を再生成し、正本の base config を `config/` のみに保持して、「設定には存在するが未収録」のプラグインについて警告を出します。
 4. コミットして push します。ページ側のコードは一切変更不要で、新しい項目が自動的に表示されます。
 
 ### ルーター機種を有効化/追加する

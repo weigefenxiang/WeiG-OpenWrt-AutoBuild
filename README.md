@@ -97,8 +97,7 @@ OpenWrt 固件**在线定制 + 云编译**。在 [网站](https://wrt.weigeshare
 
 3. 有 luci-app 层前置插件时加 `requires: ["前置id"]`,页面会自动联动勾选);
 
-4. 跑 `node tools/gen-plugins.mjs`,脚本会重新生成 `site/wrt/data/360t7/plugins.json` 并同步 base 
-config 副本,同时对"配置里有但没收录"的插件给出警告;
+4. 跑 `node tools/gen-plugins.mjs`,脚本会重新生成 `site/wrt/data/360t7/plugins.json`,并确保 base config 只保留在 `config/` 权威目录,同时对"配置里有但没收录"的插件给出警告;
 5. 提交 push。页面无需改任何代码,新选项自动出现。
 
 </details>

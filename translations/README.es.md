@@ -67,7 +67,7 @@ Flujo de datos: `config/<marca>/<modelo>/*.config` se conserva para importar con
 
 1. Confirma que en las cuatro configuraciones base ya existe la línea `# CONFIG_PACKAGE_luci-app-xxx is not set` de ese paquete (si no existe, significa que el paquete no está en los feeds de esa fuente y primero hay que añadir el feed en el script diy y actualizar la configuración base);
 2. Añade una entrada al array `plugins` de `tools/plugins-meta.json`: `{ "id": "xxx", "name": "nombre en chino", "group": "grupo", "desc": "descripción de una línea", "size": 2, "hot": false }` (si el nombre del paquete difiere del sufijo `luci-app-` o cambia entre las tres fuentes, añade el campo `pkgs` para mapearlo explícitamente; si tiene plugins prerrequisito a nivel de luci-app, añade `requires: ["id-del-prerrequisito"]` y la página los marcará automáticamente en cadena);
-3. Ejecuta `node tools/gen-plugins.mjs`; el script regenerará `site/wrt/data/360t7/plugins.json`, sincronizará las copias de las configuraciones base y, además, avisará de los plugins que «están en la configuración pero sin catalogar»;
+3. Ejecuta `node tools/gen-plugins.mjs`; el script regenerará `site/wrt/data/360t7/plugins.json`, mantendrá las configuraciones base autoritativas solo en `config/` y avisará de los plugins que «están en la configuración pero sin catalogar»;
 4. Haz commit y push. La página no necesita ningún cambio de código: la nueva opción aparece automáticamente.
 
 ### Habilitar / añadir un modelo de router

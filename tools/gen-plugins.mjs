@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// 由 config/<品牌>/<机型>/*.config + tools/plugins-meta.json 生成 site/wrt/data/<机型>/plugins.json / Builds site/wrt/data/<device>/plugins.json from per-device configs + plugins-meta.json.
-// 并把各源 base config 同步一份到 data 目录 / Also copies each source's base config into the data dir.
+// 由 config/<品牌>/<机型>/*.config + tools/plugins-meta.json 生成网站插件索引 / Builds web plugin indexes from authoritative configs + plugins-meta.json.
+// 权威 base config 只保留在 config/，不再复制到 site/wrt/data/ / Authoritative base configs stay in config/ and are no longer copied into site/wrt/data/.
 // 用法 / Usage: node tools/gen-plugins.mjs   # 处理 devices.json 里所有已启用机型 / processes all enabled devices in devices.json
 // 新增插件只改 plugins-meta.json 后重跑本脚本,页面零改动 / To add a plugin, edit plugins-meta.json and rerun — no page changes needed.
 
-import { readFileSync, writeFileSync, copyFileSync, mkdirSync, readdirSync, existsSync, statSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, statSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -29,26 +29,28 @@ const variantsFor = (source, version) => (source.variants || [])
   .filter((variant) => !variant.versions || variant.versions.includes(version.id));
 const configFor = (source, version, variant) =>
   (variant && variant.configs && variant.configs[version.id]) || variant?.config || source.config;
-const configNames = (source) => [...new Set([
-  source.config,
-  ...(source.variants || []).flatMap((variant) => Object.values(variant.configs || {})),
-].filter(Boolean))];
-
-const liveDataDirs = new Set(['seed', ...DEVICES.devices.map((device) => device.id)]);
+const liveDataDirs = new Set([
+  'seed',
+  ...DEVICES.devices
+    .filter((device) => device.enabled === true && device.plugins !== 'seed')
+    .map((device) => device.id),
+]);
 for (const name of readdirSync(DATA_ROOT)) {
   const path = join(DATA_ROOT, name);
-  if (statSync(path).isDirectory() && !liveDataDirs.has(name)) rmSync(path, { recursive: true, force: true });
+  if (statSync(path).isDirectory() && !liveDataDirs.has(name)) {
+    rmSync(path, { recursive: true, force: true });
+  }
 }
-for (const device of DEVICES.devices) {
-  const ddir = join(DATA_ROOT, device.id);
-  if (!existsSync(ddir)) continue;
-  const expected = new Set((device.sources || []).flatMap(configNames));
-  for (const name of readdirSync(ddir)) {
-    if (name.endsWith('.config') && !expected.has(name)) rmSync(join(ddir, name));
+for (const name of liveDataDirs) {
+  const dir = join(DATA_ROOT, name);
+  if (!existsSync(dir)) continue;
+  for (const entry of readdirSync(dir)) {
+    if (entry.endsWith('.config')) rmSync(join(dir, entry));
   }
 }
 
-// 种子机型共用一张 append 模式插件表 + 拷贝各自种子 config 到 data/ / seed devices share one append-mode plugin table; their seed configs are copied to data/
+// Catalog/custom-target 共用一张 append 模式插件表；base config 仅保留在 config/。
+// Catalog/custom-target share one append-mode plugin table; base configs remain only in config/.
 const seedPlugins = META.plugins.map((p) => {
   const e = { id: p.id, name: p.name, group: p.group, desc: p.desc, size: pluginSizeMB(p, null), pkgs: {},
     pkg: p.catalogCandidates?.[0] || (p.pkgs ? Object.values(p.pkgs)[0] : 'luci-app-' + p.id) };
@@ -61,20 +63,8 @@ const seedPlugins = META.plugins.map((p) => {
 mkdirSync(join(ROOT, 'site', 'wrt', 'data', 'seed'), { recursive: true });
 writeFileSync(join(ROOT, 'site', 'wrt', 'data', 'seed', 'plugins.json'),
   JSON.stringify({ version: 2, groups: META.groups, plugins: seedPlugins }, null, 1) + '\n');
-let seedCopied = 0;
-for (const device of DEVICES.devices) {
-  if (device.plugins !== 'seed') continue;
-  const cdir = configDir(device);
-  const ddir = join(ROOT, 'site', 'wrt', 'data', device.id);
-  mkdirSync(ddir, { recursive: true });
-  for (const src of device.sources || []) {
-    for (const name of configNames(src)) {
-      copyFileSync(join(cdir, name), join(ddir, name));
-      seedCopied++;
-    }
-  }
-}
-console.log(`seed/plugins.json: ${seedPlugins.length} 个插件(append 模式);种子 config 副本 ${seedCopied} 份`);
+console.log(`seed/plugins.json: ${seedPlugins.length} 个插件(append 模式);公共 config 副本 0 份`);
+
 
 for (const device of DEVICES.devices) {
   if (device.enabled !== true || device.plugins === 'seed') continue;   // 种子机型走上面的共享表 / seed devices use the shared table above
@@ -165,10 +155,6 @@ for (const device of DEVICES.devices) {
   mkdirSync(DATA_DIR, { recursive: true });
   writeFileSync(join(DATA_DIR, 'plugins.json'),
     JSON.stringify({ version: 2, groups: META.groups, plugins }, null, 1) + '\n');
-  for (const src of device.sources) {
-    for (const name of configNames(src)) copyFileSync(join(CONFIG_DIR, name), join(DATA_DIR, name));
-  }
-
   // 开发者模式的全量软件包表:每个 CONFIG_PACKAGE 符号在各源的状态 / raw package table for developer mode: per-source state of every CONFIG_PACKAGE symbol
   const allPkgs = device.id === '360t7'
     ? JSON.parse(JSON.stringify(PACKAGE_BASELINE_360T7))
@@ -196,9 +182,9 @@ for (const device of DEVICES.devices) {
   }
 }
 
-// 每个“设备/源码/版本/变体”映射到唯一公开 config 与目标签名。
+// 每个“设备/源码/版本/变体”映射到唯一权威 config 与目标签名。
 // Actions 只用本清单核对用户上传配置的目标身份,绝不据此重新生成配置。
-// Maps each device/source/version/variant to one published config and target signature.
+// Maps each device/source/version/variant to one authoritative config and target signature.
 {
   const manifest = { version: 1, configs: {} };
   const targetLines = (text) => text.split(/\r?\n/).filter((line) =>
@@ -229,7 +215,6 @@ for (const device of DEVICES.devices) {
             version: version.id,
             variant: variant.id,
             sourcePath: sourcePath.replace(ROOT, '').replace(/^[\\/]/, '').replaceAll('\\', '/'),
-            publicPath: `${device.id}/${name}`,
             target: identity,
           };
         }

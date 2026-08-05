@@ -67,7 +67,7 @@ Luồng dữ liệu: `config/<thương hiệu>/<mẫu máy>/*.config` được g
 
 1. Xác nhận cả bốn bản base config đã có dòng `# CONFIG_PACKAGE_luci-app-xxx is not set` của gói đó (nếu chưa có nghĩa là feeds của nguồn đó không có gói này, cần thêm feed vào script diy trước rồi cập nhật base config);
 2. Thêm một mục vào mảng `plugins` trong `tools/plugins-meta.json`: `{ "id": "xxx", "name": "tên tiếng Trung", "group": "nhóm", "desc": "mô tả một câu", "size": 2, "hot": false }` (khi tên gói khác với hậu tố `luci-app-` hoặc ba nguồn đặt tên khác nhau, thêm trường `pkgs` để ánh xạ tường minh; khi có plugin tiền đề ở tầng luci-app, thêm `requires: ["id-tiền-đề"]`, trang sẽ tự động tích chọn liên động);
-3. Chạy `node tools/gen-plugins.mjs`, script sẽ sinh lại `site/wrt/data/360t7/plugins.json` và đồng bộ bản sao base config, đồng thời cảnh báo về các plugin "có trong cấu hình nhưng chưa được thu nhận";
+3. Chạy `node tools/gen-plugins.mjs`, script sẽ sinh lại `site/wrt/data/360t7/plugins.json`, chỉ giữ base config chuẩn trong `config/`, đồng thời cảnh báo về các plugin "có trong cấu hình nhưng chưa được thu nhận";
 4. Commit và push. Trang web không cần sửa bất kỳ dòng code nào, tùy chọn mới sẽ tự động xuất hiện.
 
 ### Bật / thêm một mẫu router

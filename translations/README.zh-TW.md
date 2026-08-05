@@ -67,7 +67,7 @@ OpenWrt 韌體**線上客製 + 雲端編譯**。在網頁上選原始碼、選�
 
 1. 確認四份 base config 裡已有該套件的 `# CONFIG_PACKAGE_luci-app-xxx is not set` 行(沒有的話,表示該來源的 feeds 裡沒有這個套件,需要先在 diy 腳本裡加 feed 並更新 base config);
 2. 在 `tools/plugins-meta.json` 的 `plugins` 陣列裡加一條:`{ "id": "xxx", "name": "中文名", "group": "分组", "desc": "一句话说明", "size": 2, "hot": false }`(套件名與 `luci-app-` 後綴不同、或三個來源名稱不一致時,加 `pkgs` 欄位明確對應;有 luci-app 層前置套件時加 `requires: ["前置id"]`,頁面會自動連動勾選);
-3. 跑 `node tools/gen-plugins.mjs`,腳本會重新產生 `site/wrt/data/360t7/plugins.json` 並同步 base config 副本,同時對「設定裡有但沒收錄」的套件發出警告;
+3. 跑 `node tools/gen-plugins.mjs`,腳本會重新產生 `site/wrt/data/360t7/plugins.json`,並確保 base config 只保留在 `config/` 權威目錄,同時對「設定裡有但沒收錄」的套件發出警告;
 4. 提交 push。頁面無需改任何程式碼,新選項自動出現。
 
 ### 開啟/新增一台路由器機型

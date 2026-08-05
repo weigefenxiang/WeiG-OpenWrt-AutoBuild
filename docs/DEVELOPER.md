@@ -48,12 +48,11 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ packages.html             ⚙ 软件包用途说明页(gen-pkg-page 产出,11 语内嵌,离线可开)
 │  ├─ Wei.G.ico + Wei.G-favicon_little.png   站点图标
 │  └─ data/                        页面与 CI 共用的运行时数据
-│     ├─ devices.json           ✍⚙ 目标注册表 176 台机型 + 1 个通用 Target(按上游分支/Profile 生成)
+│     ├─ devices.json           ✍⚙ CI/历史请求注册表 176 台机型 + 1 个通用 Target(网页不加载)
 │     ├─ i18n.json              ⚙ 11 语 UI 词条(gen-i18n 产出)
 │     ├─ timezones.json         ✍ 445 个 LuCI IANA→POSIX 时区映射
-│     ├─ 360t7/                 ⚙ plugins.json(242 插件)+ packages.json(4736 原始包)+ config 副本
-│     ├─ seed/                  ⚙ 种子机型共用 plugins.json
-│     └─ <机型或平台>/…         ⚙ 各机型/通用 Target 的 config 副本
+│     ├─ 360t7/                 ⚙ plugins.json(242 插件)+ packages.json(4736 原始包)
+│     └─ seed/                  ⚙ Catalog/custom-target 共用 plugins.json
 ├─ tools/                          Node 工具链(≥18,零 npm 依赖)
 │  ├─ plugins-meta.json         ✍ 插件元数据(名/组/说明/体积/hot/requires/locked/warn/pkgs/exclude)
 │  ├─ plugin-sizes.json         ⚙ 360T7 官方包索引体积快照(218 项,其余回退 meta)
@@ -123,7 +122,8 @@ WeiG-OpenWrt-AutoBuild/
 
 ### 2.4 机型
 
-- 注册表:`site/wrt/data/devices.json`(360T7 完整维护;其余为种子机型,插件按追加方式开启)
+- 注册表:`site/wrt/data/devices.json`(仅供 CI、生成工具和历史请求兼容;网页不再加载。360T7 完整维护,其余为种子机型)
+- 公共网页目录 `site/wrt/data/` 禁止存放 `.config`;唯一权威 base config 位于 `config/`。`gen-plugins.mjs` 会删除旧公共副本并生成插件/软件包索引。
 - 机型目录:`tools/device-catalog.json`,由 `node tools/fetch-catalog.mjs` 逐分支解析真实 `TARGET_DEVICES` 与 `Device/*` 模板继承;随后 `node tools/gen-seed-configs.mjs` 按源码/分支/Profile 重建独立最精简配置。
 - 网页按 Catalog 的 `targetSelectors`/`targetTree` 动态生成 Target 控件，不再把五级结构写死：无选项隐藏、单选项自动选中并压缩展示、多选项才显示下拉框；上游以后增加层级时会自动追加。五列使用弹性宽度，Source/System/Subtarget 较短、Branch 居中、Profile 优先获得剩余空间，额外层级和窄屏自动换行。所有字段和选值始终显示上游英文，当前语言译文仅在桌面悬停/聚焦或手机轻触时出现，非中文语言绝不回退中文。Catalog 清单当前覆盖 ImmortalWrt 稳定版、OpenWrt 允许分支、Lean LEDE 与 hanwckf `openwrt-21.02` 兼容源。品牌/型号注册表仅保留给旧配置导入和历史请求兼容。Advanced menuconfig 排除重复 `Target Devices`，默认折叠并按真实菜单树逐级展示；当前层按实际内容高度展开，超过视口上限才进入内部滚动，普通项每批直接渲染 80 项，滚动到底继续加载，真正的 Kconfig choice 才使用下拉框。分类使用带强调色的卡片，普通项使用较浅的独立行，层次一眼可分。面包屑祖先可直接跳转，桌面与手机页面不会随数千选项无限增长。
 - 用户加载 `.config`、JSON 或 `config.buildinfo` 时，网页先从元数据、文件名和 `CONFIG_TARGET_*` 确定源码/分支并等待对应 Catalog，再恢复 Target/menuconfig，避免异步回退到目录首项。未收录 Target 保持为 `custom-target`；未收录配置项进入每批 50 项的导入工作区，可修改、关闭、删除配置行或恢复上传原值。上传的完整配置始终是唯一权威配置。

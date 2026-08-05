@@ -67,7 +67,7 @@ Fluxo de dados: `config/<marca>/<modelo>/*.config` é mantido para importar conf
 
 1. Confirme que as quatro configurações base já contêm a linha `# CONFIG_PACKAGE_luci-app-xxx is not set` do pacote (se não houver, o pacote não existe nos feeds daquela fonte — adicione primeiro o feed no script diy e atualize a configuração base);
 2. Adicione uma entrada ao array `plugins` de `tools/plugins-meta.json`: `{ "id": "xxx", "name": "nome em chinês", "group": "grupo", "desc": "descrição de uma linha", "size": 2, "hot": false }` (se o nome do pacote diferir do sufixo `luci-app-` ou variar entre as três fontes, adicione um campo `pkgs` com o mapeamento explícito; se houver plugins pré-requisitos no nível luci-app, adicione `requires: ["id-do-pre-requisito"]` e a página fará a marcação encadeada automaticamente);
-3. Execute `node tools/gen-plugins.mjs`; o script regenera `site/wrt/data/360t7/plugins.json` e sincroniza as cópias das configurações base, além de emitir avisos sobre plugins que "existem na configuração mas não foram catalogados";
+3. Execute `node tools/gen-plugins.mjs`; o script regenera `site/wrt/data/360t7/plugins.json`, mantém as configurações base autoritativas apenas em `config/` e emite avisos sobre plugins que "existem na configuração mas não foram catalogados";
 4. Faça commit e push. A página não precisa de nenhuma alteração de código — a nova opção aparece automaticamente.
 
 ### Habilitando / adicionando um modelo de roteador

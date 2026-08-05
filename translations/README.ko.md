@@ -67,7 +67,7 @@ OpenWrt 펌웨어 **온라인 커스터마이징 + 클라우드 빌드**. 웹 �
 
 1. base config 4개에 해당 패키지의 `# CONFIG_PACKAGE_luci-app-xxx is not set` 줄이 이미 있는지 확인합니다(없다면 해당 소스의 feeds에 이 패키지가 없다는 뜻이므로, 먼저 diy 스크립트에서 feed를 추가하고 base config를 업데이트해야 합니다).
 2. `tools/plugins-meta.json`의 `plugins` 배열에 항목을 하나 추가합니다: `{ "id": "xxx", "name": "中文名", "group": "分组", "desc": "一句话说明", "size": 2, "hot": false }` (패키지 이름이 `luci-app-` 접미사 규칙과 다르거나 세 소스에서 이름이 서로 다르면 `pkgs` 필드로 명시적으로 매핑하고, luci-app 수준의 선행 플러그인이 있으면 `requires: ["선행id"]`를 추가하면 페이지에서 자동으로 연동 선택됩니다).
-3. `node tools/gen-plugins.mjs`를 실행합니다. 스크립트가 `site/wrt/data/360t7/plugins.json`을 다시 생성하고 base config 사본을 동기화하며, "설정에는 있지만 수록되지 않은" 플러그인에 대해 경고를 표시합니다.
+3. `node tools/gen-plugins.mjs`를 실행합니다. 스크립트가 `site/wrt/data/360t7/plugins.json`을 다시 생성하고 권위 있는 base config는 `config/`에만 유지하며, "설정에는 있지만 수록되지 않은" 플러그인에 대해 경고를 표시합니다.
 4. 커밋하고 push합니다. 페이지 코드는 전혀 수정할 필요 없이 새 옵션이 자동으로 나타납니다.
 
 ### 라우터 기종 개방/추가하기

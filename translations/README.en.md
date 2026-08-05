@@ -67,7 +67,7 @@ Data flow: `config/<brand>/<device>/*.config` remains for legacy imports and his
 
 1. Confirm the package exists in the Catalog for the target source and branch. If the legacy-device compatibility layer also needs it, confirm its base config contains `# CONFIG_PACKAGE_luci-app-xxx is not set`;
 2. Add an entry to the `plugins` array in `tools/plugins-meta.json`: `{ "id": "xxx", "name": "Chinese name", "group": "group", "desc": "one-line description", "size": 2, "hot": false }` (if the package name differs from the `luci-app-` suffix or differs across the sources, add a `pkgs` field for an explicit mapping; if it has luci-app-level prerequisite plugins, add `requires: ["prerequisite-id"]` and the page will auto-select them together);
-3. Run `node tools/gen-plugins.mjs`; the script regenerates `site/wrt/data/360t7/plugins.json` and syncs the base config copies, while warning about plugins that "exist in the config but are not catalogued";
+3. Run `node tools/gen-plugins.mjs`; the script regenerates `site/wrt/data/360t7/plugins.json`, keeps authoritative base configs only under `config/`, and warns about plugins that "exist in the config but are not catalogued";
 4. Commit and push. The page needs no code changes — the new option appears automatically.
 
 ### Enabling / adding a router device

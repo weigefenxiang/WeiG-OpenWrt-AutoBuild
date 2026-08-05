@@ -67,7 +67,7 @@ Flux de données : `config/<marque>/<modèle>/*.config` reste disponible pour im
 
 1. Vérifiez que les quatre base config contiennent déjà la ligne `# CONFIG_PACKAGE_luci-app-xxx is not set` pour ce paquet (si elle est absente, c'est que le paquet n'existe pas dans les feeds de cette source ; il faut d'abord ajouter le feed dans le script diy et mettre à jour la base config) ;
 2. Ajoutez une entrée au tableau `plugins` de `tools/plugins-meta.json` : `{ "id": "xxx", "name": "nom chinois", "group": "groupe", "desc": "description en une phrase", "size": 2, "hot": false }` (si le nom du paquet diffère du suffixe `luci-app-` ou varie selon les trois sources, ajoutez un champ `pkgs` pour un mappage explicite ; s'il existe des plugins prérequis au niveau luci-app, ajoutez `requires: ["id-du-prérequis"]` et la page les cochera automatiquement en cascade) ;
-3. Exécutez `node tools/gen-plugins.mjs` : le script régénère `site/wrt/data/360t7/plugins.json`, synchronise les copies des base config et émet un avertissement pour les plugins « présents dans la config mais non répertoriés » ;
+3. Exécutez `node tools/gen-plugins.mjs` : le script régénère `site/wrt/data/360t7/plugins.json`, conserve les configurations de base faisant autorité uniquement sous `config/` et signale les plugins « présents dans la config mais non répertoriés » ;
 4. Commitez et poussez (push). Aucune modification de code n'est nécessaire côté page : la nouvelle option apparaît automatiquement.
 
 ### Activer / ajouter un modèle de routeur

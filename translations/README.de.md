@@ -67,7 +67,7 @@ Datenfluss: `config/<Marke>/<Modell>/*.config` bleibt für den Import älterer K
 
 1. Stellen Sie sicher, dass die Zeile `# CONFIG_PACKAGE_luci-app-xxx is not set` für das Paket in den vier Base-Konfigurationen bereits vorhanden ist (fehlt sie, gibt es das Paket in den Feeds dieser Quelle nicht – fügen Sie dann zuerst im diy-Skript den Feed hinzu und aktualisieren Sie die Base-Konfiguration);
 2. Fügen Sie im Array `plugins` in `tools/plugins-meta.json` einen Eintrag hinzu: `{ "id": "xxx", "name": "中文名", "group": "分组", "desc": "一句话说明", "size": 2, "hot": false }` (weicht der Paketname vom Suffix `luci-app-` ab oder heißt das Paket in den drei Quellen unterschiedlich, ergänzen Sie das Feld `pkgs` für eine explizite Zuordnung; gibt es vorausgesetzte Plugins auf luci-app-Ebene, ergänzen Sie `requires: ["前置id"]` – die Seite hakt sie dann automatisch mit an);
-3. Führen Sie `node tools/gen-plugins.mjs` aus – das Skript generiert `site/wrt/data/360t7/plugins.json` neu, synchronisiert die Kopien der Base-Konfigurationen und warnt zugleich vor Plugins, die zwar in der Konfiguration vorhanden, aber nicht erfasst sind;
+3. Führen Sie `node tools/gen-plugins.mjs` aus – das Skript generiert `site/wrt/data/360t7/plugins.json` neu, hält die maßgeblichen Base-Konfigurationen ausschließlich unter `config/` und warnt zugleich vor Plugins, die zwar in der Konfiguration vorhanden, aber nicht erfasst sind;
 4. Committen und pushen Sie. Auf der Seite muss kein Code geändert werden – die neue Option erscheint automatisch.
 
 ### Ein Routermodell freischalten / neu hinzufügen
