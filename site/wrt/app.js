@@ -3139,6 +3139,9 @@ function updateLoginInfo() {
 
 /* ============ 插件列表 / Plugin list ============ */
 function pluginState(p) {
+  // Catalog-only 启动期间，Target 尚未应用前 source 会短暂为空。
+  // 此时插件先按不可用处理，Catalog Target 应用后会重新渲染。
+  if (!state.source) return 'unavailable';
   if (p.builtin && p.builtin[state.source.id]) return 'builtin';
   if (p.catalogOnly) {
     if (state.device?.id !== 'catalog-target' || !MENU_CATALOG) return 'unavailable';
