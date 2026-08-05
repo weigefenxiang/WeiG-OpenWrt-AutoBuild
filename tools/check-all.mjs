@@ -302,7 +302,7 @@ mirrorRootsOk
     ? ok('source build requirements: one JSON, explicit web acceptance, and Issue rejection are connected')
     : bad('source build requirements', 'JSON schema/copy, web resolver, parser guard, or Defconfig branch contract is invalid');
   const project = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
-  const catalogMirror = readFileSync(join(ROOT, 'tools', 'fetch-catalog-mirror.mjs'), 'utf8');
+  const deployScript = readFileSync(join(ROOT, 'docs-private', 'Sync_Deploy.bat'), 'utf8');
   const catalogIndex = JSON.parse(
     readFileSync(join(ROOT, 'site', 'wrt', 'data', 'menuconfig-index.json'), 'utf8'));
   const assetHash = (name) => createHash('sha256')
@@ -313,13 +313,15 @@ mirrorRootsOk
   assetVersionOk
     ? ok('前端 CSS/JS 查询版本与文件内容指纹一致')
     : bad('frontend asset cache bust', 'index.html 的 app.css/app.js 查询版本未按内容指纹更新');
-  const catalogMirrorContract = catalogMirror.includes("project.catalogRepository") &&
-    catalogMirror.includes('Catalog asset is missing bytes/hash contract') &&
-    catalogMirror.includes('Catalog compressed SHA-256 mismatch') &&
-    !catalogMirror.includes('raw.githubusercontent.com/weigefenxiang/');
-  catalogMirrorContract
-    ? ok('VPS Catalog 镜像按 project.json 配置仓库并校验每个压缩资产')
-    : bad('Catalog mirror contract', '镜像仓库仍写死或缺少 bytes/hash 校验');
+  const remoteCatalogDeploymentContract =
+    !deployScript.includes('fetch-catalog-mirror.mjs') &&
+    !deployScript.includes('CATALOG_MIRROR_ROOT') &&
+    !deployScript.includes('catalog-data/index.json') &&
+    deployScript.includes('Browser uses commit-pinned jsDelivr with GitHub Raw fallback') &&
+    deployScript.includes(String.raw`tar -czf "%LOCAL_ARCHIVE%" -C "%MAIN_REPO%\site\wrt" .`);
+  remoteCatalogDeploymentContract
+    ? ok('VPS 只部署网页；Catalog 由提交固定的 jsDelivr/GitHub Raw 提供')
+    : bad('remote Catalog deployment', '部署脚本仍下载/打包 Catalog，或未声明提交固定的远程回退');
   const recommendedUiContract = html.includes('id="minimumBootToggle"') &&
     html.includes('id="defconfigToggle"') &&
     html.includes('id="minimumBootConfig"') && !html.includes('id="minimumBootPanel"') &&
@@ -717,7 +719,7 @@ mirrorRootsOk
   buildLimitContract
     ? ok('仓库主免排队、每用户构建上限、Issue 自助取消与强制取消兜底已接通')
     : bad('per-user build control', '仓库主绕过、准入上限、分槽并发或 Issue 作者取消链路缺失');
-  const catalogUrlBlock = js.slice(js.indexOf('function catalogUrls'), js.indexOf('function stableCatalogIndex'));
+  const catalogProviderBlock = js.slice(js.indexOf('const CATALOG_PROVIDERS'), js.indexOf('function stableCatalogIndex'));
   const menuconfigContract = html.includes('id="menuconfigGrid"') &&
     html.includes('id="menuconfigPanel"') &&
     html.includes('id="menuconfigToggle"') &&
@@ -751,9 +753,15 @@ mirrorRootsOk
     js.includes("if (node.profileId) {") &&
     js.includes('function syncCatalogApplications') &&
     js.includes("['Top level', ...menuBreadcrumb]") &&
-    catalogUrlBlock.indexOf('./catalog-data/') >= 0 &&
-    catalogUrlBlock.indexOf('./catalog-data/') < catalogUrlBlock.indexOf('cdn.jsdelivr.net') &&
-    catalogUrlBlock.indexOf('cdn.jsdelivr.net') < catalogUrlBlock.indexOf('raw.githubusercontent.com') &&
+    !js.includes('`./catalog-data/${asset}`') &&
+    catalogProviderBlock.indexOf('cdn.jsdelivr.net') >= 0 &&
+    catalogProviderBlock.indexOf('cdn.jsdelivr.net') < catalogProviderBlock.indexOf('raw.githubusercontent.com') &&
+    js.includes('function catalogAssetRef(index)') &&
+    js.includes("return /^[0-9a-f]{40}$/.test(ref) ? ref : 'catalog-data';") &&
+    js.includes('async function fetchCatalogIndexFromProvider') &&
+    js.includes('async function fetchCatalogBundle') &&
+    js.includes('catalogIndexesByProvider') &&
+    js.includes('provider.assetUrl(asset, ref)') &&
     js.includes('catalogCacheKey') &&
     js.includes('validateCatalogAsset') &&
     js.includes('if (!branch.fallback || exactRevision) throw remoteError;') &&

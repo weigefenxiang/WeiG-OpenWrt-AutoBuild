@@ -70,6 +70,8 @@ let PACKAGE_MIRRORS = { presets: [{ id: 'auto', label: { 'zh-CN': '跟随源码�
 let MENU_INDEX = null, MENU_CATALOG = null;
 let menuCatalogKey = '', menuLoadingKey = '', menuCatalogSeq = 0, menuCatalogPromise = null;
 let menuCatalogAbortController = null, menuIndexAbortController = null;
+let menuIndexProvider = '';
+const catalogIndexesByProvider = new Map();
 let catalogLoadMode = 'idle', catalogLoadError = '';
 let menuPath = null, menuParent = '', menuExpanded = false, menuSelectedExpanded = false;
 let buildContractExpanded = false;
@@ -722,13 +724,18 @@ function renderCatalogTargetSelectors(preferred = {}) {
   return { target, profile, values: { ...targetSelectorValues }, valid: !catalogTargetMismatch };
 }
 
-function catalogUrls(asset) {
-  return [
-    `./catalog-data/${asset}`,
-    `https://cdn.jsdelivr.net/gh/${MENU_CATALOG_REPO}@catalog-data/${asset}`,
-    `https://raw.githubusercontent.com/${MENU_CATALOG_REPO}/catalog-data/${asset}`,
-  ];
-}
+const CATALOG_PROVIDERS = [
+  {
+    id: 'jsdelivr',
+    indexUrl: () => `https://cdn.jsdelivr.net/gh/${MENU_CATALOG_REPO}@catalog-data/index.json`,
+    assetUrl: (asset, ref) => `https://cdn.jsdelivr.net/gh/${MENU_CATALOG_REPO}@${ref}/${asset}`,
+  },
+  {
+    id: 'github-raw',
+    indexUrl: () => `https://raw.githubusercontent.com/${MENU_CATALOG_REPO}/catalog-data/index.json`,
+    assetUrl: (asset, ref) => `https://raw.githubusercontent.com/${MENU_CATALOG_REPO}/${ref}/${asset}`,
+  },
+];
 function stableCatalogIndex(index) {
   const sources = (index?.sources || []).map((source) => ({
     ...source,
@@ -736,6 +743,27 @@ function stableCatalogIndex(index) {
       .sort((a, b) => b.branch.localeCompare(a.branch, undefined, { numeric: true })),
   })).filter((source) => source.branches.length);
   return { ...index, sources };
+}
+function safeCatalogAsset(asset) {
+  const value = String(asset || '').replace(/^\/+/, '');
+  if (!value || value.includes('..') || !/^[\w./-]+$/.test(value)) {
+    throw new Error(`invalid Catalog asset path: ${asset}`);
+  }
+  return value;
+}
+function catalogAssetRef(index) {
+  const ref = String(index?.assetRef || '').trim().toLowerCase();
+  return /^[0-9a-f]{40}$/.test(ref) ? ref : 'catalog-data';
+}
+function orderedCatalogProviders(preferred = menuIndexProvider) {
+  return [...CATALOG_PROVIDERS].sort((a, b) =>
+    Number(b.id === preferred) - Number(a.id === preferred));
+}
+function catalogBranchFromIndex(index, sourceId, branchName) {
+  const source = index?.sources?.find((item) => item.id === sourceId);
+  const branch = source?.branches?.find((item) =>
+    item.branch === branchName || item.id === branchName);
+  return { source, branch };
 }
 const CATALOG_CACHE_NAME = 'wrt-catalog-cache-v1';
 function catalogCacheKey(asset, expected = {}) {
@@ -769,39 +797,86 @@ async function readCatalogCache(asset, compressed, minSchema, expected = {}) {
     const data = await responseJson(cached, compressed);
     if (Number(data?.schema || 0) < minSchema) return null;
     return { data, url: `cache:${request.url}` };
-  } catch { /* corrupted/stale cache: continue with the network tiers */ }
+  } catch { /* corrupted/stale cache: continue with the remote provider bundle */ }
   return null;
 }
-async function fetchCatalogJson(asset, compressed = false, minSchema = 2, signal, expected = {}) {
-  const errors = [];
-  const cache = typeof caches === 'undefined' ? null : await caches.open(CATALOG_CACHE_NAME).catch(() => null);
-  // A branch asset is immutable by its catalog hash/byte contract.  Prefer a
-  // cache entry keyed by that exact contract; an older hash can never satisfy
-  // the request and therefore falls through to the network tiers.
-  if (expected?.hash || expected?.bytes) {
-    const cached = await readCatalogCache(asset, compressed, minSchema, expected);
-    if (cached) return cached;
+async function fetchCatalogIndexFromProvider(provider, signal) {
+  const url = provider.indexUrl();
+  const response = await fetch(url, { cache: 'no-store', signal });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const index = stableCatalogIndex(await response.json());
+  if (Number(index?.schema || 0) < 2 || !Array.isArray(index.sources) || !index.sources.length) {
+    throw new Error(`stale Catalog index schema ${index?.schema || 0}`);
   }
-  for (const url of catalogUrls(asset)) {
+  if (index.assetRef && !/^[0-9a-f]{40}$/i.test(String(index.assetRef))) {
+    throw new Error('Catalog index has an invalid immutable assetRef');
+  }
+  index.catalogRepo = MENU_CATALOG_REPO;
+  index.loadedFrom = url;
+  index.catalogProvider = provider.id;
+  catalogIndexesByProvider.set(provider.id, index);
+  return { data: index, url, provider: provider.id };
+}
+async function fetchCatalogIndex(signal, preferred = menuIndexProvider) {
+  const errors = [];
+  for (const provider of orderedCatalogProviders(preferred)) {
     try {
-      const response = await fetch(url, { cache: 'no-store', signal });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      await validateCatalogAsset(response, expected);
-      const copy = response.clone();
-      const data = await responseJson(response, compressed);
-      if (Number(data?.schema || 0) < minSchema) {
-        throw new Error(`stale schema ${data?.schema || 0}`);
-      }
-      if (cache) await cache.put(new Request(catalogCacheKey(asset, expected)), copy).catch(() => {});
-      return { data, url };
+      const result = await fetchCatalogIndexFromProvider(provider, signal);
+      menuIndexProvider = provider.id;
+      return result;
     } catch (error) {
       if (error?.name === 'AbortError') throw error;
-      errors.push(`${url}: ${error.message}`);
+      errors.push(`${provider.id}: ${error.message}`);
     }
   }
-  const cached = await readCatalogCache(asset, compressed, minSchema, expected);
-  if (cached) return cached;
-  throw new Error(`Catalog asset unavailable: ${asset}\n${errors.join('\n')}`);
+  throw new Error(`Catalog index unavailable\n${errors.join('\n')}`);
+}
+async function fetchCatalogAssetFromIndex(index, provider, sourceId, branchName, signal) {
+  const { branch } = catalogBranchFromIndex(index, sourceId, branchName);
+  if (!branch?.asset || branch.state === 'unavailable') {
+    throw new Error(`Catalog branch unavailable: ${sourceId}/${branchName}`);
+  }
+  const asset = safeCatalogAsset(branch.asset);
+  const cached = await readCatalogCache(asset, true, 2, branch);
+  if (cached) return { ...cached, index, provider: provider.id, branch };
+  const ref = catalogAssetRef(index);
+  const url = provider.assetUrl(asset, ref);
+  const response = await fetch(url, { cache: 'no-store', signal });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  await validateCatalogAsset(response, branch);
+  const copy = response.clone();
+  const data = await responseJson(response, true);
+  if (Number(data?.schema || 0) < 2) {
+    throw new Error(`stale schema ${data?.schema || 0}`);
+  }
+  const cache = typeof caches === 'undefined' ? null :
+    await caches.open(CATALOG_CACHE_NAME).catch(() => null);
+  if (cache) await cache.put(new Request(catalogCacheKey(asset, branch)), copy).catch(() => {});
+  return { data, url, index, provider: provider.id, branch };
+}
+async function fetchCatalogBundle(source, branch, signal) {
+  const errors = [];
+  const sourceId = source?.id || '';
+  const branchName = branch?.branch || branch?.id || '';
+  if (branch?.asset && (branch.hash || branch.bytes)) {
+    const cached = await readCatalogCache(safeCatalogAsset(branch.asset), true, 2, branch);
+    if (cached) return { ...cached, index: MENU_INDEX, provider: 'cache', branch };
+  }
+  for (const provider of orderedCatalogProviders()) {
+    try {
+      let index = catalogIndexesByProvider.get(provider.id);
+      if (!index) index = (await fetchCatalogIndexFromProvider(provider, signal)).data;
+      const result = await fetchCatalogAssetFromIndex(
+        index, provider, sourceId, branchName, signal,
+      );
+      menuIndexProvider = provider.id;
+      return result;
+    } catch (error) {
+      if (error?.name === 'AbortError') throw error;
+      errors.push(`${provider.id}: ${error.message}`);
+    }
+  }
+  throw new Error(`Catalog bundle unavailable: ${sourceId}/${branchName}\n${errors.join('\n')}`);
 }
 async function responseJson(response, compressed) {
   if (!compressed) return response.json();
@@ -826,7 +901,7 @@ async function refreshMenuIndex() {
     const previousCatalogKey = menuCatalogKey;
     const previousCatalogAsset = previousBranch?.asset || '';
     const localSources = MENU_INDEX?.sources || [];
-    const remote = await fetchCatalogJson('index.json', false, 2, abortController.signal);
+    const remote = await fetchCatalogIndex(abortController.signal);
     const index = stableCatalogIndex(remote.data);
     if (index.schema >= 2 && Array.isArray(index.sources) && index.sources.length) {
       for (const source of localSources) {
@@ -865,7 +940,7 @@ async function refreshMenuIndex() {
         renderCatalogLocatorResults();
       }
     }
-  } catch (e) { /* 独立目录尚未发布时继续使用仓库内回退清单 */ }
+  } catch (e) { /* 远程 Catalog 暂不可用时继续使用仓库内回退清单 / keep the bundled locator while remote providers are unavailable */ }
   finally {
     if (menuIndexAbortController === abortController) menuIndexAbortController = null;
   }
@@ -1103,7 +1178,7 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
   menuCatalogPromise = (async () => {
     let catalog;
     try {
-      const remote = await fetchCatalogJson(branch.asset, true, 2, abortController.signal, branch);
+      const remote = await fetchCatalogBundle(source, branch, abortController.signal);
       catalog = remote.data;
       catalog.loadedFrom = remote.url;
     } catch (remoteError) {

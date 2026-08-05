@@ -128,9 +128,9 @@ WeiG-OpenWrt-AutoBuild/
 - 网页按 Catalog 的 `targetSelectors`/`targetTree` 动态生成 Target 控件，不再把五级结构写死：无选项隐藏、单选项自动选中并压缩展示、多选项才显示下拉框；上游以后增加层级时会自动追加。五列使用弹性宽度，Source/System/Subtarget 较短、Branch 居中、Profile 优先获得剩余空间，额外层级和窄屏自动换行。所有字段和选值始终显示上游英文，当前语言译文仅在桌面悬停/聚焦或手机轻触时出现，非中文语言绝不回退中文。Catalog 清单当前覆盖 ImmortalWrt 稳定版、OpenWrt 允许分支、Lean LEDE 与 hanwckf `openwrt-21.02` 兼容源。品牌/型号注册表仅保留给旧配置导入和历史请求兼容。Advanced menuconfig 排除重复 `Target Devices`，默认折叠并按真实菜单树逐级展示；当前层按实际内容高度展开，超过视口上限才进入内部滚动，普通项每批直接渲染 80 项，滚动到底继续加载，真正的 Kconfig choice 才使用下拉框。分类使用带强调色的卡片，普通项使用较浅的独立行，层次一眼可分。面包屑祖先可直接跳转，桌面与手机页面不会随数千选项无限增长。
 - 用户加载 `.config`、JSON 或 `config.buildinfo` 时，网页先从元数据、文件名和 `CONFIG_TARGET_*` 确定源码/分支并等待对应 Catalog，再恢复 Target/menuconfig，避免异步回退到目录首项。未收录 Target 保持为 `custom-target`；未收录配置项进入每批 50 项的导入工作区，可修改、关闭、删除配置行或恢复上传原值。上传的完整配置始终是唯一权威配置。
 - Catalog 以源码 `.packageinfo`/Kconfig 英文为权威名称，在 `translations/zh-CN.json` 维护精选 Applications 的 11 语名称与用途，在 `translations/menu-i18n.json` 维护人工校对菜单；发布阶段用 `i18n-cache.json` 复用历史译文，只把新增/变化文本交给 GitHub Models。额度不足或翻译服务异常会保留官方英文并记录待译数量，不阻断成功分支。Advanced menuconfig 只把英文作为主界面文字，当前语言名称与用途在桌面悬停/键盘聚焦或手机轻触时显示；软件包名优先获得横向空间、始终保持单行并在溢出时省略，名称悬停只在当前语言有真实译文时显示译文。工作区的 `N/M/Y ?` 总说明统一解释三态：N 禁用且不编译，M 模块化或生成默认不写入固件的独立安装包，Y 启用并编译进固件。搜索匹配源码、分支、Target、任意菜单层级、英文、译文、symbol 与用途。
-- Advanced 软件包名只有存在当前语言真实译文时才建立翻译提示，不使用英文回退或裸 `PACKAGE_` symbol；说明文字只在视觉截断时通过统一委托事件显示全文，完整行不产生提示。Source/Branch 选定后，详细 Target Catalog 尚未返回期间由剩余列显示加载圆圈；成功后替换为 Target 控件，失败则显示可点击重试。浏览器按 Catalog index 的 commit/hash/bytes 精确契约，依次读取命中契约的缓存、同源 `catalog-data` 镜像、jsDelivr 与 GitHub raw；存在精确契约时不得用旧本地分片兜底。Catalog Actions 负责生成数据，固件编译 Actions 不参与页面加载。
+- Advanced 软件包名只有存在当前语言真实译文时才建立翻译提示，不使用英文回退或裸 `PACKAGE_` symbol；说明文字只在视觉截断时通过统一委托事件显示全文，完整行不产生提示。Source/Branch 选定后，详细 Target Catalog 尚未返回期间由剩余列显示加载圆圈；成功后替换为 Target 控件，失败则显示可点击重试。浏览器按 Catalog index 的 commit/hash/bytes 精确契约，先从 jsDelivr 读取 index 与该 index 固定 Git 提交中的分片；整组失败才切换 GitHub raw。VPS 不保存 `catalog-data`，存在精确契约时不得用旧本地分片兜底。Catalog Actions 负责生成数据，固件编译 Actions 不参与页面加载。
 - 英文界面不显示译文浮层或译文标签；非英文桌面继续悬停/聚焦查看，手机通过独立“译/Tr”标签打开，避免触发分类跳转。手机菜单分类名依次尝试缩小 1/2/3px，仍放不下才恢复可读字号并分两行；choice、普通项和软件包行把操作控件尽量保持在右侧，名称/说明最多两行，文本输入才允许占第二排。
-- 网页只接受 schema、commit、压缩字节数与 SHA-256 都符合 index 的 Catalog，防止 CDN 或同源镜像旧分片遮住新数据。`Top level` 固定作为可回跳的“主菜单”；`Applications` 与精选插件按 `CONFIG_PACKAGE_*` 双向关联，普通模式隐藏当前 Catalog 不提供的项，开发者模式才显示灰项。
+- 网页只接受 schema、commit、压缩字节数与 SHA-256 都符合 index 的 Catalog，防止 CDN 的旧 index 或旧分片遮住新数据；每个 index 都固定到不可变数据提交。`Top level` 固定作为可回跳的“主菜单”；`Applications` 与精选插件按 `CONFIG_PACKAGE_*` 双向关联，普通模式隐藏当前 Catalog 不提供的项，开发者模式才显示灰项。
 - Catalog 的 Publish 按分支校验当前结果。成功分支立即发布新分片；失败或校验损坏的分支隔离本轮结果并沿用 `catalog-data` 的 last-good，index 分别标为 fresh/stale/unavailable。部分失败时滚动目录仍更新、矩阵 Workflow 仍保持红色；只有所有分支都成功且通过校验时才更新完整 Release。
 - Catalog 翻译任务使用工作流最小权限 `models: read`，默认每周增量处理 500 条文本；翻译警告写入 `translation-summary.json` 和 Publish Summary。人工表、上游英文与已经成功的目录发布不受模型故障影响。
 - 360T7 最小 config 不携带完整 Kconfig 软件包表;开发者搜索所需三源状态保存在 `tools/package-baseline-360t7.json`,由 `gen-plugins` 合并生成 `packages.json`。
@@ -178,7 +178,7 @@ WeiG-OpenWrt-AutoBuild/
 
 ### 2.7 部署与迁移
 
-- 页面整个 `site/wrt/` 目录拷走即可用；Catalog 使用精确缓存 → 同源镜像 → jsDelivr → raw，其他静态数据使用相对路径和本地优先降级
+- 页面整个 `site/wrt/` 目录拷走即可用；Catalog 使用精确缓存 → jsDelivr index + 固定提交分片 → GitHub Raw index + 固定提交分片，VPS 不保存 Catalog；其他静态数据使用相对路径和本地优先降级
 - Fork 后只需修改 `site/wrt/data/project.json` 的主仓库、Catalog 仓库与博客地址；网页链接、Issue 目标和运行时 Catalog 会自动采用该文件。HTML 中保留的人类可读链接仅是旧部署兜底。
 - 博客副本:`node tools/sync-blog.mjs [博客路径]`(自动剔除 *.config,原子替换)
 
