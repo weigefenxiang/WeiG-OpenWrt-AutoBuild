@@ -77,11 +77,22 @@ let menuPath = null, menuParent = '', menuExpanded = false, menuSelectedExpanded
 let buildContractExpanded = false;
 let menuVisibleLimit = 80, menuHistory = [], menuBreadcrumb = [];
 const menuValues = new Map();
+// menuTouched is the full explicit output layer (user, recommended, imported repairs,
+// and dependency closure). User intent is tracked separately so upstream defaults never
+// inflate the curated-plugin counter.
 const menuTouched = new Set();
-// Profile packages are applied automatically by the Catalog. Keep their symbols
-// separate so changing Target/Profile cannot leak the previous target's packages.
+const catalogBaselineValues = new Map();
+const catalogBaselineOrigins = new Map();
+const catalogContractOrigins = new Map();
+const catalogRecommendedValues = new Map();
+const catalogDependencySymbols = new Set();
+const catalogImportedSymbols = new Set();
+const catalogUserOverrides = new Map();
+// Profile packages are applied automatically by the Catalog. Keep their package names
+// separate so changing Target/Profile cannot leak the previous target's contract.
 const catalogProfilePackageSymbols = new Set();
 const catalogContractSymbols = new Set();
+let menuOriginFilter = 'all';
 const menuImportedOriginal = new Map();
 const menuImportedNonDefault = new Set();
 const importedConfigValues = new Map();
@@ -160,7 +171,7 @@ const INITIAL_CATALOG_TARGET = {
   system: 'x86', subtarget: '64', profileSymbol: 'DEVICE_generic',
 };
 let catalogInitialTargetPending = true;
-const DATA_CACHE_VERSION = 'v19-catalog-build-contract';
+const DATA_CACHE_VERSION = 'v20-catalog-selection-layers';
 const NTP_PRESETS = {
   cn: ['ntp.aliyun.com', 'time1.cloud.tencent.com', 'cn.ntp.org.cn', 'cn.pool.ntp.org'],
   global: ['0.openwrt.pool.ntp.org', '1.openwrt.pool.ntp.org', '2.openwrt.pool.ntp.org', '3.openwrt.pool.ntp.org'],
@@ -287,6 +298,24 @@ function applyI18n() {
     uiText('显示已关闭项', '顯示已關閉項目', 'Show disabled');
   if ($('importUnknownMore')) $('importUnknownMore').textContent =
     uiText('再显示 50 项', '再顯示 50 項', 'Show 50 more');
+  if ($('menuconfigOriginFilter')) {
+    const labels = [
+      ['all', uiText('全部来源', '全部來源', 'All origins')],
+      ['user', uiText('用户选择', '使用者選擇', 'User selected')],
+      ['excluded', uiText('明确排除', '明確排除', 'Explicitly excluded')],
+      ['target', uiText('Target / Profile', 'Target / Profile', 'Target / Profile')],
+      ['default', uiText('上游默认', '上游預設', 'Upstream defaults')],
+      ['recommended', uiText('网页推荐', '網頁推薦', 'Recommended')],
+      ['dependency', uiText('自动依赖', '自動相依', 'Dependencies')],
+      ['imported', uiText('导入配置', '匯入設定', 'Imported')],
+    ];
+    for (const [value, label] of labels) {
+      const option = [...$('menuconfigOriginFilter').options].find((item) => item.value === value);
+      if (option) option.textContent = label;
+    }
+    const label = $('menuconfigOriginFilter').closest('label')?.querySelector('span');
+    if (label) label.textContent = uiText('来源', '來源', 'Origin');
+  }
   if ($('menuconfigStateHelp')) {
     const help = uiText(
       'N：禁用，不编译。\nM：模块化或编译为可安装软件包，默认不写入固件。\nY：启用并编译进固件。',
@@ -1195,28 +1224,11 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
     MENU_CATALOG = catalog;
     menuCatalogKey = key;
     buildMenuIndexes(catalog);
-    menuValues.clear();
-    menuTouched.clear();
-    catalogProfilePackageSymbols.clear();
-    catalogContractSymbols.clear();
+    resetCatalogSelectionLayers();
     minimumBootOriginal.clear();
     minimumBootTouchedOriginal.clear();
     menuImportedOriginal.clear();
     menuImportedNonDefault.clear();
-    for (const option of menuSearchOptions) {
-      // Hidden support symbols are often selected by Target Kconfig. Target Devices are
-      // intentionally omitted from the runtime Catalog, so pre-filling them with N would
-      // turn an unresolved target default into a false dependency failure.
-      if (option.hidden) continue;
-      const value = simpleKconfigDefault(option);
-      if (value !== '') menuValues.set(option.symbol, value);
-    }
-    for (const choice of catalog.menu.choices || []) {
-      const selected = (menuChoiceOptions.get(choice.id) || []).some((item) =>
-        item.choice === choice.id && menuValues.get(item.symbol) === 'y');
-      const preferred = String(choice.defaults?.[0] || '').split(/\s+/)[0];
-      if (!selected && preferred) menuValues.set(preferred, 'y');
-    }
     resetMenuNavigation();
     menuVisibleLimit = MENU_PAGE_SIZE;
     renderCatalogPicker(false, requested || { sourceId: activeSource.id, branchId: activeBranch.id });
@@ -1331,21 +1343,21 @@ function catalogSourceObject(source, branch) {
     variants: [],
   };
 }
-function catalogTargetPackageOps(target, profile) {
-  const raw = [
-    ...(target?.packages || []),
-    ...(profile?.packages || []),
-  ].map((pkg) => String(pkg).trim()).filter(Boolean);
-  const state = new Map();
+function catalogPackageOps(tokens = []) {
+  const raw = tokens.map((pkg) => String(pkg).trim()).filter(Boolean);
+  const values = new Map();
   for (const token of raw) {
     const remove = token.startsWith('-');
     const name = token.replace(/^[+-]/, '').trim();
     if (!name) continue;
-    state.set(name, remove ? 'remove' : 'add');
+    values.set(name, remove ? 'remove' : 'add');
   }
-  const add = [...state].filter(([, value]) => value === 'add').map(([name]) => name);
-  const remove = [...state].filter(([, value]) => value === 'remove').map(([name]) => name);
+  const add = [...values].filter(([, value]) => value === 'add').map(([name]) => name);
+  const remove = [...values].filter(([, value]) => value === 'remove').map(([name]) => name);
   return { raw: [...new Set(raw)], add, remove };
+}
+function catalogTargetPackageOps(target, profile) {
+  return catalogPackageOps([...(target?.packages || []), ...(profile?.packages || [])]);
 }
 async function applyCatalogTarget() {
   if (!MENU_CATALOG || catalogTargetMismatch) return;
@@ -1355,6 +1367,8 @@ async function applyCatalogTarget() {
   const { target, profile } = selectedTarget;
   if (!target || !profile) return;
   const source = catalogSourceObject(sourceRow, branchRow);
+  const targetPackageOps = catalogPackageOps(target?.packages || []);
+  const profilePackageOps = catalogPackageOps(profile?.packages || []);
   const packageOps = catalogTargetPackageOps(target, profile);
   const previousTarget = state.device?.id === 'catalog-target' ? state.device.target : null;
   const previousKey = previousTarget
@@ -1382,7 +1396,12 @@ async function applyCatalogTarget() {
       arch: String(target.arch || '').trim(),
       archPackages: String(target.archPackages || '').trim(),
       features: [...(target.features || [])],
-      targetPackages: [...(target.packages || [])],
+      targetPackages: targetPackageOps.raw,
+      targetPackagesAdd: targetPackageOps.add,
+      targetPackagesRemove: targetPackageOps.remove,
+      profileDeclaredPackages: profilePackageOps.raw,
+      profileDeclaredPackagesAdd: profilePackageOps.add,
+      profileDeclaredPackagesRemove: profilePackageOps.remove,
       profilePackages: packageOps.raw,
       profilePackagesAdd: packageOps.add,
       profilePackagesRemove: packageOps.remove,
@@ -1411,21 +1430,50 @@ async function applyCatalogTarget() {
     await switchDevice(device, false);
   }
   state.device = device;
+  const needsBaseline = targetChanged || !catalogBaselineValues.size;
+  if (needsBaseline) {
+    initializeCatalogBaseline();
+    const profileAssignments = [];
+    for (const pkg of device.target.targetPackagesAdd || []) {
+      catalogProfilePackageSymbols.add(pkg);
+      if (menuOptionBySymbol.has(`PACKAGE_${pkg}`)) {
+        profileAssignments.push({
+          symbol: `PACKAGE_${pkg}`, value: 'y', source: target.name || target.subtarget,
+          origin: 'target',
+        });
+      }
+    }
+    for (const pkg of device.target.targetPackagesRemove || []) {
+      catalogProfilePackageSymbols.add(pkg);
+      if (menuOptionBySymbol.has(`PACKAGE_${pkg}`)) {
+        profileAssignments.push({
+          symbol: `PACKAGE_${pkg}`, value: 'n', source: target.name || target.subtarget,
+          origin: 'target-remove',
+        });
+      }
+    }
+    for (const pkg of device.target.profileDeclaredPackagesAdd || []) {
+      catalogProfilePackageSymbols.add(pkg);
+      if (menuOptionBySymbol.has(`PACKAGE_${pkg}`)) {
+        profileAssignments.push({
+          symbol: `PACKAGE_${pkg}`, value: 'y', source: profile.id,
+          origin: 'profile-add',
+        });
+      }
+    }
+    for (const pkg of device.target.profileDeclaredPackagesRemove || []) {
+      catalogProfilePackageSymbols.add(pkg);
+      if (menuOptionBySymbol.has(`PACKAGE_${pkg}`)) {
+        profileAssignments.push({
+          symbol: `PACKAGE_${pkg}`, value: 'n', source: profile.id,
+          origin: 'profile-remove',
+        });
+      }
+    }
+    applyCatalogContractAssignments(profileAssignments, 'target-profile');
+    snapshotCatalogBaseline();
+  }
   syncCatalogApplications();
-  const profileAssignments = [];
-  for (const pkg of device.target.profilePackagesAdd || []) {
-    catalogProfilePackageSymbols.add(pkg);
-    if (menuOptionBySymbol.has(`PACKAGE_${pkg}`)) {
-      profileAssignments.push({ symbol: `PACKAGE_${pkg}`, value: 'y', source: profile.id });
-    }
-  }
-  for (const pkg of device.target.profilePackagesRemove || []) {
-    catalogProfilePackageSymbols.add(pkg);
-    if (menuOptionBySymbol.has(`PACKAGE_${pkg}`)) {
-      profileAssignments.push({ symbol: `PACKAGE_${pkg}`, value: 'n', source: profile.id });
-    }
-  }
-  applyCatalogContractAssignments(profileAssignments, 'target-profile');
   activateTargetRecord(record);
   renderMenuconfig();
   renderBuildContract();
@@ -1487,6 +1535,7 @@ function renderBuildContract() {
     .filter((pkg) => !String(pkg).startsWith('-'));
   const selected = effectiveSelection();
   const selectedNames = selected.all.map((item) => item.id);
+  const selectionSummary = catalogSelectionSummary();
   const commit = String(MENU_CATALOG.source?.commit || '').slice(0, 8) || 'unknown';
   $('buildContractTitle').textContent = contractText('当前构建契约', 'Current build contract');
   $('buildContractCatalog').textContent = `${contractText('Catalog 提交', 'Catalog commit')} ${commit}`;
@@ -1498,6 +1547,13 @@ function renderBuildContract() {
     [contractText('Target Profile', 'Target Profile'), target.profileLabel || target.profileSymbol || '-'],
     [contractText('构建架构 / 软件包架构', 'Build / package architecture'),
       `${target.arch || contractText('Catalog 未提供', 'Missing from Catalog')} / ${target.archPackages || contractText('Catalog 未提供', 'Missing from Catalog')}`],
+    [contractText('基础 / 上游默认', 'Target baseline / upstream defaults'),
+      `${selectionSummary.target} / ${selectionSummary.defaults}`],
+    [contractText('推荐 / 自动依赖', 'Recommended / dependencies'),
+      `${selectionSummary.recommended} / ${selectionSummary.dependency}`],
+    [contractText('用户启用 / 排除', 'User enabled / excluded'),
+      `${selectionSummary.userEnabled} / ${selectionSummary.userExcluded}`],
+    [contractText('最终启用软件包', 'Final enabled packages'), String(selectionSummary.finalEnabled)],
   ];
   for (const [label, value] of rows) {
     const row = document.createElement('div');
@@ -1523,10 +1579,172 @@ function renderBuildContract() {
   box.hidden = false;
 }
 
+function resetCatalogSelectionLayers() {
+  menuValues.clear();
+  menuTouched.clear();
+  catalogBaselineValues.clear();
+  catalogBaselineOrigins.clear();
+  catalogContractOrigins.clear();
+  catalogRecommendedValues.clear();
+  catalogDependencySymbols.clear();
+  catalogImportedSymbols.clear();
+  catalogUserOverrides.clear();
+  catalogProfilePackageSymbols.clear();
+  catalogContractSymbols.clear();
+  state.sel.clear();
+  state.removed.clear();
+  menuOriginFilter = 'all';
+  if ($('menuconfigOriginFilter')) $('menuconfigOriginFilter').value = 'all';
+}
+function defaultConditionState(condition) {
+  if (!condition) return { status: 'satisfied', level: 2 };
+  if (CATALOG_ENGINE?.evaluateExpressionState) {
+    const context = catalogValidationContext(menuValues, 'interactive');
+    return CATALOG_ENGINE.evaluateExpressionState(
+      condition, context.values, context.validationOptions,
+    );
+  }
+  return { status: kconfigExpr(condition) > 0 ? 'satisfied' : 'unsatisfied', level: null };
+}
+function initializeCatalogBaseline() {
+  menuValues.clear();
+  menuTouched.clear();
+  catalogBaselineValues.clear();
+  catalogBaselineOrigins.clear();
+  catalogContractOrigins.clear();
+  catalogRecommendedValues.clear();
+  catalogDependencySymbols.clear();
+  catalogImportedSymbols.clear();
+  catalogUserOverrides.clear();
+  catalogProfilePackageSymbols.clear();
+  catalogContractSymbols.clear();
+  state.sel.clear();
+  state.removed.clear();
+  // Defaults can reference other defaults. Iterate to a stable point after the Target/Profile
+  // context exists; deferred conditions are never treated as enabled.
+  for (let pass = 0; pass < 8; pass++) {
+    let changed = false;
+    for (const option of menuSearchOptions) {
+      if (option.hidden) continue;
+      const value = simpleKconfigDefault(option);
+      if (value === '' || menuValues.get(option.symbol) === value) continue;
+      menuValues.set(option.symbol, value);
+      changed = true;
+    }
+    if (!changed) break;
+  }
+  for (const choice of MENU_CATALOG?.menu?.choices || []) {
+    const selected = (menuChoiceOptions.get(choice.id) || []).some((item) =>
+      item.choice === choice.id && menuValues.get(item.symbol) === 'y');
+    const preferred = String(choice.defaults?.[0] || '').split(/\s+/)[0];
+    if (!selected && preferred && menuOptionBySymbol.has(preferred)) {
+      menuValues.set(preferred, 'y');
+    }
+  }
+  snapshotCatalogBaseline();
+}
+function snapshotCatalogBaseline() {
+  catalogBaselineValues.clear();
+  for (const option of menuSearchOptions) {
+    const value = menuValues.get(option.symbol) ?? (option.type === 'string' ? '' : 'n');
+    catalogBaselineValues.set(option.symbol, value);
+    if (value !== 'n' && value !== '' && !catalogContractOrigins.has(option.symbol) &&
+        !catalogDependencySymbols.has(option.symbol)) {
+      catalogBaselineOrigins.set(option.symbol, {
+        kind: 'kconfig-default', detail: 'Kconfig default',
+      });
+    }
+  }
+}
+function catalogInheritedValue(symbol) {
+  if (state.importedConfig && menuImportedOriginal.has(symbol)) return menuImportedOriginal.get(symbol);
+  if (state.minimumBoot && catalogRecommendedValues.has(symbol)) return catalogRecommendedValues.get(symbol);
+  return catalogBaselineValues.get(symbol) ?? (menuOptionBySymbol.get(symbol)?.type === 'string' ? '' : 'n');
+}
+function catalogOriginMeta(option) {
+  const symbol = option?.symbol || '';
+  const value = menuValues.get(symbol) ?? simpleKconfigDefault(option || {});
+  if (catalogUserOverrides.has(symbol)) {
+    return catalogUserOverrides.get(symbol) === 'n'
+      ? { kind: 'user-exclude', label: uiText('用户排除', '使用者排除', 'User excluded') }
+      : { kind: 'user', label: uiText('用户选择', '使用者選擇', 'User selected') };
+  }
+  if (catalogImportedSymbols.has(symbol)) {
+    return { kind: 'imported', label: uiText('导入配置', '匯入設定', 'Imported') };
+  }
+  if (catalogRecommendedValues.has(symbol)) {
+    return { kind: 'recommended', label: uiText('网页推荐', '網頁推薦', 'Recommended') };
+  }
+  const contract = catalogContractOrigins.get(symbol);
+  if (contract) {
+    const labels = {
+      target: uiText('Target 基础', 'Target 基礎', 'Target baseline'),
+      'target-remove': uiText('Target 排除', 'Target 排除', 'Target exclusion'),
+      'profile-add': uiText('Profile 基础', 'Profile 基礎', 'Profile baseline'),
+      'profile-remove': uiText('Profile 排除', 'Profile 排除', 'Profile exclusion'),
+    };
+    return { kind: contract.kind, label: labels[contract.kind] || contract.kind, detail: contract.detail || '' };
+  }
+  if (catalogDependencySymbols.has(symbol)) {
+    return { kind: 'dependency', label: uiText('自动依赖', '自動相依', 'Dependency') };
+  }
+  if (value !== 'n' && value !== '') {
+    const baseline = catalogBaselineOrigins.get(symbol);
+    if (baseline) return { kind: baseline.kind, label: uiText('上游默认', '上游預設', 'Upstream default') };
+  }
+  return { kind: 'inactive', label: uiText('未启用', '未啟用', 'Disabled') };
+}
+function catalogOriginMatches(option) {
+  if (menuOriginFilter === 'all') return true;
+  const origin = catalogOriginMeta(option).kind;
+  if (menuOriginFilter === 'target') return ['target', 'profile-add'].includes(origin);
+  if (menuOriginFilter === 'default') return origin === 'kconfig-default';
+  if (menuOriginFilter === 'excluded') return ['user-exclude', 'target-remove', 'profile-remove'].includes(origin);
+  return origin === menuOriginFilter;
+}
+function catalogSelectionSummary() {
+  const summary = {
+    target: 0, defaults: 0, recommended: 0, dependency: 0, imported: 0,
+    userEnabled: 0, userExcluded: 0, finalEnabled: 0,
+  };
+  for (const option of menuSearchOptions) {
+    if (!option.symbol.startsWith('PACKAGE_')) continue;
+    const value = menuValues.get(option.symbol) ?? simpleKconfigDefault(option);
+    if (value !== 'n' && value !== '') summary.finalEnabled++;
+    const origin = catalogOriginMeta(option).kind;
+    if (['target', 'profile-add'].includes(origin) && value !== 'n') summary.target++;
+    else if (origin === 'kconfig-default' && value !== 'n') summary.defaults++;
+    else if (origin === 'recommended' && value !== 'n') summary.recommended++;
+    else if (origin === 'dependency' && value !== 'n') summary.dependency++;
+    else if (origin === 'imported' && value !== 'n') summary.imported++;
+    else if (origin === 'user' && value !== 'n') summary.userEnabled++;
+    else if (origin === 'user-exclude') summary.userExcluded++;
+  }
+  return summary;
+}
+function restoreCatalogDefault(option) {
+  if (!option) return;
+  catalogUserOverrides.delete(option.symbol);
+  const plugin = option.symbol.startsWith('PACKAGE_') ? PLUGINS?.plugins?.find((item) =>
+    curatedPackageCandidates(item).includes(option.symbol.slice(8))) : null;
+  if (plugin) {
+    state.sel.delete(plugin.id);
+    state.removed.delete(plugin.id);
+  }
+  const value = catalogInheritedValue(option.symbol);
+  const result = applyCatalogIntent(option, value, true, 'restore');
+  if (result.violations.length) showToast(CATALOG_ENGINE.formatViolations(result.violations));
+  renderMenuconfig();
+  renderMinimumBoot();
+  renderFirmwareSettings();
+  renderGroups();
+  updateStats();
+}
 function simpleKconfigDefault(option) {
   for (const raw of option.defaults || []) {
     const [value, condition] = raw.split(/\s+if\s+/, 2);
-    if (!condition || kconfigExpr(condition) > 0) return value.replace(/^"|"$/g, '');
+    const evaluated = defaultConditionState(condition);
+    if (evaluated.status === 'satisfied') return value.replace(/^"|"$/g, '');
   }
   return option.type === 'string' ? '' : 'n';
 }
@@ -1573,19 +1791,24 @@ function optionMaxLevel(option) {
   return Math.max(0, ...optionDependencyVariants(option).map((group) =>
     group.reduce((level, expression) => Math.min(level, kconfigExpr(expression)), 2)));
 }
-function syncMenuToCurated(option, value) {
+function syncMenuToCurated(option, value, source = 'user') {
   if (!option.symbol.startsWith('PACKAGE_') || !PLUGINS?.plugins || !state.source) return false;
   const packageName = option.symbol.slice('PACKAGE_'.length);
   const plugin = PLUGINS.plugins.find((item) =>
     curatedPackageCandidates(item).includes(packageName));
   if (!plugin) return false;
-  const builtin = pluginState(plugin) === 'builtin';
-  if (value === 'y') {
-    if (builtin) state.removed.delete(plugin.id);
-    else state.sel.add(plugin.id);
+  if (source === 'restore') {
+    state.sel.delete(plugin.id);
+    state.removed.delete(plugin.id);
+    return true;
+  }
+  if (source !== 'user') return true;
+  if (value === 'n') {
+    state.sel.delete(plugin.id);
+    state.removed.add(plugin.id);
   } else {
-    if (builtin && !plugin.locked) state.removed.add(plugin.id);
-    else if (!builtin) state.sel.delete(plugin.id);
+    state.sel.add(plugin.id);
+    state.removed.delete(plugin.id);
   }
   return true;
 }
@@ -1615,13 +1838,19 @@ function syncCatalogApplications() {
   if (state.device?.id !== 'catalog-target' || !PLUGINS?.plugins) return;
   for (const plugin of PLUGINS.plugins) {
     const option = curatedMenuOption(plugin);
-    if (!option) {
+    if (!option || !catalogUserOverrides.has(option.symbol)) {
       state.sel.delete(plugin.id);
+      state.removed.delete(plugin.id);
       continue;
     }
-    const value = menuValues.get(option.symbol) ?? simpleKconfigDefault(option);
-    if (value !== 'n') state.sel.add(plugin.id);
-    else state.sel.delete(plugin.id);
+    const value = catalogUserOverrides.get(option.symbol);
+    if (value === 'n') {
+      state.sel.delete(plugin.id);
+      state.removed.add(plugin.id);
+    } else {
+      state.sel.add(plugin.id);
+      state.removed.delete(plugin.id);
+    }
   }
 }
 function resetMenuNavigation() {
@@ -1652,27 +1881,36 @@ function menuOptionSelected(option) {
   const value = menuValues.get(option.symbol) ?? simpleKconfigDefault(option);
   return menuTouched.has(option.symbol) || menuImportedNonDefault.has(option.symbol) || value !== 'n';
 }
-function applyCatalogIntent(option, value, force = false) {
+function applyCatalogIntent(option, value, force = false, source = 'user') {
   if (!option) return { changes: [], violations: [] };
-  if (!CATALOG_MODEL || !CATALOG_ENGINE) {
-    const previous = menuValues.get(option.symbol) ?? 'n';
-    menuValues.set(option.symbol, value);
-    return { changes: [{ symbol: option.symbol, from: previous, to: value, reason: 'fallback' }], violations: [] };
-  }
-  const context = catalogValidationContext(menuValues, 'interactive');
-  const result = CATALOG_ENGINE.applyUserIntent(CATALOG_MODEL, context.values, {
-    symbol: option.symbol,
-    value,
-    force,
-    validationOptions: context.validationOptions,
-  });
+  const previous = menuValues.get(option.symbol) ?? 'n';
+  const result = (!CATALOG_MODEL || !CATALOG_ENGINE)
+    ? { changes: [{ symbol: option.symbol, from: previous, to: value, reason: 'fallback' }], violations: [] }
+    : CATALOG_ENGINE.applyUserIntent(CATALOG_MODEL,
+      catalogValidationContext(menuValues, 'interactive').values, {
+        symbol: option.symbol,
+        value,
+        force,
+        validationOptions: catalogValidationContext(menuValues, 'interactive').validationOptions,
+      });
   for (const change of result.changes) {
     menuValues.set(change.symbol, change.to);
-    menuTouched.add(change.symbol);
+    const explicit = change.symbol === option.symbol;
+    if (source === 'restore' && explicit) {
+      if (!catalogRecommendedValues.has(change.symbol) && !catalogImportedSymbols.has(change.symbol)) {
+        menuTouched.delete(change.symbol);
+      }
+    } else {
+      menuTouched.add(change.symbol);
+    }
+    if (source === 'user' && explicit) catalogUserOverrides.set(change.symbol, change.to);
+    else if (source === 'recommended' && explicit) catalogRecommendedValues.set(change.symbol, change.to);
+    else if (source === 'imported') catalogImportedSymbols.add(change.symbol);
+    else if (!explicit || source === 'dependency') catalogDependencySymbols.add(change.symbol);
     const changedOption = menuOptionBySymbol.get(change.symbol);
     if (!changedOption) continue;
-    syncMenuToCurated(changedOption, change.to);
-    if (!minimumBootApplying) {
+    syncMenuToCurated(changedOption, change.to, explicit ? source : 'dependency');
+    if (source === 'user' && explicit && !minimumBootApplying) {
       reconcileMinimumBootChange(changedOption, change.to);
       syncThemeFromMenu(changedOption, change.to);
     }
@@ -1681,7 +1919,13 @@ function applyCatalogIntent(option, value, force = false) {
 }
 function applyCatalogContractAssignments(assignments, reason = 'catalog-contract') {
   if (!assignments?.length) return { changes: [], violations: [] };
-  for (const assignment of assignments) catalogContractSymbols.add(assignment.symbol);
+  const directSymbols = new Set(assignments.map((assignment) => assignment.symbol));
+  for (const assignment of assignments) {
+    catalogContractSymbols.add(assignment.symbol);
+    catalogContractOrigins.set(assignment.symbol, {
+      kind: assignment.origin || 'profile-add', detail: assignment.source || reason,
+    });
+  }
   if (!CATALOG_MODEL || !CATALOG_ENGINE?.applyAuthoritativeValues) {
     const changes = [];
     for (const assignment of assignments) {
@@ -1691,7 +1935,7 @@ function applyCatalogContractAssignments(assignments, reason = 'catalog-contract
       if (previous === assignment.value) continue;
       menuValues.set(assignment.symbol, assignment.value);
       changes.push({ symbol: assignment.symbol, from: previous, to: assignment.value, reason });
-      syncMenuToCurated(option, assignment.value);
+      syncMenuToCurated(option, assignment.value, 'contract');
     }
     return { changes, violations: [] };
   }
@@ -1705,8 +1949,9 @@ function applyCatalogContractAssignments(assignments, reason = 'catalog-contract
   for (const change of result.changes) {
     menuValues.set(change.symbol, change.to);
     catalogContractSymbols.add(change.symbol);
+    if (!directSymbols.has(change.symbol)) catalogDependencySymbols.add(change.symbol);
     const option = menuOptionBySymbol.get(change.symbol);
-    if (option) syncMenuToCurated(option, change.to);
+    if (option) syncMenuToCurated(option, change.to, directSymbols.has(change.symbol) ? 'contract' : 'dependency');
   }
   return result;
 }
@@ -1774,13 +2019,13 @@ function minimumBootOption(item) {
 function minimumFirewallItems() {
   return MINIMUM_BOOT?.firewallBackend?.candidates || [];
 }
-function setMenuValueQuiet(option, value) {
+function setMenuValueQuiet(option, value, source = 'recommended') {
   if (!option) return { changes: [], violations: [] };
-  return applyCatalogIntent(option, value, true);
+  return applyCatalogIntent(option, value, true, source);
 }
-function trySetMenuValueQuiet(option, value, context = 'preset') {
+function trySetMenuValueQuiet(option, value, context = 'preset', source = 'recommended') {
   try {
-    return { result: setMenuValueQuiet(option, value), error: null };
+    return { result: setMenuValueQuiet(option, value, source), error: null };
   } catch (error) {
     console.warn(`[Catalog ${context} skipped] ${option?.symbol || 'unknown'}=${value}`, error);
     return { result: null, error };
@@ -1800,6 +2045,9 @@ function enforceFirewallBackend(preferred = '') {
     const snapshot = {
       values: new Map(menuValues), touched: new Set(menuTouched),
       selected: new Set(state.sel), removed: new Set(state.removed), theme: state.theme,
+      recommended: new Map(catalogRecommendedValues),
+      dependencies: new Set(catalogDependencySymbols),
+      userOverrides: new Map(catalogUserOverrides),
     };
     minimumBootApplying = true;
     const attempt = trySetMenuValueQuiet(minimumBootOption(chosen), 'y', 'firewall preset');
@@ -1815,6 +2063,9 @@ function enforceFirewallBackend(preferred = '') {
     restoreSet(menuTouched, snapshot.touched);
     restoreSet(state.sel, snapshot.selected);
     restoreSet(state.removed, snapshot.removed);
+    restoreMap(catalogRecommendedValues, snapshot.recommended);
+    restoreSet(catalogDependencySymbols, snapshot.dependencies);
+    restoreMap(catalogUserOverrides, snapshot.userOverrides);
     state.theme = snapshot.theme;
     failures.push({ symbol: chosen.symbol, error: attempt.error });
   }
@@ -1886,7 +2137,8 @@ function restoreMinimumBootPreset() {
     menuValues.set(symbol, value);
     if (minimumBootTouchedOriginal.has(symbol)) menuTouched.add(symbol);
     else menuTouched.delete(symbol);
-    syncMenuToCurated(option, value);
+    catalogRecommendedValues.delete(symbol);
+    syncMenuToCurated(option, value, 'restore');
   }
   minimumBootApplying = false;
   minimumBootOriginal.clear();
@@ -1928,6 +2180,9 @@ async function applyCatalogStartupPresets() {
     removed: new Set(state.removed),
     minimumOriginal: new Map(minimumBootOriginal),
     minimumTouchedOriginal: new Set(minimumBootTouchedOriginal),
+    recommended: new Map(catalogRecommendedValues),
+    dependencies: new Set(catalogDependencySymbols),
+    userOverrides: new Map(catalogUserOverrides),
     theme: state.theme,
   };
   try {
@@ -1941,6 +2196,9 @@ async function applyCatalogStartupPresets() {
     restoreSet(state.removed, snapshot.removed);
     restoreMap(minimumBootOriginal, snapshot.minimumOriginal);
     restoreSet(minimumBootTouchedOriginal, snapshot.minimumTouchedOriginal);
+    restoreMap(catalogRecommendedValues, snapshot.recommended);
+    restoreSet(catalogDependencySymbols, snapshot.dependencies);
+    restoreMap(catalogUserOverrides, snapshot.userOverrides);
     minimumBootApplying = false;
     state.theme = snapshot.theme;
     renderMinimumBoot();
@@ -2124,6 +2382,13 @@ function initMenuconfigControls() {
     resetMenuScroll();
     renderMenuconfig();
   };
+  $('menuconfigOriginFilter').onchange = () => {
+    menuOriginFilter = $('menuconfigOriginFilter').value || 'all';
+    resetMenuNavigation();
+    menuVisibleLimit = MENU_PAGE_SIZE;
+    resetMenuScroll();
+    renderMenuconfig();
+  };
   $('menuconfigStateHelp').onclick = (event) => {
     event.stopPropagation();
     showMenuHelp($('menuconfigStateHelp'));
@@ -2243,8 +2508,10 @@ function renderMenuOption(option, showPath = false) {
   const childCount = menuNestedCounts.get(option.symbol) || 0;
   const row = document.createElement('div');
   const packageName = option.symbol.startsWith('PACKAGE_') ? option.symbol.slice(8) : '';
+  const origin = catalogOriginMeta(option);
   const profileRequired = packageName && state.device?.id === 'catalog-target' &&
-    (state.device.target?.profilePackages || []).includes(packageName);
+    ['target', 'profile-add'].includes(origin.kind) &&
+    catalogBaselineValues.get(option.symbol) !== 'n';
   row.className = `menuconfig-option${packageName ? ' package-option' : ''}${childCount ? ' has-children' : ''}${option.hidden ? ' hidden-package-option' : ''}`;
   if (profileRequired) row.classList.add('catalog-profile-required');
   const prompt = document.createElement('span');
@@ -2255,6 +2522,13 @@ function renderMenuOption(option, showPath = false) {
   if (packageName) name.dataset.fullText = packageName;
   else name.title = name.textContent;
   prompt.appendChild(name);
+  if (origin.kind !== 'inactive') {
+    const badge = document.createElement('small');
+    badge.className = `catalog-origin catalog-origin-${origin.kind}`;
+    badge.textContent = origin.label;
+    badge.title = origin.detail || origin.label;
+    prompt.appendChild(badge);
+  }
   if (packageName) {
     const description = document.createElement('span');
     description.className = 'menuconfig-package-desc';
@@ -2296,7 +2570,7 @@ function renderMenuOption(option, showPath = false) {
       button.className = value === stateValue ? 'active' : '';
       if (profileRequired) {
         button.disabled = stateValue !== 'y';
-        button.title = 'Required by the selected Target Profile';
+        button.title = 'Required by the selected Target / Profile baseline';
       } else if (option.userSettable === false && stateValue !== 'n') {
         button.disabled = true;
         button.title = 'Hidden package: it can be disabled here but is enabled only through Catalog dependencies';
@@ -2311,6 +2585,16 @@ function renderMenuOption(option, showPath = false) {
     input.value = value === 'n' ? '' : value;
     input.onchange = () => setMenuValue(option, input.value);
     actions.appendChild(input);
+  }
+  if (catalogUserOverrides.has(option.symbol)) {
+    const restore = document.createElement('button');
+    restore.type = 'button';
+    restore.className = 'menuconfig-restore-default';
+    restore.textContent = uiText('默认', '預設', 'Default');
+    restore.title = uiText('删除用户覆盖并恢复继承值', '刪除使用者覆寫並還原繼承值',
+      'Remove the user override and restore the inherited value');
+    restore.onclick = () => restoreCatalogDefault(option);
+    actions.appendChild(restore);
   }
   if (childCount) {
     const childButton = document.createElement('button');
@@ -2483,7 +2767,8 @@ function renderMenuconfig() {
     renderImportedWorkspace();
     return;
   }
-  const eligible = (option) => optionVisible(option) && (!selectedOnly || menuOptionSelected(option));
+  const eligible = (option) => optionVisible(option) && catalogOriginMatches(option) &&
+    (!selectedOnly || menuOptionSelected(option));
   let nodes = [];
   let options = [];
   let showPath = false;
@@ -2494,6 +2779,11 @@ function renderMenuconfig() {
         eligible(option) && menuSearchText.get(option.symbol)?.includes(query));
       showPath = true;
     }
+  } else if (menuOriginFilter !== 'all') {
+    const originLabel = $('menuconfigOriginFilter')?.selectedOptions?.[0]?.textContent || 'Origin';
+    renderMenuPanelTitle(originLabel);
+    options = menuSearchOptions.filter(eligible);
+    showPath = true;
   } else {
     const key = menuPathKey(menuPath || []);
     renderMenuPanelTitle();
@@ -2655,11 +2945,11 @@ function renderImportedWorkspace() {
   const modified = menuTouched.size + importedUnknownEdits.size;
   $('importSummaryText').textContent = uiText(
     `已识别 ${menuImportedOriginal.size} 项 · 仅导入 ${importedUnknownOriginal.size} 项` +
-      `（启用 ${activeUnknown}）· 精选插件 ${state.sel.size + state.removed.size} 项 · 已修改 ${modified} 项`,
+      `（启用 ${activeUnknown}）· 用户插件操作 ${state.sel.size + state.removed.size} 项 · 已修改 ${modified} 项`,
     `已識別 ${menuImportedOriginal.size} 項 · 僅匯入 ${importedUnknownOriginal.size} 項` +
-      `（啟用 ${activeUnknown}）· 精選外掛 ${state.sel.size + state.removed.size} 項 · 已修改 ${modified} 項`,
+      `（啟用 ${activeUnknown}）· 使用者外掛操作 ${state.sel.size + state.removed.size} 項 · 已修改 ${modified} 項`,
     `Recognized ${menuImportedOriginal.size} · import-only ${importedUnknownOriginal.size}` +
-      ` (enabled ${activeUnknown}) · curated plugins ${state.sel.size + state.removed.size} · modified ${modified}`);
+      ` (enabled ${activeUnknown}) · user plugin actions ${state.sel.size + state.removed.size} · modified ${modified}`);
   const targetCard = $('importTargetCard');
   targetCard.hidden = importedTargetVerified;
   targetCard.textContent = '';
@@ -2732,15 +3022,7 @@ function clearImportedWorkspace() {
   importedUnknownEdits.clear();
   menuImportedOriginal.clear();
   menuImportedNonDefault.clear();
-  menuTouched.clear();
-  catalogContractSymbols.clear();
-  catalogProfilePackageSymbols.clear();
-  menuValues.clear();
-  for (const option of menuSearchOptions) {
-    if (option.hidden) continue;
-    const value = simpleKconfigDefault(option);
-    if (value !== '') menuValues.set(option.symbol, value);
-  }
+  resetCatalogSelectionLayers();
   $('importWorkspace').hidden = true;
   $('importUnknownBox').hidden = true;
 }
@@ -3509,13 +3791,24 @@ function renderPlugin(p) {
   cb.id = cbId;
   cb.dataset.pid = p.id;
   const catalogOption = state.device?.id === 'catalog-target' ? curatedMenuOption(p) : null;
+  const catalogOrigin = catalogOption ? catalogOriginMeta(catalogOption) : null;
+  const catalogLocked = catalogOption && ['target', 'profile-add'].includes(catalogOrigin.kind) &&
+    catalogBaselineValues.get(catalogOption.symbol) !== 'n';
   cb.checked = catalogOption
     ? (menuValues.get(catalogOption.symbol) ?? simpleKconfigDefault(catalogOption)) !== 'n'
     : st === 'builtin' ? !state.removed.has(p.id) : state.sel.has(p.id);
   // V10:灰色项只看双开关,其余沿用旧规则 / V10: grey items obey the double gate; everything else keeps the old rule
-  cb.disabled = lockedItem || (st === 'unavailable' ? !canForce : (!adv && st !== 'ok'));
+  cb.disabled = lockedItem || catalogLocked ||
+    (st === 'unavailable' ? !canForce : (!adv && st !== 'ok'));
+  if (catalogLocked) cb.title = uiText(
+    '由当前 Target / Profile 基础配置锁定', '由目前 Target / Profile 基礎設定鎖定',
+    'Locked by the current Target / Profile baseline');
   cb.setAttribute('aria-label', pName(p));
   cb.addEventListener('change', () => {
+    if (catalogOption) {
+      setMenuValue(catalogOption, cb.checked ? 'y' : 'n');
+      return;
+    }
     const selectedBefore = new Set(state.sel);
     if (st === 'builtin') {
       if (cb.checked) {
@@ -3563,9 +3856,27 @@ function renderPlugin(p) {
     f.textContent = t('plugin.required');
     nameBtn.appendChild(f);
   }
+  if (catalogOption) {
+    const origin = catalogOrigin;
+    if (catalogLocked) {
+      const required = document.createElement('span');
+      required.className = 'flag flag-required';
+      required.textContent = t('plugin.required');
+      nameBtn.appendChild(required);
+    }
+    if (origin.kind !== 'inactive') {
+      const f = document.createElement('span');
+      f.className = `flag flag-origin flag-origin-${origin.kind}`;
+      f.textContent = origin.label;
+      f.title = origin.detail || origin.label;
+      nameBtn.appendChild(f);
+    }
+  }
   const detail = (st === 'builtin' ? t('plugin.builtin')
     : st === 'unavailable' ? t('plugin.unavailable')
-    : pDesc(p)) + (p.warn ? '\n' + t(p.warn) : '');
+    : pDesc(p)) + (catalogOrigin && catalogOrigin.kind !== 'inactive'
+      ? `\n${uiText('来源', '來源', 'Origin')}: ${catalogOrigin.label}` : '') +
+    (p.warn ? '\n' + t(p.warn) : '');
   const pkg = p.pkgs?.[state.source.id] || p.pkg || p.catalogCandidates?.[0] || p.id;
   nameBtn.title = detail;
   nameBtn.addEventListener('click', (e) => {
@@ -3630,8 +3941,10 @@ $('hotOnly').addEventListener('change', renderGroups);
 /* 当前源下真正生效的选择,勾选项在换源后可能不再可用 / Selections actually effective under the current source; checked items may become unavailable after switching sources */
 function effectiveSelection() {
   const normal = [], forced = [], removed = [];
+  const catalogTarget = state.device?.id === 'catalog-target';
   for (const p of PLUGINS.plugins) {
     const st = pluginState(p);
+    if (catalogTarget && state.removed.has(p.id)) { removed.push(p); continue; }
     if (st === 'builtin') { if (state.removed.has(p.id)) removed.push(p); continue; }
     if (!state.sel.has(p.id)) continue;
     if (st === 'ok') normal.push(p);
@@ -3707,9 +4020,12 @@ function openSelectedDrawer() {
     rm.textContent = '✕';
     rm.setAttribute('aria-label', t('drawer.remove', { name: pName(p) }));
     rm.addEventListener('click', () => {
-      if (kind === 'remove') state.removed.delete(p.id); else state.sel.delete(p.id);
+      const catalogOption = state.device?.id === 'catalog-target' ? curatedMenuOption(p) : null;
+      if (catalogOption) restoreCatalogDefault(catalogOption);
+      else if (kind === 'remove') state.removed.delete(p.id);
+      else state.sel.delete(p.id);
       const cb = document.querySelector('input[data-pid="' + p.id + '"]');
-      if (cb) cb.checked = kind === 'remove';
+      if (cb && !catalogOption) cb.checked = kind === 'remove';
       updateStats();
       row.remove();
       if (!list.children.length) closeModal();
@@ -3853,7 +4169,10 @@ function applyAcceptedBuildRequirements(text) {
 }
 function applyMenuConfig(text) {
   if (!MENU_CATALOG) return text;
-  for (const symbol of new Set([...catalogContractSymbols, ...menuTouched])) {
+  for (const symbol of new Set([
+    ...catalogContractSymbols, ...menuTouched, ...catalogRecommendedValues.keys(),
+    ...catalogUserOverrides.keys(), ...catalogImportedSymbols,
+  ])) {
     const option = menuOptionBySymbol.get(symbol);
     if (option) text = setConfigSymbol(text, symbol, String(menuValues.get(symbol) ?? 'n'), option.type);
   }
@@ -4416,6 +4735,9 @@ function customDeviceFromConfig(text) {
 function restoreSelections(config, payload) {
   state.sel.clear();
   state.removed.clear();
+  catalogUserOverrides.clear();
+  catalogImportedSymbols.clear();
+  catalogDependencySymbols.clear();
   importedConfigValues.clear();
   importedUnknownOriginal.clear();
   importedUnknownEdits.clear();
@@ -4437,8 +4759,6 @@ function restoreSelections(config, payload) {
     if (raw) {
       if (raw.startsWith('-')) state.removed.add(p.id);
       else state.sel.add(p.id);
-    } else if (!explicit && new RegExp('^CONFIG_PACKAGE_' + pkg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=[ym]$', 'm').test(config)) {
-      state.sel.add(p.id);
     }
   }
   if (menuSearchOptions.length) {
@@ -4449,11 +4769,23 @@ function restoreSelections(config, payload) {
           try { value = JSON.parse(value); } catch (e) { value = value.replace(/^"|"$/g, ''); }
         }
         menuValues.set(option.symbol, value);
+        catalogImportedSymbols.add(option.symbol);
         menuImportedOriginal.set(option.symbol, value);
         let defaultValue = simpleKconfigDefault(option);
         if ((option.type === 'bool' || option.type === 'tristate') && !defaultValue) defaultValue = 'n';
         if (String(value) !== String(defaultValue)) menuImportedNonDefault.add(option.symbol);
       }
+    }
+  }
+  if (explicit) {
+    for (const p of PLUGINS.plugins) {
+      const raw = explicit.find((id) => typeof id === 'string' && id.replace(/^[+-]/, '') === p.id);
+      if (!raw) continue;
+      const option = curatedMenuOption(p);
+      if (!option) continue;
+      const value = raw.startsWith('-') ? 'n' : (menuValues.get(option.symbol) ?? 'y');
+      catalogUserOverrides.set(option.symbol, value);
+      if (raw.startsWith('-')) catalogImportedSymbols.delete(option.symbol);
     }
   }
   for (const [symbol, value] of importedConfigValues) {
@@ -4470,7 +4802,8 @@ function restoreSelections(config, payload) {
       if (!menuOptionBySymbol.has(change.symbol)) continue;
       menuValues.set(change.symbol, change.to);
       menuTouched.add(change.symbol);
-      syncMenuToCurated(menuOptionBySymbol.get(change.symbol), change.to);
+      catalogDependencySymbols.add(change.symbol);
+      syncMenuToCurated(menuOptionBySymbol.get(change.symbol), change.to, 'dependency');
     }
     if (repairs.changes.length) {
       importLogStep('catalog-dependencies-repaired', {

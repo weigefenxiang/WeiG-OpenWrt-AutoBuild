@@ -1207,6 +1207,44 @@ mirrorRootsOk
     buildContractUi
       ? ok('Catalog Target 构建契约:架构/必需包/主屏信息与 Actions 校验已接通')
       : bad('Catalog build contract', '架构、Profile 必需包、主屏信息或 Issue/Actions 校验缺失');
+    const catalogSelectionLayerContract =
+      html.includes('id="menuconfigOriginFilter"') &&
+      html.includes('<option value="excluded"') &&
+      html.includes('<option value="target"') &&
+      html.includes('<option value="dependency"') &&
+      js.includes('const catalogBaselineValues = new Map()') &&
+      js.includes('const catalogRecommendedValues = new Map()') &&
+      js.includes('const catalogUserOverrides = new Map()') &&
+      js.includes('const catalogImportedSymbols = new Set()') &&
+      js.includes('const catalogDependencySymbols = new Set()') &&
+      js.includes('function initializeCatalogBaseline()') &&
+      js.includes('function catalogOriginMeta(option)') &&
+      js.includes('function catalogSelectionSummary()') &&
+      js.includes('function restoreCatalogDefault(option)') &&
+      js.includes("evaluated.status === 'satisfied'") &&
+      js.includes('resetCatalogSelectionLayers();') &&
+      js.indexOf('state.device = device;') < js.indexOf('initializeCatalogBaseline();', js.indexOf('async function applyCatalogTarget()')) &&
+      js.includes("if (source !== 'user') return true") &&
+      js.includes('!catalogUserOverrides.has(option.symbol)') &&
+      js.includes('const value = catalogUserOverrides.get(option.symbol)') &&
+      js.includes("if (source === 'user' && explicit) catalogUserOverrides.set(change.symbol, change.to)") &&
+      js.includes("else if (source === 'recommended' && explicit) catalogRecommendedValues.set(change.symbol, change.to)") &&
+      js.includes("else if (!explicit || source === 'dependency') catalogDependencySymbols.add(change.symbol)") &&
+      js.includes("origin: 'target'") && js.includes("origin: 'profile-add'") &&
+      js.includes("origin: 'target-remove'") && js.includes("origin: 'profile-remove'") &&
+      js.includes("['target', 'profile-add'].includes(origin.kind)") &&
+      js.includes('catalogUserOverrides.delete(option.symbol)') &&
+      js.includes('catalogInheritedValue(option.symbol)') &&
+      js.includes("else if (menuOriginFilter !== 'all')") &&
+      js.includes('options = menuSearchOptions.filter(eligible)') &&
+      js.includes("contractText('基础 / 上游默认'") &&
+      js.includes("contractText('用户启用 / 排除'") &&
+      css.includes('.catalog-origin') &&
+      css.includes('.menuconfig-restore-default') &&
+      css.includes('.flag-origin');
+    catalogSelectionLayerContract
+      ? ok('Catalog 选择状态已分为基础/推荐/用户覆盖/依赖/导入层；首次用户插件计数不再吸收上游默认')
+      : bad('Catalog selection layers', '状态分层、deferred 默认、来源筛选、恢复默认或用户计数隔离不完整');
     const versionContract = versionWorkflow.includes('"site/wrt/**"') &&
     versionWorkflow.includes('"VERSION"') &&
     versionWorkflow.includes("github.actor != 'github-actions[bot]'") &&

@@ -67,6 +67,26 @@ The page no longer loads the legacy device registry or public base configs. `dev
 An uploaded config waits for the matching source/branch catalog before restoring the Target and known menuconfig values. Uncatalogued symbols remain editable in a paged import workspace, while an unknown Target stays an explicit `custom-target` instead of silently falling back to the first catalog entry. Upstream English is authoritative; reviewed tables carry curated Applications in 11 languages, while the publish stage reuses content-keyed translations and incrementally translates menu levels, choices, and ordinary options. Missing locales fall back to English and remain visible in coverage reports; translation failures do not block catalog publication.
 ```
 
+## Catalog 选择状态 / Catalog selection state
+
+Catalog Target 页面把当前配置拆成四个语义层，而不是把所有 `y/m` 软件包都算作用户插件：
+
+- `baseline`：Target/Profile 契约与在完整 Target 上下文中成立的上游 Kconfig 默认值；
+- `recommended`：最低启动、默认主题等网页推荐预设；
+- `userOverrides`：用户明确启用、排除或修改的值；
+- `resolved`：前三层叠加后由共享 Catalog 引擎补齐或清理依赖得到的最终状态。
+
+精选插件计数只读取 `userOverrides`，因此首次选定 Target/Profile 时保持 0；基础包仍在插件卡片和 Advanced menuconfig 中显示真实启用状态与来源。Advanced 可按 Target/Profile、上游默认、推荐、依赖、导入、用户选择或明确排除筛选；“恢复默认”删除用户覆盖并回到继承值。D99-A 继续锁定 Target/Profile 明确要求的软件包；安全精简策略留给 D99-B，Relations 紧凑数组/分片留给 D99-C。
+
+The Catalog Target page separates the effective configuration into four semantic layers instead of counting every `y/m` package as a user-selected plugin:
+
+- `baseline`: the Target/Profile contract plus upstream Kconfig defaults that are satisfied in the complete Target context;
+- `recommended`: web presets such as minimum-boot and the default theme;
+- `userOverrides`: values explicitly enabled, excluded, or edited by the user;
+- `resolved`: the effective state after the shared Catalog engine applies dependency closure to those layers.
+
+The curated-plugin counter reads only `userOverrides`, so a newly selected Target/Profile starts at zero. Baseline packages still appear as enabled in curated cards and Advanced menuconfig with their actual origin. Advanced can filter Target/Profile, upstream defaults, recommendations, dependencies, imports, user selections, and explicit exclusions; Restore default removes only the user override. D99-A keeps Target/Profile-declared packages locked. Safe baseline slimming is deferred to D99-B, and compact/sharded Relations data to D99-C.
+
 ## 构建链路 / Build pipeline
 
 Catalog Target 的 `arch`、`archPackages`、Target/Profile 与 Profile 必需包是一个不可拆分的构建契约：Catalog 从上游 `Target-Arch` 原样发布真实构建架构，网页写入 `CONFIG_<arch>`、`CONFIG_ARCH`、`CONFIG_TARGET_ARCH_PACKAGES` 并自动加入 Profile 必需包，解析器按同一分支 Catalog 逐项复核；缺失、架构不匹配或 Catalog 无法读取时直接拒绝请求 / A Catalog Target treats `arch`, `archPackages`, Target/Profile, and Profile-required packages as one atomic build contract. Catalog publishes upstream `Target-Arch` verbatim; the page writes `CONFIG_<arch>`, `CONFIG_ARCH`, and `CONFIG_TARGET_ARCH_PACKAGES`, adds required Profile packages, and the parser rejects missing or mismatched contract data.

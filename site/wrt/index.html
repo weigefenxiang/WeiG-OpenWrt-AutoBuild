@@ -6,7 +6,7 @@
 <meta name="description" data-i18n="app.desc" content="OpenWrt 固件在线定制:选源码、勾插件,GitHub Actions 云编译,免费自取">
 <title>Wei.G · OpenWrt 固件在线定制</title>
 <link rel="icon" href="Wei.G.ico">
-<link rel="stylesheet" href="app.css?v=9191a75284">
+<link rel="stylesheet" href="app.css?v=0ae8d7fe93">
 </head>
 <body>
 <header class="site-header">
@@ -145,6 +145,19 @@
                   <nav class="menuconfig-breadcrumb" id="menuconfigPanelTitle" aria-label="Menu path"></nav>
                   <input type="search" id="menuconfigSearch" placeholder="Search option / symbol">
                   <label title="Selected only"><input type="checkbox" id="menuconfigSelectedOnly"> Selected only</label>
+                  <label class="menuconfig-origin-filter-label" title="Filter by configuration origin">
+                    <span>Origin</span>
+                    <select id="menuconfigOriginFilter">
+                      <option value="all">All origins</option>
+                      <option value="user">User selected</option>
+                      <option value="excluded">Explicitly excluded</option>
+                      <option value="target">Target / Profile</option>
+                      <option value="default">Upstream defaults</option>
+                      <option value="recommended">Recommended</option>
+                      <option value="dependency">Dependencies</option>
+                      <option value="imported">Imported</option>
+                    </select>
+                  </label>
                   <button class="menuconfig-state-help" id="menuconfigStateHelp" type="button">N/M/Y ?</button>
                 </div>
                 <button class="menuconfig-selected-toggle" id="menuconfigSelectedToggle" type="button"
@@ -302,6 +315,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <noscript><p class="wrap" style="padding:2rem 0">本页面需要启用 JavaScript 才能使用。/ JavaScript is required.</p></noscript>
-<script src="app.js?v=213863e000"></script>
+<script src="app.js?v=0108d94a95"></script>
 </body>
 </html>
