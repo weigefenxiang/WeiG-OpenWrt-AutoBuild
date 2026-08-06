@@ -297,6 +297,18 @@ const conflicts = validateConfig(model, parseConfigDocument([
   'CONFIG_PACKAGE_backend-b=y',
 ].join('\n')));
 assert(conflicts.some((row) => row.code === 'package-conflict'), 'generic package conflict was not detected');
+let conflictIntentError = null;
+try {
+  applyUserIntent(model, parseConfigDocument([
+    '# CONFIG_PACKAGE_backend-a is not set',
+    'CONFIG_PACKAGE_backend-b=y',
+  ].join('\n')), { symbol: 'PACKAGE_backend-a', value: 'y' });
+} catch (error) {
+  conflictIntentError = error;
+}
+assert(conflictIntentError?.name === 'CatalogIntentError' &&
+  conflictIntentError.violations?.some((row) => row.code === 'package-conflict'),
+  'interactive conflict did not preserve structured violation details for the browser dialog');
 
 // Broad anonymous matrix: every Target/Profile contract package depends on its own
 // selector plus an upstream hidden default omitted from the compact Catalog. This

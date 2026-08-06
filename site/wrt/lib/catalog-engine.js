@@ -957,7 +957,13 @@ export function applyUserIntent(model, inputValues, intent) {
   const violations = validateConfig(model, values, options);
   if (value !== 'n') {
     const blocking = violations.filter((item) => !beforeKeys.has(violationKey(item)));
-    if (blocking.length) throw new Error(formatViolations(blocking));
+    if (blocking.length) {
+      const error = new Error(formatViolations(blocking));
+      error.name = 'CatalogIntentError';
+      error.violations = blocking;
+      error.intent = { symbol, value };
+      throw error;
+    }
   }
   return { values, changes, violations };
 }

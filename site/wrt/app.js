@@ -504,7 +504,7 @@ function setActive(row, pill) {
 async function init() {
   try {
     [CATALOG_ENGINE, CATALOG_LOADER_MODULE, CATALOG_SCHEMA6_MODULE] = await Promise.all([
-      import('./lib/catalog-engine.js?v=3a24f62dec'),
+      import('./lib/catalog-engine.js?v=9f03d1396d'),
       import('./lib/catalog-loader.js?v=319e7a7c96'),
       import('./lib/catalog-schema6.js?v=0a165903c2'),
     ]);
@@ -1846,19 +1846,17 @@ function renderBuildContract() {
   $('buildContractCatalog').textContent = `${contractText('Catalog 提交', 'Catalog commit')} ${commit}`;
   const grid = $('buildContractGrid');
   grid.textContent = '';
+  const profileAdd = target.profilePackagesAdd?.length || 0;
+  const profileRemove = target.profilePackagesRemove?.length || 0;
   const rows = [
-    [contractText('源码 / 分支', 'Source / Branch'), `${source?.label || state.source?.id || '-'} / ${branch?.branch || state.version?.branch || '-'}`],
-    [contractText('Target System / Subtarget', 'Target System / Subtarget'), `${target.systemLabel || target.system} / ${target.subtargetLabel || target.subtarget}`],
-    [contractText('Target Profile', 'Target Profile'), target.profileLabel || target.profileSymbol || '-'],
-    [contractText('构建架构 / 软件包架构', 'Build / package architecture'),
-      `${target.arch || contractText('Catalog 未提供', 'Missing from Catalog')} / ${target.archPackages || contractText('Catalog 未提供', 'Missing from Catalog')}`],
-    [contractText('基础 / 上游默认', 'Target baseline / upstream defaults'),
-      `${selectionSummary.target} / ${selectionSummary.defaults}`],
-    [contractText('推荐 / 自动依赖', 'Recommended / dependencies'),
-      `${selectionSummary.recommended} / ${selectionSummary.dependency}`],
-    [contractText('用户启用 / 排除', 'User enabled / excluded'),
-      `${selectionSummary.userEnabled} / ${selectionSummary.userExcluded}`],
-    [contractText('最终启用软件包', 'Final enabled packages'), String(selectionSummary.finalEnabled)],
+    [contractText('源码', 'Source'), source?.label || state.source?.id || '-'],
+    [contractText('分支', 'Branch'), branch?.branch || state.version?.branch || '-'],
+    [contractText('Target', 'Target'), target.systemLabel || target.system || '-'],
+    [contractText('Subtarget', 'Subtarget'), target.subtargetLabel || target.subtarget || '-'],
+    [contractText('Profile', 'Profile'), target.profileLabel || target.profileSymbol || '-'],
+    [contractText('软件包', 'Packages'), `${profileAdd} add / ${profileRemove} remove`],
+    [contractText('Catalog', 'Catalog'), commit],
+    [contractText('架构', 'Architecture'), target.arch || target.archPackages || contractText('Catalog 未提供', 'Missing from Catalog')],
   ];
   for (const [label, value] of rows) {
     const row = document.createElement('div');
@@ -2027,7 +2025,6 @@ function restoreCatalogDefault(option) {
   }
   const value = catalogInheritedValue(option.symbol);
   const result = applyCatalogIntent(option, value, true, 'restore');
-  if (result.violations.length) showToast(CATALOG_ENGINE.formatViolations(result.violations));
   renderMenuconfig();
   renderMinimumBoot();
   renderFirmwareSettings();
@@ -2246,19 +2243,192 @@ function applyCatalogIntent(option, value, force = false, source = 'user') {
   if (result.changes.length) markCatalogStateChanged();
   return result;
 }
+function catalogConflictRecordForPackage(name) {
+  return CATALOG_MODEL?.byPackage?.get(String(name || '')) || null;
+}
+function catalogConflictRows(option, requestedValue, violations) {
+  const symbols = new Set([option.symbol]);
+  for (const violation of violations || []) {
+    if (violation.code === 'package-conflict') {
+      const left = catalogConflictRecordForPackage(violation.package);
+      const right = catalogConflictRecordForPackage(violation.otherPackage);
+      if (left?.configSymbol) symbols.add(left.configSymbol);
+      if (right?.configSymbol) symbols.add(right.configSymbol);
+    } else if (violation.code === 'choice-conflict') {
+      for (const symbol of violation.symbols || []) symbols.add(symbol);
+    }
+  }
+  return [...symbols].slice(0, 18).map((symbol) => {
+    const record = CATALOG_MODEL?.bySymbol?.get(symbol);
+    const menuOption = menuOptionBySymbol.get(symbol);
+    if (!record || !menuOption) return null;
+    return {
+      symbol,
+      record,
+      option: menuOption,
+      label: record.package || symbol.replace(/^PACKAGE_/, ''),
+      requested: symbol === option.symbol ? requestedValue : null,
+    };
+  }).filter(Boolean);
+}
+function catalogConflictPlanInvalid(plan, violations) {
+  for (const violation of violations || []) {
+    if (violation.code === 'package-conflict') {
+      const left = catalogConflictRecordForPackage(violation.package)?.configSymbol;
+      const right = catalogConflictRecordForPackage(violation.otherPackage)?.configSymbol;
+      if (left && right && (plan.get(left) || 'n') !== 'n' && (plan.get(right) || 'n') !== 'n') return true;
+    }
+    if (violation.code === 'choice-conflict') {
+      const enabled = (violation.symbols || []).filter((symbol) => (plan.get(symbol) || 'n') !== 'n');
+      if (enabled.length > 1) return true;
+    }
+  }
+  return false;
+}
+function snapshotCatalogUiState() {
+  return {
+    values: new Map(menuValues), touched: new Set(menuTouched), selected: new Set(state.sel),
+    removed: new Set(state.removed), dependencies: new Set(catalogDependencySymbols),
+    userOverrides: new Map(catalogUserOverrides), recommended: new Map(catalogRecommendedValues),
+    imported: new Set(catalogImportedSymbols), theme: state.theme,
+  };
+}
+function restoreCatalogUiState(snapshot) {
+  restoreMap(menuValues, snapshot.values);
+  restoreSet(menuTouched, snapshot.touched);
+  restoreSet(state.sel, snapshot.selected);
+  restoreSet(state.removed, snapshot.removed);
+  restoreSet(catalogDependencySymbols, snapshot.dependencies);
+  restoreMap(catalogUserOverrides, snapshot.userOverrides);
+  restoreMap(catalogRecommendedValues, snapshot.recommended);
+  restoreSet(catalogImportedSymbols, snapshot.imported);
+  state.theme = snapshot.theme;
+  markCatalogStateChanged();
+}
+function renderCatalogUiAfterIntent(openChildren = false, option = null, value = 'n') {
+  if (openChildren && value !== 'n' && option) openMenuChildren(option);
+  renderMenuconfig();
+  renderMinimumBoot();
+  renderFirmwareSettings();
+  renderGroups();
+  updateStats();
+}
+function openCatalogConflictModal(option, value, violations, openChildren = false) {
+  const rows = catalogConflictRows(option, value, violations);
+  if (rows.length < 2) return false;
+  const plan = new Map(rows.map((row) => [row.symbol, menuValues.get(row.symbol) ?? 'n']));
+  for (const row of rows) {
+    if (row.symbol !== option.symbol && row.record.canDisable) plan.set(row.symbol, 'n');
+  }
+  plan.set(option.symbol, value);
+
+  modalCancelHandler = null;
+  openModal(uiText('软件包冲突', '套件衝突', 'Package conflict'));
+  const modal = $('modal').querySelector('.modal');
+  modal.classList.remove('modal-wide', 'modal-import-source', 'recommended-config',
+    'profile-package-config', 'generation-error', 'catalog-conflict');
+  modal.classList.add('catalog-conflict');
+  const body = $('modalBody');
+  body.textContent = '';
+  const copy = document.createElement('p');
+  copy.className = 'catalog-conflict-copy';
+  copy.textContent = uiText(
+    `${rows[0].label} 与当前选项冲突。请选择最终 N/M/Y；冲突项不能同时启用。`,
+    `${rows[0].label} 與目前選項衝突。請選擇最終 N/M/Y；衝突項不能同時啟用。`,
+    `${rows[0].label} conflicts with the current selection. Choose the final N/M/Y states; conflicting items cannot remain enabled together.`);
+  body.appendChild(copy);
+  const list = document.createElement('div');
+  list.className = 'catalog-conflict-list';
+  const warning = document.createElement('p');
+  warning.className = 'catalog-conflict-warning';
+  const actions = document.createElement('div');
+  actions.className = 'modal-actions';
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'btn';
+  cancel.textContent = t('btn.close');
+  cancel.onclick = closeModal;
+  const apply = document.createElement('button');
+  apply.type = 'button';
+  apply.className = 'btn btn-primary';
+  apply.textContent = uiText('应用切换', '套用切換', 'Apply switch');
+
+  const refresh = () => {
+    const invalid = catalogConflictPlanInvalid(plan, violations);
+    warning.textContent = invalid ? uiText(
+      '冲突的软件包不能同时为 M 或 Y。', '衝突的套件不能同時為 M 或 Y。',
+      'Conflicting packages cannot both remain M or Y.') : '';
+    apply.disabled = invalid;
+    list.querySelectorAll('.catalog-conflict-row').forEach((row) => {
+      row.classList.toggle('is-invalid', invalid && (plan.get(row.dataset.symbol) || 'n') !== 'n');
+      row.querySelectorAll('button[data-value]').forEach((button) => {
+        button.classList.toggle('active', plan.get(row.dataset.symbol) === button.dataset.value);
+      });
+    });
+  };
+
+  for (const row of rows) {
+    const line = document.createElement('div');
+    line.className = 'catalog-conflict-row';
+    line.dataset.symbol = row.symbol;
+    const name = document.createElement('code');
+    name.textContent = row.label;
+    name.title = row.symbol.startsWith('PACKAGE_') ? `CONFIG_${row.symbol}` : row.symbol;
+    const stateBox = document.createElement('span');
+    stateBox.className = 'catalog-conflict-state';
+    for (const stateValue of ['n', 'm', 'y']) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.value = stateValue;
+      button.textContent = stateValue.toUpperCase();
+      button.disabled = stateValue === 'n' ? !row.record.canDisable : !row.record.states?.includes(stateValue);
+      button.onclick = () => { plan.set(row.symbol, stateValue); refresh(); };
+      stateBox.appendChild(button);
+    }
+    line.append(name, stateBox);
+    list.appendChild(line);
+  }
+  body.append(list, warning);
+  actions.append(cancel, apply);
+  body.appendChild(actions);
+  apply.onclick = () => {
+    if (catalogConflictPlanInvalid(plan, violations)) return;
+    const snapshot = snapshotCatalogUiState();
+    try {
+      for (const row of rows) {
+        if ((plan.get(row.symbol) || 'n') === 'n') applyCatalogIntent(row.option, 'n', true, 'user');
+      }
+      for (const row of rows) {
+        const next = plan.get(row.symbol) || 'n';
+        if (next !== 'n') applyCatalogIntent(row.option, next, true, 'user');
+      }
+      modalCancelHandler = null;
+      closeModal();
+      renderCatalogUiAfterIntent(openChildren, option, plan.get(option.symbol) || 'n');
+    } catch (error) {
+      restoreCatalogUiState(snapshot);
+      warning.textContent = String(error?.message || error).split(';')[0];
+      apply.disabled = false;
+    }
+  };
+  refresh();
+  return true;
+}
+
 function setMenuValue(option, value, openChildren = false) {
   let result;
   try {
     result = applyCatalogIntent(option, value, false);
   } catch (error) {
-    showToast(error.message);
+    const violations = Array.isArray(error?.violations) ? error.violations : [];
+    if (violations.some((item) => item.code === 'package-conflict' || item.code === 'choice-conflict') &&
+        openCatalogConflictModal(option, value, violations, openChildren)) return;
+    const first = String(error?.message || error).split(';')[0];
+    showToast(first.length > 240 ? `${first.slice(0, 237)}…` : first);
     return;
   }
   const curatedChanged = result.changes.some((change) =>
     menuOptionBySymbol.get(change.symbol)?.symbol?.startsWith('PACKAGE_'));
-  if (result.violations.length) {
-    showToast(CATALOG_ENGINE.formatViolations(result.violations));
-  }
   if (openChildren && value !== 'n') openMenuChildren(option);
   renderMenuconfig();
   renderMinimumBoot();
@@ -2587,7 +2757,11 @@ function renderMinimumBootModal() {
   }
 }
 function openMinimumBootModal() {
-  if (!state.minimumBoot) return;
+  if (!state.minimumBoot) {
+    showToast(uiText('请先启用推荐项，再修改推荐配置。', '請先啟用推薦項，再修改推薦設定。',
+      'Enable Recommended before editing its configuration.'));
+    return;
+  }
   minimumBootModalOpen = true;
   openModal(uiText('推荐项配置', '推薦項設定', 'Recommended configuration'));
   $('modal').querySelector('.modal').classList.add('modal-wide', 'recommended-config');
@@ -2596,7 +2770,14 @@ function openMinimumBootModal() {
 }
 function renderMinimumBoot() {
   const config = $('minimumBootConfig');
-  if (config) config.hidden = !state.minimumBoot;
+  if (config) {
+    config.hidden = false;
+    config.disabled = !state.minimumBoot;
+    config.setAttribute('aria-disabled', String(!state.minimumBoot));
+    config.title = state.minimumBoot ? '' : uiText(
+      '启用推荐项后可修改配置。', '啟用推薦項後可修改設定。',
+      'Enable Recommended to edit its configuration.');
+  }
   renderMinimumBootModal();
   updateSubmitGate();
 }
@@ -5029,6 +5210,68 @@ function restoreSelections(config, payload) {
   renderImportedWorkspace();
   updateStats();
 }
+function decodeLegacyJsonString(raw) {
+  let output = '';
+  for (let index = 0; index < raw.length; index++) {
+    const char = raw[index];
+    if (char !== '\\') {
+      output += char;
+      continue;
+    }
+    const next = raw[++index];
+    if (next === undefined) {
+      output += '\\';
+      break;
+    }
+    if (next === 'n') output += '\n';
+    else if (next === 'r') output += '\r';
+    else if (next === 't') output += '\t';
+    else if (next === 'b') output += '\b';
+    else if (next === 'f') output += '\f';
+    else if (next === '"') output += '"';
+    else if (next === '\\') output += '\\';
+    else if (next === '/') output += '/';
+    else if (next === 'u' && /^[0-9A-Fa-f]{4}$/.test(raw.slice(index + 1, index + 5))) {
+      output += String.fromCharCode(parseInt(raw.slice(index + 1, index + 5), 16));
+      index += 4;
+    } else output += `\\${next}`;
+  }
+  return output;
+}
+function recoverLegacyWeiGJson(text) {
+  const source = String(text || '');
+  if (!/"schema"\s*:\s*[3456]/.test(source) || !/"pageVersion"\s*:/.test(source) ||
+      !/# Generated by WeiG-OpenWrt-AutoBuild/.test(source) || !/"use_defconfig"\s*:/.test(source)) return null;
+  const field = /"config"\s*:\s*"/.exec(source);
+  if (!field) return null;
+  const startQuote = field.index + field[0].length - 1;
+  const useField = source.lastIndexOf('\n  "use_defconfig"');
+  if (useField < startQuote) return null;
+  const comma = source.lastIndexOf(',', useField);
+  if (comma < startQuote) return null;
+  let endQuote = comma - 1;
+  while (endQuote > startQuote && /\s/.test(source[endQuote])) endQuote--;
+  if (source[endQuote] !== '"') return null;
+  const config = decodeLegacyJsonString(source.slice(startQuote + 1, endQuote));
+  const repaired = `${source.slice(0, startQuote)}${JSON.stringify(config)}${source.slice(endQuote + 1)}`;
+  const payload = JSON.parse(repaired);
+  if (typeof payload.config !== 'string') return null;
+  return payload;
+}
+function parseImportedJson(text) {
+  try {
+    return { payload: JSON.parse(text), recovered: false };
+  } catch (error) {
+    try {
+      const payload = recoverLegacyWeiGJson(text);
+      if (payload) return { payload, recovered: true };
+    } catch (legacyError) {
+      console.warn('[Legacy WeiG JSON recovery failed]', legacyError);
+    }
+    throw error;
+  }
+}
+
 async function importConfigFile(file) {
   const seq = ++configImportSeq;
   importingConfig = true;
@@ -5041,9 +5284,16 @@ async function importConfigFile(file) {
     if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
     if (text.includes('\0')) throw new Error(t('import.binary'));
     let payload = null;
+    let legacyJsonRecovered = false;
     if (/\.json$/i.test(file.name) || text.trimStart().startsWith('{')) {
       importLogStep('json-detected');
-      try { payload = JSON.parse(text); } catch (e) { throw new Error(t('import.jsonInvalid', { msg: e.message })); }
+      try {
+        const parsed = parseImportedJson(text);
+        payload = parsed.payload;
+        legacyJsonRecovered = parsed.recovered;
+      } catch (e) {
+        throw new Error(t('import.jsonInvalid', { msg: e.message }));
+      }
       if (typeof payload.config !== 'string') throw new Error(t('import.jsonNoConfig'));
       text = payload.config;
     }
@@ -5066,7 +5316,11 @@ async function importConfigFile(file) {
     importLogStep('profile-selected', { verified: importedTargetVerified, state: importStateSnapshot() });
     restoreSelections(state.importedConfig, payload);
     finishImportLog('success');
-    showToast(t('import.ok', { id: configId }));
+    showToast(legacyJsonRecovered
+      ? uiText('已兼容加载旧版 JSON，请重新下载以保存为标准格式。',
+        '已相容載入舊版 JSON，請重新下載以儲存為標準格式。',
+        'Legacy JSON loaded. Download it again to save a standards-compliant file.')
+      : t('import.ok', { id: configId }));
     updateSubmitGate();
   } finally {
     if (seq === configImportSeq) importingConfig = false;
@@ -5155,7 +5409,7 @@ function closeModal() {
   const cancel = modalCancelHandler;
   modalCancelHandler = null;
   $('modal').hidden = true;
-  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'profile-package-config', 'generation-error');
+  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'profile-package-config', 'generation-error', 'catalog-conflict');
   document.body.classList.remove('modal-open');
   if (lastFocus && lastFocus.focus) lastFocus.focus();
   if (cancel) cancel();
