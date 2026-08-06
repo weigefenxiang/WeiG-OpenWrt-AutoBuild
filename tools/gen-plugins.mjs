@@ -55,7 +55,6 @@ const seedPlugins = META.plugins.map((p) => {
   const e = { id: p.id, name: p.name, group: p.group, desc: p.desc, size: pluginSizeMB(p, null), pkgs: {},
     pkg: p.catalogCandidates?.[0] || (p.pkgs ? Object.values(p.pkgs)[0] : 'luci-app-' + p.id) };
   if (p.hot) e.hot = true;
-  if (p.requires) e.requires = p.requires;
   if (p.catalogOnly) e.catalogOnly = true;
   if (p.catalogCandidates) e.catalogCandidates = p.catalogCandidates;
   return e;
@@ -120,7 +119,6 @@ for (const device of DEVICES.devices) {
     if (p.catalogOnly) entry.catalogOnly = true;
     if (p.catalogCandidates) entry.catalogCandidates = p.catalogCandidates;
     if (Object.keys(builtin).length) entry.builtin = builtin;
-    if (p.requires) entry.requires = p.requires;
     plugins.push(entry);
   }
 
@@ -134,16 +132,6 @@ for (const device of DEVICES.devices) {
       if (/_INCLUDE_|_Iptables_|_Nftables_/.test(pkg)) continue;
       if (!covered.has(pkg) && !excluded.has(pkg)) warnings.push(`未收录: ${pkg}(如无需展示请加进 exclude)`);
     }
-  }
-
-  // requires 只保留最终插件表里幸存的目标,避免前端解析到悬空依赖 / keep only requires targets that survived into the final list, so the UI never sees a dangling dependency
-  for (const e of plugins) {
-    if (!e.requires) continue;
-    const alive = e.requires.filter((rid) => plugins.some((x) => x.id === rid));
-    for (const rid of e.requires) {
-      if (!alive.includes(rid)) warnings.push(`${e.id}: requires 的 ${rid} 不在插件表中,已移除该依赖`);
-    }
-    if (alive.length) e.requires = alive; else delete e.requires;
   }
 
   const groupOrder = new Map(META.groups.map((g, i) => [g, i]));

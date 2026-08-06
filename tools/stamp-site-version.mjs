@@ -12,10 +12,19 @@ const OUT = join(SITE, 'data', 'site-version.json');
 const ROOT_VERSION = join(ROOT, 'VERSION');
 const skip = new Set(['data/site-version.json']);
 const INDEX = join(SITE, 'index.html');
+const APP = join(SITE, 'app.js');
+const contentDigest = (path) => createHash('sha256')
+  .update(readFileSync(path, 'utf8').replace(/\r\n/g, '\n')).digest('hex').slice(0, 10);
+let app = readFileSync(APP, 'utf8');
+for (const moduleName of ['catalog-engine.mjs', 'catalog-loader.mjs']) {
+  const digest = contentDigest(join(SITE, 'lib', moduleName));
+  app = app.replace(new RegExp(`\\./lib/${moduleName.replace('.', '\\.')}(?:\\?v=[A-Fa-f0-9]+)?`, 'g'),
+    `./lib/${moduleName}?v=${digest}`);
+}
+if (app !== readFileSync(APP, 'utf8')) writeFileSync(APP, app);
 let html = readFileSync(INDEX, 'utf8');
 for (const asset of ['app.css', 'app.js']) {
-  const content = readFileSync(join(SITE, asset), 'utf8').replace(/\r\n/g, '\n');
-  const digest = createHash('sha256').update(content).digest('hex').slice(0, 10);
+  const digest = contentDigest(join(SITE, asset));
   html = html.replace(new RegExp(`${asset.replace('.', '\\.')}\\?v=[^"'<>]+`, 'g'), `${asset}?v=${digest}`);
 }
 if (html !== readFileSync(INDEX, 'utf8')) writeFileSync(INDEX, html);

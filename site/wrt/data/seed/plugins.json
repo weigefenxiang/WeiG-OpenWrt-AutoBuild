@@ -830,10 +830,7 @@
    "desc": "按国内外IP智能分流出口",
    "size": 2,
    "pkgs": {},
-   "pkg": "luci-app-mwan3helper",
-   "requires": [
-    "mwan3"
-   ]
+   "pkg": "luci-app-mwan3helper"
   },
   {
    "id": "mwol",
@@ -1006,10 +1003,7 @@
    "desc": "发现 OLSR 网络中的服务",
    "size": 1,
    "pkgs": {},
-   "pkg": "luci-app-olsr-services",
-   "requires": [
-    "olsr"
-   ]
+   "pkg": "luci-app-olsr-services"
   },
   {
    "id": "olsr-viz",
@@ -1018,10 +1012,7 @@
    "desc": "图形化查看 Mesh 网络拓扑",
    "size": 1,
    "pkgs": {},
-   "pkg": "luci-app-olsr-viz",
-   "requires": [
-    "olsr"
-   ]
+   "pkg": "luci-app-olsr-viz"
   },
   {
    "id": "omcproxy",

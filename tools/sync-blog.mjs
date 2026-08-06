@@ -1,74 +1,257 @@
 #!/usr/bin/env node
-// 把 site/wrt/ 同步到 Hexo 博客仓库的 source/wrt/,剔除所有大体积 *.config / Syncs site/wrt/ into the Hexo blog's source/wrt/, excluding all bulky *.config files.
-// 博客端页面本地取 config 404 后会自动走 jsDelivr → raw,剔除可省博客仓库体积与流量 / The blog page falls back to jsDelivr → raw when a local config 404s, so excluding them saves blog repo size and bandwidth.
-// 用法 / Usage: node tools/sync-blog.mjs [博客仓库路径 blog repo path]   默认 / default: ../weige-share-blog
+// 把主仓库 site/wrt/ 精确镜像到 Hexo 博客 source/wrt/。
+// Exact-mirrors the main repository's site/wrt/ into the Hexo blog's source/wrt/.
+// 用法 / Usage: node tools/sync-blog.mjs [博客仓库路径 blog repo path] [--check]
 
-import { cpSync, rmSync, renameSync, existsSync, readdirSync, statSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import {
+  cpSync,
+  existsSync,
+  lstatSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+} from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SRC = join(ROOT, 'site', 'wrt');
-const args = process.argv.slice(2);
-const checkOnly = args.includes('--check');
-const blogRepo = args.find((arg) => arg !== '--check') || join(ROOT, '..', 'weige-share-blog');
-const DEST = join(blogRepo, 'source', 'wrt');
+const MODULE_PATH = fileURLToPath(import.meta.url);
+const ROOT = resolve(dirname(MODULE_PATH), '..');
+const DEFAULT_SOURCE = join(ROOT, 'site', 'wrt');
+const DEFAULT_BLOG = resolve(ROOT, '..', 'weige-share-blog');
+const REQUIRED_SOURCE_FILES = ['index.html', 'app.js', join('data', 'site-version.json')];
 
-if (!existsSync(join(blogRepo, '_config.yml')) || !existsSync(join(blogRepo, 'source'))) {
-  console.error(`目标不是 Hexo 仓库(缺 _config.yml 或 source/): ${blogRepo}`);
-  process.exit(1);
+function samePath(left, right) {
+  const a = resolve(left);
+  const b = resolve(right);
+  return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
 }
 
-function sourceFiles(dir, root = dir, files = new Map()) {
-  if (!existsSync(dir)) return files;
-  for (const name of readdirSync(dir)) {
-    const path = join(dir, name);
-    const relative = path.slice(root.length + 1);
-    const stat = statSync(path);
-    if (stat.isDirectory()) sourceFiles(path, root, files);
-    else if (!relative.endsWith('.config')) files.set(relative, path);
+function isDirectChild(parent, child, expectedName) {
+  const rel = relative(resolve(parent), resolve(child));
+  if (!rel || isAbsolute(rel) || rel.startsWith(`..${sep}`) || rel === '..') return false;
+  return rel === expectedName;
+}
+
+function assertRegularDirectory(path, label) {
+  if (!existsSync(path)) throw new Error(`${label} does not exist / 不存在: ${path}`);
+  const stat = lstatSync(path);
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new Error(`${label} must be a real directory / 必须是真实目录: ${path}`);
   }
-  return files;
 }
 
-function directoriesMatch() {
-  const source = sourceFiles(SRC);
-  const destination = sourceFiles(DEST);
+function assertRegularFile(path, label) {
+  if (!existsSync(path)) throw new Error(`${label} does not exist / 不存在: ${path}`);
+  const stat = lstatSync(path);
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new Error(`${label} must be a regular file / 必须是普通文件: ${path}`);
+  }
+}
+
+export function collectTree(root) {
+  const normalizedRoot = resolve(root);
+  assertRegularDirectory(normalizedRoot, 'Tree root / 目录根');
+  const entries = new Map();
+
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const path = join(dir, entry.name);
+      const rel = relative(normalizedRoot, path).split(sep).join('/');
+      const stat = lstatSync(path);
+      if (stat.isSymbolicLink()) {
+        throw new Error(`Symbolic links are not allowed in the web mirror / 网页镜像不允许符号链接: ${path}`);
+      }
+      if (stat.isDirectory()) {
+        entries.set(rel, { type: 'dir', path, size: 0 });
+        walk(path);
+      } else if (stat.isFile()) {
+        entries.set(rel, { type: 'file', path, size: stat.size });
+      } else {
+        throw new Error(`Unsupported filesystem entry / 不支持的文件类型: ${path}`);
+      }
+    }
+  };
+
+  walk(normalizedRoot);
+  return entries;
+}
+
+export function directoriesMatch(sourceDir, destinationDir) {
+  if (!existsSync(destinationDir)) return false;
+  const source = collectTree(sourceDir);
+  const destination = collectTree(destinationDir);
   if (source.size !== destination.size) return false;
-  for (const [relative, sourcePath] of source) {
-    const destinationPath = destination.get(relative);
-    if (!destinationPath || !readFileSync(sourcePath).equals(readFileSync(destinationPath))) return false;
+
+  for (const [rel, sourceEntry] of source) {
+    const destinationEntry = destination.get(rel);
+    if (!destinationEntry || sourceEntry.type !== destinationEntry.type) return false;
+    if (sourceEntry.type === 'file') {
+      if (sourceEntry.size !== destinationEntry.size) return false;
+      if (!readFileSync(sourceEntry.path).equals(readFileSync(destinationEntry.path))) return false;
+    }
   }
   return true;
 }
 
-if (checkOnly) {
-  if (directoriesMatch()) {
-    console.log('Blog copy is already current; no site file changes.');
-    process.exit(0);
+function validateLayout(sourceDir, blogRepo) {
+  const source = resolve(sourceDir);
+  const blog = resolve(blogRepo);
+  const blogSource = join(blog, 'source');
+  const destination = join(blogSource, 'wrt');
+  const temporary = join(blogSource, 'wrt.sync-tmp');
+  const previous = join(blogSource, 'wrt.sync-prev');
+
+  assertRegularDirectory(source, 'Main site/wrt / 主仓库 site/wrt');
+  for (const rel of REQUIRED_SOURCE_FILES) {
+    assertRegularFile(join(source, rel), `Required site file ${rel} / 必需网页文件 ${rel}`);
   }
-  console.log('Blog copy needs synchronization.');
-  process.exit(3);
+
+  assertRegularDirectory(blog, 'Blog repository / 博客仓库');
+  if (!existsSync(join(blog, '.git'))) {
+    throw new Error(`Blog repository is missing .git / 博客仓库缺少 .git: ${blog}`);
+  }
+  assertRegularFile(join(blog, '_config.yml'), 'Hexo _config.yml');
+  assertRegularDirectory(blogSource, 'Hexo source / Hexo source 目录');
+
+  if (!isDirectChild(blogSource, destination, 'wrt') ||
+      !isDirectChild(blogSource, temporary, 'wrt.sync-tmp') ||
+      !isDirectChild(blogSource, previous, 'wrt.sync-prev')) {
+    throw new Error('Refusing unsafe blog destination paths / 拒绝不安全的博客目标路径');
+  }
+  if (samePath(source, destination) || samePath(source, blog) || samePath(destination, blogSource)) {
+    throw new Error('Source and destination paths overlap / 源目录与目标目录发生重叠');
+  }
+
+  return { source, blog, blogSource, destination, temporary, previous };
 }
 
-// 先拷到临时目录,成功后再原子替换,拷贝中途失败不会丢已有副本 / copy into a temp dir first, then swap atomically — a mid-copy failure never destroys the existing copy
-const TMP = DEST + '.tmp';
-rmSync(TMP, { recursive: true, force: true });
-cpSync(SRC, TMP, {
-  recursive: true,
-  filter: (p) => !p.endsWith('.config'),
-});
-rmSync(DEST, { recursive: true, force: true });
-renameSync(TMP, DEST);
-
-let files = 0, bytes = 0;
-(function walk(dir) {
-  for (const name of readdirSync(dir)) {
-    const p = join(dir, name);
-    const st = statSync(p);
-    if (st.isDirectory()) walk(p);
-    else { files++; bytes += st.size; }
+function treeStats(root) {
+  const entries = collectTree(root);
+  let files = 0;
+  let directories = 0;
+  let bytes = 0;
+  for (const entry of entries.values()) {
+    if (entry.type === 'dir') directories++;
+    else {
+      files++;
+      bytes += entry.size;
+    }
   }
-})(DEST);
-console.log(`已同步到 ${DEST}`);
-console.log(`${files} 个文件,共 ${Math.round(bytes / 1024)}KB(base config 已剔除,走 CDN)`);
+  return { files, directories, bytes };
+}
+
+export function syncBlogMirror({
+  sourceDir = DEFAULT_SOURCE,
+  blogRepo = DEFAULT_BLOG,
+  checkOnly = false,
+  hooks = {},
+} = {}) {
+  const layout = validateLayout(sourceDir, blogRepo);
+  const { source, destination, temporary, previous } = layout;
+
+  if (checkOnly) {
+    return {
+      ...layout,
+      current: directoriesMatch(source, destination),
+      stats: treeStats(source),
+    };
+  }
+
+  // Recover an interrupted previous activation before starting a new copy.
+  if (existsSync(previous)) {
+    if (existsSync(destination)) rmSync(previous, { recursive: true, force: true });
+    else renameSync(previous, destination);
+  }
+  rmSync(temporary, { recursive: true, force: true });
+
+  try {
+    cpSync(source, temporary, {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+      verbatimSymlinks: true,
+    });
+    if (typeof hooks.afterCopy === 'function') hooks.afterCopy({ ...layout });
+    if (!directoriesMatch(source, temporary)) {
+      throw new Error('Temporary mirror verification failed / 临时镜像校验失败');
+    }
+  } catch (error) {
+    rmSync(temporary, { recursive: true, force: true });
+    throw error;
+  }
+
+  let previousStaged = false;
+  try {
+    if (existsSync(destination)) {
+      rmSync(previous, { recursive: true, force: true });
+      renameSync(destination, previous);
+      previousStaged = true;
+    }
+    renameSync(temporary, destination);
+    if (typeof hooks.afterActivate === 'function') hooks.afterActivate({ ...layout });
+    if (!directoriesMatch(source, destination)) {
+      throw new Error('Activated mirror verification failed / 启用后的镜像校验失败');
+    }
+    rmSync(previous, { recursive: true, force: true });
+  } catch (error) {
+    rmSync(temporary, { recursive: true, force: true });
+    rmSync(destination, { recursive: true, force: true });
+    if (previousStaged && existsSync(previous)) renameSync(previous, destination);
+    throw error;
+  }
+
+  return {
+    ...layout,
+    current: true,
+    stats: treeStats(destination),
+  };
+}
+
+function parseCli(argv) {
+  let checkOnly = false;
+  let blogRepo = '';
+  for (const arg of argv) {
+    if (arg === '--check') {
+      checkOnly = true;
+      continue;
+    }
+    if (arg.startsWith('--')) throw new Error(`Unknown option / 未知选项: ${arg}`);
+    if (blogRepo) throw new Error('Only one blog repository path is allowed / 只能指定一个博客仓库路径');
+    blogRepo = arg;
+  }
+  return { checkOnly, blogRepo: blogRepo || DEFAULT_BLOG };
+}
+
+function runCli() {
+  try {
+    const options = parseCli(process.argv.slice(2));
+    const result = syncBlogMirror({
+      sourceDir: DEFAULT_SOURCE,
+      blogRepo: options.blogRepo,
+      checkOnly: options.checkOnly,
+    });
+
+    if (options.checkOnly) {
+      if (result.current) {
+        console.log('Blog source/wrt is an exact mirror / 博客 source/wrt 已是精确镜像。');
+        return 0;
+      }
+      console.log('Blog source/wrt needs exact-mirror synchronization / 博客 source/wrt 需要精确镜像同步。');
+      return 3;
+    }
+
+    console.log(`[blog:source] ${result.source}`);
+    console.log(`[blog:destination] ${result.destination}`);
+    console.log('[blog:verify] Exact mirror confirmed / 已确认精确镜像');
+    console.log(`[blog:summary] ${result.stats.files} files, ${result.stats.directories} directories, ${result.stats.bytes} bytes`);
+    return 0;
+  } catch (error) {
+    console.error(`[blog:error] ${error?.message || error}`);
+    return 1;
+  }
+}
+
+if (process.argv[1] && samePath(process.argv[1], MODULE_PATH)) {
+  process.exitCode = runCli();
+}

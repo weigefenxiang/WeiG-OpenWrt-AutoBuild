@@ -3,5 +3,6 @@
   "name": "WeiG-OpenWrt-AutoBuild",
   "repository": "weigefenxiang/WeiG-OpenWrt-AutoBuild",
   "catalogRepository": "weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog",
-  "blogUrl": "https://www.weigeshare.cc.cd/"
+  "blogUrl": "https://www.weigeshare.cc.cd/",
+  "catalogReleaseTag": "menuconfig-catalog-complete"
 }

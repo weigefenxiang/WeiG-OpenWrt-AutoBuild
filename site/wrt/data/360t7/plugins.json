@@ -1248,10 +1248,7 @@
    "pkgs": {
     "ImmortalWrt": "luci-app-mwan3helper"
    },
-   "pkg": "luci-app-mwan3helper",
-   "requires": [
-    "mwan3"
-   ]
+   "pkg": "luci-app-mwan3helper"
   },
   {
    "id": "nft-qos",
@@ -2412,10 +2409,7 @@
     "ImmortalWrt": "luci-app-olsr-services",
     "OpenWrt": "luci-app-olsr-services"
    },
-   "pkg": "luci-app-olsr-services",
-   "requires": [
-    "olsr"
-   ]
+   "pkg": "luci-app-olsr-services"
   },
   {
    "id": "olsr-viz",
@@ -2427,10 +2421,7 @@
     "ImmortalWrt": "luci-app-olsr-viz",
     "OpenWrt": "luci-app-olsr-viz"
    },
-   "pkg": "luci-app-olsr-viz",
-   "requires": [
-    "olsr"
-   ]
+   "pkg": "luci-app-olsr-viz"
   },
   {
    "id": "olsrd2",

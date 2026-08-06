@@ -3,8 +3,4 @@ docs-private/
 
 # 本地工具与依赖 / local tooling & deps
 node_modules/
-.claude/
 .vscode/
-
-# Codex local conversation attachments; never commit / Codex 对话附件,不提交
-/.codex-remote-attachments/

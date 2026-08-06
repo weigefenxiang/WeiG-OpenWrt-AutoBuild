@@ -272,6 +272,11 @@ input:focus-visible { border-color: var(--accent); }
 .catalog-load-state[data-state=error]{border-color:color-mix(in srgb,var(--danger) 55%,var(--border));color:var(--danger);cursor:pointer}
 .catalog-load-spinner{width:17px;height:17px;flex:none;border:2px solid color-mix(in srgb,var(--accent) 24%,transparent);border-top-color:var(--accent);border-radius:50%;animation:catalog-spin .75s linear infinite}
 .catalog-load-state[data-state=error] .catalog-load-spinner{animation:none;border-color:var(--danger);border-top-color:transparent}
+.catalog-load-details{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:10px;flex:1 0 100%;padding:10px;border:1px solid color-mix(in srgb,var(--danger) 45%,var(--border));border-radius:9px;background:color-mix(in srgb,var(--danger) 5%,var(--card))}
+.catalog-load-details[hidden]{display:none}
+.catalog-load-details pre{min-width:0;max-height:190px;margin:0;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text2);font:12px/1.5 ui-monospace,Consolas,monospace}
+.catalog-copy-diagnostics{min-height:34px;padding:0 10px;border:1px solid var(--border);border-radius:7px;background:var(--card2);color:var(--text);font:inherit;cursor:pointer}
+.catalog-copy-diagnostics:hover,.catalog-copy-diagnostics:focus-visible{border-color:var(--accent);color:var(--accent)}
 @keyframes catalog-spin{to{transform:rotate(360deg)}}
 .catalog-locator{position:relative;margin-top:10px}
 .catalog-locator-row{display:flex;align-items:center;gap:10px}
@@ -860,31 +865,6 @@ body.dense .plugin-name.fit-s1 { font-size: 14px; }
 body.dense .plugin-name.fit-s2 { font-size: 13px; }
 .flag-required { color: var(--accent-text); background: var(--accent-bg); }
 
-/* 开发者模式:全量软件包搜索视图 / developer mode raw-package browser */
-.devpkg-head {
-  width: 100%; border: 0; color: inherit; background: transparent;
-  cursor: pointer; text-align: left; font: inherit;
-}
-.devpkg-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
-.devpkg-chevron { margin-left: auto; transition: transform .18s ease; }
-.devpkg-head[aria-expanded="true"] .devpkg-chevron { transform: rotate(180deg); }
-.devpkg-body { padding: 12px 14px; }
-.devpkg-body input { margin: 8px 0 10px; }
-.devpkg-meta {
-  display: flex; align-items: baseline; justify-content: space-between;
-  gap: 8px 16px; flex-wrap: wrap;
-}
-.devpkg-meta .hint { margin: 0; min-width: 0; }
-.devpkg-meta a { flex: none; }
-.pkg-list {
-  max-height: 340px; overflow: auto;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 2px 14px;
-}
-.pkg-item { display: flex; align-items: center; gap: 8px; padding: 5px 2px; font-size: 14.5px; min-width: 0; }
-.pkg-item input { flex: none; width: 15px; height: 15px; accent-color: var(--warn); }
-.pkg-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, Consolas, monospace; }
-.pkg-item .flag { flex: none; }
-
 /* 灰色插件二级门禁:紧挨开发者模式,风险细节由 title+确认弹窗承载 / Grey-plugin gate: inline beside Developer mode; title + confirm carry the risk details */
 .adv-grey-toggle { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; color: var(--danger); font-weight: 600; white-space: nowrap; }
 .adv-grey-toggle input { accent-color: var(--danger); width: 16px; height: 16px; }
@@ -912,3 +892,8 @@ body.dense .plugin-name.fit-s2 { font-size: 13px; }
 .font-input:focus-visible { border-color: var(--accent); outline: none; }
 .font-unit { font-size: 12.5px; color: var(--text3); }
 .font-reset { flex: none; }
+
+.hidden-package-option { border-left: 3px solid var(--warn); }
+.hidden-package-option .menuconfig-package-desc::before { content: "Hidden · "; color: var(--muted); }
+
+@media(max-width:560px){.catalog-load-details{grid-template-columns:1fr}.catalog-copy-diagnostics{width:100%}}

@@ -175,7 +175,15 @@ jobs:
 
       - name: Clone source code / 拉取源码
         run: |
-          git clone "https://github.com/${{ steps.req.outputs.repo }}" -b "${{ steps.req.outputs.branch }}" --depth 1 openwrt
+          if [ -n "${{ steps.req.outputs.source_commit }}" ]; then
+            git init openwrt
+            git -C openwrt remote add origin "https://github.com/${{ steps.req.outputs.repo }}"
+            git -C openwrt fetch --depth 1 origin "${{ steps.req.outputs.source_commit }}"
+            git -C openwrt checkout --detach FETCH_HEAD
+            test "$(git -C openwrt rev-parse HEAD)" = "${{ steps.req.outputs.source_commit }}"
+          else
+            git clone "https://github.com/${{ steps.req.outputs.repo }}" -b "${{ steps.req.outputs.branch }}" --depth 1 openwrt
+          fi
           cd openwrt && git log -1 --pretty='源码提交: %h %an %ad %s'
           # 版本信息写进日志与 Summary,排障时能对照"哪个定制器版本 × 哪个上游快照" / Emit version info to the log and run summary so failures map to exact customizer × upstream snapshots
           TEST_VERSION="$(tr -d '\r\n' < "$GITHUB_WORKSPACE/VERSION")"
@@ -187,6 +195,7 @@ jobs:
             echo "- 测试版本 / test version: \`$TEST_VERSION\`"
             echo "- 定制器 / customizer: \`${GITHUB_SHA::7}\`"
             echo "- 上游源码 / upstream: \`$(git log -1 --format='%h %ad' --date=short)\` (${{ steps.req.outputs.repo }} @ ${{ steps.req.outputs.branch }})"
+            echo "- Catalog: \`${{ steps.req.outputs.catalog_revision }}\` · \`${{ steps.req.outputs.catalog_asset }}\`"
             echo "- 参数 / inputs: \`${{ steps.req.outputs.device }} · ${{ steps.req.outputs.source }} · ${{ steps.req.outputs.version }} · ${{ steps.req.outputs.variant }}\`"
             echo "- 构建契约 / build contract: build arch \`${{ steps.req.outputs.catalog_arch }}\`; package arch \`${{ steps.req.outputs.catalog_arch_packages }}\`; profile packages \`${{ steps.req.outputs.catalog_profile_packages }}\`"
             echo "- 插件 / plugins: \`${{ steps.req.outputs.plugins }}\`"
@@ -333,6 +342,14 @@ jobs:
             --requested "$GITHUB_WORKSPACE/recommended-audit.json" \
             --config .config \
             --report "$GITHUB_WORKSPACE/recommended-report.json"
+          if [ -n "${{ steps.req.outputs.catalog_file }}" ]; then
+            CATALOG_PHASE="pre-defconfig"
+            if [ "${{ steps.req.outputs.use_defconfig }}" = "1" ]; then CATALOG_PHASE="post-defconfig"; fi
+            node "$GITHUB_WORKSPACE/tools/validate-catalog-config.mjs" \
+              --catalog "$GITHUB_WORKSPACE/${{ steps.req.outputs.catalog_file }}" \
+              --config .config \
+              --phase "$CATALOG_PHASE"
+          fi
           grep -Fx 'CONFIG_DEVEL=y' .config || { echo 'CONFIG_DEVEL is missing from the build config' >&2; exit 1; }
           grep -Fx 'CONFIG_BUILD_LOG=y' .config || { echo 'CONFIG_BUILD_LOG is missing from the build config' >&2; exit 1; }
           if [ "${{ steps.req.outputs.firmware_snapshot }}" = "1" ]; then
@@ -559,7 +576,7 @@ jobs:
           cp build.log build-diagnostic.log download.log failure-logs/ 2>/dev/null || true
           cp build-metadata.txt failure-logs/ 2>/dev/null || true
           cp proxy-selected.txt failure-logs/ 2>/dev/null || true
-          cp submitted.config config-overrides.json config-overrides.diff recommended-audit.json recommended-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig-report.json defconfig.log build.config failure-logs/ 2>/dev/null || true
+          cp submitted.config active-catalog.json config-overrides.json config-overrides.diff recommended-audit.json recommended-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig-report.json defconfig.log build.config failure-logs/ 2>/dev/null || true
           cp openwrt/.config failure-logs/final.config 2>/dev/null || true
           # OpenWrt 的 CONFIG_BUILD_LOG=y 会把每个包的日志写到 openwrt/logs/ / With CONFIG_BUILD_LOG=y, OpenWrt writes per-package build logs to openwrt/logs/
           if [ -d openwrt/logs ]; then

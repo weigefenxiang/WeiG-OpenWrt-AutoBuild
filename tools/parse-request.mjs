@@ -12,7 +12,13 @@ import { createHash } from 'node:crypto';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
-import { findCatalogPackageConflicts, formatPackageConflicts } from './verify-package-conflicts.mjs';
+import {
+  createCatalogModel,
+  createCatalogValidationContext,
+  formatViolations,
+  parseConfigDocument,
+  validateConfig,
+} from '../site/wrt/lib/catalog-engine.mjs';
 import { matchingConfigRules } from './config-rules.mjs';
 import {
   formatMissingBuildRequirements,
@@ -65,11 +71,13 @@ function normalizeAudit(raw) {
     defconfig: { enabled: defconfig.enabled === true },
   };
 }
-async function loadCatalogIndex() {
+async function loadCatalogIndex(revision = 'catalog-data') {
   const repo = PROJECT.catalogRepository || LOCAL_CATALOG_INDEX.catalogRepo;
+  const ref = String(revision || 'catalog-data').trim().toLowerCase();
+  if (ref !== 'catalog-data' && !/^[a-f0-9]{40}$/.test(ref)) throw new Error(`Catalog index revision 非法:${ref}`);
   const urls = [
-    `https://raw.githubusercontent.com/${repo}/catalog-data/index.json`,
-    `https://cdn.jsdelivr.net/gh/${repo}@catalog-data/index.json`,
+    `https://raw.githubusercontent.com/${repo}/${ref}/index.json`,
+    `https://cdn.jsdelivr.net/gh/${repo}@${ref}/index.json`,
   ];
   for (const url of urls) {
     try {
@@ -77,19 +85,23 @@ async function loadCatalogIndex() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const index = await response.json();
       if (Number(index?.schema || 0) >= 2 && Array.isArray(index.sources)) return index;
+      throw new Error('invalid Catalog index schema');
     } catch (error) {
       console.warn(`Catalog index fallback / 目录索引回退: ${url}: ${error.message}`);
     }
   }
-  return LOCAL_CATALOG_INDEX;
+  if (ref === 'catalog-data') return LOCAL_CATALOG_INDEX;
+  throw new Error(`无法读取固定 Catalog index revision:${ref}`);
 }
 
-async function loadCatalog(repo, branch) {
+async function loadCatalog(repo, branch, revision = 'catalog-data') {
   const asset = String(branch?.asset || '');
   if (!/^[A-Za-z0-9._-]+\.json\.gz$/.test(asset)) throw new Error(`Catalog 资源名非法:${asset || '(缺失)'}`);
+  const ref = String(revision || 'catalog-data').trim().toLowerCase();
+  if (ref !== 'catalog-data' && !/^[a-f0-9]{40}$/.test(ref)) throw new Error(`Catalog revision 非法:${ref}`);
   const urls = [
-    `https://raw.githubusercontent.com/${repo}/catalog-data/${asset}`,
-    `https://cdn.jsdelivr.net/gh/${repo}@catalog-data/${asset}`,
+    `https://raw.githubusercontent.com/${repo}/${ref}/${asset}`,
+    `https://cdn.jsdelivr.net/gh/${repo}@${ref}/${asset}`,
   ];
   let lastError = '';
   for (const url of urls) {
@@ -108,7 +120,8 @@ async function loadCatalog(repo, branch) {
       const actualHash = createHash('sha256').update(compressed).digest('hex');
       if (actualHash !== expectedHash) throw new Error(`Catalog compressed hash mismatch: ${actualHash} != ${expectedHash}`);
       const catalog = JSON.parse(gunzipSync(compressed).toString('utf8'));
-      if (Number(catalog?.schema || 0) < 2 || !Array.isArray(catalog?.menu?.options)) throw new Error('目录格式非法');
+      if (Number(catalog?.schema || 0) < 5 || Number(catalog?.relations?.schema || 0) < 2 ||
+          !Array.isArray(catalog?.menu?.options)) throw new Error('Catalog schema 5 / relations schema 2 is required');
       return catalog;
     } catch (error) {
       lastError = error.message;
@@ -116,6 +129,32 @@ async function loadCatalog(repo, branch) {
   }
   throw new Error(lastError || '无可用镜像');
 }
+
+function normalizeCatalogContract(raw) {
+  if (!raw || typeof raw !== 'object') fail('schema 5 请求缺少 catalog 版本契约');
+  const contract = {
+    repository: String(raw.repository || ''),
+    revision: String(raw.revision || '').toLowerCase(),
+    asset: String(raw.asset || ''),
+    compressedSha256: String(raw.compressedSha256 || '').toLowerCase(),
+    compressedBytes: Number(raw.compressedBytes || 0),
+    catalogSchema: Number(raw.catalogSchema || 0),
+    relationsSchema: Number(raw.relationsSchema || 0),
+    sourceRepository: String(raw.sourceRepository || ''),
+    sourceCommit: String(raw.sourceCommit || '').toLowerCase(),
+  };
+  const expectedRepo = String(PROJECT.catalogRepository || LOCAL_CATALOG_INDEX.catalogRepo || '');
+  if (contract.repository !== expectedRepo) fail(`Catalog 仓库不在白名单:${contract.repository}`);
+  if (!/^[a-f0-9]{40}$/.test(contract.revision)) fail('Catalog revision 必须是完整 40 位 Git commit');
+  if (!/^[A-Za-z0-9._-]+\.json\.gz$/.test(contract.asset)) fail(`Catalog asset 非法:${contract.asset}`);
+  if (!/^[a-f0-9]{64}$/.test(contract.compressedSha256)) fail('Catalog compressedSha256 非法');
+  if (!Number.isSafeInteger(contract.compressedBytes) || contract.compressedBytes <= 0) fail('Catalog compressedBytes 非法');
+  if (contract.catalogSchema < 5 || contract.relationsSchema < 2) fail('请求需要 Catalog schema 5 / relations schema 2');
+  if (!/^[a-f0-9]{40}$/.test(contract.sourceCommit)) fail('Catalog sourceCommit 必须是完整 40 位 Git commit');
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(contract.sourceRepository)) fail('Catalog sourceRepository 非法');
+  return contract;
+}
+
 
 let req;
 let requestMode = 'smoke-internal';
@@ -134,7 +173,7 @@ if (requestManifest) {
     if (manifest.files.length !== 1) fail('build-request.json 必须单独上传,不要与 .config/config.buildinfo 混用');
     requestAttachmentName = jsonFiles[0].name || '';
     try { req = JSON.parse(readFileSync(jsonFiles[0].path, 'utf8')); } catch (e) { fail('build-request.json 无法解析: ' + e.message); }
-    if (![3, 4].includes(req.schema)) fail(`不支持的 build-request schema:${JSON.stringify(req.schema)}(需要 3 或 4)`);
+    if (![3, 4, 5].includes(req.schema)) fail(`不支持的 build-request schema:${JSON.stringify(req.schema)}(需要 3、4 或 5)`);
     submittedConfig = req.config;
     requestMode = 'issue-json';
   } else {
@@ -170,7 +209,7 @@ if (requestManifest) {
   try { raw = readFileSync(requestFile); } catch (e) { fail('无法读取 Issue 附件请求文件: ' + e.message); }
   if (raw.length < 32 || raw.length > 2 * 1024 * 1024) fail(`build-request.json 大小非法:${raw.length} bytes(允许 32B~2MB)`);
   try { req = JSON.parse(raw.toString('utf8')); } catch (e) { fail('build-request.json 无法解析: ' + e.message); }
-  if (![3, 4].includes(req.schema)) fail(`不支持的 build-request schema:${JSON.stringify(req.schema)}(需要 3 或 4)`);
+  if (![3, 4, 5].includes(req.schema)) fail(`不支持的 build-request schema:${JSON.stringify(req.schema)}(需要 3、4 或 5)`);
   submittedConfig = req.config;
   requestMode = 'issue-attachment';
 } else if (process.env.ISSUE_BODY) {
@@ -191,6 +230,7 @@ if (requestManifest) {
 }
 
 recommendationAudit = normalizeAudit(req.audit);
+const catalogContract = req.schema === 5 ? normalizeCatalogContract(req.catalog) : null;
 
 const hasSubmittedConfig = requestMode.startsWith('issue-') && !requestMode.includes('inline');
 const requestDefconfig = typeof req.use_defconfig === 'boolean' ? req.use_defconfig : null;
@@ -207,7 +247,11 @@ let catalogBranch;
 let catalogIndex;
 if (isCustomTarget) {
   if (!hasSubmittedConfig) fail('自定义 Target 必须通过 Issue 附件提交完整 .config');
-  catalogIndex = await loadCatalogIndex();
+  try {
+    catalogIndex = await loadCatalogIndex(catalogContract?.revision || 'catalog-data');
+  } catch (error) {
+    fail(`无法读取自定义 Target 的固定 Catalog index:${error.message}`);
+  }
   catalogRepo = catalogIndex.catalogRepo || PROJECT.catalogRepository || LOCAL_CATALOG_INDEX.catalogRepo;
   const catalogSource = catalogIndex.sources.find((item) => item.id === req.source);
   const requestedBranch = String(req.branch || '');
@@ -220,6 +264,11 @@ if (isCustomTarget) {
   if (catalogBranch.state === 'unavailable') {
     fail(`Catalog 已标记该源码/分支不可用:${catalogSource.id}/${catalogBranch.branch}`);
   }
+  if (catalogContract && (
+    catalogBranch.asset !== catalogContract.asset ||
+    String(catalogBranch.hash || catalogBranch.compressedSha256 || '').toLowerCase() !== catalogContract.compressedSha256 ||
+    Number(catalogBranch.bytes || catalogBranch.compressedBytes || 0) !== catalogContract.compressedBytes
+  )) fail('固定 Catalog index 与请求中的 asset/hash/bytes 契约不一致');
   version = { id: catalogBranch.id, branch: catalogBranch.branch, label: catalogBranch.branch };
   source = {
     id: catalogSource.id, label: catalogSource.label || catalogSource.id, repo: catalogSource.repo, versions: [version],
@@ -307,32 +356,63 @@ if (hasSubmittedConfig) {
 }
 
 let activeCatalog = null;
+let activeCatalogModel = null;
+let activeCatalogTargetContext = null;
 let catalogArch = '';
 let catalogArchPackages = '';
 let catalogProfilePackages = [];
+let activeCatalogRevision = '';
+let activeCatalogFile = '';
+let sourceCommit = '';
 if (hasSubmittedConfig) {
-  if (!catalogIndex) catalogIndex = await loadCatalogIndex();
-  const catalogSource = catalogIndex.sources.find((item) => item.id === source.id);
-  const branch = catalogSource?.branches?.find((item) => item.id === version.id &&
-    (!version.branch || item.branch === version.branch));
-  if (!catalogSource || !branch || branch.state === 'unavailable') {
-    console.warn(`Package conflict preflight skipped / 软件包互斥预检跳过: ${source.id}/${version.branch}`);
+  if (catalogContract) {
+    catalogRepo = catalogContract.repository;
+    catalogBranch = {
+      asset: catalogContract.asset,
+      hash: catalogContract.compressedSha256,
+      bytes: catalogContract.compressedBytes,
+      commit: catalogContract.sourceCommit,
+    };
+    activeCatalogRevision = catalogContract.revision;
   } else {
+    if (!catalogIndex) catalogIndex = await loadCatalogIndex();
+    const catalogSource = catalogIndex.sources.find((item) => item.id === source.id);
+    const branch = catalogSource?.branches?.find((item) => item.id === version.id &&
+      (!version.branch || item.branch === version.branch));
+    if (!catalogSource || !branch || branch.state === 'unavailable') {
+      fail(`Catalog 中没有可验证的源码/分支:${source.id}/${version.branch}`);
+    }
     catalogRepo = catalogIndex.catalogRepo || PROJECT.catalogRepository || LOCAL_CATALOG_INDEX.catalogRepo;
     catalogBranch = branch;
-    try {
-      activeCatalog = await loadCatalog(catalogRepo, catalogBranch);
-    } catch (error) {
-      console.warn(`Package conflict preflight skipped / 软件包互斥预检跳过: ${error.message}`);
-    }
-    if (activeCatalog) {
-      const conflicts = findCatalogPackageConflicts(submittedConfig, activeCatalog);
-      if (conflicts.length) {
-        fail(`软件包互斥: ${formatPackageConflicts(conflicts)}。请只保留其中一项。`);
-      }
+    activeCatalogRevision = /^[a-f0-9]{40}$/i.test(String(catalogIndex.assetRef || ''))
+      ? String(catalogIndex.assetRef).toLowerCase() : 'catalog-data';
+  }
+  try {
+    activeCatalog = await loadCatalog(catalogRepo, catalogBranch, activeCatalogRevision);
+  } catch (error) {
+    fail(`无法读取 ${source.id}/${version.branch} 的精确 Catalog:${error.message}`);
+  }
+  if (activeCatalog.source?.id !== source.id || activeCatalog.source?.branch !== version.branch) {
+    fail(`Catalog 源码身份不匹配:request=${source.id}/${version.branch},catalog=${activeCatalog.source?.id}/${activeCatalog.source?.branch}`);
+  }
+  if (String(activeCatalog.source?.repo || '') !== String(source.repo || '')) {
+    fail(`Catalog 上游仓库不匹配:request=${source.repo},catalog=${activeCatalog.source?.repo || '(missing)'}`);
+  }
+  sourceCommit = String(activeCatalog.source?.commit || '').toLowerCase();
+  if (!/^[a-f0-9]{40}$/.test(sourceCommit)) fail('Catalog 未提供完整上游 source commit');
+  if (catalogContract) {
+    if (sourceCommit !== catalogContract.sourceCommit) fail('Catalog sourceCommit 与请求契约不一致');
+    if (activeCatalog.source?.repo !== catalogContract.sourceRepository) fail('Catalog sourceRepository 与请求契约不一致');
+    if (Number(activeCatalog.schema) !== catalogContract.catalogSchema ||
+        Number(activeCatalog.relations?.schema) !== catalogContract.relationsSchema) {
+      fail('Catalog schema 与请求契约不一致');
     }
   }
+  activeCatalogModel = createCatalogModel(activeCatalog);
+  activeCatalogFile = String(process.env.ACTIVE_CATALOG_OUT || 'active-catalog.json');
+  writeFileSync(activeCatalogFile, JSON.stringify(activeCatalog) + '\n', 'utf8');
 }
+
 if (isCustomTarget) {
   if (!activeCatalog) fail(`无法读取 ${source.id}/${version.branch} 的 Catalog，不能验证 Target/Profile 构建契约`);
   const contractContext = {
@@ -373,6 +453,41 @@ if (isCustomTarget) {
   catalogProfilePackages = [...new Set(
     catalogProfile.packagesAdd || (catalogProfile.packages || []).filter((pkg) => !String(pkg).startsWith('-')),
   )];
+  activeCatalogTargetContext = {
+    system: catalogTarget.board,
+    board: catalogTarget.board,
+    subtarget: catalogTarget.subtarget,
+    arch: catalogTarget.arch,
+    archPackages: catalogTarget.archPackages,
+    features: [...(catalogTarget.features || [])],
+    packages: [...(catalogTarget.packages || [])],
+    boardSelector: catalogProfile.boardSelector || catalogTarget.contract?.boardSelector || `TARGET_${catalogTarget.board}`,
+    targetSelector: catalogProfile.targetSelector || catalogTarget.targetSelector || catalogTarget.contract?.targetSelector || '',
+    profileSelector: catalogProfile.selector || catalogProfile.profileSelector || expectedTargetDevice.replace(/^CONFIG_|=y$/g, ''),
+    profileSymbol: catalogProfile.id,
+    profile: catalogProfile.id.replace(/^DEVICE_/, ''),
+    profilePackages: [...(catalogProfile.packages || [])],
+    rawTarget: catalogTarget,
+    rawProfile: catalogProfile,
+  };
+}
+
+if (activeCatalogModel) {
+  const parsedCatalogConfig = parseConfigDocument(submittedConfig);
+  const validationContext = createCatalogValidationContext(
+    activeCatalogModel,
+    activeCatalogTargetContext,
+    parsedCatalogConfig,
+    { phase: 'pre-defconfig' },
+  );
+  const catalogViolations = validateConfig(
+    activeCatalogModel,
+    validationContext.values,
+    validationContext.validationOptions,
+  );
+  if (catalogViolations.length) {
+    fail(`Catalog 配置验证失败:${formatViolations(catalogViolations)}`);
+  }
 }
 
 // 种子机型共用 seed 表 / seed devices share the seed plugin table
@@ -440,7 +555,7 @@ if (existsSync(packageTable)) {
 if (isCustomTarget) {
   let catalogTheme = activeCatalog?.menu?.options?.find((item) => item?.symbol === `PACKAGE_${theme}`) || null;
   if (!catalogTheme) try {
-    const catalog = await loadCatalog(catalogRepo, catalogBranch);
+    const catalog = await loadCatalog(catalogRepo, catalogBranch, activeCatalogRevision || 'catalog-data');
     catalogTheme = catalog.menu.options.find((item) => item?.symbol === `PACKAGE_${theme}`) || null;
   } catch (error) {
     fail(`无法读取 ${source.id}/${version.branch} 的 Catalog 主题清单:${error.message}`);
@@ -491,6 +606,12 @@ const out = [
   `version=${version.id}`,
   `branch=${version.branch}`,
   `repo=${source.repo}`,
+  `source_commit=${sourceCommit}`,
+  `catalog_file=${activeCatalogFile}`,
+  `catalog_revision=${activeCatalogRevision}`,
+  `catalog_asset=${catalogBranch?.asset || ''}`,
+  `catalog_hash=${catalogBranch?.hash || catalogBranch?.compressedSha256 || ''}`,
+  `catalog_bytes=${catalogBranch?.bytes || catalogBranch?.compressedBytes || ''}`,
   `diy1=${source.diy1}`,
   `diy2=${source.diy2}`,
   `variant=${variant.id}`,

@@ -6,7 +6,7 @@
 <meta name="description" data-i18n="app.desc" content="OpenWrt 固件在线定制:选源码、勾插件,GitHub Actions 云编译,免费自取">
 <title>Wei.G · OpenWrt 固件在线定制</title>
 <link rel="icon" href="Wei.G.ico">
-<link rel="stylesheet" href="app.css?v=aef4e2532e">
+<link rel="stylesheet" href="app.css?v=9191a75284">
 </head>
 <body>
 <header class="site-header">
@@ -87,6 +87,10 @@
             <span class="catalog-load-spinner" aria-hidden="true"></span>
             <span id="catalogLoadText">Loading Target and menuconfig…</span>
           </button>
+          <div class="catalog-load-details" id="catalogLoadDetails" hidden>
+            <pre id="catalogLoadDiagnostics"></pre>
+            <button class="catalog-copy-diagnostics" id="catalogCopyDiagnostics" type="button">Copy diagnostics</button>
+          </div>
         </div>
         <section class="build-contract" id="buildContract" hidden aria-live="polite">
           <div class="build-contract-head">
@@ -204,17 +208,6 @@
         <input type="search" id="searchBox" data-i18n-ph="search.placeholder" data-i18n-aria="search.aria">
         <label class="hot-only"><input type="checkbox" id="hotOnly"> <span data-i18n="filter.hotOnly">只看热门</span></label>
       </div>
-      <div class="group devpkg" id="devpkgBox" hidden>
-        <button class="group-head devpkg-head" id="devpkgToggle" type="button" aria-expanded="false" aria-controls="devpkgBody">
-          <span class="group-ico" aria-hidden="true">📦</span><span data-i18n="devpkg.title"></span><span class="group-count" id="devpkgCount"></span><span class="devpkg-chevron" aria-hidden="true">⌄</span>
-        </button>
-        <div class="devpkg-body" id="devpkgBody" hidden>
-          <p class="hint" data-i18n="devpkg.hint"></p>
-          <div class="devpkg-meta"><span class="hint" id="devpkgStatus"></span><a href="packages.html" target="_blank" rel="noopener" data-i18n="devpkg.docs">📖 软件包用途说明页</a></div>
-          <input type="search" id="pkgSearch" placeholder="iptables-mod / kmod-usb / luci-i18n …">
-          <div id="pkgList" class="pkg-list"></div>
-        </div>
-      </div>
       <div id="groups"></div>
     </section>
 
@@ -309,6 +302,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <noscript><p class="wrap" style="padding:2rem 0">本页面需要启用 JavaScript 才能使用。/ JavaScript is required.</p></noscript>
-<script src="app.js?v=4e67d04619"></script>
+<script src="app.js?v=b46a84a55b"></script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// CI 端按用户选择生成 .config,规则必须与网页端 app.js 保持一致 / CI-side .config generator; the rules must stay in sync with the web-side app.js.
+// 旧 repository_dispatch/smoke 路径的 .config 生成器；网页权威配置由 Catalog Engine 校验，不在此复制软件包依赖规则。
+// Legacy .config generator for repository_dispatch/smoke paths; authoritative web configs are validated by Catalog Engine, so package dependency rules are not duplicated here.
 // 用法 / Usage: node tools/build-config.mjs --device 360t7 --source OpenWrt --version main \
 //         --variant qihoo_360t7 --plugins "openclash ttyd +homeproxy -mtk" --out openwrt/.config
 // 插件 id 必须在 plugins.json 白名单内;高级模式前缀 +强制勾选、-取消内置 / plugin ids must be whitelisted in plugins.json; advanced prefixes: + force-enable, - drop a builtin.
@@ -85,12 +86,11 @@ for (const raw of (args.packages || '').split(/\s+/).filter(Boolean)) {
   else { setY(name); rawApplied.push(name); }
 }
 
-// 与网页端一致:固件主题是单选 Kconfig / keep firmware theme selection aligned with app.js
+// 与网页端一致:选择主题只负责启用所选包；Catalog 负责保留必需依赖 / theme selection only enables the chosen package; Catalog preserves required dependencies
 const theme = args.theme || (['OpenWrt', 'lede'].includes(source.id) ? 'luci-theme-bootstrap' : 'luci-theme-argon');
 if (!/^luci-theme-[A-Za-z0-9._+-]{1,48}$/.test(theme)) {
   console.error(`非法固件主题: ${theme}`); process.exit(1);
 }
-text = text.replace(/^CONFIG_PACKAGE_(luci-theme-[A-Za-z0-9._+-]+)=[ym]$/gm, '# CONFIG_PACKAGE_$1 is not set');
 setY(theme);
 const timezones = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'timezones.json'), 'utf8')).zones;
 const zone = timezones.find((item) => item.zonename === args.zonename) ||

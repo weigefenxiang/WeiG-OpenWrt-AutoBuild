@@ -672,10 +672,7 @@
    "name": "MWAN3 分流助手",
    "group": "网络管理",
    "desc": "按国内外IP智能分流出口",
-   "size": 2,
-   "requires": [
-    "mwan3"
-   ]
+   "size": 2
   },
   {
    "id": "mwol",
@@ -810,20 +807,14 @@
    "name": "OLSR 服务发现",
    "group": "其他与高级",
    "desc": "发现 OLSR 网络中的服务",
-   "size": 1,
-   "requires": [
-    "olsr"
-   ]
+   "size": 1
   },
   {
    "id": "olsr-viz",
    "name": "OLSR 拓扑图",
    "group": "其他与高级",
    "desc": "图形化查看 Mesh 网络拓扑",
-   "size": 1,
-   "requires": [
-    "olsr"
-   ]
+   "size": 1
   },
   {
    "id": "omcproxy",
@@ -1597,7 +1588,9 @@
    "descEn": "AdGuard Home package when listed by the Catalog",
    "size": 8,
    "catalogOnly": true,
-   "catalogCandidates": ["luci-app-adguardhome"]
+   "catalogCandidates": [
+    "luci-app-adguardhome"
+   ]
   },
   {
    "id": "antiblock",
@@ -1608,7 +1601,9 @@
    "descEn": "Domain unblocking and filtering tool when listed by the Catalog",
    "size": 1,
    "catalogOnly": true,
-   "catalogCandidates": ["luci-app-antiblock"]
+   "catalogCandidates": [
+    "luci-app-antiblock"
+   ]
   },
   {
    "id": "chrony",
@@ -1619,7 +1614,9 @@
    "descEn": "Precision NTP time synchronization service when listed by the Catalog",
    "size": 2,
    "catalogOnly": true,
-   "catalogCandidates": ["luci-app-chrony"]
+   "catalogCandidates": [
+    "luci-app-chrony"
+   ]
   },
   {
    "id": "csshnpd",
@@ -1630,7 +1627,9 @@
    "descEn": "SSH tunneling service when listed by the Catalog",
    "size": 1,
    "catalogOnly": true,
-   "catalogCandidates": ["luci-app-csshnpd"]
+   "catalogCandidates": [
+    "luci-app-csshnpd"
+   ]
   },
   {
    "id": "email",
@@ -1641,7 +1640,9 @@
    "descEn": "Mail service component when listed by the Catalog",
    "size": 2,
    "catalogOnly": true,
-   "catalogCandidates": ["luci-app-email"]
+   "catalogCandidates": [
+    "luci-app-email"
+   ]
   },
   {
    "id": "filemanager",
@@ -1652,7 +1653,9 @@
    "descEn": "Web file manager when listed by the Catalog",
    "size": 2,
    "catalogOnly": true,
-   "catalogCandidates": ["luci-app-filemanager"]
+   "catalogCandidates": [
+    "luci-app-filemanager"
+   ]
   },
   {
    "id": "irqbalance",
@@ -1663,7 +1666,9 @@
    "descEn": "Interrupt load-balancing service when listed by the Catalog",
    "size": 1,
    "catalogOnly": true,
-   "catalogCandidates": ["luci-app-irqbalance"]
+   "catalogCandidates": [
+    "luci-app-irqbalance"
+   ]
   },
   {
    "id": "openlist",
@@ -1674,7 +1679,9 @@
    "descEn": "Multi-cloud file listing service when listed by the Catalog",
    "size": 10,
    "catalogOnly": true,
-   "catalogCandidates": ["luci-app-openlist"]
+   "catalogCandidates": [
+    "luci-app-openlist"
+   ]
   },
   {
    "id": "openthread",
@@ -1685,7 +1692,9 @@
    "descEn": "Thread networking component when listed by the Catalog",
    "size": 3,
    "catalogOnly": true,
-   "catalogCandidates": ["luci-app-openthread"]
+   "catalogCandidates": [
+    "luci-app-openthread"
+   ]
   },
   {
    "id": "package-manager",
@@ -1696,7 +1705,9 @@
    "descEn": "Package management interface when listed by the Catalog",
    "size": 1,
    "catalogOnly": true,
-   "catalogCandidates": ["luci-app-package-manager"]
+   "catalogCandidates": [
+    "luci-app-package-manager"
+   ]
   },
   {
    "id": "radicale3",
@@ -1707,7 +1718,9 @@
    "descEn": "Calendar and contacts synchronization service when listed by the Catalog",
    "size": 8,
    "catalogOnly": true,
-   "catalogCandidates": ["luci-app-radicale3"]
+   "catalogCandidates": [
+    "luci-app-radicale3"
+   ]
   },
   {
    "id": "rustdesk-server",
@@ -1718,7 +1731,9 @@
    "descEn": "Remote desktop relay service when listed by the Catalog",
    "size": 12,
    "catalogOnly": true,
-   "catalogCandidates": ["luci-app-rustdesk-server"]
+   "catalogCandidates": [
+    "luci-app-rustdesk-server"
+   ]
   },
   {
    "id": "strongswan-swanctl",
@@ -1729,7 +1744,9 @@
    "descEn": "IPsec swanctl management tool when listed by the Catalog",
    "size": 5,
    "catalogOnly": true,
-   "catalogCandidates": ["luci-app-strongswan-swanctl"]
+   "catalogCandidates": [
+    "luci-app-strongswan-swanctl"
+   ]
   },
   {
    "id": "tailscale-community",
@@ -1740,7 +1757,9 @@
    "descEn": "Community Tailscale component when listed by the Catalog",
    "size": 8,
    "catalogOnly": true,
-   "catalogCandidates": ["luci-app-tailscale-community"]
+   "catalogCandidates": [
+    "luci-app-tailscale-community"
+   ]
   },
   {
    "id": "ustreamer",
@@ -1751,7 +1770,9 @@
    "descEn": "Lightweight camera streaming service when listed by the Catalog",
    "size": 2,
    "catalogOnly": true,
-   "catalogCandidates": ["luci-app-ustreamer"]
+   "catalogCandidates": [
+    "luci-app-ustreamer"
+   ]
   },
   {
    "id": "wifihistory",
@@ -1762,7 +1783,9 @@
    "descEn": "WiFi connection history when listed by the Catalog",
    "size": 1,
    "catalogOnly": true,
-   "catalogCandidates": ["luci-app-wifihistory"]
+   "catalogCandidates": [
+    "luci-app-wifihistory"
+   ]
   },
   {
    "id": "busybox",

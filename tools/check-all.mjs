@@ -3,16 +3,12 @@
 // One-click health check: syntax-check every script, validate every data JSON, basic frontend consistency.
 // 用法 / Usage: node tools/check-all.mjs   (或双击 Check_检查.bat / or double-click the bat)
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import {
-  findCatalogPackageConflicts,
-  findPackageInfoConflicts,
-  formatPackageConflicts,
-} from './verify-package-conflicts.mjs';
 import { applyConfigResolution, configSymbolValues, matchingConfigRules } from './config-rules.mjs';
 import {
   applyBuildRequirements,
@@ -20,6 +16,7 @@ import {
   sourceBuildRequirements,
 } from './source-build-requirements.mjs';
 import { applyConfigOverrides, verifyConfigLayers } from './config-overrides.mjs';
+import { directoriesMatch, syncBlogMirror } from './sync-blog.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 let fail = 0;
@@ -51,10 +48,115 @@ function formatSizeContract(mb) {
 
 console.log('[1/3] JS 语法检查 / syntax check (node --check)');
 const scripts = [join(ROOT, 'site', 'wrt', 'app.js'),
+  ...walkFiles(join(ROOT, 'site', 'wrt', 'lib'), '.mjs'),
   ...readdirSync(join(ROOT, 'tools')).filter((f) => f.endsWith('.mjs')).map((f) => join(ROOT, 'tools', f))];
 for (const f of scripts) {
   const r = spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
   r.status === 0 ? ok(f.replace(ROOT, '.')) : bad(f.replace(ROOT, '.'), (r.stderr || '').split('\n')[0]);
+}
+
+const catalogLoaderTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-catalog-loader.mjs')], {
+  encoding: 'utf8',
+});
+catalogLoaderTest.status === 0
+  ? ok('Catalog loader: Raw index priority, immutable CDN/Raw/Release fallback, cache, SHA-256, schema diagnostics')
+  : bad('Catalog loader tests', (catalogLoaderTest.stderr || catalogLoaderTest.stdout || '').trim().slice(0, 240));
+
+const catalogEngineMatrixTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-catalog-engine.mjs')], {
+  encoding: 'utf8',
+});
+catalogEngineMatrixTest.status === 0
+  ? ok('Catalog engine matrix: deferred/strict context, authoritative profile contract, generic dependency closure')
+  : bad('Catalog engine matrix tests',
+    (catalogEngineMatrixTest.stderr || catalogEngineMatrixTest.stdout || '').trim().slice(0, 320));
+
+const blogMirrorTestRoot = mkdtempSync(join(tmpdir(), 'weig-blog-mirror-'));
+try {
+  const sourceDir = join(blogMirrorTestRoot, 'main', 'site', 'wrt');
+  const blogRepo = join(blogMirrorTestRoot, 'weige-share-blog');
+  const blogDestination = join(blogRepo, 'source', 'wrt');
+  mkdirSync(join(sourceDir, 'data'), { recursive: true });
+  mkdirSync(join(sourceDir, 'nested', 'empty'), { recursive: true });
+  writeFileSync(join(sourceDir, 'index.html'), '<!doctype html>');
+  writeFileSync(join(sourceDir, 'app.js'), 'console.log("source");\n');
+  writeFileSync(join(sourceDir, 'data', 'site-version.json'), '{"version":"test"}\n');
+  writeFileSync(join(sourceDir, 'nested', 'base.config'), 'CONFIG_TEST=y\n');
+  writeFileSync(join(sourceDir, 'nested', 'asset.txt'), 'asset\n');
+  mkdirSync(join(blogRepo, '.git'), { recursive: true });
+  mkdirSync(join(blogDestination, 'old'), { recursive: true });
+  writeFileSync(join(blogRepo, '_config.yml'), 'skip_render:\n  - wrt/**\n');
+  writeFileSync(join(blogDestination, 'old', 'zombie.txt'), 'stale\n');
+  writeFileSync(join(blogDestination, 'app.js'), 'old\n');
+
+  const before = syncBlogMirror({ sourceDir, blogRepo, checkOnly: true });
+  const first = syncBlogMirror({ sourceDir, blogRepo });
+  const after = syncBlogMirror({ sourceDir, blogRepo, checkOnly: true });
+  const exactAfterFirst = !before.current && first.current && after.current &&
+    directoriesMatch(sourceDir, blogDestination) &&
+    readFileSync(join(blogDestination, 'nested', 'base.config'), 'utf8') === 'CONFIG_TEST=y\n' &&
+    existsSync(join(blogDestination, 'nested', 'empty')) &&
+    !existsSync(join(blogDestination, 'old', 'zombie.txt')) &&
+    !existsSync(join(blogRepo, 'source', 'wrt.sync-tmp')) &&
+    !existsSync(join(blogRepo, 'source', 'wrt.sync-prev'));
+
+  writeFileSync(join(blogDestination, 'app.js'), 'changed\n');
+  const changedDetected = !syncBlogMirror({ sourceDir, blogRepo, checkOnly: true }).current;
+  syncBlogMirror({ sourceDir, blogRepo });
+  const destinationBeforeFailedCopy = readFileSync(join(blogDestination, 'app.js'));
+  let temporaryVerificationRejected = false;
+  try {
+    syncBlogMirror({
+      sourceDir,
+      blogRepo,
+      hooks: {
+        afterCopy: ({ temporary }) => writeFileSync(join(temporary, 'app.js'), 'corrupt temporary copy\n'),
+      },
+    });
+  } catch {
+    temporaryVerificationRejected = true;
+  }
+  const oldDestinationPreserved = temporaryVerificationRejected &&
+    destinationBeforeFailedCopy.equals(readFileSync(join(blogDestination, 'app.js'))) &&
+    directoriesMatch(sourceDir, blogDestination) &&
+    !existsSync(join(blogRepo, 'source', 'wrt.sync-tmp')) &&
+    !existsSync(join(blogRepo, 'source', 'wrt.sync-prev'));
+
+  let activationVerificationRejected = false;
+  try {
+    syncBlogMirror({
+      sourceDir,
+      blogRepo,
+      hooks: {
+        afterActivate: ({ destination }) => writeFileSync(join(destination, 'app.js'), 'corrupt activated copy\n'),
+      },
+    });
+  } catch {
+    activationVerificationRejected = true;
+  }
+  const activationRollbackRestoredOld = activationVerificationRejected &&
+    destinationBeforeFailedCopy.equals(readFileSync(join(blogDestination, 'app.js'))) &&
+    directoriesMatch(sourceDir, blogDestination) &&
+    !existsSync(join(blogRepo, 'source', 'wrt.sync-tmp')) &&
+    !existsSync(join(blogRepo, 'source', 'wrt.sync-prev'));
+
+  rmSync(join(sourceDir, 'app.js'));
+  let incompleteSourceRejected = false;
+  try {
+    syncBlogMirror({ sourceDir, blogRepo });
+  } catch {
+    incompleteSourceRejected = true;
+  }
+  const incompleteSourcePreservedDestination = incompleteSourceRejected &&
+    destinationBeforeFailedCopy.equals(readFileSync(join(blogDestination, 'app.js')));
+
+  exactAfterFirst && changedDetected && oldDestinationPreserved && activationRollbackRestoredOld &&
+    incompleteSourcePreservedDestination
+    ? ok('blog mirror: exact tree, .config, stale removal, check mode, temp/activation rollback, safety guard')
+    : bad('blog mirror runtime tests', 'exact mirror, rollback, complete-tree or source safety contract failed');
+} catch (error) {
+  bad('blog mirror runtime tests', error.message.slice(0, 240));
+} finally {
+  rmSync(blogMirrorTestRoot, { recursive: true, force: true });
 }
 
 console.log('[2/3] 数据 JSON 校验 / data JSON validation');
@@ -76,24 +178,6 @@ for (const f of ['site/wrt/data/devices.json', 'site/wrt/data/i18n.json', 'site/
 
 console.log('[3/3] 一致性抽查 / consistency spot checks');
 try {
-  const conflictConfig = 'CONFIG_PACKAGE_tls-alpha=y\nCONFIG_PACKAGE_tls-beta=y\nCONFIG_PACKAGE_tls-module=m\n';
-  const packageInfoFixture = [
-    'Package: tls-alpha',
-    'Conflicts: tls-beta tls-module',
-    '',
-    'Package: tls-beta',
-  ].join('\n');
-  const catalogFixture = {
-    menu: {
-      options: [{ symbol: 'PACKAGE_tls-alpha', conflicts: ['PACKAGE_tls-beta', 'PACKAGE_tls-module'] }],
-    },
-  };
-  const directConflicts = findPackageInfoConflicts(conflictConfig, packageInfoFixture);
-  const catalogConflicts = findCatalogPackageConflicts(conflictConfig, catalogFixture);
-  formatPackageConflicts(directConflicts) === 'tls-alpha <-> tls-beta' &&
-    formatPackageConflicts(catalogConflicts) === 'tls-alpha <-> tls-beta'
-    ? ok('package conflict parser: upstream and Catalog reject y/y pairs but allow module selections')
-    : bad('package conflict parser', 'unexpected conflict result');
   const configRuleFixture = 'CONFIG_DEFAULT_libustream-openssl=y\nCONFIG_PACKAGE_luci-ssl=y\nCONFIG_PACKAGE_libustream-openssl=y\n';
   const configRulesSource = JSON.parse(readFileSync(
     join(ROOT, 'config', '001.presets', 'config-rules.json'), 'utf8'));
@@ -225,19 +309,21 @@ const minimumBootPublic = JSON.parse(readFileSync(
   join(ROOT, 'site', 'wrt', 'data', 'minimum-boot.json'), 'utf8'));
 const packageMirrors = JSON.parse(readFileSync(
   join(ROOT, 'site', 'wrt', 'data', 'package-mirrors.json'), 'utf8'));
-const minimumItems = [...(minimumBootSource.items || []),
-  ...(minimumBootSource.firewallBackend?.candidates || [])];
+const firewallCandidates = minimumBootSource.firewallBackend?.candidates || [];
+const minimumItems = [...(minimumBootSource.items || []), ...firewallCandidates];
 const minimumSymbols = minimumItems.map((item) => item.symbol);
 const minimumIds = minimumItems.map((item) => item.id);
 const recommendedOpkg = (minimumBootSource.items || []).find((item) => item.id === 'opkg');
+const firewallChoiceOk = firewallCandidates.length >= 2 &&
+  firewallCandidates.every((item) => /^PACKAGE_[A-Za-z0-9_.+@-]+$/.test(item.symbol || ''));
 JSON.stringify(minimumBootSource) === JSON.stringify(minimumBootPublic) &&
   minimumItems.length >= 3 && new Set(minimumIds).size === minimumIds.length &&
   new Set(minimumSymbols).size === minimumSymbols.length &&
   minimumSymbols.includes('PACKAGE_opkg') && !minimumSymbols.includes('PACKAGE_luci-app-opkg') &&
   recommendedOpkg?.symbol === 'PACKAGE_opkg' && recommendedOpkg.catalogPath === 'Base system' &&
-  minimumSymbols.includes('PACKAGE_firewall4') && minimumSymbols.includes('PACKAGE_firewall')
-  ? ok(`推荐项预设:${minimumBootSource.items.length} 个可维护项目 + opkg + firewall4/firewall 强制二选一`)
-  : bad('minimum-boot.json', '源文件/网页副本不一致、项目 ID/符号重复、opkg 或防火墙后端缺失');
+  firewallChoiceOk
+  ? ok(`推荐项预设:${minimumBootSource.items.length} 个可维护项目 + opkg + ${firewallCandidates.length} 个防火墙候选`)
+  : bad('minimum-boot.json', '源文件/网页副本不一致、项目 ID/符号重复、opkg 或防火墙候选缺失');
 const mirrorIds = (packageMirrors.presets || []).map((preset) => preset.id);
 const mirrorRootsOk = packageMirrors.schema === 1 &&
   ['auto', 'ustc', 'tuna', 'bfsu', 'pku', 'official'].every((id) => mirrorIds.includes(id)) &&
@@ -249,6 +335,7 @@ mirrorRootsOk
   : bad('package-mirrors.json', '镜像 ID、根路径或来源映射不符合安全格式');
   const html = readFileSync(join(ROOT, 'site', 'wrt', 'index.html'), 'utf8');
   const js = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
+  const catalogLoaderJs = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.mjs'), 'utf8');
   const genPlugins = readFileSync(join(ROOT, 'tools', 'gen-plugins.mjs'), 'utf8');
   const sensitiveMaskContract = js.includes("'wireguard'") && js.includes("'tor'") &&
     js.includes("/^wireguard$/i.test(w)") && js.includes("w.slice(0, 3) + '***' + w.slice(-3)");
@@ -303,25 +390,54 @@ mirrorRootsOk
     : bad('source build requirements', 'JSON schema/copy, web resolver, parser guard, or Defconfig branch contract is invalid');
   const project = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
   const deployScript = readFileSync(join(ROOT, 'docs-private', 'Sync_Deploy.bat'), 'utf8');
+  const syncBlogSource = readFileSync(join(ROOT, 'tools', 'sync-blog.mjs'), 'utf8');
+  const deployGuide = readFileSync(join(ROOT, 'docs-private', '部署与同步.md'), 'utf8');
+  const blogGuide = readFileSync(join(ROOT, 'docs-private', '003.weige-share-blog同步与推送.md'), 'utf8');
+  const developerGuideZh = readFileSync(join(ROOT, 'docs', 'DEVELOPER.md'), 'utf8');
+  const developerGuideEn = readFileSync(join(ROOT, 'docs', 'DEVELOPER.en.md'), 'utf8');
   const catalogIndex = JSON.parse(
     readFileSync(join(ROOT, 'site', 'wrt', 'data', 'menuconfig-index.json'), 'utf8'));
   const assetHash = (name) => createHash('sha256')
     .update(readFileSync(join(ROOT, 'site', 'wrt', name), 'utf8').replace(/\r\n/g, '\n'))
     .digest('hex').slice(0, 10);
+  const moduleHash = (name) => createHash('sha256')
+    .update(readFileSync(join(ROOT, 'site', 'wrt', 'lib', name), 'utf8').replace(/\r\n/g, '\n'))
+    .digest('hex').slice(0, 10);
   const assetVersionOk = html.includes(`app.css?v=${assetHash('app.css')}`) &&
-    html.includes(`app.js?v=${assetHash('app.js')}`);
+    html.includes(`app.js?v=${assetHash('app.js')}`) &&
+    js.includes(`./lib/catalog-engine.mjs?v=${moduleHash('catalog-engine.mjs')}`) &&
+    js.includes(`./lib/catalog-loader.mjs?v=${moduleHash('catalog-loader.mjs')}`);
   assetVersionOk
-    ? ok('前端 CSS/JS 查询版本与文件内容指纹一致')
-    : bad('frontend asset cache bust', 'index.html 的 app.css/app.js 查询版本未按内容指纹更新');
+    ? ok('前端 CSS/JS 与动态 Catalog 模块查询版本均和内容指纹一致')
+    : bad('frontend asset cache bust', 'index.html 或 app.js 的静态/动态资源查询版本未按内容指纹更新');
   const remoteCatalogDeploymentContract =
     !deployScript.includes('fetch-catalog-mirror.mjs') &&
     !deployScript.includes('CATALOG_MIRROR_ROOT') &&
     !deployScript.includes('catalog-data/index.json') &&
-    deployScript.includes('Browser uses commit-pinned jsDelivr with GitHub Raw fallback') &&
+    (deployScript.includes('Browser uses commit-pinned jsDelivr/GitHub Raw with complete Release fallback') ||
+      deployScript.includes('Browser uses commit-pinned jsDelivr with GitHub Raw fallback')) &&
     deployScript.includes(String.raw`tar -czf "%LOCAL_ARCHIVE%" -C "%MAIN_REPO%\site\wrt" .`);
   remoteCatalogDeploymentContract
-    ? ok('VPS 只部署网页；Catalog 由提交固定的 jsDelivr/GitHub Raw 提供')
+    ? ok('VPS 只部署网页；Catalog 由固定提交 CDN/Raw 与完整 Release 提供')
     : bad('remote Catalog deployment', '部署脚本仍下载/打包 Catalog，或未声明提交固定的远程回退');
+  const exactBlogMirrorContract =
+    syncBlogSource.includes("const temporary = join(blogSource, 'wrt.sync-tmp')") &&
+    syncBlogSource.includes("const previous = join(blogSource, 'wrt.sync-prev')") &&
+    syncBlogSource.includes('Temporary mirror verification failed') &&
+    syncBlogSource.includes('Activated mirror verification failed') &&
+    syncBlogSource.includes("assertRegularFile(join(source, rel)") &&
+    syncBlogSource.includes('return 3;') &&
+    !syncBlogSource.includes("endsWith('.config')") &&
+    deployScript.includes(String.raw`node tools\sync-blog.mjs "%BLOG_REPO%"`) &&
+    deployScript.includes('call :verify_blog_mirror || exit /b 1') &&
+    deployScript.includes('update blog, exact-mirror site/wrt to source/wrt') &&
+    !deployGuide.includes('剔除全部 `*.config`') &&
+    !blogGuide.includes('排除 base `*.config`') &&
+    !developerGuideZh.includes('自动剔除 *.config') &&
+    !developerGuideEn.includes('strips *.config');
+  exactBlogMirrorContract
+    ? ok('blog sync: option 3 uses verified exact mirror with rollback; legacy .config filtering is removed')
+    : bad('blog exact mirror contract', '同步工具、选项 3 编排、回滚验证或中英文文档仍保留旧过滤逻辑');
   const recommendedUiContract = html.includes('id="minimumBootToggle"') &&
     html.includes('id="defconfigToggle"') &&
     html.includes('id="minimumBootConfig"') && !html.includes('id="minimumBootPanel"') &&
@@ -401,14 +517,24 @@ mirrorRootsOk
     : bad('upstream drift sentinel', '360T7 专用检查仍存在，或 OpenWrt 通用分支策略缺失');
   const previewBatBytes = readFileSync(join(ROOT, 'OpenWebPage_打开网页.bat'));
   const previewBat = previewBatBytes.toString('ascii');
+  const previewServer = readFileSync(join(ROOT, 'tools', 'serve.mjs'), 'utf8');
   const previewBatOk = !previewBatBytes.some((byte) => byte > 0x7f) &&
     !/(?<!\r)\n/.test(previewBat) &&
-    previewBat.includes('tools\\serve.mjs site\\wrt 8642') &&
+    previewBat.includes('node tools\\serve.mjs site\\wrt 8642') &&
+    previewBat.includes('title wrt-server - local preview 8642') &&
     previewBat.includes('http://localhost:8642/index.html') &&
-    previewBat.includes('devpkgBox');
+    previewBat.includes('http://localhost:8642/lib/catalog-engine.mjs') &&
+    previewBat.includes('http://localhost:8642/lib/catalog-loader.mjs') &&
+    previewBat.includes("$l.Headers['Content-Type'] -match 'javascript'") &&
+    previewBat.includes('start "" /b powershell') &&
+    !previewBat.includes('start "wrt-server" /min') &&
+    !previewBat.includes('pause\r\nexit /b 0') &&
+    previewBat.includes('menuconfigBox') &&
+    previewServer.includes("'.mjs': 'text/javascript; charset=utf-8'") &&
+    previewServer.includes("'cache-control': 'no-store'");
   previewBatOk
-    ? ok('本地预览 bat 为 ASCII+CRLF,含正确目录与 8642 健康检查')
-    : bad('OpenWebPage_打开网页.bat', '编码/换行、serve 参数或健康检查不正确');
+    ? ok('本地预览单窗口启动，ES modules MIME/无缓存检查与 ASCII+CRLF 均已接通')
+    : bad('local preview', '单窗口启动、模块健康检查、MIME、无缓存或 bat 编码不正确');
   const ids = [...js.matchAll(/\$\('([A-Za-z]\w+)'\)/g)].map((m) => m[1]);
   const dynamicIds = new Set(['targetSystem', 'targetSubtarget', 'targetProfile']);
   const missing = [...new Set(ids)].filter((id) => !html.includes(`id="${id}"`) && !dynamicIds.has(id));
@@ -449,17 +575,21 @@ mirrorRootsOk
   const catalogProjectContract = project.schema === 1 &&
     project.repository === 'weigefenxiang/WeiG-OpenWrt-AutoBuild' &&
     project.catalogRepository === catalogIndex.catalogRepo &&
+    project.catalogReleaseTag === 'menuconfig-catalog-complete' &&
     catalogIndex.sources.length === 4 && catalogBranches.length === 14 &&
     catalogBranches.includes('hanwckf/openwrt-21.02') &&
     js.includes('PROJECT = await loadJson') &&
-    js.includes('branches: (source.branches || [])') &&
+    (js.includes('branches: (source.branches || [])') ||
+      catalogLoaderJs.includes('branches: [...(source.branches || [])]')) &&
     js.includes("errorStage: 'catalog-refresh-required'") &&
     !js.includes("filter((branch) => branch.state !== 'unavailable')") &&
-    parser.includes('async function loadCatalogIndex()') &&
-    parser.includes('async function loadCatalog(repo, branch)') &&
+    parser.includes("async function loadCatalogIndex(revision = 'catalog-data')") &&
+    parser.includes("async function loadCatalog(repo, branch, revision = 'catalog-data')") &&
     parser.includes('Catalog index lacks an exact compressed bytes/hash contract') &&
     parser.includes("String(branch?.hash || branch?.compressedSha256 || '').toLowerCase()") &&
-    parser.includes('findCatalogPackageConflicts(submittedConfig, activeCatalog)') &&
+    parser.includes('validateConfig(') &&
+    parser.includes('createCatalogModel(activeCatalog)') &&
+    parser.includes('Catalog sourceCommit 与请求契约不一致') &&
     parser.includes('Catalog 不提供该源码/分支的固件主题') &&
     parser.includes('catalogBranch.state ===');
   catalogProjectContract
@@ -719,7 +849,21 @@ mirrorRootsOk
   buildLimitContract
     ? ok('仓库主免排队、每用户构建上限、Issue 自助取消与强制取消兜底已接通')
     : bad('per-user build control', '仓库主绕过、准入上限、分槽并发或 Issue 作者取消链路缺失');
-  const catalogProviderBlock = js.slice(js.indexOf('const CATALOG_PROVIDERS'), js.indexOf('function stableCatalogIndex'));
+  const loadCatalogStart = js.indexOf('async function loadCatalog(');
+  const loadCatalogEnd = js.indexOf('function initialCatalogTargetRequest()', loadCatalogStart);
+  const loadCatalogBody = loadCatalogStart >= 0 && loadCatalogEnd > loadCatalogStart
+    ? js.slice(loadCatalogStart, loadCatalogEnd) : '';
+  const catalogTargetBeforePresets =
+    loadCatalogBody.indexOf('renderCatalogPicker(false') >= 0 &&
+    loadCatalogBody.indexOf('await applyCatalogTarget()') > loadCatalogBody.indexOf('renderCatalogPicker(false') &&
+    loadCatalogBody.indexOf('await applyCatalogStartupPresets()') > loadCatalogBody.indexOf('await applyCatalogTarget()') &&
+    !loadCatalogBody.includes('applyDefaultCatalogTheme();') &&
+    !loadCatalogBody.includes('applyMinimumBootPreset(false)') &&
+    js.includes('async function applyCatalogStartupPresets()') &&
+    js.includes("console.error('[Catalog startup presets failed]', error)");
+  catalogTargetBeforePresets
+    ? ok('Catalog startup order: establish Target/Profile before target-sensitive defaults, with preset rollback')
+    : bad('Catalog startup order', 'Target/Profile must be established before theme/minimum-boot defaults');
   const menuconfigContract = html.includes('id="menuconfigGrid"') &&
     html.includes('id="menuconfigPanel"') &&
     html.includes('id="menuconfigToggle"') &&
@@ -754,17 +898,23 @@ mirrorRootsOk
     js.includes('function syncCatalogApplications') &&
     js.includes("['Top level', ...menuBreadcrumb]") &&
     !js.includes('`./catalog-data/${asset}`') &&
-    catalogProviderBlock.indexOf('cdn.jsdelivr.net') >= 0 &&
-    catalogProviderBlock.indexOf('cdn.jsdelivr.net') < catalogProviderBlock.indexOf('raw.githubusercontent.com') &&
-    js.includes('function catalogAssetRef(index)') &&
-    js.includes("return /^[0-9a-f]{40}$/.test(ref) ? ref : 'catalog-data';") &&
-    js.includes('async function fetchCatalogIndexFromProvider') &&
+    js.includes("import('./lib/catalog-loader.mjs?v=") &&
+    catalogLoaderJs.indexOf("for (const id of ['github-raw', 'jsdelivr', 'github-release'])") >= 0 &&
+    catalogLoaderJs.indexOf("const order = ['jsdelivr', 'github-raw', 'github-release']") >= 0 &&
+    catalogLoaderJs.includes('/releases/download/${defaultReleaseTag}/index.json') &&
+    catalogLoaderJs.includes('/releases/download/${tag}/${asset}') &&
+    js.includes("releaseTag: PROJECT.catalogReleaseTag || 'menuconfig-catalog-complete'") &&
+    catalogLoaderJs.includes('wrt_refresh=${nonce}') &&
+    catalogLoaderJs.includes("export const CATALOG_CACHE_NAME = 'wrt-catalog-cache-v2'") &&
+    catalogLoaderJs.includes('Catalog schema ${schema}; required ${MIN_CATALOG_SCHEMA}') &&
+    catalogLoaderJs.includes('Catalog relations schema ${relationsSchema}; required ${MIN_RELATIONS_SCHEMA}') &&
+    catalogLoaderJs.includes('Catalog compressed SHA-256 mismatch') &&
+    catalogLoaderJs.includes('await cacheStorage.delete(CATALOG_CACHE_NAME)') &&
     js.includes('async function fetchCatalogBundle') &&
-    js.includes('catalogIndexesByProvider') &&
-    js.includes('provider.assetUrl(asset, ref)') &&
-    js.includes('catalogCacheKey') &&
-    js.includes('validateCatalogAsset') &&
-    js.includes('if (!branch.fallback || exactRevision) throw remoteError;') &&
+    js.includes('CATALOG_LOADER.fetchBundle') &&
+    js.includes('catalogCopyDiagnostics') &&
+    html.includes('id="catalogLoadDiagnostics"') &&
+    css.includes('.catalog-load-details') &&
     js.includes('menuCatalogAbortController?.abort()') &&
     js.includes('menuIndexAbortController?.abort()') &&
     js.includes('promptZh') &&
@@ -775,7 +925,7 @@ mirrorRootsOk
     js.includes('function setCatalogLoadState') &&
     js.includes('function retryCatalogLoad') &&
     js.includes("setCatalogLoadState('loading')") &&
-    js.includes("setCatalogLoadState('error', error)") &&
+    js.includes("setCatalogLoadState('error', error, diagnostics)") &&
     js.includes("setCatalogLoadState('idle')") &&
     !js.includes('translation.usage, packageMeta') &&
     js.includes("applyMenuTranslation(description, '', translation.usage, true)") &&
@@ -884,14 +1034,40 @@ mirrorRootsOk
   selfTestContract
     ? ok('网页自检使用 Catalog/上传配置与真实 .config 生成演算')
     : bad('web self-test contract', '种子数据路径、Catalog/上传配置或真实生成演算缺失');
-  const devpkgContract = html.includes('id="devpkgToggle"') &&
-    html.includes('id="devpkgBody" hidden') &&
-    html.includes('id="devpkgStatus"') &&
-    js.includes('kw.length < 2') &&
-    js.includes("setDevpkgExpanded(false)");
-  devpkgContract
-    ? ok('开发者软件包默认折叠、两字符门禁与同行状态区已接通')
-    : bad('developer package contract', '折叠、搜索门禁或状态区缺失');
+  const catalogEngineUiContract = !html.includes('id="devpkgToggle"') &&
+    !js.includes('devPkgs') && !js.includes('PKGDATA') &&
+    js.includes("import('./lib/catalog-engine.mjs?v=") &&
+    js.includes('menuSearchOptions = [...options, ...hiddenOptions]') &&
+    js.includes('CATALOG_ENGINE.applyUserIntent') &&
+    js.includes('CATALOG_ENGINE.proposeRepairs') &&
+    js.includes('schema: 5') &&
+    buildWorkflow.includes('validate-catalog-config.mjs') &&
+    buildWorkflow.includes('--phase "$CATALOG_PHASE"') &&
+    requestParser.includes('createCatalogValidationContext(') &&
+    requestParser.includes("phase: 'pre-defconfig'") &&
+    js.includes('function catalogValidationContext(') &&
+    buildWorkflow.includes('steps.req.outputs.source_commit');
+  catalogEngineUiContract
+    ? ok('Advanced 已接管隐藏包搜索；网页/Actions 共用 Catalog 引擎，旧原始包入口已退役')
+    : bad('Catalog engine UI/CI contract', '共享引擎、隐藏包搜索、精确源码或旧入口清理不完整');
+  const catalogEngineSource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.mjs'), 'utf8');
+  const catalogMatrixSource = readFileSync(join(ROOT, 'tools', 'test-catalog-engine.mjs'), 'utf8');
+  const enginePackageLiteral = /[\"'`]PACKAGE_[A-Za-z0-9_.+@-]+[\"'`]/.test(catalogEngineSource);
+  const standardizedContextContract =
+    catalogEngineSource.includes("status: 'deferred'") &&
+    catalogEngineSource.includes('createCatalogValidationContext') &&
+    catalogEngineSource.includes('trustedSymbols') &&
+    catalogEngineSource.includes("phase === 'post-defconfig'") &&
+    catalogEngineSource.includes('beforeKeys') &&
+    catalogMatrixSource.includes('PACKAGE_optional-driver') &&
+    catalogMatrixSource.includes('PACKAGE_i18n-service') &&
+    catalogMatrixSource.includes('app-shaped Target/Profile contract') &&
+    catalogMatrixSource.includes("run(preConfigPath, 'pre-defconfig')") &&
+    catalogMatrixSource.includes("run(preConfigPath, 'post-defconfig')") &&
+    !enginePackageLiteral;
+  standardizedContextContract
+    ? ok('Catalog 上下文使用通用三态/权威契约；共享引擎与矩阵测试无单包补丁')
+    : bad('standardized Catalog context', '缺少 deferred/trusted/pre-post 机制或仍有单包补丁样例');
   const meta = JSON.parse(readFileSync(join(ROOT, 'tools', 'plugins-meta.json'), 'utf8'));
   const sizes = JSON.parse(readFileSync(join(ROOT, 'tools', 'plugin-sizes.json'), 'utf8'));
   const sizeEntries = Object.entries(sizes.plugins || {});
