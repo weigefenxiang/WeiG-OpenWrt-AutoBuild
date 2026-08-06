@@ -2,7 +2,9 @@
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { createCatalogModel } from '../site/wrt/lib/catalog-engine.js';
-import { createCatalogLoader, formatCatalogDiagnostics, sha256Hex } from '../site/wrt/lib/catalog-loader.js';
+import {
+  createCatalogLoader, formatCatalogDiagnostics, legacyCatalogContract, sha256Hex,
+} from '../site/wrt/lib/catalog-loader.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -54,6 +56,25 @@ function fakeCaches() {
     async delete(name) { return stores.delete(name); },
   };
 }
+
+const explicitLegacy = legacyCatalogContract({
+  schema: 6,
+  asset: 'ambiguous-root.json.gz', hash: 'a'.repeat(64), bytes: 1,
+  assets: { core: { asset: 'core.json.gz' }, graph: { asset: 'graph.json.gz' } },
+  legacy: {
+    asset: 'legacy.json.gz', hash: 'b'.repeat(64), bytes: 123,
+    catalogSchema: 5, relationsSchema: 2,
+  },
+});
+assert(explicitLegacy?.asset === 'legacy.json.gz' && explicitLegacy.catalogSchema === 5 &&
+  explicitLegacy.relationsSchema === 2, 'explicit legacy build contract was not selected');
+assert(legacyCatalogContract({
+  schema: 6, asset: 'ambiguous-root.json.gz', hash: 'a'.repeat(64), bytes: 1,
+  assets: { core: { asset: 'core.json.gz' }, graph: { asset: 'graph.json.gz' } },
+}) === null, 'schema-6 root metadata was incorrectly treated as a legacy build contract');
+assert(legacyCatalogContract({
+  schema: 5, asset: 'old.json.gz', hash: 'c'.repeat(64), bytes: 42,
+})?.relationsSchema === 2, 'legacy-only schema-5 index compatibility was lost');
 
 const abc = new TextEncoder().encode('abc').buffer;
 assert(await sha256Hex(abc, null) ===
@@ -228,6 +249,9 @@ const splitAssets = Object.fromEntries(Object.entries(splitDocuments).map(([logi
 const splitIndex = indexFor(asset, valid, splitCommit, '5'.repeat(40));
 splitIndex.sources[0].branches[0] = {
   ...splitIndex.sources[0].branches[0], commit: splitCommit, schema: 6, assets: splitAssets,
+  legacy: {
+    asset, hash: valid.hash, bytes: valid.bytes.length, catalogSchema: 5, relationsSchema: 2,
+  },
 };
 const splitCalls = [];
 const splitLoader = createCatalogLoader({

@@ -119,3 +119,12 @@ The runtime no longer puts Targets, the full relation graph, display menus, hidd
 Advanced 在状态 revision 内复用 Target 上下文、表达式 token、可见性、最大状态和目录索引；搜索由独立 Worker 建立二元词索引并返回 symbol ID。默认搜索排除长 Help，显示列表按 80 行分页，避免每次展开或键入都重新扫描、解析并重建全部 DOM。
 
 Within one state revision, Advanced reuses Target context, expression tokens, visibility, maximum state, and path indexes. A dedicated Worker builds a bigram search index and returns symbol IDs. Default search excludes long Help, and display is paged in bounded 80-row chunks so expansion and typing do not repeatedly parse and rebuild the entire DOM.
+
+## D100 Catalog 运行契约与构建契约分离
+
+Schema 6 浏览器运行时使用 `core + graph`，其关系模型为 Relations Schema 3；GitHub Actions 在迁移期仍使用 Schema 5 单体资产做精确构建验证。`index.json` 的每个分支因此同时发布两类互不混用的契约：
+
+- `assets.*`：浏览器运行分片；
+- `legacy`：构建验证单体，包含 `asset/hash/bytes/catalogSchema/relationsSchema`。
+
+网页生成 `build-request.json` 时只能从同一个 `branch.legacy` 对象读取资产、哈希、大小和两个 schema，禁止从 `MENU_CATALOG` 运行对象拼接 schema。Actions 也先读取固定 index 中的 `legacy`，再逐字段核对请求并下载该单体。根级 `asset/hash/bytes` 仅作为迁移期旧客户端镜像，不能作为 Schema 6 构建契约的权威来源。

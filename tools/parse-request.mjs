@@ -94,9 +94,27 @@ async function loadCatalogIndex(revision = 'catalog-data') {
   throw new Error(`无法读取固定 Catalog index revision:${ref}`);
 }
 
+function legacyCatalogContract(branch) {
+  const row = branch && typeof branch === 'object' ? branch : {};
+  const explicit = row.legacy && typeof row.legacy === 'object' ? row.legacy : null;
+  if (!explicit && (row.assets?.core || row.assets?.graph || Number(row.schema || 0) >= 6)) return null;
+  const source = explicit || row;
+  const asset = String(source.asset || '');
+  if (!asset) return null;
+  return {
+    asset,
+    hash: String(source.hash || source.compressedSha256 || '').toLowerCase(),
+    bytes: Number(source.bytes || source.compressedBytes || 0),
+    catalogSchema: Number(source.catalogSchema || (!explicit ? row.schema || 5 : 0)),
+    relationsSchema: Number(source.relationsSchema || (!explicit ? 2 : 0)),
+  };
+}
 async function loadCatalog(repo, branch, revision = 'catalog-data') {
-  const asset = String(branch?.asset || '');
-  if (!/^[A-Za-z0-9._-]+\.json\.gz$/.test(asset)) throw new Error(`Catalog 资源名非法:${asset || '(缺失)'}`);
+  const contract = legacyCatalogContract(branch);
+  const asset = String(contract?.asset || '');
+  if (!/^[A-Za-z0-9._-]+\.json\.gz$/.test(asset)) {
+    throw new Error(`Catalog 缺少构建验证用 legacy 资源契约:${asset || '(缺失)'}`);
+  }
   const ref = String(revision || 'catalog-data').trim().toLowerCase();
   if (ref !== 'catalog-data' && !/^[a-f0-9]{40}$/.test(ref)) throw new Error(`Catalog revision 非法:${ref}`);
   const urls = [
@@ -109,8 +127,8 @@ async function loadCatalog(repo, branch, revision = 'catalog-data') {
       const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const compressed = Buffer.from(await response.arrayBuffer());
-      const expectedBytes = Number(branch?.bytes || branch?.compressedBytes || 0);
-      const expectedHash = String(branch?.hash || branch?.compressedSha256 || '').toLowerCase();
+      const expectedBytes = Number(contract.bytes || 0);
+      const expectedHash = String(contract.hash || '').toLowerCase();
       if (!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0 || !/^[a-f0-9]{64}$/.test(expectedHash)) {
         throw new Error(`Catalog index lacks an exact compressed bytes/hash contract: ${asset}`);
       }
@@ -264,11 +282,19 @@ if (isCustomTarget) {
   if (catalogBranch.state === 'unavailable') {
     fail(`Catalog 已标记该源码/分支不可用:${catalogSource.id}/${catalogBranch.branch}`);
   }
-  if (catalogContract && (
-    catalogBranch.asset !== catalogContract.asset ||
-    String(catalogBranch.hash || catalogBranch.compressedSha256 || '').toLowerCase() !== catalogContract.compressedSha256 ||
-    Number(catalogBranch.bytes || catalogBranch.compressedBytes || 0) !== catalogContract.compressedBytes
-  )) fail('固定 Catalog index 与请求中的 asset/hash/bytes 契约不一致');
+  if (catalogContract) {
+    const indexedLegacy = legacyCatalogContract(catalogBranch);
+    if (!indexedLegacy) fail('固定 Catalog index 缺少构建验证用 legacy 契约');
+    if (indexedLegacy.asset !== catalogContract.asset ||
+        indexedLegacy.hash !== catalogContract.compressedSha256 ||
+        indexedLegacy.bytes !== catalogContract.compressedBytes ||
+        indexedLegacy.catalogSchema !== catalogContract.catalogSchema ||
+        indexedLegacy.relationsSchema !== catalogContract.relationsSchema) {
+      fail(`固定 Catalog index 与请求的 legacy 契约不一致:` +
+        ` index=${indexedLegacy.asset} catalog=${indexedLegacy.catalogSchema} relations=${indexedLegacy.relationsSchema}` +
+        ` request=${catalogContract.asset} catalog=${catalogContract.catalogSchema} relations=${catalogContract.relationsSchema}`);
+    }
+  }
   version = { id: catalogBranch.id, branch: catalogBranch.branch, label: catalogBranch.branch };
   source = {
     id: catalogSource.id, label: catalogSource.label || catalogSource.id, repo: catalogSource.repo, versions: [version],
@@ -403,9 +429,14 @@ if (hasSubmittedConfig) {
   if (catalogContract) {
     if (sourceCommit !== catalogContract.sourceCommit) fail('Catalog sourceCommit 与请求契约不一致');
     if (activeCatalog.source?.repo !== catalogContract.sourceRepository) fail('Catalog sourceRepository 与请求契约不一致');
-    if (Number(activeCatalog.schema) !== catalogContract.catalogSchema ||
-        Number(activeCatalog.relations?.schema) !== catalogContract.relationsSchema) {
-      fail('Catalog schema 与请求契约不一致');
+    const actualCatalogSchema = Number(activeCatalog.schema || 0);
+    const actualRelationsSchema = Number(activeCatalog.relations?.schema || 0);
+    if (actualCatalogSchema !== catalogContract.catalogSchema ||
+        actualRelationsSchema !== catalogContract.relationsSchema) {
+      fail(`Catalog schema contract mismatch / Catalog schema 与请求契约不一致:` +
+        ` asset=${catalogContract.asset}` +
+        ` request catalog=${catalogContract.catalogSchema} relations=${catalogContract.relationsSchema}` +
+        ` actual catalog=${actualCatalogSchema} relations=${actualRelationsSchema}`);
     }
   }
   activeCatalogModel = createCatalogModel(activeCatalog);

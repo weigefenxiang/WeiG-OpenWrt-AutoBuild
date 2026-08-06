@@ -818,8 +818,8 @@ mirrorRootsOk
     !js.includes("filter((branch) => branch.state !== 'unavailable')") &&
     parser.includes("async function loadCatalogIndex(revision = 'catalog-data')") &&
     parser.includes("async function loadCatalog(repo, branch, revision = 'catalog-data')") &&
-    parser.includes('Catalog index lacks an exact compressed bytes/hash contract') &&
-    parser.includes("String(branch?.hash || branch?.compressedSha256 || '').toLowerCase()") &&
+    parser.includes('Catalog 缺少构建验证用 legacy 资源契约') &&
+    parser.includes('const indexedLegacy = legacyCatalogContract(catalogBranch)') &&
     parser.includes('validateConfig(') &&
     parser.includes('createCatalogModel(activeCatalog)') &&
     parser.includes('Catalog sourceCommit 与请求契约不一致') &&
@@ -1228,6 +1228,22 @@ mirrorRootsOk
     catalogSchema6PerformanceContract
       ? ok('Catalog schema 6: core/graph initial load, lazy display shards, revision caches and worker search are connected')
       : bad('Catalog schema 6 performance contract', 'split loading, compact graph, lazy shards, caches or worker search is incomplete');
+    const catalogBuildContractSeparation =
+      catalogLoaderJs.includes('export function legacyCatalogContract(branch)') &&
+      catalogLoaderJs.includes('Catalog index lacks an explicit legacy build/bundle contract') &&
+      js.includes('const legacy = CATALOG_LOADER_MODULE.legacyCatalogContract(branch)') &&
+      js.includes('catalogSchema: legacy.catalogSchema') &&
+      js.includes('relationsSchema: legacy.relationsSchema') &&
+      !js.includes('catalogSchema: Number(MENU_CATALOG?.schema') &&
+      !js.includes('relationsSchema: Number(MENU_CATALOG?.relations?.schema') &&
+      parser.includes('function legacyCatalogContract(branch)') &&
+      parser.includes('固定 Catalog index 缺少构建验证用 legacy 契约') &&
+      parser.includes('Catalog schema contract mismatch / Catalog schema 与请求契约不一致') &&
+      parser.includes('request catalog=${catalogContract.catalogSchema} relations=${catalogContract.relationsSchema}') &&
+      parser.includes('actual catalog=${actualCatalogSchema} relations=${actualRelationsSchema}');
+    catalogBuildContractSeparation
+      ? ok('Catalog build contract: schema-6 runtime and schema-5 legacy validation assets are separated')
+      : bad('Catalog build contract separation', 'runtime schema leaked into build request or legacy index/parser guards are missing');
     const buildContractUi = html.includes('id="buildContract"') &&
       html.includes('id="buildContractToggle"') &&
       html.includes('aria-expanded="false" aria-controls="buildContractBody"') &&

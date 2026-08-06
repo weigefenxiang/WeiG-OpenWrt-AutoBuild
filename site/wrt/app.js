@@ -501,7 +501,7 @@ async function init() {
   try {
     [CATALOG_ENGINE, CATALOG_LOADER_MODULE, CATALOG_SCHEMA6_MODULE] = await Promise.all([
       import('./lib/catalog-engine.js?v=5b3e3c15d9'),
-      import('./lib/catalog-loader.js?v=34cd54132f'),
+      import('./lib/catalog-loader.js?v=319e7a7c96'),
       import('./lib/catalog-schema6.js?v=0a165903c2'),
     ]);
     I18N = await loadJson('i18n.json');
@@ -880,26 +880,28 @@ function currentCatalogContract() {
   const source = selectedCatalogSource();
   const branch = selectedCatalogBranch(source);
   const revision = String(MENU_INDEX?.assetRef || '').trim().toLowerCase();
-  const hash = String(branch?.hash || branch?.compressedSha256 || '').trim().toLowerCase();
-  const bytes = Number(branch?.bytes || branch?.compressedBytes || 0);
-  const sourceCommit = String(MENU_CATALOG?.source?.commit || branch?.commit || '').trim().toLowerCase();
-  if (!source || !branch?.asset || !/^[0-9a-f]{40}$/.test(revision) ||
-      !/^[0-9a-f]{64}$/.test(hash) || !Number.isSafeInteger(bytes) || bytes <= 0 ||
+  const legacy = CATALOG_LOADER_MODULE.legacyCatalogContract(branch);
+  const sourceRepository = String(source?.repo || '').trim();
+  const sourceCommit = String(branch?.commit || '').trim().toLowerCase();
+  if (!source || !branch || !legacy || !/^[0-9a-f]{40}$/.test(revision) ||
+      !/^[0-9a-f]{64}$/.test(legacy.hash) || !Number.isSafeInteger(legacy.bytes) || legacy.bytes <= 0 ||
+      legacy.catalogSchema < 5 || legacy.relationsSchema < 2 ||
+      !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(sourceRepository) ||
       !/^[0-9a-f]{40}$/.test(sourceCommit)) {
     throw new Error(uiText(
-      '当前 Catalog 缺少不可变版本契约，请刷新页面后重试。',
-      '目前 Catalog 缺少不可變版本契約，請重新整理頁面後重試。',
-      'The current Catalog lacks an immutable version contract. Refresh and try again.'));
+      '当前分支缺少构建验证所需的旧版 Catalog 精确契约，请等待 Catalog 发布完成后重试。',
+      '目前分支缺少建置驗證所需的舊版 Catalog 精確契約，請等待 Catalog 發佈完成後重試。',
+      'This branch lacks the exact legacy Catalog contract required for build validation. Wait for Catalog publishing to finish and try again.'));
   }
   return {
     repository: String(MENU_INDEX.catalogRepo || MENU_CATALOG_REPO),
     revision,
-    asset: safeCatalogAsset(branch.asset),
-    compressedSha256: hash,
-    compressedBytes: bytes,
-    catalogSchema: Number(MENU_CATALOG?.schema || 0),
-    relationsSchema: Number(MENU_CATALOG?.relations?.schema || 0),
-    sourceRepository: String(MENU_CATALOG?.source?.repo || source.repo || ''),
+    asset: legacy.asset,
+    compressedSha256: legacy.hash,
+    compressedBytes: legacy.bytes,
+    catalogSchema: legacy.catalogSchema,
+    relationsSchema: legacy.relationsSchema,
+    sourceRepository,
     sourceCommit,
   };
 }

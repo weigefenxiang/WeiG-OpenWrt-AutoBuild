@@ -25,6 +25,22 @@ export function safeCatalogAsset(asset) {
   return value;
 }
 
+export function legacyCatalogContract(branch) {
+  const row = branch && typeof branch === 'object' ? branch : {};
+  const explicit = row.legacy && typeof row.legacy === 'object' ? row.legacy : null;
+  if (!explicit && (row.assets?.core || row.assets?.graph || Number(row.schema || 0) >= 6)) return null;
+  const source = explicit || row;
+  const asset = String(source.asset || '');
+  if (!asset) return null;
+  return {
+    asset: safeCatalogAsset(asset),
+    hash: String(source.hash || source.compressedSha256 || '').trim().toLowerCase(),
+    bytes: Number(source.bytes || source.compressedBytes || 0),
+    catalogSchema: Number(source.catalogSchema || (!explicit ? row.schema || 5 : 0)),
+    relationsSchema: Number(source.relationsSchema || (!explicit ? 2 : 0)),
+  };
+}
+
 function exactAssetRef(index) {
   const ref = String(index?.assetRef || '').trim().toLowerCase();
   if (!/^[0-9a-f]{40}$/.test(ref)) throw new Error('Catalog index lacks an exact immutable assetRef');
@@ -410,13 +426,13 @@ export function createCatalogLoader({
       };
     }
 
-    if (!branch.asset || !branch.hash || !branch.bytes) {
-      throw loaderError('Catalog index lacks an exact compressed bytes/hash contract', diagnostics);
+    const legacy = legacyCatalogContract(branch);
+    if (!legacy?.asset || !legacy.hash || !legacy.bytes) {
+      throw loaderError('Catalog index lacks an explicit legacy build/bundle contract', diagnostics);
     }
-    const asset = safeCatalogAsset(branch.asset);
     const result = await fetchAssetDocument({
-      asset,
-      contract: branch,
+      asset: legacy.asset,
+      contract: legacy,
       index,
       signal,
       diagnostics,
@@ -426,7 +442,7 @@ export function createCatalogLoader({
     });
     let model;
     try {
-      model = validateCatalogDocument(result.data, branch, engine);
+      model = validateCatalogDocument(result.data, legacy, engine);
     } catch (error) {
       diagnostic(diagnostics, 'asset-schema', result.provider, false, error.message, result.url);
       throw loaderError(`Catalog bundle unavailable: ${error.message}`, diagnostics, error);

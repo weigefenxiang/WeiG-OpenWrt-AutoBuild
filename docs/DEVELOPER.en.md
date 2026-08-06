@@ -195,3 +195,28 @@ GitHub's Run-workflow form cannot cascade dropdowns, hence the manual pairing; *
 **Second-level local checks without waiting for CI**: `node tools/parse-request.mjs`, `node tools/build-config.mjs …` (legacy dispatch compatibility), and `node tools/check-all.mjs` (including every versioned base config in the proxy-default scan).
 
 **Facts**: a build takes ~2–3h uncached; ~20 parallel jobs on the free tier; independent original `.img.gz`, `CONFIG`, `OPTIONAL-PACKAGES`, and `FIRMWARE-OTHER` live 30 days while `BUILD-LOGS` lives 14 days; use a dated tag (e.g. `weige-0727`) to tell batches apart; cancelled issue-builds are commented and closed by the bot too.
+
+## D100: Catalog Schema 6 vs. the Actions build contract
+
+Every Catalog branch index must explicitly contain:
+
+```json
+{
+  "assets": { "core": {}, "graph": {} },
+  "legacy": {
+    "asset": "source--branch.json.gz",
+    "hash": "<compressed sha256>",
+    "bytes": 123,
+    "catalogSchema": 5,
+    "relationsSchema": 2
+  }
+}
+```
+
+`assets` serves the browser's Schema 6 / Relations 3 runtime. `legacy` serves the exact Schema 5 / Relations 2 asset validated by Actions. Contract changes must be reviewed together in `site/wrt/app.js`, `site/wrt/lib/catalog-loader.js`, and `tools/parse-request.mjs`. Never combine `branch.asset/hash/bytes` with schemas taken from the in-memory `MENU_CATALOG`. A branch without an explicit `legacy` contract may still be browsed, but cloud-build submission must be blocked.
+
+On Windows, run the Catalog checks with:
+
+```powershell
+npm.cmd test
+```

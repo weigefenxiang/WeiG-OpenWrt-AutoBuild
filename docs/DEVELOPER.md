@@ -248,3 +248,28 @@ node tools/check-all.mjs
 - Artifacts:独立原始 `.img.gz`、`CONFIG`、`OPTIONAL-PACKAGES`、`FIRMWARE-OTHER` 保留 30 天，`BUILD-LOGS` 保留 14 天，过期重新提交;
 - run 列表按 `Build 定制 · 标识 · 源 版本/变体` 命名,测试时 tag 用带日期的昵称(如 `weige-0727`)方便区分批次;
 - 取消构建:普通提交者在自己的构建 Issue 回复 `/cancel`;管理员也可在 run 页面右上 Cancel。取消后机器人会回评并关单。
+
+## D100：Catalog Schema 6 与 Actions 构建契约
+
+Catalog 分支索引必须明确包含：
+
+```json
+{
+  "assets": { "core": {}, "graph": {} },
+  "legacy": {
+    "asset": "source--branch.json.gz",
+    "hash": "<compressed sha256>",
+    "bytes": 123,
+    "catalogSchema": 5,
+    "relationsSchema": 2
+  }
+}
+```
+
+`assets` 服务于网页 Schema 6/Relations 3 运行时；`legacy` 服务于 Actions 的 Schema 5/Relations 2 精确验证。修改请求契约时，必须同步检查 `site/wrt/app.js`、`site/wrt/lib/catalog-loader.js` 和 `tools/parse-request.mjs`。严禁把 `branch.asset/hash/bytes` 与 `MENU_CATALOG.schema` 或 `MENU_CATALOG.relations.schema` 交叉拼接。新分支尚未发布 `legacy` 时，网页可以浏览，但必须阻止提交云编译。
+
+Windows 运行 Catalog 检查使用：
+
+```powershell
+npm.cmd test
+```
