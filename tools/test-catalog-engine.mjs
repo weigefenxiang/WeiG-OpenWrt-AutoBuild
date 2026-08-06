@@ -4,13 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
-  applyAuthoritativeValues,
   applyUserIntent,
   createCatalogModel,
   createCatalogValidationContext,
   evaluateExpressionState,
   parseConfigDocument,
-  proposeRepairs,
   validateConfig,
 } from '../site/wrt/lib/catalog-engine.js';
 
@@ -74,6 +72,11 @@ const records = [
   { kind: 'package', package: 'flow-core', configSymbol: 'PACKAGE_flow-core', kconfigSymbol: 'PACKAGE_flow-core', states: ['n', 'm', 'y'] },
   { kind: 'package', package: 'flow-offload', configSymbol: 'PACKAGE_flow-offload', kconfigSymbol: 'PACKAGE_flow-offload', states: ['n', 'm', 'y'],
     kconfig: { dependsExpressions: [['PACKAGE_flow-core && (TARGET_demo_full || TARGET_demo_lite)']] } },
+  { kind: 'package', package: 'flow-monitor', configSymbol: 'PACKAGE_flow-monitor', kconfigSymbol: 'PACKAGE_flow-monitor', states: ['n', 'm', 'y'],
+    kconfig: { dependsExpressions: [['PACKAGE_flow-core']] } },
+  { kind: 'config', configSymbol: 'SOFT_HINT', kconfigSymbol: 'SOFT_HINT', states: ['n', 'y'] },
+  { kind: 'package', package: 'imply-source', configSymbol: 'PACKAGE_imply-source', kconfigSymbol: 'PACKAGE_imply-source', states: ['n', 'y'],
+    kconfig: { impliesExpressions: [['SOFT_HINT']] } },
   { kind: 'package', package: 'unrelated-tool', configSymbol: 'PACKAGE_unrelated-tool', kconfigSymbol: 'PACKAGE_unrelated-tool', states: ['n', 'm', 'y'] },
   { kind: 'package', package: 'provider-a', configSymbol: 'PACKAGE_provider-a', kconfigSymbol: 'PACKAGE_provider-a', states: ['n', 'm', 'y'], provides: ['virtual-api'] },
   { kind: 'package', package: 'consumer', configSymbol: 'PACKAGE_consumer', kconfigSymbol: 'PACKAGE_consumer', states: ['n', 'm', 'y'],
@@ -93,7 +96,7 @@ const catalog = {
       providers: { 'virtual-api': ['provider-a'] },
       choices: { 'choice-format': ['FORMAT_A', 'FORMAT_B'] },
       reverseKconfig: {
-        'PACKAGE_flow-core': ['PACKAGE_flow-offload'],
+        'PACKAGE_flow-core': ['PACKAGE_flow-offload', 'PACKAGE_flow-monitor'],
       },
       reverseDependencies: {
         'core-service': ['ui-service'],
@@ -235,11 +238,51 @@ const chain = parseConfigDocument([
 const cascade = applyUserIntent(model, chain, { symbol: 'PACKAGE_core-service', value: 'n' });
 assert(cascade.values.get('PACKAGE_ui-service') === 'n' && cascade.values.get('PACKAGE_i18n-service') === 'n',
   'generic reverse dependency cascade failed');
-const orphan = proposeRepairs(model, parseConfigDocument([
-  '# CONFIG_PACKAGE_ui-service is not set',
-  'CONFIG_PACKAGE_i18n-service=y',
-].join('\n')));
-assert(orphan.values.get('PACKAGE_i18n-service') === 'n', 'generic hidden orphan repair failed');
+
+const enabledOffload = applyUserIntent(model, full.values, {
+  symbol: 'PACKAGE_flow-offload', value: 'y', validationOptions: full.validationOptions,
+});
+assert(enabledOffload.values.get('PACKAGE_flow-core') === 'y',
+  'mandatory dependency was not enabled');
+const prunedOffload = applyUserIntent(model, enabledOffload.values, {
+  symbol: 'PACKAGE_flow-offload', value: 'n',
+  dependencySymbols: new Set(['PACKAGE_flow-core']),
+  protectedSymbols: new Set(),
+  validationOptions: full.validationOptions,
+});
+assert(prunedOffload.values.get('PACKAGE_flow-core') === 'n' &&
+  prunedOffload.changes.some((row) => row.symbol === 'PACKAGE_flow-core' && row.reason === 'dependency-unused'),
+  'unused automatically selected dependency was not pruned');
+
+const shared = parseConfigDocument([
+  'CONFIG_PACKAGE_flow-core=y',
+  'CONFIG_PACKAGE_flow-offload=y',
+  'CONFIG_PACKAGE_flow-monitor=y',
+].join('\n'));
+const sharedResult = applyUserIntent(model, shared, {
+  symbol: 'PACKAGE_flow-offload', value: 'n',
+  dependencySymbols: new Set(['PACKAGE_flow-core']),
+  protectedSymbols: new Set(),
+});
+assert(sharedResult.values.get('PACKAGE_flow-core') === 'y',
+  'shared dependency was incorrectly pruned');
+
+const protectedResult = applyUserIntent(model, parseConfigDocument([
+  'CONFIG_PACKAGE_flow-core=y',
+  'CONFIG_PACKAGE_flow-offload=y',
+].join('\n')), {
+  symbol: 'PACKAGE_flow-offload', value: 'n',
+  dependencySymbols: new Set(['PACKAGE_flow-core']),
+  protectedSymbols: new Set(['PACKAGE_flow-core']),
+});
+assert(protectedResult.values.get('PACKAGE_flow-core') === 'y',
+  'explicitly protected dependency was incorrectly pruned');
+
+const imply = applyUserIntent(model, full.values, {
+  symbol: 'PACKAGE_imply-source', value: 'y', validationOptions: full.validationOptions,
+});
+assert(imply.values.get('SOFT_HINT') !== 'y',
+  'weak imply relationship was incorrectly treated as a mandatory dependency');
 
 const provider = applyUserIntent(model, parseConfigDocument([
   'CONFIG_PACKAGE_provider-a=y',
@@ -258,27 +301,6 @@ const conflicts = validateConfig(model, parseConfigDocument([
   'CONFIG_PACKAGE_backend-b=y',
 ].join('\n')));
 assert(conflicts.some((row) => row.code === 'package-conflict'), 'generic package conflict was not detected');
-
-const authoritative = applyAuthoritativeValues(model, full.values, [
-  { symbol: 'PACKAGE_profile-driver', value: 'y', source: 'DEVICE_alpha' },
-], { validationOptions: pre.validationOptions });
-assert(authoritative.values.get('PACKAGE_profile-driver') === 'y' &&
-  !authoritative.violations.some((row) => row.symbol === 'PACKAGE_profile-driver'),
-'authoritative Catalog assignment was not preserved');
-const repairTrusted = proposeRepairs(model, pre.values, pre.validationOptions);
-assert(repairTrusted.values.get('PACKAGE_profile-driver') === 'y',
-  'repair removed a trusted profile contract package');
-
-const post = createCatalogValidationContext(model, selectedTarget, base, {
-  phase: 'post-defconfig', deferred: 'error',
-});
-const postViolations = validateConfig(model, post.values, post.validationOptions);
-assert(postViolations.some((row) => row.code === 'kconfig-dependency-deferred' && row.symbol === 'PACKAGE_profile-driver'),
-  'post-defconfig strict mode did not reject unresolved hidden dependency');
-const explicitResolved = new Map(post.values);
-explicitResolved.set('UNPUBLISHED_DEFAULT', 'y');
-assert(validateConfig(model, explicitResolved, post.validationOptions).length === 0,
-  'post-defconfig strict mode rejected an explicitly resolved dependency');
 
 // Broad anonymous matrix: every Target/Profile contract package depends on its own
 // selector plus an upstream hidden default omitted from the compact Catalog. This
@@ -346,21 +368,12 @@ for (let index = 0; index < matrixTargets.length; index++) {
   });
   assert(matrixPreset.values.get(presetSymbol) === 'y',
     `matrix ${index}: deferred target-sensitive preset was rejected`);
-  const matrixPost = createCatalogValidationContext(matrixModel, targetContext, matrixPreset.values,
-    { phase: 'post-defconfig' });
-  assert(validateConfig(matrixModel, matrixPost.values, matrixPost.validationOptions)
-    .some((row) => row.deferred), `matrix ${index}: strict phase missed omitted hidden state`);
-  const resolvedMatrix = new Map(matrixPost.values);
-  resolvedMatrix.set(`OMITTED_DEFAULT_${index}`, 'y');
-  assert(validateConfig(matrixModel, resolvedMatrix, matrixPost.validationOptions).length === 0,
-    `matrix ${index}: strict phase rejected explicitly resolved state`);
 }
 
 const temp = mkdtempSync(join(tmpdir(), 'weig-catalog-engine-'));
 try {
   const catalogPath = join(temp, 'catalog.json');
   const preConfigPath = join(temp, 'pre.config');
-  const resolvedConfigPath = join(temp, 'resolved.config');
   writeFileSync(catalogPath, JSON.stringify(catalog));
   const targetConfig = [
     'CONFIG_TARGET_demo=y',
@@ -373,19 +386,16 @@ try {
     'CONFIG_PACKAGE_profile-driver=y',
   ].join('\n') + '\n';
   writeFileSync(preConfigPath, targetConfig);
-  writeFileSync(resolvedConfigPath, `${targetConfig}CONFIG_UNPUBLISHED_DEFAULT=y\n`);
   const cli = join(process.cwd(), 'tools', 'validate-catalog-config.mjs');
-  const run = (configPath, phase) => spawnSync(process.execPath, [cli,
-    '--catalog', catalogPath, '--config', configPath, '--phase', phase], { encoding: 'utf8' });
-  const preCli = run(preConfigPath, 'pre-defconfig');
-  assert(preCli.status === 0, `pre-defconfig CLI diverged from browser engine: ${preCli.stderr}`);
-  const strictCli = run(preConfigPath, 'post-defconfig');
-  assert(strictCli.status === 1 && /dependenc/i.test(strictCli.stderr),
-    `post-defconfig CLI did not reject unresolved hidden dependency: status=${strictCli.status} stdout=${strictCli.stdout} stderr=${strictCli.stderr}`);
-  const resolvedCli = run(resolvedConfigPath, 'post-defconfig');
-  assert(resolvedCli.status === 0, `post-defconfig CLI rejected resolved config: ${resolvedCli.stderr}`);
+  const run = (...extra) => spawnSync(process.execPath, [cli,
+    '--catalog', catalogPath, '--config', preConfigPath, ...extra], { encoding: 'utf8' });
+  const submittedCli = run();
+  assert(submittedCli.status === 0, `submitted-config CLI diverged from browser engine: ${submittedCli.stderr}`);
+  const removedPostCli = run('--phase', 'post-defconfig');
+  assert(removedPostCli.status === 2 && /removed/i.test(removedPostCli.stderr),
+    'removed post-defconfig mode was unexpectedly accepted');
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }
 
-console.log('Catalog engine standardized context matrix passed');
+console.log('Catalog engine dependency and submitted-config matrix passed');

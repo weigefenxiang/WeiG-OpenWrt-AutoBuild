@@ -15,7 +15,6 @@ import {
   missingBuildRequirements,
   sourceBuildRequirements,
 } from './source-build-requirements.mjs';
-import { applyConfigOverrides, verifyConfigLayers } from './config-overrides.mjs';
 import { directoriesMatch, syncBlogMirror } from './sync-blog.mjs';
 import { checkTextFiles } from './check-text-format.mjs';
 import {
@@ -176,7 +175,7 @@ const catalogEngineMatrixTest = spawnSync(process.execPath, [join(ROOT, 'tools',
   encoding: 'utf8',
 });
 catalogEngineMatrixTest.status === 0
-  ? ok('Catalog engine matrix: deferred/strict context, authoritative profile contract, generic dependency closure')
+  ? ok('Catalog engine matrix: submitted-config validation, dependency closure, reverse disable and orphan pruning')
   : bad('Catalog engine matrix tests',
     (catalogEngineMatrixTest.stderr || catalogEngineMatrixTest.stdout || '').trim().slice(0, 320));
 
@@ -317,7 +316,7 @@ for (const f of ['site/wrt/data/devices.json', 'site/wrt/data/i18n.json', 'site/
   'site/wrt/data/package-mirrors.json', 'site/wrt/data/config-rules.json',
   'site/wrt/data/source-build-requirements.json',
   'config/001.presets/minimum-boot.json', 'config/001.presets/config-rules.json',
-  'config/001.presets/source-build-requirements.json', 'config/001.presets/system-overrides.json',
+  'config/001.presets/source-build-requirements.json',
   'tools/plugins-meta.json', 'tools/plugin-sizes.json', 'tools/i18n-source.json',
   'tools/i18n-translations.json', 'tools/plugins-i18n.json', 'tools/device-catalog.json',
   'tools/package-baseline-360t7.json']) {
@@ -522,14 +521,6 @@ mirrorRootsOk
     profile: 'DEVICE_generic',
   };
   const requirementFixture = 'CONFIG_TARGET_x86=y\nCONFIG_TARGET_BOARD="x86"\n';
-  const systemOverrideRules = JSON.parse(readFileSync(
-    join(ROOT, 'config', '001.presets', 'system-overrides.json'), 'utf8'));
-  const systemOverrideInput = 'CONFIG_TARGET_x86=y\n# CONFIG_DEVEL is not set\n';
-  const systemOverrideApplied = applyConfigOverrides(systemOverrideInput, systemOverrideRules);
-  const systemOverrideReport = verifyConfigLayers(
-    systemOverrideInput, systemOverrideApplied.outputText, systemOverrideRules);
-  const undeclaredChangeReport = verifyConfigLayers(
-    systemOverrideInput, `${systemOverrideApplied.outputText}CONFIG_PACKAGE_bad=y\n`, systemOverrideRules);
   const missingRequirements = missingBuildRequirements(requirementFixture, requirementContext);
   const requirementResolved = applyBuildRequirements(requirementFixture, missingRequirements);
   const requirementIds = sourceBuildRequirements.requirements?.map((row) => row.id) || [];
@@ -546,9 +537,7 @@ mirrorRootsOk
     js.includes('openBuildRequirementResolver') &&
     parser.includes('missingBuildRequirements(config, configRuleContext)') &&
     parser.includes('if (!useDefconfig && missingRequirements.length)') &&
-    parser.includes('use_defconfig=') &&
-    systemOverrideReport.valid && systemOverrideApplied.applied.length === 2 &&
-    !undeclaredChangeReport.valid && undeclaredChangeReport.unexpected[0]?.symbol === 'PACKAGE_bad';
+    parser.includes('use_defconfig=');
   sourceRequirementsOk
     ? ok('source build requirements: one JSON, explicit web acceptance, and Issue rejection are connected')
     : bad('source build requirements', 'JSON schema/copy, web resolver, parser guard, or Defconfig branch contract is invalid');
@@ -699,19 +688,26 @@ mirrorRootsOk
     !js.includes("type: 'Menu'") && !js.includes("type: 'Option'") && !js.includes("type: 'Application'") &&
     js.includes("`${packageName} ${option.prompt || ''} ${option.promptEn || ''} ${option.promptZh || ''} `") &&
     !js.includes("`${option.usageEn || ''} ${option.usageZh || ''} `") &&
-    html.includes('id="menuconfigSearch"') && html.includes('placeholder="Search option name"') && css.includes('.menuconfig-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:nowrap') &&
-    js.includes("name.className = 'menuconfig-option-label'") &&
-    js.includes("name.textContent = path ? `${label} (${path})` : label") &&
-    js.includes("function menuOptionPopupText(element)") &&
-    js.includes("`${uiText('索引', '索引', 'Index')}: CONFIG_${element.dataset.symbol}`") &&
+    html.includes('id="menuconfigSearch"') && html.includes('placeholder="Search option name"') &&
+    css.includes('.menuconfig-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:nowrap') &&
+    js.includes("id.className = 'menuconfig-option-label menuconfig-option-id'") &&
+    js.includes('id.textContent = packageName || option.symbol') &&
+    js.includes("description.className = 'menuconfig-option-label menuconfig-option-description'") &&
+    js.includes("description.textContent = [...new Set([localized, english].filter(Boolean))].join(' · ')") &&
+    js.includes('function menuOptionPopupText(element)') &&
+    js.includes('`CONFIG_${element.dataset.symbol}`') &&
+    js.includes("element.dataset.path || ''") &&
     js.includes("if (optionLabel?.dataset.symbol) showMenuOptionTooltip(optionLabel)") &&
     js.includes("if (optionLabel?.dataset.symbol && !matchMedia('(hover: none)').matches)") &&
-    js.includes("name.dataset.symbol = option.symbol") && js.includes('name.tabIndex = 0') &&
-    !js.includes("name.textContent = `CONFIG_${symbol}`") &&
-    !js.includes('menuconfig-package-desc') && !css.includes('.menuconfig-package-desc');
+    js.includes('id.dataset.symbol = option.symbol') && js.includes('id.tabIndex = 0') &&
+    !js.includes("id.textContent = `CONFIG_${option.symbol}`") &&
+    !js.includes('menuconfig-package-desc') && !css.includes('.menuconfig-package-desc') &&
+    css.includes('.menuconfig-option-summary{display:grid;grid-template-columns:minmax(120px,220px) auto minmax(0,1fr)') &&
+    css.includes('.menuconfig-option-description{text-align:right') &&
+    css.includes('.menuconfig-option-actions{position:relative;z-index:2;display:flex;flex:none');
   catalogLayoutContract
-    ? ok('Catalog UI:范围搜索、构建契约、Advanced/推荐项顺序、单行名称与工具栏契约已接通')
-    : bad('Catalog UI layout', '搜索范围、控件顺序、Advanced 单行显示或工具栏布局不符合约定');
+    ? ok('Catalog UI:范围搜索、构建契约、Advanced/推荐项顺序、ID/描述单行与安全悬浮已接通')
+    : bad('Catalog UI layout', '搜索范围、控件顺序、Advanced ID/描述、悬浮信息或 N/M/Y 隔离不符合约定');
   const shanghaiOpkgContract = js.includes("const MAINLAND_PACKAGE_MIRRORS = ['ustc', 'pku', 'tuna', 'bfsu']") &&
     js.includes("if (state.timezone !== 'Asia/Shanghai') return 'auto'") &&
     js.includes('opkgSelectionExplicit = true') && mainlandCoverage;
@@ -735,30 +731,38 @@ mirrorRootsOk
   submitGateContract
     ? ok('提交门禁:Target/Catalog/menuconfig/theme/recommended/defconfig 阶段就绪后才可提交')
     : bad('submit readiness gate', '提交按钮未按构建阶段状态禁用或缺少事件驱动门禁');
-  const failureDiagnosticsContract = buildWorkflow.includes('apply-config-overrides.mjs') &&
-    buildWorkflow.includes('system-overrides.json') &&
-    buildWorkflow.includes("grep -Fx 'CONFIG_BUILD_LOG=y' .config") &&
-    buildWorkflow.includes('config_policy=upstream-defconfig-with-declared-overrides') &&
+  const failureDiagnosticsContract =
+    !buildWorkflow.includes('apply-config-overrides.mjs') &&
+    !buildWorkflow.includes('system-overrides.json') &&
+    !buildWorkflow.includes('CONFIG_DEVEL') &&
+    !buildWorkflow.includes('CONFIG_BUILD_LOG') &&
+    !buildWorkflow.includes('config-overrides.json') &&
+    !buildWorkflow.includes('config-overrides.diff') &&
+    !existsSync(join(ROOT, 'tools', 'apply-config-overrides.mjs')) &&
+    !existsSync(join(ROOT, 'tools', 'config-overrides.mjs')) &&
+    !existsSync(join(ROOT, 'config', '001.presets', 'system-overrides.json')) &&
+    buildWorkflow.includes('config_policy=upstream-defconfig') &&
+    buildWorkflow.includes('config_policy=authoritative-no-defconfig') &&
     buildWorkflow.includes('use_defconfig=') &&
+    buildWorkflow.includes('validate-catalog-config.mjs') &&
+    buildWorkflow.indexOf('validate-catalog-config.mjs') < buildWorkflow.indexOf('make defconfig 2>&1 | tee') &&
+    !buildWorkflow.includes('--phase post-defconfig') &&
+    !buildWorkflow.includes('CATALOG_PHASE') &&
     buildWorkflow.includes('make defconfig 2>&1 | tee') &&
     !buildWorkflow.includes('verify-defconfig.mjs') &&
     !existsSync(join(ROOT, 'tools', 'verify-defconfig.mjs')) &&
     buildWorkflow.includes('pre-defconfig.config') &&
+    buildWorkflow.includes('defconfig.config') &&
     buildWorkflow.includes('defconfig.diff') &&
     buildWorkflow.includes('defconfig.log') &&
-    !buildWorkflow.includes('defconfig-report.json') &&
-    buildWorkflow.includes('config-overrides.json') &&
-    buildWorkflow.includes('config-overrides.diff') &&
     buildWorkflow.includes('build.config') &&
-    !buildWorkflow.includes('resolved.config') &&
-    !buildWorkflow.includes('config-defconfig.diff') &&
-    !buildWorkflow.includes('verify-resolved-target.mjs') &&
     buildWorkflow.includes('id: compile') &&
     buildWorkflow.includes('id: diagnose') &&
     buildWorkflow.includes('continue-on-error: true') &&
     buildWorkflow.includes('timeout-minutes: 60') &&
-    buildWorkflow.includes("make -j1 V=s") &&
+    buildWorkflow.includes('make -j1 V=s BUILD_LOG=1') &&
     buildWorkflow.includes('build-diagnostic.log') &&
+    buildWorkflow.includes('Compile was not started because an earlier step failed') &&
     buildWorkflow.includes('Finalize compile result') &&
     parser.includes('const configRuleContext = {') && parser.includes('matchingConfigRules(config, configRuleContext)') &&
     js.includes('matchingConfigRules(config)') &&
@@ -767,8 +771,8 @@ mirrorRootsOk
     !js.includes("window.open('about:blank'") && js.includes('window.location.assign(issueUrl)') &&
     buildWorkflow.includes('实际列出的文件');
   failureDiagnosticsContract
-    ? ok('失败诊断:配置规则先处理、Issue 不预开空白页、单线程 V=s 日志与 Artifact 已接通')
-    : bad('failure diagnostics', '配置规则、Issue 打开时序、构建日志、单线程诊断或 Artifact 说明缺失');
+    ? ok('失败诊断:提交配置预检、官方 Defconfig、BUILD_LOG 单线程诊断与跳过编译保护已接通')
+    : bad('failure diagnostics', '仍有配置覆盖、post-defconfig 验证、诊断命令或跳过编译误报问题');
   const hiddenSmokeContract = !buildWorkflow.includes('workflow_dispatch:') &&
     buildWorkflow.includes('repository_dispatch:') &&
     buildWorkflow.includes('types: [smoke-build]') &&
@@ -1088,12 +1092,16 @@ mirrorRootsOk
   firmwareSettingsContract
     ? ok('请求编号 Artifact 前缀与时区/主题/NTP/opkg 固件内审计链已接通')
     : bad('firmware settings contract', '请求编号、提交快照、DIY、主题或 opkg 核验缺失');
-  const normalizationMetadataContract = workflow.includes(
-    `OVERRIDES_APPLIED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).applied.length' "$GITHUB_WORKSPACE/config-overrides.json")"`,
-  ) && !workflow.includes('node -p \\"');
-  normalizationMetadataContract
-    ? ok('系统覆盖计数使用 Shell 安全参数读取，括号表达式不会被 Bash 误解析')
-    : bad('override metadata shell contract', 'Node 表达式未安全引用或仍含错误的反斜杠引号');
+  const upstreamConfigContract =
+    !workflow.includes('config-overrides.json') &&
+    !workflow.includes('config-overrides.diff') &&
+    !workflow.includes('CONFIG_DEVEL=y') &&
+    !workflow.includes('CONFIG_BUILD_LOG=y') &&
+    workflow.includes('config_policy=upstream-defconfig') &&
+    workflow.includes('config_policy=authoritative-no-defconfig');
+  upstreamConfigContract
+    ? ok('配置元数据只记录官方 Defconfig 或权威原配置，不再记录系统覆盖')
+    : bad('upstream config metadata', '仍有系统覆盖字段或缺少官方配置策略标记');
   const liveLogContract = workflow.includes('JOBS=$(( $(nproc) + 1 ))') &&
     workflow.includes('stdbuf -oL -eL make download -j"$JOBS" 2>&1 |') &&
     workflow.includes('stdbuf -oL -eL make -j"$JOBS" 2>&1 |') &&
@@ -1103,7 +1111,7 @@ mirrorRootsOk
     workflow.includes('- name: Upload complete logs / 上传完整日志\n        if: always()') &&
     !workflow.includes('ci-log-filter.awk') &&
     !workflow.includes('compile_retry') &&
-    workflow.includes('make -j1 V=s') &&
+    workflow.includes('make -j1 V=s BUILD_LOG=1') &&
     workflow.includes('build-diagnostic.log');
   liveLogContract
     ? ok('Actions 下载/编译 CPU+1 动态并发、原始实时日志与失败单线程诊断已接通')
@@ -1141,56 +1149,6 @@ mirrorRootsOk
     ? ok('Catalog startup order: establish Target/Profile before target-sensitive defaults, with preset rollback')
     : bad('Catalog startup order', 'Target/Profile must be established before theme/minimum-boot defaults');
   const menuconfigContract = html.includes('id="menuconfigGrid"') &&
-    html.includes('id="menuconfigPanel"') &&
-    html.includes('id="menuconfigToggle"') &&
-    html.includes('id="menuconfigSelectedToggle"') &&
-    html.includes('id="menuconfigStateHelp"') &&
-    html.includes('id="catalogLoadState"') &&
-    html.includes('id="menuconfigContent"') &&
-    html.includes('id="menuconfigMore"') &&
-    js.includes('function renderCatalogPicker') &&
-    js.includes('function catalogBranchLabel') &&
-    js.includes('function buildMenuIndexes') &&
-    js.includes('const targetSelector = target.targetSelector || target.contract?.targetSelector') &&
-    js.includes('profile.selector || profile.profileSelector') &&
-    js.includes("option.path?.[0] !== 'Target Devices'") &&
-    js.includes('const MENU_PAGE_SIZE = 80') &&
-    js.includes('function applyMenuTranslation') &&
-    js.includes("state.lang === 'en' || !lines.length") &&
-    js.includes('function fitMenuCategoryNames') &&
-    js.includes("chip.className = 'menu-translation-chip'") &&
-    js.includes('function jumpMenuBreadcrumb') &&
-    js.includes('function initCatalogLocator') &&
-    js.includes('function selectCatalogLocatorTarget') &&
-    js.includes('const preferredTarget = { ...values, strictCatalogTarget: true };') &&
-    js.includes('renderCatalogTargetSelectors(preferredTarget)') &&
-    js.includes('const INITIAL_CATALOG_TARGET =') &&
-    js.includes("sourceId: 'ImmortalWrt', branch: 'openwrt-25.12'") &&
-    js.includes("system: 'x86', subtarget: '64', profileSymbol: 'DEVICE_generic'") &&
-    js.includes('function initialCatalogTargetRequest()') &&
-    js.includes("selector.id === 'profile'") &&
-    js.includes('preferred[`${selector.id}Symbol`] || preferred[selector.id]') &&
-    js.includes("if (node.profileId) {") &&
-    js.includes('function syncCatalogApplications') &&
-    js.includes("['Top level', ...menuBreadcrumb]") &&
-    !js.includes('`./catalog-data/${asset}`') &&
-    js.includes("import('./lib/catalog-loader.js?v=") &&
-    catalogLoaderJs.indexOf("for (const id of ['github-raw', 'jsdelivr', 'github-release'])") >= 0 &&
-    catalogLoaderJs.indexOf("const order = ['jsdelivr', 'github-raw', 'github-release']") >= 0 &&
-    catalogLoaderJs.includes('/releases/download/${defaultReleaseTag}/index.json') &&
-    catalogLoaderJs.includes('/releases/download/${tag}/${asset}') &&
-    js.includes("releaseTag: PROJECT.catalogReleaseTag || 'menuconfig-catalog-complete'") &&
-    catalogLoaderJs.includes('wrt_refresh=${nonce}') &&
-    catalogLoaderJs.includes("export const CATALOG_CACHE_NAME = 'wrt-catalog-cache-v3'") &&
-    catalogLoaderJs.includes('Catalog schema ${schema}; required ${MIN_CATALOG_SCHEMA}') &&
-    catalogLoaderJs.includes('Catalog relations schema ${relationsSchema}; required 2 or 3') &&
-    catalogLoaderJs.includes('Catalog compressed SHA-256 mismatch') &&
-    catalogLoaderJs.includes('await cacheStorage.delete(CATALOG_CACHE_NAME)') &&
-    js.includes('async function fetchCatalogBundle') &&
-    js.includes('CATALOG_LOADER.fetchBundle') &&
-    js.includes('catalogCopyDiagnostics') &&
-    html.includes('id="catalogLoadDiagnostics"') &&
-    css.includes('.catalog-load-details') &&
     js.includes('menuCatalogAbortController?.abort()') &&
     js.includes('menuIndexAbortController?.abort()') &&
     js.includes('promptZh') &&
@@ -1205,14 +1163,13 @@ mirrorRootsOk
     js.includes("setCatalogLoadState('idle')") &&
     !js.includes('translation.usage, packageMeta') &&
     js.includes('function renderMenuOption(option)') &&
-    js.includes("name.className = 'menuconfig-option-label'") &&
-    js.includes("name.textContent = path ? `${label} (${path})` : label") &&
-    js.includes('applyMenuTranslation(name, translation.title, translation.usage, true)') &&
+    js.includes("id.className = 'menuconfig-option-label menuconfig-option-id'") &&
+    js.includes('id.textContent = packageName || option.symbol') &&
+    js.includes("description.className = 'menuconfig-option-label menuconfig-option-description'") &&
     js.includes('function showMenuOptionTooltip(element)') &&
     js.includes('menuOptionPopupText(element)') &&
-    js.includes('element.dataset.fullText') &&
-    !js.includes("menuOptionLabel(option) || option.symbol") &&
-    js.includes('select.title = select.selectedOptions[0]?.title ||') &&
+    js.includes('`CONFIG_${element.dataset.symbol}`') &&
+    js.includes("element.dataset.path || ''") &&
     !js.includes('clippedDescription') &&
     !js.includes('function renderMenuOption(option, showPath') &&
     js.includes("'N: Disabled; not built.") &&
@@ -1229,10 +1186,10 @@ mirrorRootsOk
     css.includes('.menu-tooltip') &&
     css.includes('.menu-fit-s3') &&
     css.includes('.menu-fit-two-line') &&
-    css.includes('html:not([lang=en]) .menu-translation-chip') &&
     css.includes('.menuconfig-grid{grid-template-columns:minmax(0,1fr)}') &&
-    css.includes('.menuconfig-option-summary{display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden}') &&
-    css.includes('.menuconfig-option-label{display:block;min-width:0;overflow:hidden;font-weight:650;white-space:nowrap;text-overflow:ellipsis}') &&
+    css.includes('.menuconfig-option-summary{display:grid;grid-template-columns:minmax(120px,220px) auto minmax(0,1fr)') &&
+    css.includes('.menuconfig-option-id{font:650 13px ui-monospace') &&
+    css.includes('.menuconfig-option-description{text-align:right') &&
     css.includes('.menuconfig-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:nowrap') &&
     !css.includes('.menuconfig-package-desc') &&
     !css.includes('.menuconfig-prompt') && !css.includes('.menuconfig-option-name') &&
@@ -1250,9 +1207,9 @@ mirrorRootsOk
     formatSizeContract(123.4) === '123 MB' &&
     formatSizeContract(1023) === '0.999 GB' &&
     existsSync(join(ROOT, 'site', 'wrt', 'data', 'menuconfig-index.json'));
-    menuconfigContract
-      ? ok('多源码 Catalog → 名称搜索、单行名称/路径、完整悬浮译文与可跳面包屑已接通')
-      : bad('menuconfig catalog contract', '动态 Target、名称搜索、单行名称/路径、悬浮译文、面包屑或 choice 缺失');
+  menuconfigContract
+    ? ok('多源码 Catalog → 名称搜索、单行 ID/描述、完整 CONFIG/译文/路径悬浮与面包屑已接通')
+    : bad('menuconfig catalog contract', '动态 Target、名称搜索、ID/描述单行、悬浮详情、面包屑或 choice 缺失');
     const catalogSchema6PerformanceContract =
       catalogLoaderJs.includes('branch.assets?.core && branch.assets?.graph') &&
       catalogLoaderJs.includes('const [core, graph] = await Promise.all') &&
@@ -1308,7 +1265,9 @@ mirrorRootsOk
       js.includes('archPackages: String(target.archPackages ||') &&
       js.includes('CONFIG_ARCH=') &&
       js.includes('CONFIG_TARGET_ARCH_PACKAGES') &&
-      js.includes('enforceCatalogProfilePackages') &&
+      js.includes('function renderProfilePackageModal()') &&
+      js.includes('function applyProfilePackageOverrides(text)') &&
+      !js.includes('enforceCatalogProfilePackages') &&
       parser.includes('catalogArch') &&
       parser.includes('catalogArchPackages') &&
       parser.includes('packagesAdd') &&
@@ -1323,7 +1282,7 @@ mirrorRootsOk
     const catalogSelectionLayerContract =
       html.includes('id="menuconfigOriginFilter"') &&
       html.includes('<option value="excluded"') &&
-      html.includes('<option value="target"') &&
+      !html.includes('<option value="target"') &&
       html.includes('<option value="dependency"') &&
       js.includes('const catalogBaselineValues = new Map()') &&
       js.includes('const catalogRecommendedValues = new Map()') &&
@@ -1342,10 +1301,13 @@ mirrorRootsOk
       js.includes('const value = catalogUserOverrides.get(option.symbol)') &&
       js.includes("if (source === 'user' && explicit) catalogUserOverrides.set(change.symbol, change.to)") &&
       js.includes("else if (source === 'recommended' && explicit) catalogRecommendedValues.set(change.symbol, change.to)") &&
-      js.includes("else if (!explicit || source === 'dependency') catalogDependencySymbols.add(change.symbol)") &&
-      js.includes("origin: 'target'") && js.includes("origin: 'profile-add'") &&
-      js.includes("origin: 'target-remove'") && js.includes("origin: 'profile-remove'") &&
-      js.includes("['target', 'profile-add'].includes(origin.kind)") &&
+      js.includes("else catalogDependencySymbols.add(change.symbol)") &&
+      js.includes('const profilePackageOverrides = new Map()') &&
+      js.includes('function renderProfilePackageModal()') &&
+      js.includes('function profilePackageMode(packageName)') &&
+      js.includes('profilePackageOverrides.has(packageName)') &&
+      js.includes('catalogUserOverrides.has(option.symbol)') &&
+      !js.includes("origin: 'target'") && !js.includes("origin: 'profile-add'") &&
       js.includes('catalogUserOverrides.delete(option.symbol)') &&
       js.includes('catalogInheritedValue(option.symbol)') &&
       js.includes("else if (menuOriginFilter !== 'all')") &&
@@ -1405,17 +1367,28 @@ mirrorRootsOk
     js.includes("import('./lib/catalog-engine.js?v=") &&
     js.includes('menuSearchOptions = [...options, ...hiddenOptions]') &&
     js.includes('CATALOG_ENGINE.applyUserIntent') &&
-    js.includes('CATALOG_ENGINE.proposeRepairs') &&
+    !js.includes('CATALOG_ENGINE.proposeRepairs') &&
+    !js.includes('repairCatalogConfiguration') &&
+    js.includes('catalogProtectedSymbols') &&
+    js.includes('dependencySymbols: catalogDependencySymbols') &&
+    js.includes('protectedSymbols: catalogProtectedSymbols') &&
+    js.includes('function renderProfilePackageModal()') &&
+    js.includes('function applyProfilePackageOverrides(text)') &&
+    js.includes("id.textContent = packageName || option.symbol") &&
+    js.includes('menuconfig-option-description') &&
+    js.includes('`CONFIG_${element.dataset.symbol}`') &&
+    js.includes(".join(' › ')") &&
     js.includes('schema: 5') &&
     buildWorkflow.includes('validate-catalog-config.mjs') &&
-    buildWorkflow.includes('--phase "$CATALOG_PHASE"') &&
+    !buildWorkflow.includes('CATALOG_PHASE') &&
+    !buildWorkflow.includes('--phase "$CATALOG_PHASE"') &&
     requestParser.includes('createCatalogValidationContext(') &&
     requestParser.includes("phase: 'pre-defconfig'") &&
     js.includes('function catalogValidationContext(') &&
     buildWorkflow.includes('steps.req.outputs.source_commit');
   catalogEngineUiContract
-    ? ok('Advanced 已接管隐藏包搜索；网页/Actions 共用 Catalog 引擎，旧原始包入口已退役')
-    : bad('Catalog engine UI/CI contract', '共享引擎、隐藏包搜索、精确源码或旧入口清理不完整');
+    ? ok('Advanced 与普通插件共用 Catalog 依赖引擎；Profile 包和完整悬浮信息已接通')
+    : bad('Catalog engine UI/CI contract', '依赖引擎、Profile 包、悬浮信息或 post-defconfig 清理不完整');
   const catalogEngineSource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.js'), 'utf8');
   const catalogMatrixSource = readFileSync(join(ROOT, 'tools', 'test-catalog-engine.mjs'), 'utf8');
   const enginePackageLiteral = /[\"'`]PACKAGE_[A-Za-z0-9_.+@-]+[\"'`]/.test(catalogEngineSource);
@@ -1423,17 +1396,21 @@ mirrorRootsOk
     catalogEngineSource.includes("status: 'deferred'") &&
     catalogEngineSource.includes('createCatalogValidationContext') &&
     catalogEngineSource.includes('trustedSymbols') &&
-    catalogEngineSource.includes("phase === 'post-defconfig'") &&
+    !catalogEngineSource.includes("phase === 'post-defconfig'") &&
     catalogEngineSource.includes('beforeKeys') &&
-    catalogMatrixSource.includes('PACKAGE_optional-driver') &&
-    catalogMatrixSource.includes('PACKAGE_i18n-service') &&
-    catalogMatrixSource.includes('app-shaped Target/Profile contract') &&
-    catalogMatrixSource.includes("run(preConfigPath, 'pre-defconfig')") &&
-    catalogMatrixSource.includes("run(preConfigPath, 'post-defconfig')") &&
+    catalogEngineSource.includes('function pruneUnusedDependencies') &&
+    catalogEngineSource.includes("'dependency-unused'") &&
+    !catalogEngineSource.includes('applyAuthoritativeValues') &&
+    !catalogEngineSource.includes('proposeRepairs') &&
+    catalogMatrixSource.includes('unused automatically selected dependency was not pruned') &&
+    catalogMatrixSource.includes('shared dependency was incorrectly pruned') &&
+    catalogMatrixSource.includes('explicitly protected dependency was incorrectly pruned') &&
+    catalogMatrixSource.includes('weak imply relationship was incorrectly treated') &&
+    catalogMatrixSource.includes('removed post-defconfig mode was unexpectedly accepted') &&
     !enginePackageLiteral;
   standardizedContextContract
-    ? ok('Catalog 上下文使用通用三态/权威契约；共享引擎与矩阵测试无单包补丁')
-    : bad('standardized Catalog context', '缺少 deferred/trusted/pre-post 机制或仍有单包补丁样例');
+    ? ok('Catalog 引擎只执行正式强依赖/select，支持反向关闭与安全清理孤立自动依赖')
+    : bad('standardized Catalog context', '依赖清理、共享保护、imply 边界、post 模式删除或通用性测试缺失');
   const meta = JSON.parse(readFileSync(join(ROOT, 'tools', 'plugins-meta.json'), 'utf8'));
   const sizes = JSON.parse(readFileSync(join(ROOT, 'tools', 'plugin-sizes.json'), 'utf8'));
   const sizeEntries = Object.entries(sizes.plugins || {});

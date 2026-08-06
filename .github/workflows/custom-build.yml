@@ -309,6 +309,11 @@ jobs:
             cp openwrt/.config submitted.config
           fi
           cp submitted.config openwrt/pre-defconfig.config
+          if [ -n "${{ steps.req.outputs.catalog_file }}" ]; then
+            node "$GITHUB_WORKSPACE/tools/validate-catalog-config.mjs" \
+              --catalog "$GITHUB_WORKSPACE/${{ steps.req.outputs.catalog_file }}" \
+              --config "$GITHUB_WORKSPACE/submitted.config"
+          fi
           if [ "${{ steps.req.outputs.use_defconfig }}" = "1" ]; then
             cd openwrt
             echo "Defconfig enabled / 官方补全已启用: make defconfig"
@@ -323,28 +328,10 @@ jobs:
             : > defconfig.log
           fi
           cd openwrt
-          CONFIG_INPUT="$GITHUB_WORKSPACE/submitted.config"
-          if [ "${{ steps.req.outputs.use_defconfig }}" = "1" ]; then CONFIG_INPUT="$GITHUB_WORKSPACE/defconfig.config"; fi
-          node "$GITHUB_WORKSPACE/tools/apply-config-overrides.mjs" \
-            --input "$CONFIG_INPUT" \
-            --rules "$GITHUB_WORKSPACE/config/001.presets/system-overrides.json" \
-            --output .config \
-            --report "$GITHUB_WORKSPACE/config-overrides.json" \
-            --diff "$GITHUB_WORKSPACE/config-overrides.diff"
           node "$GITHUB_WORKSPACE/tools/audit-recommended.mjs" \
             --requested "$GITHUB_WORKSPACE/recommended-audit.json" \
             --config .config \
             --report "$GITHUB_WORKSPACE/recommended-report.json"
-          if [ -n "${{ steps.req.outputs.catalog_file }}" ]; then
-            CATALOG_PHASE="pre-defconfig"
-            if [ "${{ steps.req.outputs.use_defconfig }}" = "1" ]; then CATALOG_PHASE="post-defconfig"; fi
-            node "$GITHUB_WORKSPACE/tools/validate-catalog-config.mjs" \
-              --catalog "$GITHUB_WORKSPACE/${{ steps.req.outputs.catalog_file }}" \
-              --config .config \
-              --phase "$CATALOG_PHASE"
-          fi
-          grep -Fx 'CONFIG_DEVEL=y' .config || { echo 'CONFIG_DEVEL is missing from the build config' >&2; exit 1; }
-          grep -Fx 'CONFIG_BUILD_LOG=y' .config || { echo 'CONFIG_BUILD_LOG is missing from the build config' >&2; exit 1; }
           if [ "${{ steps.req.outputs.firmware_snapshot }}" = "1" ]; then
             grep -Fx "CONFIG_PACKAGE_${{ steps.req.outputs.theme }}=y" .config || {
               echo "Selected firmware theme is missing from the submitted config: ${{ steps.req.outputs.theme }}" >&2
@@ -359,7 +346,6 @@ jobs:
         run: |
           cd openwrt
           TEST_VERSION="$(tr -d '\r\n' < "$GITHUB_WORKSPACE/VERSION")"
-          OVERRIDES_APPLIED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).applied.length' "$GITHUB_WORKSPACE/config-overrides.json")"
           RECOMMENDED_REQUESTED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).counts?.requested || 0' "$GITHUB_WORKSPACE/recommended-report.json")"
           RECOMMENDED_APPLIED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).counts?.applied || 0' "$GITHUB_WORKSPACE/recommended-report.json")"
           RECOMMENDED_SKIPPED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).counts?.skipped || 0' "$GITHUB_WORKSPACE/recommended-report.json")"
@@ -389,12 +375,10 @@ jobs:
             echo "recommended_applied=$RECOMMENDED_APPLIED"
             echo "recommended_skipped=$RECOMMENDED_SKIPPED"
             if [ "${{ steps.req.outputs.use_defconfig }}" = "1" ]; then
-              echo "config_policy=upstream-defconfig-with-declared-overrides"
+              echo "config_policy=upstream-defconfig"
             else
-              echo "config_policy=authoritative-no-defconfig-with-declared-overrides"
+              echo "config_policy=authoritative-no-defconfig"
             fi
-            echo "config_overrides=verified"
-            echo "config_overrides_applied=$OVERRIDES_APPLIED"
             echo "config_id=${{ steps.req.outputs.config_id }}"
             echo "submitted_sha256=${{ steps.req.outputs.submitted_sha256 }}"
             echo "plugins=${{ steps.req.outputs.plugins }}"
@@ -442,8 +426,6 @@ jobs:
           path: |
             openwrt/.config
             submitted.config
-            config-overrides.json
-            config-overrides.diff
             pre-defconfig.config
             defconfig.config
             defconfig.diff
@@ -515,17 +497,17 @@ jobs:
         timeout-minutes: 60
         run: |
           cd openwrt
-          echo "单线程重试 / single-thread retry: make -j1 V=s (60 minute limit)"
+          echo "单线程重试 / single-thread retry: make -j1 V=s BUILD_LOG=1 (60 minute limit)"
           set +e
           set -o pipefail
-          timeout 60m stdbuf -oL -eL make -j1 V=s 2>&1 |
+          timeout 60m stdbuf -oL -eL make -j1 V=s BUILD_LOG=1 2>&1 |
             tee "$GITHUB_WORKSPACE/build-diagnostic.log"
           RC=${PIPESTATUS[0]}
           set -e
           {
             echo "### 🔎 单线程重试 / Single-thread retry"
             echo ""
-            echo "- command: \`make -j1 V=s\`"
+            echo "- command: \`make -j1 V=s BUILD_LOG=1\`"
             echo "- exit code: \`$RC\`"
             echo "- log: \`build-diagnostic.log\`"
             echo "- result: exit 0 resumes the build; a non-zero exit keeps it failed."
@@ -545,13 +527,17 @@ jobs:
             echo "Parallel compile succeeded / 并行编译成功"
             exit 0
           fi
+          if [ "${{ steps.compile.outcome }}" = "skipped" ] || [ -z "${{ steps.compile.outcome }}" ]; then
+            echo "Compile was not started because an earlier step failed / 前置步骤失败，编译未开始"
+            exit 0
+          fi
           if [ "${{ steps.diagnose.outcome }}" = "success" ]; then
             echo "::warning::并行编译失败，但单线程重试成功；构建继续。"
             {
               echo "### ✅ 单线程恢复 / Recovered by single-thread retry"
               echo ""
               echo "- parallel build: failed"
-              echo "- make -j1 V=s: succeeded"
+              echo "- make -j1 V=s BUILD_LOG=1: succeeded"
               echo ""
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
@@ -566,9 +552,9 @@ jobs:
           cp build.log build-diagnostic.log download.log failure-logs/ 2>/dev/null || true
           cp build-metadata.txt failure-logs/ 2>/dev/null || true
           cp proxy-selected.txt failure-logs/ 2>/dev/null || true
-          cp submitted.config active-catalog.json config-overrides.json config-overrides.diff recommended-audit.json recommended-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig.log build.config failure-logs/ 2>/dev/null || true
+          cp submitted.config active-catalog.json recommended-audit.json recommended-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig.log build.config failure-logs/ 2>/dev/null || true
           cp openwrt/.config failure-logs/final.config 2>/dev/null || true
-          # OpenWrt 的 CONFIG_BUILD_LOG=y 会把每个包的日志写到 openwrt/logs/ / With CONFIG_BUILD_LOG=y, OpenWrt writes per-package build logs to openwrt/logs/
+          # 失败重试通过 BUILD_LOG=1 请求 OpenWrt 生成分包日志 / The retry requests OpenWrt per-package logs through BUILD_LOG=1
           if [ -d openwrt/logs ]; then
             tar czf failure-logs/package-logs.tar.gz -C openwrt logs || true
           fi

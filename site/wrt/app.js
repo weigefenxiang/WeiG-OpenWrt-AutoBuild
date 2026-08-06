@@ -85,15 +85,12 @@ const menuValues = new Map();
 const menuTouched = new Set();
 const catalogBaselineValues = new Map();
 const catalogBaselineOrigins = new Map();
-const catalogContractOrigins = new Map();
 const catalogRecommendedValues = new Map();
 const catalogDependencySymbols = new Set();
 const catalogImportedSymbols = new Set();
 const catalogUserOverrides = new Map();
-// Profile packages are applied automatically by the Catalog. Keep their package names
-// separate so changing Target/Profile cannot leak the previous target's contract.
-const catalogProfilePackageSymbols = new Set();
-const catalogContractSymbols = new Set();
+const profilePackageOverrides = new Map();
+let profilePackageModalOpen = false;
 let menuOriginFilter = 'all';
 const menuImportedOriginal = new Map();
 const menuImportedNonDefault = new Set();
@@ -321,7 +318,6 @@ function applyI18n() {
       ['all', uiText('全部来源', '全部來源', 'All origins')],
       ['user', uiText('用户选择', '使用者選擇', 'User selected')],
       ['excluded', uiText('明确排除', '明確排除', 'Explicitly excluded')],
-      ['target', uiText('Target / Profile', 'Target / Profile', 'Target / Profile')],
       ['default', uiText('上游默认', '上游預設', 'Upstream defaults')],
       ['recommended', uiText('网页推荐', '網頁推薦', 'Recommended')],
       ['dependency', uiText('自动依赖', '自動相依', 'Dependencies')],
@@ -511,7 +507,7 @@ function setActive(row, pill) {
 async function init() {
   try {
     [CATALOG_ENGINE, CATALOG_LOADER_MODULE, CATALOG_SCHEMA6_MODULE] = await Promise.all([
-      import('./lib/catalog-engine.js?v=5b3e3c15d9'),
+      import('./lib/catalog-engine.js?v=3a24f62dec'),
       import('./lib/catalog-loader.js?v=319e7a7c96'),
       import('./lib/catalog-schema6.js?v=0a165903c2'),
     ]);
@@ -990,11 +986,15 @@ function showMenuTooltip(element) {
 }
 function menuOptionPopupText(element) {
   if (!element?.dataset.symbol) return '';
+  const description = [...new Set([
+    element.dataset.translation || '',
+    element.dataset.english || '',
+  ].filter(Boolean))];
   return [
-    element.dataset.fullText || element.textContent.trim(),
-    state.lang === 'en' ? '' : element.dataset.translation || '',
-    `${uiText('索引', '索引', 'Index')}: CONFIG_${element.dataset.symbol}`,
-  ].filter(Boolean).join('\n');
+    `CONFIG_${element.dataset.symbol}`,
+    description.length ? description.join('\n') : '',
+    element.dataset.path || '',
+  ].filter(Boolean).join('\n\n');
 }
 function showMenuOptionTooltip(element) {
   const text = menuOptionPopupText(element);
@@ -1007,12 +1007,18 @@ function showMenuHelp(element) {
 function showMenuPopup(element, text) {
   const tooltip = $('menuTooltip');
   if (!tooltip || !text) return;
+  const margin = 8;
+  const optionRow = element.closest('.menuconfig-option');
+  const actions = optionRow?.querySelector('.menuconfig-option-actions');
+  const rowRect = optionRow?.getBoundingClientRect();
+  const rightLimit = actions ? actions.getBoundingClientRect().left - margin : innerWidth - margin;
+  const leftLimit = Math.max(margin, rowRect?.left || margin);
+  tooltip.style.maxWidth = `${Math.max(180, Math.min(520, rightLimit - leftLimit))}px`;
   tooltip.textContent = text;
   tooltip.hidden = false;
   const rect = element.getBoundingClientRect();
   const tipRect = tooltip.getBoundingClientRect();
-  const margin = 8;
-  const left = Math.min(Math.max(margin, rect.left), innerWidth - tipRect.width - margin);
+  const left = Math.min(Math.max(leftLimit, rect.left), Math.max(leftLimit, rightLimit - tipRect.width));
   const below = rect.bottom + margin;
   const top = below + tipRect.height <= innerHeight - margin
     ? below : Math.max(margin, rect.top - tipRect.height - margin);
@@ -1026,6 +1032,7 @@ function hideMenuTooltip() {
   tooltip.textContent = '';
   tooltip.style.removeProperty('left');
   tooltip.style.removeProperty('top');
+  tooltip.style.removeProperty('max-width');
 }
 function catalogDiagnosticsText() {
   const source = selectedCatalogSource();
@@ -1620,12 +1627,8 @@ async function applyCatalogTarget() {
     device.target.profileSelector, device.target.arch, device.target.archPackages].join('|');
   const targetChanged = Boolean(previousKey && previousKey !== nextKey);
   if (targetChanged) {
-    for (const symbol of catalogContractSymbols) {
-      menuTouched.delete(symbol);
-      menuValues.delete(symbol);
-    }
-    catalogContractSymbols.clear();
-    catalogProfilePackageSymbols.clear();
+    profilePackageOverrides.clear();
+    profilePackageModalOpen = false;
     markCatalogStateChanged();
   }
   if (state.device?.id !== device.id || state.source?.id !== source.id ||
@@ -1637,48 +1640,7 @@ async function applyCatalogTarget() {
   }
   state.device = device;
   const needsBaseline = targetChanged || !catalogBaselineValues.size;
-  if (needsBaseline) {
-    initializeCatalogBaseline();
-    const profileAssignments = [];
-    for (const pkg of device.target.targetPackagesAdd || []) {
-      catalogProfilePackageSymbols.add(pkg);
-      if (menuOptionBySymbol.has(`PACKAGE_${pkg}`)) {
-        profileAssignments.push({
-          symbol: `PACKAGE_${pkg}`, value: 'y', source: target.name || target.subtarget,
-          origin: 'target',
-        });
-      }
-    }
-    for (const pkg of device.target.targetPackagesRemove || []) {
-      catalogProfilePackageSymbols.add(pkg);
-      if (menuOptionBySymbol.has(`PACKAGE_${pkg}`)) {
-        profileAssignments.push({
-          symbol: `PACKAGE_${pkg}`, value: 'n', source: target.name || target.subtarget,
-          origin: 'target-remove',
-        });
-      }
-    }
-    for (const pkg of device.target.profileDeclaredPackagesAdd || []) {
-      catalogProfilePackageSymbols.add(pkg);
-      if (menuOptionBySymbol.has(`PACKAGE_${pkg}`)) {
-        profileAssignments.push({
-          symbol: `PACKAGE_${pkg}`, value: 'y', source: profile.id,
-          origin: 'profile-add',
-        });
-      }
-    }
-    for (const pkg of device.target.profileDeclaredPackagesRemove || []) {
-      catalogProfilePackageSymbols.add(pkg);
-      if (menuOptionBySymbol.has(`PACKAGE_${pkg}`)) {
-        profileAssignments.push({
-          symbol: `PACKAGE_${pkg}`, value: 'n', source: profile.id,
-          origin: 'profile-remove',
-        });
-      }
-    }
-    applyCatalogContractAssignments(profileAssignments, 'target-profile');
-    snapshotCatalogBaseline();
-  }
+  if (needsBaseline) initializeCatalogBaseline();
   syncCatalogApplications();
   activateTargetRecord(record);
   renderMenuconfig();
@@ -1713,6 +1675,150 @@ function renderContractList(element, title, items, empty) {
   }
   element.appendChild(content);
 }
+
+function profilePackageRows(target = state.device?.target) {
+  if (!target) return [];
+  const rows = new Map();
+  for (const pkg of target.profilePackagesAdd || target.profilePackages || []) {
+    const name = String(pkg).replace(/^[+-]/, '').trim();
+    if (name) rows.set(name, { name, upstream: 'include' });
+  }
+  for (const pkg of target.profilePackagesRemove || []) {
+    const name = String(pkg).replace(/^[+-]/, '').trim();
+    if (name) rows.set(name, { name, upstream: 'exclude' });
+  }
+  return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+function profilePackageMode(packageName) {
+  if (profilePackageOverrides.has(packageName)) return profilePackageOverrides.get(packageName);
+  const option = profilePackageOption(packageName);
+  if (!option || !catalogUserOverrides.has(option.symbol)) return 'follow';
+  return catalogUserOverrides.get(option.symbol) === 'n' ? 'exclude' : 'include';
+}
+function renderProfilePackageContract(element, target) {
+  if (!element) return;
+  element.textContent = '';
+  const head = document.createElement('div');
+  head.className = 'build-contract-list-head';
+  const title = document.createElement('strong');
+  title.textContent = contractText('Profile 软件包', 'Profile packages');
+  const manage = document.createElement('button');
+  manage.type = 'button';
+  manage.className = 'text-btn profile-package-manage';
+  manage.textContent = contractText('管理', 'Manage');
+  manage.onclick = openProfilePackageModal;
+  head.append(title, manage);
+  element.appendChild(head);
+  const rows = profilePackageRows(target);
+  const content = document.createElement('div');
+  content.className = 'build-contract-chips';
+  if (!rows.length) {
+    const none = document.createElement('span');
+    none.className = 'hint';
+    none.textContent = contractText('上游未声明额外 Profile 软件包', 'No additional Profile packages declared upstream');
+    content.appendChild(none);
+  } else {
+    for (const row of rows) {
+      const mode = profilePackageMode(row.name);
+      const chip = document.createElement('code');
+      chip.className = `build-contract-chip profile-package-chip mode-${mode}`;
+      const upstream = row.upstream === 'exclude' ? '−' : '+';
+      const explicit = mode === 'follow' ? '' : mode === 'include' ? ' → +' : ' → −';
+      chip.textContent = `${upstream}${row.name}${explicit}`;
+      chip.title = `${row.name}
+${contractText('默认跟随上游；可在管理中显式加入或排除', 'Follows upstream by default; Manage can explicitly include or exclude it')}`;
+      content.appendChild(chip);
+    }
+  }
+  element.appendChild(content);
+}
+function profilePackageOption(packageName) {
+  return menuOptionBySymbol.get(`PACKAGE_${packageName}`) || null;
+}
+function profilePackageEnabledValue(option) {
+  if (!option) return 'y';
+  return option.states?.includes('y') ? 'y' : option.states?.includes('m') ? 'm' : 'y';
+}
+function setProfilePackageMode(packageName, mode) {
+  if (!['follow', 'include', 'exclude'].includes(mode)) return;
+  const previous = profilePackageMode(packageName);
+  const option = profilePackageOption(packageName);
+  try {
+    if (mode === 'follow') {
+      profilePackageOverrides.delete(packageName);
+      if (option) {
+        catalogUserOverrides.delete(option.symbol);
+        const inherited = catalogInheritedValue(option.symbol);
+        applyCatalogIntent(option, inherited, true, 'restore');
+      }
+    } else if (option) {
+      profilePackageOverrides.delete(packageName);
+      applyCatalogIntent(option,
+        mode === 'include' ? profilePackageEnabledValue(option) : 'n', false, 'user');
+    } else {
+      profilePackageOverrides.set(packageName, mode);
+    }
+  } catch (error) {
+    if (previous === 'follow') profilePackageOverrides.delete(packageName);
+    else profilePackageOverrides.set(packageName, previous);
+    showToast(error.message);
+  }
+  renderProfilePackageModal();
+  renderBuildContract();
+  renderMenuconfig();
+  renderGroups();
+  updateStats();
+}
+function renderProfilePackageModal() {
+  if (!profilePackageModalOpen || $('modal').hidden) return;
+  const body = $('modalBody');
+  body.textContent = '';
+  const intro = document.createElement('p');
+  intro.className = 'hint';
+  intro.textContent = contractText(
+    '默认“跟随上游”不写入显式值；只有“加入”或“排除”才记录用户选择。',
+    'Follow upstream writes no explicit value; only Include or Exclude records a user choice.');
+  body.appendChild(intro);
+  const list = document.createElement('div');
+  list.className = 'profile-package-list';
+  for (const row of profilePackageRows()) {
+    const item = document.createElement('div');
+    item.className = 'profile-package-row';
+    const name = document.createElement('code');
+    name.textContent = row.name;
+    const upstream = document.createElement('small');
+    upstream.textContent = row.upstream === 'exclude'
+      ? contractText('上游排除', 'Upstream excludes')
+      : contractText('上游加入', 'Upstream includes');
+    const choices = document.createElement('span');
+    choices.className = 'profile-package-actions';
+    for (const [value, zh, en] of [
+      ['follow', '跟随上游', 'Follow upstream'], ['include', '加入', 'Include'], ['exclude', '排除', 'Exclude'],
+    ]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = contractText(zh, en);
+      button.className = profilePackageMode(row.name) === value ? 'active' : '';
+      button.onclick = () => setProfilePackageMode(row.name, value);
+      choices.appendChild(button);
+    }
+    item.append(name, upstream, choices);
+    list.appendChild(item);
+  }
+  if (!list.children.length) {
+    const empty = document.createElement('p');
+    empty.className = 'hint';
+    empty.textContent = contractText('当前 Profile 没有额外软件包声明。', 'This Profile declares no additional packages.');
+    body.appendChild(empty);
+  } else body.appendChild(list);
+}
+function openProfilePackageModal() {
+  profilePackageModalOpen = true;
+  openModal(contractText('Profile 软件包', 'Profile packages'));
+  $('modal').querySelector('.modal').classList.add('modal-wide', 'profile-package-config');
+  modalCancelHandler = () => { profilePackageModalOpen = false; };
+  renderProfilePackageModal();
+}
 function setBuildContractExpanded(expanded) {
   buildContractExpanded = Boolean(expanded);
   const toggle = $('buildContractToggle');
@@ -1737,8 +1843,6 @@ function renderBuildContract() {
   }
   const source = selectedCatalogSource();
   const branch = selectedCatalogBranch(source);
-  const profilePackages = [...new Set(target.profilePackagesAdd || target.profilePackages || [])]
-    .filter((pkg) => !String(pkg).startsWith('-'));
   const selected = effectiveSelection();
   const selectedNames = selected.all.map((item) => item.id);
   const selectionSummary = catalogSelectionSummary();
@@ -1773,9 +1877,7 @@ function renderBuildContract() {
     row.append(key, val);
     grid.appendChild(row);
   }
-  renderContractList($('buildContractProfilePackages'),
-    contractText('Profile 必需软件包（自动加入）', 'Profile required packages (added automatically)'),
-    profilePackages, contractText('无额外必需包', 'No additional profile packages'));
+  renderProfilePackageContract($('buildContractProfilePackages'), target);
   const shownSelected = selectedNames.slice(0, 24);
   if (selectedNames.length > shownSelected.length) shownSelected.push(`+${selectedNames.length - shownSelected.length}`);
   renderContractList($('buildContractSelection'),
@@ -1790,13 +1892,12 @@ function resetCatalogSelectionLayers() {
   menuTouched.clear();
   catalogBaselineValues.clear();
   catalogBaselineOrigins.clear();
-  catalogContractOrigins.clear();
   catalogRecommendedValues.clear();
   catalogDependencySymbols.clear();
   catalogImportedSymbols.clear();
   catalogUserOverrides.clear();
-  catalogProfilePackageSymbols.clear();
-  catalogContractSymbols.clear();
+  profilePackageOverrides.clear();
+  profilePackageModalOpen = false;
   state.sel.clear();
   state.removed.clear();
   menuOriginFilter = 'all';
@@ -1818,13 +1919,10 @@ function initializeCatalogBaseline() {
   menuTouched.clear();
   catalogBaselineValues.clear();
   catalogBaselineOrigins.clear();
-  catalogContractOrigins.clear();
   catalogRecommendedValues.clear();
   catalogDependencySymbols.clear();
   catalogImportedSymbols.clear();
   catalogUserOverrides.clear();
-  catalogProfilePackageSymbols.clear();
-  catalogContractSymbols.clear();
   state.sel.clear();
   state.removed.clear();
   // Defaults can reference other defaults. Iterate to a stable point after the Target/Profile
@@ -1862,8 +1960,7 @@ function snapshotCatalogBaseline() {
   for (const option of menuSearchOptions) {
     const value = menuValues.get(option.symbol) ?? (option.type === 'string' ? '' : 'n');
     catalogBaselineValues.set(option.symbol, value);
-    if (value !== 'n' && value !== '' && !catalogContractOrigins.has(option.symbol) &&
-        !catalogDependencySymbols.has(option.symbol)) {
+    if (value !== 'n' && value !== '' && !catalogDependencySymbols.has(option.symbol)) {
       catalogBaselineOrigins.set(option.symbol, {
         kind: 'kconfig-default', detail: 'Kconfig default',
       });
@@ -1889,16 +1986,6 @@ function catalogOriginMeta(option) {
   if (catalogRecommendedValues.has(symbol)) {
     return { kind: 'recommended', label: uiText('网页推荐', '網頁推薦', 'Recommended') };
   }
-  const contract = catalogContractOrigins.get(symbol);
-  if (contract) {
-    const labels = {
-      target: uiText('Target 基础', 'Target 基礎', 'Target baseline'),
-      'target-remove': uiText('Target 排除', 'Target 排除', 'Target exclusion'),
-      'profile-add': uiText('Profile 基础', 'Profile 基礎', 'Profile baseline'),
-      'profile-remove': uiText('Profile 排除', 'Profile 排除', 'Profile exclusion'),
-    };
-    return { kind: contract.kind, label: labels[contract.kind] || contract.kind, detail: contract.detail || '' };
-  }
   if (catalogDependencySymbols.has(symbol)) {
     return { kind: 'dependency', label: uiText('自动依赖', '自動相依', 'Dependency') };
   }
@@ -1911,14 +1998,13 @@ function catalogOriginMeta(option) {
 function catalogOriginMatches(option) {
   if (menuOriginFilter === 'all') return true;
   const origin = catalogOriginMeta(option).kind;
-  if (menuOriginFilter === 'target') return ['target', 'profile-add'].includes(origin);
   if (menuOriginFilter === 'default') return origin === 'kconfig-default';
-  if (menuOriginFilter === 'excluded') return ['user-exclude', 'target-remove', 'profile-remove'].includes(origin);
+  if (menuOriginFilter === 'excluded') return origin === 'user-exclude';
   return origin === menuOriginFilter;
 }
 function catalogSelectionSummary() {
   const summary = {
-    target: 0, defaults: 0, recommended: 0, dependency: 0, imported: 0,
+    defaults: 0, recommended: 0, dependency: 0, imported: 0,
     userEnabled: 0, userExcluded: 0, finalEnabled: 0,
   };
   for (const option of menuSearchOptions) {
@@ -1926,8 +2012,7 @@ function catalogSelectionSummary() {
     const value = menuValues.get(option.symbol) ?? simpleKconfigDefault(option);
     if (value !== 'n' && value !== '') summary.finalEnabled++;
     const origin = catalogOriginMeta(option).kind;
-    if (['target', 'profile-add'].includes(origin) && value !== 'n') summary.target++;
-    else if (origin === 'kconfig-default' && value !== 'n') summary.defaults++;
+    if (origin === 'kconfig-default' && value !== 'n') summary.defaults++;
     else if (origin === 'recommended' && value !== 'n') summary.recommended++;
     else if (origin === 'dependency' && value !== 'n') summary.dependency++;
     else if (origin === 'imported' && value !== 'n') summary.imported++;
@@ -1973,12 +2058,12 @@ function catalogValidationContext(inputValues = menuValues, phase = 'interactive
     ? CATALOG_ENGINE.createCatalogValidationContext(CATALOG_MODEL, target, inputValues, { phase })
     : {
       values: new Map(inputValues),
-      trustedSymbols: new Set(catalogContractSymbols),
+      trustedSymbols: new Set(),
       validationOptions: {
         phase,
         contextComplete: Boolean(target?.system && target?.subtarget && (target?.profileSymbol || target?.profile)),
-        trustedSymbols: new Set(catalogContractSymbols),
-        deferred: phase === 'post-defconfig' ? 'error' : 'ignore',
+        trustedSymbols: new Set(),
+        deferred: 'ignore',
       },
     };
   if (cacheable) catalogContextCache.set(cacheKey, context);
@@ -2113,6 +2198,18 @@ function menuOptionSelected(option) {
   const value = menuValues.get(option.symbol) ?? simpleKconfigDefault(option);
   return menuTouched.has(option.symbol) || menuImportedNonDefault.has(option.symbol) || value !== 'n';
 }
+function catalogProtectedSymbols(activeSymbol = '') {
+  const protectedSymbols = new Set();
+  for (const [symbol, value] of catalogBaselineValues) if (value !== 'n' && value !== '') protectedSymbols.add(symbol);
+  for (const [symbol, value] of catalogRecommendedValues) if (value !== 'n' && value !== '') protectedSymbols.add(symbol);
+  for (const symbol of catalogImportedSymbols) {
+    const value = menuValues.get(symbol) ?? 'n';
+    if (value !== 'n' && value !== '') protectedSymbols.add(symbol);
+  }
+  for (const [symbol, value] of catalogUserOverrides) if (value !== 'n' && value !== '') protectedSymbols.add(symbol);
+  if (activeSymbol) protectedSymbols.delete(activeSymbol);
+  return protectedSymbols;
+}
 function applyCatalogIntent(option, value, force = false, source = 'user') {
   if (!option) return { changes: [], violations: [] };
   const previous = menuValues.get(option.symbol) ?? 'n';
@@ -2123,6 +2220,8 @@ function applyCatalogIntent(option, value, force = false, source = 'user') {
       symbol: option.symbol,
       value,
       force,
+      dependencySymbols: catalogDependencySymbols,
+      protectedSymbols: catalogProtectedSymbols(value === 'n' ? option.symbol : ''),
       validationOptions: context.validationOptions,
     });
   for (const change of result.changes) {
@@ -2138,7 +2237,9 @@ function applyCatalogIntent(option, value, force = false, source = 'user') {
     if (source === 'user' && explicit) catalogUserOverrides.set(change.symbol, change.to);
     else if (source === 'recommended' && explicit) catalogRecommendedValues.set(change.symbol, change.to);
     else if (source === 'imported') catalogImportedSymbols.add(change.symbol);
-    else if (!explicit || source === 'dependency') catalogDependencySymbols.add(change.symbol);
+    if (explicit) catalogDependencySymbols.delete(change.symbol);
+    else if (change.to === 'n') catalogDependencySymbols.delete(change.symbol);
+    else catalogDependencySymbols.add(change.symbol);
     const changedOption = menuOptionBySymbol.get(change.symbol);
     if (!changedOption) continue;
     syncMenuToCurated(changedOption, change.to, explicit ? source : 'dependency');
@@ -2150,47 +2251,6 @@ function applyCatalogIntent(option, value, force = false, source = 'user') {
   if (result.changes.length) markCatalogStateChanged();
   return result;
 }
-function applyCatalogContractAssignments(assignments, reason = 'catalog-contract') {
-  if (!assignments?.length) return { changes: [], violations: [] };
-  const directSymbols = new Set(assignments.map((assignment) => assignment.symbol));
-  for (const assignment of assignments) {
-    catalogContractSymbols.add(assignment.symbol);
-    catalogContractOrigins.set(assignment.symbol, {
-      kind: assignment.origin || 'profile-add', detail: assignment.source || reason,
-    });
-  }
-  if (!CATALOG_MODEL || !CATALOG_ENGINE?.applyAuthoritativeValues) {
-    const changes = [];
-    for (const assignment of assignments) {
-      const option = menuOptionBySymbol.get(assignment.symbol);
-      if (!option) continue;
-      const previous = menuValues.get(assignment.symbol) ?? 'n';
-      if (previous === assignment.value) continue;
-      menuValues.set(assignment.symbol, assignment.value);
-      changes.push({ symbol: assignment.symbol, from: previous, to: assignment.value, reason });
-      syncMenuToCurated(option, assignment.value, 'contract');
-    }
-    if (changes.length) markCatalogStateChanged();
-    return { changes, violations: [] };
-  }
-  const context = catalogValidationContext(menuValues, 'pre-defconfig');
-  const result = CATALOG_ENGINE.applyAuthoritativeValues(
-    CATALOG_MODEL, context.values, assignments, {
-      reason,
-      validationOptions: context.validationOptions,
-    },
-  );
-  for (const change of result.changes) {
-    menuValues.set(change.symbol, change.to);
-    catalogContractSymbols.add(change.symbol);
-    if (!directSymbols.has(change.symbol)) catalogDependencySymbols.add(change.symbol);
-    const option = menuOptionBySymbol.get(change.symbol);
-    if (option) syncMenuToCurated(option, change.to, directSymbols.has(change.symbol) ? 'contract' : 'dependency');
-  }
-  if (result.changes.length) markCatalogStateChanged();
-  return result;
-}
-
 function setMenuValue(option, value, openChildren = false) {
   let result;
   try {
@@ -2741,35 +2801,41 @@ function renderMenuOption(option) {
   const row = document.createElement('div');
   const packageName = option.symbol.startsWith('PACKAGE_') ? option.symbol.slice(8) : '';
   const origin = catalogOriginMeta(option);
-  const profileRequired = packageName && state.device?.id === 'catalog-target' &&
-    ['target', 'profile-add'].includes(origin.kind) &&
-    catalogBaselineValues.get(option.symbol) !== 'n';
   row.dataset.symbol = option.symbol;
   row.className = `menuconfig-option${packageName ? ' package-option' : ''}${childCount ? ' has-children' : ''}${option.hidden ? ' hidden-package-option' : ''}`;
-  if (profileRequired) row.classList.add('catalog-profile-required');
-  const prompt = document.createElement('span');
-  prompt.className = 'menuconfig-option-summary';
-  const name = document.createElement('span');
-  name.className = 'menuconfig-option-label';
+  const summary = document.createElement('span');
+  summary.className = 'menuconfig-option-summary';
   const path = (option.path || []).map(menuPathLabel).filter(Boolean).join(' › ');
-  const label = menuOptionLabel(option);
-  name.textContent = path ? `${label} (${path})` : label;
-  name.dataset.fullText = name.textContent;
-  name.dataset.symbol = option.symbol;
-  name.tabIndex = 0;
-  prompt.appendChild(name);
+  const english = menuOptionLabel(option);
+  const translation = menuOptionTranslation(option);
+  const localized = [translation.usage, translation.title]
+    .map((item) => String(item || '').trim()).find(Boolean) || '';
+  const id = document.createElement('span');
+  id.className = 'menuconfig-option-label menuconfig-option-id';
+  id.textContent = packageName || option.symbol;
+  id.dataset.symbol = option.symbol;
+  id.dataset.translation = localized;
+  id.dataset.english = english;
+  id.dataset.path = path;
+  id.tabIndex = 0;
+  const description = document.createElement('span');
+  description.className = 'menuconfig-option-label menuconfig-option-description';
+  description.textContent = [...new Set([localized, english].filter(Boolean))].join(' · ') || id.textContent;
+  description.dataset.symbol = option.symbol;
+  description.dataset.translation = localized;
+  description.dataset.english = english;
+  description.dataset.path = path;
+  description.tabIndex = 0;
+  summary.append(id);
   if (origin.kind !== 'inactive') {
     const badge = document.createElement('small');
     badge.className = `catalog-origin catalog-origin-${origin.kind}`;
     badge.textContent = origin.label;
     badge.title = origin.detail || origin.label;
-    prompt.appendChild(badge);
+    summary.appendChild(badge);
   }
-  const translation = menuOptionTranslation(option);
-  if (translation.title || translation.usage) {
-    applyMenuTranslation(name, translation.title, translation.usage, true);
-  }
-  row.appendChild(prompt);
+  summary.appendChild(description);
+  row.appendChild(summary);
   const actions = document.createElement('span');
   actions.className = 'menuconfig-option-actions';
   if (option.type === 'bool' || option.type === 'tristate') {
@@ -2786,10 +2852,7 @@ function renderMenuOption(option) {
       button.type = 'button';
       button.textContent = stateValue.toUpperCase();
       button.className = value === stateValue ? 'active' : '';
-      if (profileRequired) {
-        button.disabled = stateValue !== 'y';
-        button.title = 'Required by the selected Target / Profile baseline';
-      } else if (option.userSettable === false && stateValue !== 'n') {
+      if (option.userSettable === false && stateValue !== 'n') {
         button.disabled = true;
         button.title = 'Hidden package: it can be disabled here but is enabled only through Catalog dependencies';
       }
@@ -2819,9 +2882,7 @@ function renderMenuOption(option) {
     childButton.type = 'button';
     childButton.className = 'menuconfig-child';
     childButton.textContent = '›';
-    childButton.title = value === 'n'
-      ? 'Select M or Y to open sub-options'
-      : 'Open sub-options';
+    childButton.title = value === 'n' ? 'Select M or Y to open sub-options' : 'Open sub-options';
     childButton.setAttribute('aria-label', childButton.title);
     childButton.disabled = value === 'n';
     childButton.onclick = () => {
@@ -2865,12 +2926,16 @@ function renderMenuLeaf(options, list) {
       entry.value = option.symbol;
       entry.textContent = menuOptionLabel(option);
       const optionTranslation = menuOptionTranslation(option);
-      entry.title = [
-        entry.textContent,
-        optionTranslation.title,
+      const choiceDescription = [...new Set([
         optionTranslation.usage,
+        optionTranslation.title,
+        menuOptionLabel(option),
+      ].filter(Boolean))];
+      entry.title = [
         `CONFIG_${option.symbol}`,
-      ].filter(Boolean).join('\n');
+        choiceDescription.join('\n'),
+        (option.path || []).map(menuPathLabel).filter(Boolean).join(' › '),
+      ].filter(Boolean).join('\n\n');
       entry.selected = option.symbol === selected?.symbol;
       select.appendChild(entry);
     }
@@ -4376,7 +4441,7 @@ function applyAcceptedBuildRequirements(text) {
 function applyMenuConfig(text) {
   if (!MENU_CATALOG) return text;
   for (const symbol of new Set([
-    ...catalogContractSymbols, ...menuTouched, ...catalogRecommendedValues.keys(),
+    ...menuTouched, ...catalogRecommendedValues.keys(),
     ...catalogUserOverrides.keys(), ...catalogImportedSymbols,
   ])) {
     const option = menuOptionBySymbol.get(symbol);
@@ -4425,17 +4490,12 @@ function catalogTargetConfig() {
   let text = lines.join('\n');
   return applyMenuConfig(text);
 }
-function enforceCatalogProfilePackages(text) {
-  const target = state.device?.target;
-  if (state.device?.id !== 'catalog-target' || !target) return text;
-  for (const pkg of target.profilePackagesAdd || target.profilePackages || []) {
-    if (String(pkg).startsWith('-')) continue;
-    if (!/^[A-Za-z0-9._+@-]+$/.test(pkg)) throw new Error(`Catalog profile package is invalid: ${pkg}`);
-    text = setConfigSymbol(text, `PACKAGE_${pkg}`, 'y', 'bool');
-  }
-  for (const pkg of target.profilePackagesRemove || []) {
-    if (!/^[A-Za-z0-9._+@-]+$/.test(pkg)) throw new Error(`Catalog profile removal is invalid: ${pkg}`);
-    text = setConfigSymbol(text, `PACKAGE_${pkg}`, 'n', 'bool');
+function applyProfilePackageOverrides(text) {
+  for (const [packageName, mode] of profilePackageOverrides) {
+    if (!/^[A-Za-z0-9._+@-]+$/.test(packageName)) {
+      throw new Error(`Catalog profile package is invalid: ${packageName}`);
+    }
+    text = setConfigSymbol(text, `PACKAGE_${packageName}`, mode === 'include' ? 'y' : 'n', 'bool');
   }
   return text;
 }
@@ -4458,6 +4518,7 @@ function applyToConfig(text, sel) {
   const zone = currentTimezone();
   text = applyImportedUnknownEdits(text);
   text = applyMenuConfig(text);
+  text = applyProfilePackageOverrides(text);
   // “跟随基础配置”不改主题；选择具体主题只负责启用该主题，依赖包由 Catalog 保留。
   if (state.theme !== '@base') setY(state.theme);
   let resolvedTheme = resolveConfigTheme(text, false);
@@ -4479,17 +4540,6 @@ function applyToConfig(text, sel) {
     '# plugins: ' + (sel.normal.map((p) => p.id).join(' ') || '(none)') + '\n' +
     (sel.forced.length ? '# forced (advanced): ' + sel.forced.map((p) => p.id).join(' ') + '\n' : '') +
     (sel.removed.length ? '# removed builtin (advanced): ' + sel.removed.map((p) => p.id).join(' ') + '\n' : '') + text;
-}
-function repairCatalogConfiguration(text) {
-  if (!CATALOG_ENGINE || !CATALOG_MODEL) return text;
-  const values = CATALOG_ENGINE.parseConfigDocument(text);
-  const context = catalogValidationContext(values, 'pre-defconfig');
-  const repairs = CATALOG_ENGINE.proposeRepairs(
-    CATALOG_MODEL, context.values, context.validationOptions,
-  );
-  return repairs.changes.length
-    ? CATALOG_ENGINE.applyChangesToConfig(text, repairs.changes, CATALOG_MODEL)
-    : text;
 }
 function assertCatalogConfiguration(text) {
   if (!CATALOG_ENGINE || !CATALOG_MODEL) throw new Error('Catalog engine is not ready');
@@ -4536,7 +4586,6 @@ async function generateConfigText({ enforceBuildRequirements = false } = {}) {
     throw new Error('This workspace requires an uploaded authoritative .config');
   }
   let config = applyToConfig(raw, effectiveSelection());
-  if (!state.importedConfig) config = enforceCatalogProfilePackages(config);
   for (let pass = 0; pass < 16; pass++) {
     const rules = matchingConfigRules(config);
     if (!rules.length) break;
@@ -4548,7 +4597,6 @@ async function generateConfigText({ enforceBuildRequirements = false } = {}) {
     config = updated;
   }
   if (matchingConfigRules(config).length) throw new Error(uiText('配置规则循环超过 16 次，请检查规则文件。', '設定規則循環超過 16 次，請檢查規則檔。', 'Configuration rules exceeded 16 passes; check the rule file.'));
-  config = repairCatalogConfiguration(config);
   assertCatalogConfiguration(config);
   if (enforceBuildRequirements && !state.useDefconfig) {
     config = applyAcceptedBuildRequirements(config);
@@ -5000,30 +5048,7 @@ function restoreSelections(config, payload) {
       importedUnknownOriginal.set(symbol, value);
     }
   }
-  if (CATALOG_ENGINE && CATALOG_MODEL) {
-    markCatalogStateChanged();
-    const context = catalogValidationContext(menuValues, 'pre-defconfig');
-    const repairs = CATALOG_ENGINE.proposeRepairs(
-      CATALOG_MODEL, context.values, context.validationOptions,
-    );
-    for (const change of repairs.changes) {
-      if (!menuOptionBySymbol.has(change.symbol)) continue;
-      menuValues.set(change.symbol, change.to);
-      menuTouched.add(change.symbol);
-      catalogDependencySymbols.add(change.symbol);
-      syncMenuToCurated(menuOptionBySymbol.get(change.symbol), change.to, 'dependency');
-    }
-    if (repairs.changes.length) {
-      markCatalogStateChanged();
-      importLogStep('catalog-dependencies-repaired', {
-        changes: repairs.changes.map((change) => `${change.symbol}:${change.from}->${change.to}`),
-      });
-      showToast(uiText(
-        `Catalog 已清理 ${repairs.changes.length} 个失效依赖项`,
-        `Catalog 已清理 ${repairs.changes.length} 個失效相依項目`,
-        `Catalog removed ${repairs.changes.length} invalid dependent setting(s)`));
-    }
-  }
+  markCatalogStateChanged();
   importLogStep('values-restored', {
     catalog: menuImportedOriginal.size,
     importedOnly: importedUnknownOriginal.size,
@@ -5189,7 +5214,7 @@ function closeModal() {
   const cancel = modalCancelHandler;
   modalCancelHandler = null;
   $('modal').hidden = true;
-  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'config-rule-resolver');
+  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'config-rule-resolver', 'profile-package-config');
   document.body.classList.remove('modal-open');
   if (lastFocus && lastFocus.focus) lastFocus.focus();
   if (cancel) cancel();

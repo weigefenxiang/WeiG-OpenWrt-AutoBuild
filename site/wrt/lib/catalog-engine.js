@@ -460,7 +460,7 @@ export function createTargetContextValues(model, target, inputValues = new Map()
     }
   }
 
-  // Resolve transitive select/imply rules such as x86_64 -> ARCH_64BIT and
+  // Resolve transitive select rules such as x86_64 -> ARCH_64BIT and
   // PCI_SUPPORT -> AUDIO_SUPPORT using the same generic Catalog engine.
   cascadeEnabled(model, values, changes, unique(contextSymbols.filter((symbol) => model.bySymbol.has(symbol))));
   return { values, changes };
@@ -479,27 +479,24 @@ export function createCatalogValidationContext(model, target, inputValues = new 
     ? createTargetContextValues(model, resolved, inputValues)
     : { values: new Map(valuesMap(inputValues)), changes: [] };
   const trustedSymbols = new Set(options.trustedSymbols || []);
-  const trustTargetContract = options.trustTargetContract ?? phase !== 'post-defconfig';
   if (resolved) {
     const operations = catalogPackageOperations(resolved, resolved.rawProfile || null);
-    if (trustTargetContract) {
-      for (const packageName of operations.add) {
-        const direct = model.byPackage.get(packageName);
-        if (direct?.configSymbol) trustedSymbols.add(direct.configSymbol);
-        for (const provider of model.providers.get(packageName) || []) {
-          const record = model.byPackage.get(provider);
-          if (record?.configSymbol && stateLevel(context.values.get(record.configSymbol) ?? 'n') > 0) {
-            trustedSymbols.add(record.configSymbol);
-          }
+    for (const packageName of operations.add) {
+      const direct = model.byPackage.get(packageName);
+      if (direct?.configSymbol) trustedSymbols.add(direct.configSymbol);
+      for (const provider of model.providers.get(packageName) || []) {
+        const record = model.byPackage.get(provider);
+        if (record?.configSymbol && stateLevel(context.values.get(record.configSymbol) ?? 'n') > 0) {
+          trustedSymbols.add(record.configSymbol);
         }
       }
-      for (const symbol of [
-        resolved.boardSelector,
-        resolved.targetSelector,
-        resolved.profileSelector,
-        resolved.arch,
-      ].filter(Boolean)) trustedSymbols.add(symbol);
     }
+    for (const symbol of [
+      resolved.boardSelector,
+      resolved.targetSelector,
+      resolved.profileSelector,
+      resolved.arch,
+    ].filter(Boolean)) trustedSymbols.add(symbol);
   }
   const contextComplete = options.contextComplete ?? targetContextComplete(resolved);
   return {
@@ -511,7 +508,7 @@ export function createCatalogValidationContext(model, target, inputValues = new 
       phase,
       contextComplete,
       trustedSymbols,
-      deferred: options.deferred || (phase === 'post-defconfig' ? 'error' : 'ignore'),
+      deferred: options.deferred || 'ignore',
     },
   };
 }
@@ -722,20 +719,13 @@ function enabledState(record, requested) {
 }
 
 function applyKconfigRules(model, record, requested, values, changes, options = {}) {
-  const groups = [
-    ['select', record.kconfig?.selectsExpressions || []],
-    ['imply', record.kconfig?.impliesExpressions || []],
-  ];
-  for (const [kind, variants] of groups) {
-    for (const rows of variants) {
-      for (const raw of Array.isArray(rows) ? rows : [rows]) {
-        const { symbol, condition } = ruleParts(raw);
-        if (!symbol || (condition && evaluateExpressionRaw(condition, values, options) !== 2)) continue;
-        const target = model.bySymbol.get(symbol);
-        if (!target) continue;
-        if (kind === 'imply' && values.has(symbol) && normalizeValue(values.get(symbol)) === 'n') continue;
-        setValue(values, changes, symbol, enabledState(target, requested), kind, record.configSymbol);
-      }
+  for (const rows of record.kconfig?.selectsExpressions || []) {
+    for (const raw of Array.isArray(rows) ? rows : [rows]) {
+      const { symbol, condition } = ruleParts(raw);
+      if (!symbol || (condition && evaluateExpressionRaw(condition, values, options) !== 2)) continue;
+      const target = model.bySymbol.get(symbol);
+      if (!target) continue;
+      setValue(values, changes, symbol, enabledState(target, requested), 'select', record.configSymbol);
     }
   }
 }
@@ -895,44 +885,47 @@ function cascadeEnabled(model, values, changes, initialSymbols, options = {}) {
   }
 }
 
-export function applyAuthoritativeValues(model, inputValues, assignments, options = {}) {
-  const values = new Map(valuesMap(inputValues));
-  const changes = [];
-  const reason = String(options.reason || 'catalog-contract');
-  const enabled = [];
-  const disabled = [];
-  const inherited = validationOptions(values, options.validationOptions || options);
-  const trustedSymbols = new Set(inherited.trustedSymbols);
-  for (const assignment of assignments || []) {
-    const symbol = String(assignment?.symbol || '');
-    const record = model.bySymbol.get(symbol);
-    if (!record) continue;
-    const value = normalizeValue(assignment?.value ?? 'n');
-    if (value !== 'n' && !record.states?.includes(value)) continue;
-    if (value === 'n' && !record.canDisable) continue;
-    (value === 'n' ? disabled : enabled).push({ assignment, record, symbol, value });
-    if (value !== 'n') trustedSymbols.add(symbol);
-  }
-  const activeOptions = { ...inherited, trustedSymbols };
-
-  for (const { assignment, record, symbol, value } of enabled) {
-    setValue(values, changes, symbol, value, reason, String(assignment?.source || ''));
-    if (record.choice) {
-      for (const sibling of model.choices.get(record.choice) || []) {
-        if (sibling !== symbol) setValue(values, changes, sibling, 'n', 'choice', symbol);
-      }
+function activeSelectsSymbol(record, targetSymbol, values, options = {}) {
+  for (const rows of record.kconfig?.selectsExpressions || []) {
+    for (const raw of Array.isArray(rows) ? rows : [rows]) {
+      const rule = ruleParts(raw);
+      if (rule.symbol !== targetSymbol) continue;
+      if (!rule.condition || evaluateExpressionRaw(rule.condition, values, options) === 2) return true;
     }
   }
-  if (options.resolveDependencies !== false) {
-    cascadeEnabled(model, values, changes, enabled.map((item) => item.symbol), activeOptions);
+  return false;
+}
+
+function dependencyStillRequired(model, symbol, values, options = {}) {
+  const record = model.bySymbol.get(symbol);
+  if (!record) return false;
+  const testValues = new Map(values);
+  testValues.set(symbol, 'n');
+  for (const candidateSymbol of reverseCandidates(model, record)) {
+    const candidate = model.bySymbol.get(candidateSymbol);
+    if (!candidate || !recordEnabled(candidate, values)) continue;
+    if (activeSelectsSymbol(candidate, symbol, values, options)) return true;
+    const before = new Set(recordViolations(model, candidate, values, options)
+      .filter((item) => !item.deferred).map(violationKey));
+    const after = recordViolations(model, candidate, testValues, options)
+      .filter((item) => !item.deferred);
+    if (after.some((item) => !before.has(violationKey(item)))) return true;
   }
-  for (const { assignment, symbol } of disabled) {
-    setValue(values, changes, symbol, 'n', reason, String(assignment?.source || ''));
+  return false;
+}
+
+function pruneUnusedDependencies(model, values, changes, dependencySymbols, protectedSymbols, options = {}) {
+  const candidates = new Set(dependencySymbols || []);
+  const protectedSet = new Set(protectedSymbols || []);
+  let progress = true;
+  while (progress) {
+    progress = false;
+    for (const symbol of candidates) {
+      if (protectedSet.has(symbol) || normalizeValue(values.get(symbol) ?? 'n') === 'n') continue;
+      if (dependencyStillRequired(model, symbol, values, options)) continue;
+      if (setValue(values, changes, symbol, 'n', 'dependency-unused')) progress = true;
+    }
   }
-  if (disabled.length) {
-    cascadeDisabled(model, values, changes, disabled.map((item) => item.symbol), activeOptions);
-  }
-  return { values, changes, trustedSymbols, violations: validateConfig(model, values, activeOptions) };
 }
 
 export function applyUserIntent(model, inputValues, intent) {
@@ -957,52 +950,16 @@ export function applyUserIntent(model, inputValues, intent) {
   }
   if (value === 'n') cascadeDisabled(model, values, changes, [symbol], options);
   else cascadeEnabled(model, values, changes, [symbol], options);
+  if (changes.some((change) => change.to === 'n')) {
+    pruneUnusedDependencies(model, values, changes, intent?.dependencySymbols,
+      intent?.protectedSymbols, options);
+  }
   const violations = validateConfig(model, values, options);
   if (value !== 'n') {
     const blocking = violations.filter((item) => !beforeKeys.has(violationKey(item)));
     if (blocking.length) throw new Error(formatViolations(blocking));
   }
   return { values, changes, violations };
-}
-
-export function proposeRepairs(model, inputValues, rawOptions = {}) {
-  const values = new Map(valuesMap(inputValues));
-  const changes = [];
-  const options = validationOptions(values, rawOptions);
-  let progress = true;
-  while (progress) {
-    progress = false;
-    for (const record of model.records) {
-      if (!recordEnabled(record, values) || options.trustedSymbols.has(record.configSymbol)) continue;
-      const violations = recordViolations(model, record, values, options)
-        .filter((item) => !item.deferred);
-      if (!violations.length) continue;
-      if (setValue(values, changes, record.configSymbol, 'n', 'dependency-unsatisfied')) progress = true;
-    }
-  }
-  return { values, changes, violations: validateConfig(model, values, options) };
-}
-
-export function setConfigSymbol(text, symbol, value, type = '') {
-  const normalized = normalizeValue(value);
-  const escaped = String(symbol).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`^(?:CONFIG_${escaped}=.*|# CONFIG_${escaped} is not set)$`, 'm');
-  let line;
-  if (normalized === 'n') line = `# CONFIG_${symbol} is not set`;
-  else if (normalized === 'y' || normalized === 'm') line = `CONFIG_${symbol}=${normalized}`;
-  else if (type === 'int' || type === 'hex' || /^-?(?:0x[0-9a-f]+|\d+)$/i.test(normalized)) line = `CONFIG_${symbol}=${normalized}`;
-  else line = `CONFIG_${symbol}=${JSON.stringify(normalized)}`;
-  if (re.test(text)) return String(text).replace(re, line);
-  return `${String(text).replace(/\s*$/, '')}\n${line}\n`;
-}
-
-export function applyChangesToConfig(text, changes, model = null) {
-  let output = String(text || '');
-  for (const change of changes || []) {
-    const type = model?.bySymbol.get(change.symbol)?.type || '';
-    output = setConfigSymbol(output, change.symbol, change.to, type);
-  }
-  return output;
 }
 
 export function formatViolations(violations) {
