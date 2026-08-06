@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { directoriesMatch, syncBlogMirror } from './sync-blog.mjs';
 import { checkTextFiles } from './check-text-format.mjs';
@@ -1092,6 +1092,60 @@ mirrorRootsOk
   mobileIssueContract
     ? ok('手机 GitHub App 正文压缩请求 → 权威 config 校验链已接通')
     : bad('mobile Issue request contract', '网页压缩载荷、Actions 解压或工作流入口缺失');
+  const issueEventBodyContract = issueRequestReader.includes('GITHUB_EVENT_PATH') &&
+    issueRequestReader.includes("event.issue?.body") &&
+    workflow.includes("if: always() && steps.req.outcome == 'success'");
+  issueEventBodyContract
+    ? ok('Issue 事件正文从 GITHUB_EVENT_PATH 读取，解析失败前不上传空 CONFIG artifact')
+    : bad('Issue event payload contract', '事件正文回退或 CONFIG artifact 门禁缺失');
+  const issueEventFixtureRoot = mkdtempSync(join(tmpdir(), 'weig-issue-event-body-'));
+  try {
+    const requestText = JSON.stringify({
+      schema: 5,
+      config: 'CONFIG_TARGET_x86=y\nCONFIG_TARGET_x86_64=y\n',
+    }) + '\n';
+    const attachmentUrl = 'https://github.com/user-attachments/files/123456/build-request.json';
+    const eventPath = join(issueEventFixtureRoot, 'event.json');
+    const manifestPath = join(issueEventFixtureRoot, 'request-attachments.json');
+    const requestDir = join(issueEventFixtureRoot, 'request-attachments');
+    const preloadPath = join(issueEventFixtureRoot, 'mock-fetch.mjs');
+    writeFileSync(eventPath, JSON.stringify({
+      action: 'opened',
+      issue: { body: `### Build request\n\n[build-request.json](${attachmentUrl})\n` },
+    }));
+    writeFileSync(preloadPath, [
+      `const payload = ${JSON.stringify(requestText)};`,
+      "const bytes = Buffer.from(payload, 'utf8');",
+      "globalThis.fetch = async () => ({ ok: true, status: 200, headers: { get: (name) => name === 'content-length' ? String(bytes.length) : null }, arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) });",
+      '',
+    ].join('\n'));
+    const issueEventRun = spawnSync(process.execPath, [
+      '--import',
+      pathToFileURL(preloadPath).href,
+      join(ROOT, 'tools', 'fetch-build-request.mjs'),
+    ], {
+      cwd: issueEventFixtureRoot,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        ISSUE_BODY: '',
+        GITHUB_EVENT_PATH: eventPath,
+        REQUEST_MANIFEST_OUT: manifestPath,
+        REQUEST_DIR: requestDir,
+      },
+    });
+    const fixtureManifest = issueEventRun.status === 0 && existsSync(manifestPath)
+      ? JSON.parse(readFileSync(manifestPath, 'utf8'))
+      : null;
+    issueEventRun.status === 0 && fixtureManifest?.files?.length === 1 &&
+        fixtureManifest.files[0].type === 'json'
+      ? ok('Issue event fixture: attachment body is discovered without ISSUE_BODY env injection')
+      : bad('Issue event fixture', (issueEventRun.stderr || issueEventRun.stdout || 'manifest missing').trim().slice(0, 500));
+  } catch (error) {
+    bad('Issue event fixture', error.message.slice(0, 300));
+  } finally {
+    rmSync(issueEventFixtureRoot, { recursive: true, force: true });
+  }
   const artifactContract = [
     'actions/upload-artifact@v7',
     'actions/download-artifact@v8',

@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 // Downloads 1..3 GitHub-hosted Issue attachments and records their detected formats.
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_FILES = 3;
-const body = String(process.env.ISSUE_BODY || '');
 const output = String(process.env.REQUEST_MANIFEST_OUT || 'request-attachments.json');
 const outputDir = String(process.env.REQUEST_DIR || 'request-attachments');
+const body = readIssueBody();
 const linkRe = /\[([^\]\r\n]{1,160})\]\((https:\/\/github\.com\/user-attachments\/(?:files|assets)\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+)\)/g;
 const bareRe = /https:\/\/github\.com\/user-attachments\/(?:files|assets)\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+/g;
 const inlineMatch = body.match(/<!--\s*WEIG_BUILD_REQUEST_GZIP_BASE64\s*([\s\S]*?)-->/i);
@@ -25,6 +25,19 @@ for (const match of body.matchAll(bareRe)) {
 function fail(message) {
   console.error('Attachment validation failed / 附件校验失败: ' + message);
   process.exit(1);
+}
+function readIssueBody() {
+  if (typeof process.env.ISSUE_BODY === 'string' && process.env.ISSUE_BODY !== '') {
+    return process.env.ISSUE_BODY;
+  }
+  const eventPath = String(process.env.GITHUB_EVENT_PATH || '').trim();
+  if (!eventPath) return '';
+  try {
+    const event = JSON.parse(readFileSync(eventPath, 'utf8'));
+    return String(event.issue?.body || '');
+  } catch (error) {
+    fail(`cannot read GitHub event payload: ${error.message}`);
+  }
 }
 function safeName(name, index) {
   const clean = String(name).replace(/[^A-Za-z0-9._+-]/g, '_').slice(0, 100);
