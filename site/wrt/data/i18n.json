@@ -216,17 +216,17 @@
    "vi": "Đang tải dữ liệu plugin…"
   },
   "loading.fail": {
-   "zh-CN": "加载失败:{msg}(请刷新重试,或点右上角\"自检\"排查网络)",
-   "zh-TW": "載入失敗:{msg}(請重新整理再試,或點右上角「自我檢測」檢查網路)",
-   "en": "Load failed: {msg} (refresh to retry, or use \"Self-test\" at the top right to check your network)",
-   "ru": "Ошибка загрузки: {msg} (обновите страницу или нажмите «Диагностика» справа вверху, чтобы проверить сеть)",
-   "es": "Error al cargar: {msg} (recarga la página o usa “Autodiagnóstico” arriba a la derecha para revisar tu red)",
-   "pt": "Falha ao carregar: {msg} (atualize a página ou clique em \"Autoteste\" no canto superior direito para checar a rede)",
-   "ja": "読み込みに失敗しました:{msg}(再読み込みするか、右上の「自己診断」でネットワークを確認してください)",
-   "ko": "불러오기 실패: {msg}(새로고침해 보거나 오른쪽 위 '자체 점검'으로 네트워크를 확인해요)",
-   "de": "Laden fehlgeschlagen: {msg} (bitte neu laden oder oben rechts \"Selbsttest\" zur Netzwerkdiagnose)",
-   "fr": "Échec du chargement : {msg} (actualisez la page, ou cliquez sur « Diagnostic » en haut à droite pour tester le réseau)",
-   "vi": "Tải thất bại: {msg} (hãy tải lại trang, hoặc nhấn \"Tự kiểm tra\" ở góc trên phải để kiểm tra mạng)"
+   "zh-CN": "加载失败:{msg}(请刷新重试,或点右下角\"自检\"排查网络)",
+   "zh-TW": "載入失敗:{msg}(請重新整理再試,或點右下角「自我檢測」檢查網路)",
+   "en": "Load failed: {msg} (refresh to retry, or use “Self-test” at the bottom right to check your network)",
+   "ru": "Ошибка загрузки: {msg} (обновите страницу или нажмите «Диагностика» в правом нижнем углу, чтобы проверить сеть)",
+   "es": "Error al cargar: {msg} (recarga la página o usa «Autodiagnóstico» abajo a la derecha para revisar tu red)",
+   "pt": "Falha ao carregar: {msg} (atualize a página ou clique em “Autoteste” no canto inferior direito para checar a rede)",
+   "ja": "読み込みに失敗しました:{msg}(再読み込みするか、右下の「自己診断」でネットワークを確認してください)",
+   "ko": "불러오기 실패: {msg}(새로고침해 보거나 오른쪽 아래의 ‘자체 점검’으로 네트워크를 확인해요)",
+   "de": "Laden fehlgeschlagen: {msg} (bitte neu laden oder unten rechts „Selbsttest“ zur Netzwerkdiagnose verwenden)",
+   "fr": "Échec du chargement : {msg} (actualisez la page, ou utilisez « Diagnostic » en bas à droite pour tester le réseau)",
+   "vi": "Tải thất bại: {msg} (hãy tải lại trang, hoặc nhấn “Tự kiểm tra” ở góc dưới bên phải để kiểm tra mạng)"
   },
   "risk.q0": {
    "zh-CN": "⚠️刷机前三问:",
@@ -981,19 +981,6 @@
    "de": "Wird erstellt…",
    "fr": "Génération…",
    "vi": "Đang tạo…"
-  },
-  "btn.download.fail": {
-   "zh-CN": "生成失败:{msg}(可点右上角\"自检\"排查)",
-   "zh-TW": "產生失敗:{msg}(可點右上角「自我檢測」查明原因)",
-   "en": "Generation failed: {msg} (use \"Self-test\" at the top right to diagnose)",
-   "ru": "Ошибка создания: {msg} (нажмите «Диагностика» справа вверху)",
-   "es": "Error al generar: {msg} (usa “Autodiagnóstico” arriba a la derecha para revisar)",
-   "pt": "Falha ao gerar: {msg} (clique em \"Autoteste\" no canto superior direito para investigar)",
-   "ja": "生成に失敗しました:{msg}(右上の「自己診断」で確認できます)",
-   "ko": "생성 실패: {msg}(오른쪽 위 '자체 점검'으로 확인할 수 있어요)",
-   "de": "Erstellen fehlgeschlagen: {msg} (oben rechts \"Selbsttest\" zur Diagnose)",
-   "fr": "Échec de la génération : {msg} (cliquez sur « Diagnostic » en haut à droite pour investiguer)",
-   "vi": "Tạo thất bại: {msg} (có thể nhấn \"Tự kiểm tra\" ở góc trên phải để kiểm tra)"
   },
   "btn.submit": {
    "zh-CN": "提交云编译",
@@ -2931,6 +2918,32 @@
    "de": "⚠️ Nach dem Entfernen werden USB-Laufwerke nicht mehr automatisch eingehängt; ohne USB-Speicher kann das Paket entfernt werden.",
    "fr": "⚠️ Après retrait, les disques USB ne sont plus montés automatiquement; vous pouvez le retirer si vous n’utilisez pas de stockage USB.",
    "vi": "⚠️ Sau khi bỏ, ổ USB sẽ không còn tự động gắn kết; có thể bỏ an toàn nếu bạn không dùng lưu trữ USB."
+  },
+  "generation.error.title": {
+   "zh-CN": "生成失败",
+   "zh-TW": "產生失敗",
+   "en": "Generation failed",
+   "ru": "Ошибка создания",
+   "es": "Error al generar",
+   "pt": "Falha ao gerar",
+   "ja": "生成に失敗しました",
+   "ko": "생성 실패",
+   "de": "Erstellen fehlgeschlagen",
+   "fr": "Échec de la génération",
+   "vi": "Tạo thất bại"
+  },
+  "generation.error.hint": {
+   "zh-CN": "可点右下角“自检”排查",
+   "zh-TW": "可點右下角「自我檢測」查明原因",
+   "en": "Use “Self-test” at the bottom right to diagnose.",
+   "ru": "Для диагностики нажмите «Диагностика» в правом нижнем углу.",
+   "es": "Usa «Autodiagnóstico» abajo a la derecha para revisar.",
+   "pt": "Clique em “Autoteste” no canto inferior direito para investigar.",
+   "ja": "右下の「自己診断」で確認できます。",
+   "ko": "오른쪽 아래의 ‘자체 점검’으로 확인할 수 있어요.",
+   "de": "Unten rechts mit „Selbsttest“ prüfen.",
+   "fr": "Utilisez « Diagnostic » en bas à droite pour rechercher la cause.",
+   "vi": "Nhấn “Tự kiểm tra” ở góc dưới bên phải để kiểm tra."
   }
  }
 }

@@ -4541,19 +4541,6 @@ function applyToConfig(text, sel) {
     (sel.forced.length ? '# forced (advanced): ' + sel.forced.map((p) => p.id).join(' ') + '\n' : '') +
     (sel.removed.length ? '# removed builtin (advanced): ' + sel.removed.map((p) => p.id).join(' ') + '\n' : '') + text;
 }
-function assertCatalogConfiguration(text) {
-  if (!CATALOG_ENGINE || !CATALOG_MODEL) throw new Error('Catalog engine is not ready');
-  const values = CATALOG_ENGINE.parseConfigDocument(text);
-  const context = catalogValidationContext(values, 'pre-defconfig');
-  const violations = CATALOG_ENGINE.validateConfig(
-    CATALOG_MODEL, context.values, context.validationOptions,
-  );
-  if (!violations.length) return;
-  throw new Error(uiText(
-    `Catalog 配置验证失败：${CATALOG_ENGINE.formatViolations(violations)}`,
-    `Catalog 設定驗證失敗：${CATALOG_ENGINE.formatViolations(violations)}`,
-    `Catalog configuration validation failed: ${CATALOG_ENGINE.formatViolations(violations)}`));
-}
 function resolveConfigTheme(text, fallback = true) {
   const enabled = [...String(text).matchAll(/^CONFIG_PACKAGE_(luci-theme-[A-Za-z0-9._+-]+)=y$/gm)]
     .map((match) => match[1]);
@@ -4597,7 +4584,6 @@ async function generateConfigText({ enforceBuildRequirements = false } = {}) {
     config = updated;
   }
   if (matchingConfigRules(config).length) throw new Error(uiText('配置规则循环超过 16 次，请检查规则文件。', '設定規則循環超過 16 次，請檢查規則檔。', 'Configuration rules exceeded 16 passes; check the rule file.'));
-  assertCatalogConfiguration(config);
   if (enforceBuildRequirements && !state.useDefconfig) {
     config = applyAcceptedBuildRequirements(config);
     const missing = missingBuildRequirements(config);
@@ -4639,6 +4625,57 @@ function downloadBlob(text, type, filename) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+function generationErrorItems(error) {
+  const message = String(error?.message || error || '').trim() || uiText(
+    '发生未知错误。', '發生未知錯誤。', 'An unknown error occurred.');
+  const parts = message.split(/;\s*/).map((part) => part.trim()).filter(Boolean);
+  return parts.length > 1 ? parts : [message];
+}
+function showGenerationError(error) {
+  modalCancelHandler = null;
+  openModal(t('generation.error.title'));
+  const modal = $('modal').querySelector('.modal');
+  modal.classList.remove('modal-wide', 'modal-import-source', 'recommended-config',
+    'config-rule-resolver', 'profile-package-config');
+  modal.classList.add('generation-error');
+  const body = $('modalBody');
+  body.textContent = '';
+
+  const list = document.createElement('div');
+  list.className = 'generation-error-list';
+  for (const message of generationErrorItems(error)) {
+    const item = document.createElement('div');
+    item.className = 'generation-error-item';
+    item.textContent = message;
+    list.appendChild(item);
+  }
+  body.appendChild(list);
+
+  const hint = document.createElement('p');
+  hint.className = 'generation-error-hint';
+  hint.textContent = t('generation.error.hint');
+  body.appendChild(hint);
+
+  const actions = document.createElement('div');
+  actions.className = 'modal-actions';
+  const selfTest = document.createElement('button');
+  selfTest.type = 'button';
+  selfTest.className = 'btn btn-primary';
+  selfTest.textContent = t('btn.selfTest');
+  selfTest.addEventListener('click', () => {
+    modalCancelHandler = null;
+    closeModal();
+    setTimeout(() => $('selfTestBtn').click(), 0);
+  });
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'btn';
+  close.textContent = t('btn.close');
+  close.addEventListener('click', closeModal);
+  actions.append(selfTest, close);
+  body.appendChild(actions);
+}
+
 async function downloadConfig(btn) {
   btn.disabled = true;
   btn.textContent = t('btn.download.busy');
@@ -4647,7 +4684,7 @@ async function downloadConfig(btn) {
     downloadBlob(text, 'text/plain;charset=utf-8',
       [state.device.id, localStamp(), state.source.id, state.version.id, state.variant.id].join('-') + '.config');
   } catch (err) {
-    alert(t('btn.download.fail', { msg: err.message }));
+    showGenerationError(err);
   } finally {
     btn.disabled = false;
     btn.textContent = t('btn.download');
@@ -5214,7 +5251,7 @@ function closeModal() {
   const cancel = modalCancelHandler;
   modalCancelHandler = null;
   $('modal').hidden = true;
-  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'config-rule-resolver', 'profile-package-config');
+  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'config-rule-resolver', 'profile-package-config', 'generation-error');
   document.body.classList.remove('modal-open');
   if (lastFocus && lastFocus.focus) lastFocus.focus();
   if (cancel) cancel();
@@ -5473,7 +5510,7 @@ function openSubmitModal() {
         if (issueWindow) issueWindow.opener = null;
         else window.location.assign(issueUrl);
       } catch (err) {
-        alert(t('btn.download.fail', { msg: err.message }));
+        showGenerationError(err);
       } finally {
         button.disabled = false;
       }

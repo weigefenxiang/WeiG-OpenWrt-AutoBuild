@@ -718,6 +718,35 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
 .modal-import-source .modal-actions { justify-content: flex-end; margin-top: 16px; }
 .modal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .modal-actions .btn { margin: 0; }
+.modal.generation-error {
+  max-width: 640px; overflow: hidden;
+  box-shadow: 0 24px 72px rgba(0, 0, 0, .34);
+}
+.modal.generation-error .modal-head {
+  background: color-mix(in srgb, var(--danger) 7%, var(--card));
+}
+.modal.generation-error .modal-head h3::before {
+  content: "!"; display: inline-grid; place-items: center; width: 22px; height: 22px;
+  margin-right: 9px; border-radius: 50%; background: var(--danger); color: #fff;
+  font: 800 14px/1 sans-serif; vertical-align: -1px;
+}
+.generation-error-list {
+  display: grid; gap: 9px; max-height: min(48vh, 420px); overflow-y: auto;
+  overscroll-behavior: contain; padding-right: 3px;
+}
+.generation-error-item {
+  padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--danger) 38%, var(--border));
+  border-left: 4px solid var(--danger); border-radius: 9px;
+  background: color-mix(in srgb, var(--danger) 7%, var(--card2));
+  color: var(--text); font: 13.5px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.generation-error-hint { margin-top: 13px !important; color: var(--text2); }
+.modal.generation-error .modal-actions { justify-content: flex-end; }
+@media (max-width: 560px) {
+  .modal.generation-error { align-self: flex-end; max-height: 82vh; border-radius: 16px 16px 10px 10px; }
+  .generation-error-list { max-height: 44vh; }
+}
 .modal.config-rule-resolver { max-width: 620px; background: color-mix(in srgb, var(--accent) 4%, var(--card)); }
 .config-rule { margin-top: 14px; padding: 13px; border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border)); border-radius: 12px; background: var(--card2); }
 .config-rule h4 { font-family: ui-monospace, Consolas, monospace; color: var(--accent-text); }

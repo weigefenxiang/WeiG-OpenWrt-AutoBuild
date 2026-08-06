@@ -12,7 +12,7 @@
   "theme.dark": "主題:深色(點擊切換跟隨系統)",
   "lang.label": "介面語言",
   "loading": "正在載入套件資料…",
-  "loading.fail": "載入失敗:{msg}(請重新整理再試,或點右上角「自我檢測」檢查網路)",
+  "loading.fail": "載入失敗:{msg}(請重新整理再試,或點右下角「自我檢測」檢查網路)",
   "risk.ok": "知道了",
   "step.device": "選擇機型",
   "step.device.hint": "灰色機型架構已支援但尚未開放,點它看說明",
@@ -64,7 +64,6 @@
   "bar.capacity.title": "容量粗估,僅供參考",
   "btn.download": "下載 .config",
   "btn.download.busy": "產生中…",
-  "btn.download.fail": "產生失敗:{msg}(可點右上角「自我檢測」查明原因)",
   "btn.submit": "送出雲端編譯",
   "drawer.title": "已選套件清單",
   "drawer.empty": "還沒有勾選任何套件。不勾也可以直接編譯,得到一份乾淨的韌體。",
@@ -220,7 +219,9 @@
   "submit.existing.title": "使用現有設定",
   "submit.existing.desc": "選擇 .config、config.buildinfo 或舊版請求 JSON；網頁識別機型並還原選擇後，會回到本確認頁。",
   "submit.download.title": "僅下載 .config",
-  "submit.download.desc": "只儲存目前的完整設定，不開啟 GitHub，也不會啟動雲端編譯。"
+  "submit.download.desc": "只儲存目前的完整設定，不開啟 GitHub，也不會啟動雲端編譯。",
+  "generation.error.title": "產生失敗",
+  "generation.error.hint": "可點右下角「自我檢測」查明原因"
  },
  "en": {
   "app.title": "OpenWrt Firmware Customizer",
@@ -235,7 +236,7 @@
   "theme.dark": "Theme: dark (click to follow system)",
   "lang.label": "Language",
   "loading": "Loading plugin data…",
-  "loading.fail": "Load failed: {msg} (refresh to retry, or use \"Self-test\" at the top right to check your network)",
+  "loading.fail": "Load failed: {msg} (refresh to retry, or use “Self-test” at the bottom right to check your network)",
   "risk.ok": "Got it",
   "step.device": "Choose build parameters",
   "step.device.hint": "Choose the source, branch, target, and profile",
@@ -287,7 +288,6 @@
   "bar.capacity.title": "Rough estimate, for reference only",
   "btn.download": "Download .config",
   "btn.download.busy": "Generating…",
-  "btn.download.fail": "Generation failed: {msg} (use \"Self-test\" at the top right to diagnose)",
   "btn.submit": "Start cloud build",
   "drawer.title": "Selected plugins",
   "drawer.empty": "No plugins ticked yet. You can build without any and get a clean firmware.",
@@ -443,7 +443,9 @@
   "submit.existing.title": "Use an existing configuration",
   "submit.existing.desc": "Choose a .config, config.buildinfo, or an older request JSON. The page identifies the target, restores the selections, and returns here.",
   "submit.download.title": "Download .config only",
-  "submit.download.desc": "Save the complete current configuration without opening GitHub or starting a cloud build."
+  "submit.download.desc": "Save the complete current configuration without opening GitHub or starting a cloud build.",
+  "generation.error.title": "Generation failed",
+  "generation.error.hint": "Use “Self-test” at the bottom right to diagnose."
  },
  "ru": {
   "app.title": "Онлайн-конструктор прошивок OpenWrt",
@@ -458,7 +460,7 @@
   "theme.dark": "Тема: тёмная (нажмите для системной)",
   "lang.label": "Язык интерфейса",
   "loading": "Загрузка данных о пакетах…",
-  "loading.fail": "Ошибка загрузки: {msg} (обновите страницу или нажмите «Диагностика» справа вверху, чтобы проверить сеть)",
+  "loading.fail": "Ошибка загрузки: {msg} (обновите страницу или нажмите «Диагностика» в правом нижнем углу, чтобы проверить сеть)",
   "risk.ok": "Понятно",
   "step.device": "Выбор модели",
   "step.device.hint": "Серые модели уже поддерживаются архитектурой, но пока недоступны — нажмите, чтобы узнать почему.",
@@ -510,7 +512,6 @@
   "bar.capacity.title": "Грубая оценка объёма, только для ориентира",
   "btn.download": "Скачать .config",
   "btn.download.busy": "Создание…",
-  "btn.download.fail": "Ошибка создания: {msg} (нажмите «Диагностика» справа вверху)",
   "btn.submit": "Отправить в облачную сборку",
   "drawer.title": "Список выбранных пакетов",
   "drawer.empty": "Пакеты пока не выбраны. Можно собрать и так, получится чистая прошивка.",
@@ -666,7 +667,9 @@
   "submit.existing.title": "Использовать готовую конфигурацию",
   "submit.existing.desc": "Выберите .config, config.buildinfo или старый JSON-запрос. Страница определит устройство, восстановит выбор и вернёт вас сюда.",
   "submit.download.title": "Только скачать .config",
-  "submit.download.desc": "Сохранить полную текущую конфигурацию, не открывая GitHub и не запуская облачную сборку."
+  "submit.download.desc": "Сохранить полную текущую конфигурацию, не открывая GitHub и не запуская облачную сборку.",
+  "generation.error.title": "Ошибка создания",
+  "generation.error.hint": "Для диагностики нажмите «Диагностика» в правом нижнем углу."
  },
  "es": {
   "app.title": "Personaliza tu firmware OpenWrt en línea",
@@ -681,7 +684,7 @@
   "theme.dark": "Tema: oscuro (clic para seguir el sistema)",
   "lang.label": "Idioma de la interfaz",
   "loading": "Cargando datos de plugins…",
-  "loading.fail": "Error al cargar: {msg} (recarga la página o usa “Autodiagnóstico” arriba a la derecha para revisar tu red)",
+  "loading.fail": "Error al cargar: {msg} (recarga la página o usa «Autodiagnóstico» abajo a la derecha para revisar tu red)",
   "risk.ok": "Entendido",
   "step.device": "Elige el modelo",
   "step.device.hint": "El código ya admite los modelos en gris, pero aún no están disponibles. Haz clic para ver los detalles.",
@@ -733,7 +736,6 @@
   "bar.capacity.title": "Estimación aproximada, solo de referencia",
   "btn.download": "Descargar .config",
   "btn.download.busy": "Generando…",
-  "btn.download.fail": "Error al generar: {msg} (usa “Autodiagnóstico” arriba a la derecha para revisar)",
   "btn.submit": "Enviar a compilar en la nube",
   "drawer.title": "Lista de plugins seleccionados",
   "drawer.empty": "Todavía no has marcado ningún plugin. También puedes compilar así y obtener un firmware limpio.",
@@ -889,7 +891,9 @@
   "submit.existing.title": "Usar una configuración existente",
   "submit.existing.desc": "Elige un .config, config.buildinfo o un JSON de solicitud anterior. La página identificará el equipo, restaurará la selección y volverá aquí.",
   "submit.download.title": "Descargar solo .config",
-  "submit.download.desc": "Guarda la configuración completa actual sin abrir GitHub ni iniciar una compilación en la nube."
+  "submit.download.desc": "Guarda la configuración completa actual sin abrir GitHub ni iniciar una compilación en la nube.",
+  "generation.error.title": "Error al generar",
+  "generation.error.hint": "Usa «Autodiagnóstico» abajo a la derecha para revisar."
  },
  "pt": {
   "app.title": "Firmware OpenWrt personalizado online",
@@ -904,7 +908,7 @@
   "theme.dark": "Tema: escuro (clique para seguir o sistema)",
   "lang.label": "Idioma da interface",
   "loading": "Carregando os dados dos plugins…",
-  "loading.fail": "Falha ao carregar: {msg} (atualize a página ou clique em \"Autoteste\" no canto superior direito para checar a rede)",
+  "loading.fail": "Falha ao carregar: {msg} (atualize a página ou clique em “Autoteste” no canto inferior direito para checar a rede)",
   "risk.ok": "Entendi",
   "step.device": "Escolha o modelo",
   "step.device.hint": "Modelos em cinza já têm suporte na arquitetura, mas ainda não estão disponíveis. Clique para saber mais",
@@ -956,7 +960,6 @@
   "bar.capacity.title": "Estimativa aproximada, apenas como referência",
   "btn.download": "Baixar o .config",
   "btn.download.busy": "Gerando…",
-  "btn.download.fail": "Falha ao gerar: {msg} (clique em \"Autoteste\" no canto superior direito para investigar)",
   "btn.submit": "Enviar para compilar na nuvem",
   "drawer.title": "Lista de plugins marcados",
   "drawer.empty": "Nenhum plugin marcado ainda. Você também pode compilar sem marcar nada e ficar com um firmware limpo.",
@@ -1112,7 +1115,9 @@
   "submit.existing.title": "Usar uma configuração existente",
   "submit.existing.desc": "Escolha um .config, config.buildinfo ou JSON de solicitação antigo. A página identificará o dispositivo, restaurará as escolhas e voltará aqui.",
   "submit.download.title": "Baixar apenas o .config",
-  "submit.download.desc": "Salva a configuração completa atual sem abrir o GitHub nem iniciar uma compilação na nuvem."
+  "submit.download.desc": "Salva a configuração completa atual sem abrir o GitHub nem iniciar uma compilação na nuvem.",
+  "generation.error.title": "Falha ao gerar",
+  "generation.error.hint": "Clique em “Autoteste” no canto inferior direito para investigar."
  },
  "ja": {
   "app.title": "OpenWrt ファームウェアのオンラインカスタマイズ",
@@ -1127,7 +1132,7 @@
   "theme.dark": "テーマ:ダーク(クリックでシステム連動へ)",
   "lang.label": "表示言語",
   "loading": "プラグインデータを読み込み中…",
-  "loading.fail": "読み込みに失敗しました:{msg}(再読み込みするか、右上の「自己診断」でネットワークを確認してください)",
+  "loading.fail": "読み込みに失敗しました:{msg}(再読み込みするか、右下の「自己診断」でネットワークを確認してください)",
   "risk.ok": "了解しました",
   "step.device": "機種を選択",
   "step.device.hint": "グレー表示の機種は実装済みですが未開放です。クリックすると説明が表示されます",
@@ -1179,7 +1184,6 @@
   "bar.capacity.title": "容量は概算です。参考程度にご覧ください",
   "btn.download": ".config をダウンロード",
   "btn.download.busy": "生成中…",
-  "btn.download.fail": "生成に失敗しました:{msg}(右上の「自己診断」で確認できます)",
   "btn.submit": "クラウドビルドを依頼",
   "drawer.title": "選択中のプラグイン一覧",
   "drawer.empty": "まだプラグインを選んでいません。何も選ばずにビルドして、素の状態のファームウェアを作ることもできます。",
@@ -1335,7 +1339,9 @@
   "submit.existing.title": "既存の設定を使用",
   "submit.existing.desc": ".config、config.buildinfo、または以前のリクエスト JSON を選択します。ページが機種を識別して選択を復元し、この確認画面に戻ります。",
   "submit.download.title": ".config のみダウンロード",
-  "submit.download.desc": "GitHub を開かずクラウドビルドも開始せず、現在の完全な設定だけを保存します。"
+  "submit.download.desc": "GitHub を開かずクラウドビルドも開始せず、現在の完全な設定だけを保存します。",
+  "generation.error.title": "生成に失敗しました",
+  "generation.error.hint": "右下の「自己診断」で確認できます。"
  },
  "ko": {
   "app.title": "OpenWrt 펌웨어 온라인 커스터마이징",
@@ -1350,7 +1356,7 @@
   "theme.dark": "테마: 다크(클릭하면 시스템 설정으로)",
   "lang.label": "표시 언어",
   "loading": "플러그인 데이터를 불러오는 중…",
-  "loading.fail": "불러오기 실패: {msg}(새로고침해 보거나 오른쪽 위 '자체 점검'으로 네트워크를 확인해요)",
+  "loading.fail": "불러오기 실패: {msg}(새로고침해 보거나 오른쪽 아래의 ‘자체 점검’으로 네트워크를 확인해요)",
   "risk.ok": "알겠어요",
   "step.device": "기기 선택",
   "step.device.hint": "회색 기기는 구조상 지원되지만 아직 선택할 수 없습니다. 클릭하여 설명 보기",
@@ -1402,7 +1408,6 @@
   "bar.capacity.title": "대략적인 추정치라 참고용이에요",
   "btn.download": ".config 다운로드",
   "btn.download.busy": "생성 중…",
-  "btn.download.fail": "생성 실패: {msg}(오른쪽 위 '자체 점검'으로 확인할 수 있어요)",
   "btn.submit": "클라우드 빌드 요청",
   "drawer.title": "선택한 플러그인 목록",
   "drawer.empty": "아직 체크한 플러그인이 없어요. 안 골라도 그대로 빌드해서 플러그인 없는 깨끗한 펌웨어를 받을 수 있어요.",
@@ -1558,7 +1563,9 @@
   "submit.existing.title": "기존 설정 사용",
   "submit.existing.desc": ".config, config.buildinfo 또는 이전 요청 JSON을 선택하세요. 페이지가 기기를 식별하고 선택 항목을 복원한 뒤 이 확인 화면으로 돌아옵니다.",
   "submit.download.title": ".config만 다운로드",
-  "submit.download.desc": "GitHub를 열거나 클라우드 빌드를 시작하지 않고 현재 전체 설정만 저장합니다."
+  "submit.download.desc": "GitHub를 열거나 클라우드 빌드를 시작하지 않고 현재 전체 설정만 저장합니다.",
+  "generation.error.title": "생성 실패",
+  "generation.error.hint": "오른쪽 아래의 ‘자체 점검’으로 확인할 수 있어요."
  },
  "de": {
   "app.title": "OpenWrt-Firmware online konfigurieren",
@@ -1573,7 +1580,7 @@
   "theme.dark": "Design: Dunkel (Klick für Systemvorgabe)",
   "lang.label": "Sprache der Oberfläche",
   "loading": "Paketdaten werden geladen…",
-  "loading.fail": "Laden fehlgeschlagen: {msg} (bitte neu laden oder oben rechts \"Selbsttest\" zur Netzwerkdiagnose)",
+  "loading.fail": "Laden fehlgeschlagen: {msg} (bitte neu laden oder unten rechts „Selbsttest“ zur Netzwerkdiagnose verwenden)",
   "risk.ok": "Verstanden",
   "step.device": "Modell wählen",
   "step.device.hint": "Graue Modelle sind architekturseitig bereits unterstützt, aber noch nicht freigegeben – klicken Sie darauf für Details.",
@@ -1625,7 +1632,6 @@
   "bar.capacity.title": "Grobe Schätzung, nur als Richtwert",
   "btn.download": ".config herunterladen",
   "btn.download.busy": "Wird erstellt…",
-  "btn.download.fail": "Erstellen fehlgeschlagen: {msg} (oben rechts \"Selbsttest\" zur Diagnose)",
   "btn.submit": "Cloud-Build starten",
   "drawer.title": "Liste der gewählten Pakete",
   "drawer.empty": "Noch keine Pakete gewählt. Sie können auch ohne Auswahl bauen und erhalten eine reine Firmware.",
@@ -1781,7 +1787,9 @@
   "submit.existing.title": "Vorhandene Konfiguration verwenden",
   "submit.existing.desc": "Wähle eine .config, config.buildinfo oder eine ältere Anfrage-JSON. Die Seite erkennt das Gerät, stellt die Auswahl wieder her und kehrt hierher zurück.",
   "submit.download.title": "Nur .config herunterladen",
-  "submit.download.desc": "Speichert die vollständige aktuelle Konfiguration, ohne GitHub zu öffnen oder einen Cloud-Build zu starten."
+  "submit.download.desc": "Speichert die vollständige aktuelle Konfiguration, ohne GitHub zu öffnen oder einen Cloud-Build zu starten.",
+  "generation.error.title": "Erstellen fehlgeschlagen",
+  "generation.error.hint": "Unten rechts mit „Selbsttest“ prüfen."
  },
  "fr": {
   "app.title": "Firmware OpenWrt personnalisé en ligne",
@@ -1796,7 +1804,7 @@
   "theme.dark": "Thème : sombre (cliquez pour suivre le système)",
   "lang.label": "Langue de l'interface",
   "loading": "Chargement des données des plugins…",
-  "loading.fail": "Échec du chargement : {msg} (actualisez la page, ou cliquez sur « Diagnostic » en haut à droite pour tester le réseau)",
+  "loading.fail": "Échec du chargement : {msg} (actualisez la page, ou utilisez « Diagnostic » en bas à droite pour tester le réseau)",
   "risk.ok": "Compris",
   "step.device": "Choisir le modèle",
   "step.device.hint": "Les modèles grisés sont pris en charge par l'architecture, mais pas encore disponibles. Cliquez dessus pour en savoir plus.",
@@ -1848,7 +1856,6 @@
   "bar.capacity.title": "Estimation approximative, à titre indicatif",
   "btn.download": "Télécharger .config",
   "btn.download.busy": "Génération…",
-  "btn.download.fail": "Échec de la génération : {msg} (cliquez sur « Diagnostic » en haut à droite pour investiguer)",
   "btn.submit": "Lancer la compilation cloud",
   "drawer.title": "Liste des plugins sélectionnés",
   "drawer.empty": "Aucun plugin coché pour l'instant. Vous pouvez compiler sans rien cocher et obtenir un firmware épuré.",
@@ -2004,7 +2011,9 @@
   "submit.existing.title": "Utiliser une configuration existante",
   "submit.existing.desc": "Choisissez un .config, config.buildinfo ou un ancien JSON de requête. La page identifiera l’appareil, restaurera les choix et reviendra ici.",
   "submit.download.title": "Télécharger uniquement le .config",
-  "submit.download.desc": "Enregistre la configuration complète actuelle sans ouvrir GitHub ni lancer de compilation cloud."
+  "submit.download.desc": "Enregistre la configuration complète actuelle sans ouvrir GitHub ni lancer de compilation cloud.",
+  "generation.error.title": "Échec de la génération",
+  "generation.error.hint": "Utilisez « Diagnostic » en bas à droite pour rechercher la cause."
  },
  "vi": {
   "app.title": "Tùy chỉnh firmware OpenWrt trực tuyến",
@@ -2019,7 +2028,7 @@
   "theme.dark": "Chủ đề: tối (nhấn để chuyển về theo hệ thống)",
   "lang.label": "Ngôn ngữ giao diện",
   "loading": "Đang tải dữ liệu plugin…",
-  "loading.fail": "Tải thất bại: {msg} (hãy tải lại trang, hoặc nhấn \"Tự kiểm tra\" ở góc trên phải để kiểm tra mạng)",
+  "loading.fail": "Tải thất bại: {msg} (hãy tải lại trang, hoặc nhấn “Tự kiểm tra” ở góc dưới bên phải để kiểm tra mạng)",
   "risk.ok": "Đã hiểu",
   "step.device": "Chọn thiết bị",
   "step.device.hint": "Thiết bị xám đã hỗ trợ về mặt kiến trúc nhưng chưa mở · nhấn vào để xem giải thích",
@@ -2071,7 +2080,6 @@
   "bar.capacity.title": "Ước lượng dung lượng, chỉ để tham khảo",
   "btn.download": "Tải .config",
   "btn.download.busy": "Đang tạo…",
-  "btn.download.fail": "Tạo thất bại: {msg} (có thể nhấn \"Tự kiểm tra\" ở góc trên phải để kiểm tra)",
   "btn.submit": "Gửi yêu cầu biên dịch cloud",
   "drawer.title": "Danh sách plugin đã chọn",
   "drawer.empty": "Chưa chọn plugin nào. Không chọn gì vẫn biên dịch được, bạn sẽ có một firmware sạch, không kèm plugin.",
@@ -2227,6 +2235,8 @@
   "submit.existing.title": "Dùng cấu hình có sẵn",
   "submit.existing.desc": "Chọn .config, config.buildinfo hoặc JSON yêu cầu cũ. Trang sẽ nhận diện thiết bị, khôi phục lựa chọn rồi quay lại màn hình xác nhận này.",
   "submit.download.title": "Chỉ tải .config",
-  "submit.download.desc": "Chỉ lưu cấu hình đầy đủ hiện tại, không mở GitHub và không bắt đầu biên dịch đám mây."
+  "submit.download.desc": "Chỉ lưu cấu hình đầy đủ hiện tại, không mở GitHub và không bắt đầu biên dịch đám mây.",
+  "generation.error.title": "Tạo thất bại",
+  "generation.error.hint": "Nhấn “Tự kiểm tra” ở góc dưới bên phải để kiểm tra."
  }
 }

@@ -569,6 +569,19 @@ mirrorRootsOk
   assetVersionOk
     ? ok('前端 CSS/JS 与动态 Catalog 模块查询版本均和内容指纹一致')
     : bad('frontend asset cache bust', 'index.html 或 app.js 的静态/动态资源查询版本未按内容指纹更新');
+  const browserGenerationContract =
+    !js.includes('function assertCatalogConfiguration(') &&
+    !js.includes('assertCatalogConfiguration(config)') &&
+    !js.includes("alert(t('btn.download.fail'") &&
+    js.includes('function showGenerationError(error)') &&
+    js.includes("openModal(t('generation.error.title'))") &&
+    js.includes("hint.textContent = t('generation.error.hint')") &&
+    css.includes('.modal.generation-error') &&
+    css.includes('.generation-error-list') &&
+    css.includes('.generation-error-item');
+  browserGenerationContract
+    ? ok('browser generation trusts the loaded config and uses the themed error dialog')
+    : bad('browser generation boundary', 'whole-config Catalog veto or native generation alert returned, or the themed dialog is incomplete');
   const catalogModulePackage = JSON.parse(readFileSync(
     join(ROOT, 'site', 'wrt', 'lib', 'package.json'), 'utf8'));
   const catalogBrowserModuleContract = catalogModulePackage.type === 'module' &&

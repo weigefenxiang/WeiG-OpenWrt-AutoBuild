@@ -13,7 +13,7 @@
   "theme.dark": "主题:深色(点击切跟随系统)",
   "lang.label": "界面语言",
   "loading": "正在加载插件数据…",
-  "loading.fail": "加载失败:{msg}(请刷新重试,或点右上角\"自检\"排查网络)",
+  "loading.fail": "加载失败:{msg}(请刷新重试,或点右下角\"自检\"排查网络)",
   "risk.q0": "⚠️刷机前三问:",
   "risk.q1": "① 我的路由器真是这个型号吗?",
   "risk.q2": "② 固件选对了吗?",
@@ -72,7 +72,6 @@
   "btn.download": "下载 .config",
   "btn.import": "加载配置",
   "btn.download.busy": "生成中…",
-  "btn.download.fail": "生成失败:{msg}(可点右上角\"自检\"排查)",
   "btn.submit": "提交云编译",
   "drawer.title": "已选插件清单",
   "drawer.empty": "还没有勾选任何插件。不勾也可以直接编译,得到一个纯净固件。",
@@ -221,6 +220,8 @@
   "font.label": "字号",
   "font.reset": "重置",
   "warn.dnsmasqFull": "⚠️ 路由器唯一的 DNS/DHCP 服务:取消内置且不补装基础版 dnsmasq,内网设备将拿不到 IP、无法上网;多数魔法插件强依赖完整版",
-  "warn.blockMount": "⚠️ 取消后 U 盘不再自动挂载;不用 USB 存储可放心取消"
+  "warn.blockMount": "⚠️ 取消后 U 盘不再自动挂载;不用 USB 存储可放心取消",
+  "generation.error.title": "生成失败",
+  "generation.error.hint": "可点右下角“自检”排查"
  }
 }
