@@ -6,7 +6,7 @@
 <meta name="description" data-i18n="app.desc" content="OpenWrt 固件在线定制:选源码、勾插件,GitHub Actions 云编译,免费自取">
 <title>Wei.G · OpenWrt 固件在线定制</title>
 <link rel="icon" href="Wei.G.ico">
-<link rel="stylesheet" href="app.css?v=0ae8d7fe93">
+<link rel="stylesheet" href="app.css?v=ef927efb8d">
 </head>
 <body>
 <header class="site-header">
@@ -92,26 +92,36 @@
             <button class="catalog-copy-diagnostics" id="catalogCopyDiagnostics" type="button">Copy diagnostics</button>
           </div>
         </div>
-        <section class="build-contract" id="buildContract" hidden aria-live="polite">
-          <div class="build-contract-head">
-            <button class="build-contract-toggle" id="buildContractToggle" type="button"
-              aria-expanded="false" aria-controls="buildContractBody">
-              <strong id="buildContractTitle">Current build contract</strong>
-              <span class="hint" id="buildContractCatalog"></span>
-              <span class="build-contract-chevron" aria-hidden="true">⌄</span>
-            </button>
-          </div>
-          <div class="build-contract-body" id="buildContractBody" hidden>
-            <div class="build-contract-grid" id="buildContractGrid"></div>
-            <div class="build-contract-list" id="buildContractProfilePackages"></div>
-            <div class="build-contract-list" id="buildContractSelection"></div>
-          </div>
-        </section>
-        <div class="catalog-locator">
-          <div class="catalog-locator-row">
+        <div class="catalog-overview-row">
+          <div class="catalog-locator">
             <input type="search" id="catalogLocator" autocomplete="off"
-              placeholder="Search source, branch, target, menu or package"
-              aria-label="Search source, branch, target, menu or package">
+              placeholder="Search Source, Branch, Target System, Subtarget or Target Profile"
+              aria-label="Search Source, Branch, Target System, Subtarget or Target Profile">
+            <div class="catalog-locator-results" id="catalogLocatorResults" hidden></div>
+          </div>
+          <section class="build-contract" id="buildContract" hidden aria-live="polite">
+            <div class="build-contract-head">
+              <button class="build-contract-toggle" id="buildContractToggle" type="button"
+                aria-expanded="false" aria-controls="buildContractBody">
+                <strong id="buildContractTitle">Current build contract</strong>
+                <span class="hint" id="buildContractCatalog"></span>
+                <span class="build-contract-chevron" aria-hidden="true">⌄</span>
+              </button>
+            </div>
+            <div class="build-contract-body" id="buildContractBody" hidden>
+              <div class="build-contract-grid" id="buildContractGrid"></div>
+              <div class="build-contract-list" id="buildContractProfilePackages"></div>
+              <div class="build-contract-list" id="buildContractSelection"></div>
+            </div>
+          </section>
+        </div>
+        <div class="menuconfig-box" id="menuconfigBox" hidden>
+          <div class="catalog-feature-row">
+            <button class="menuconfig-toggle" id="menuconfigToggle" type="button" aria-expanded="false" aria-controls="menuconfigBody">
+              <strong>Advanced menuconfig</strong>
+              <span class="hint" id="menuconfigStatus"></span>
+              <span class="menuconfig-chevron" aria-hidden="true">⌄</span>
+            </button>
             <label class="minimum-boot-switch">
               <input type="checkbox" id="minimumBootToggle" checked>
               <span id="minimumBootLabel">Recommended</span>
@@ -122,14 +132,6 @@
               <span id="defconfigLabel">Defconfig</span>
             </label>
           </div>
-          <div class="catalog-locator-results" id="catalogLocatorResults" hidden></div>
-        </div>
-        <div class="menuconfig-box" id="menuconfigBox" hidden>
-          <button class="menuconfig-toggle" id="menuconfigToggle" type="button" aria-expanded="false" aria-controls="menuconfigBody">
-            <strong>Advanced menuconfig</strong>
-            <span class="hint" id="menuconfigStatus"></span>
-            <span class="menuconfig-chevron" aria-hidden="true">⌄</span>
-          </button>
           <div id="menuconfigBody" hidden>
             <div class="import-workspace" id="importWorkspace" hidden>
               <div class="import-summary">
@@ -143,7 +145,7 @@
                 <div class="menuconfig-toolbar">
                   <button class="menuconfig-back" id="menuconfigBack" type="button" hidden>←</button>
                   <nav class="menuconfig-breadcrumb" id="menuconfigPanelTitle" aria-label="Menu path"></nav>
-                  <input type="search" id="menuconfigSearch" placeholder="Search option / symbol">
+                  <input type="search" id="menuconfigSearch" placeholder="Search option name">
                   <label title="Selected only"><input type="checkbox" id="menuconfigSelectedOnly"> Selected only</label>
                   <label class="menuconfig-origin-filter-label" title="Filter by configuration origin">
                     <span>Origin</span>
@@ -232,14 +234,16 @@
           <input type="text" id="lanipBox" value="192.168.1.1" inputmode="decimal" autocapitalize="off" autocorrect="off">
         </div>
         <div>
+          <label class="field-label" for="rootpwBox" data-i18n="rootpw.label"></label>
+          <input type="text" id="rootpwBox" maxlength="32" autocapitalize="off" autocorrect="off" autocomplete="off">
+        </div>
+        <div>
           <label class="field-label" for="tagBox" data-i18n="tag.label"></label>
           <input type="text" id="tagBox" maxlength="24" data-i18n-ph="tag.placeholder">
         </div>
       </div>
       <p class="hint" data-i18n="lanip.hint"></p>
       <p class="hint" id="loginInfo"></p>
-      <label class="field-label" for="rootpwBox" data-i18n="rootpw.label" style="margin-top:10px"></label>
-      <input type="text" id="rootpwBox" maxlength="32" autocapitalize="off" autocorrect="off" autocomplete="off">
       <p class="hint rootpw-warning"><strong data-i18n="rootpw.public">⚠️ 提交内容公开可见,密码公开！！</strong><span data-i18n="rootpw.hint">临时登录密码,刷机后必须立即修改! (lede 源 填 @empty 清成空密码）</span></p>
       <div class="firmware-settings">
         <label><span data-i18n="fw.timezone">时区</span><span class="timezone-combo" id="timezoneCombo"><input type="search" id="timezoneBox" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="timezoneMenu" autocomplete="off" spellcheck="false"><span class="timezone-menu" id="timezoneMenu" role="listbox" hidden></span></span></label>
@@ -315,6 +319,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <noscript><p class="wrap" style="padding:2rem 0">本页面需要启用 JavaScript 才能使用。/ JavaScript is required.</p></noscript>
-<script src="app.js?v=116b08c5b5"></script>
+<script src="app.js?v=c3f1a045b0"></script>
 </body>
 </html>

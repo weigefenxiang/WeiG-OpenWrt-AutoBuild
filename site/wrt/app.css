@@ -249,7 +249,7 @@ input:focus-visible { border-color: var(--accent); }
 .target-picker .target-subtarget{flex:.8 1 140px}
 .target-picker .target-profile{flex:1.8 1 260px}
 .target-picker .target-extra{flex:1 1 180px}
-.build-contract{margin-top:12px;padding:12px;border:1px solid color-mix(in srgb,var(--accent) 38%,var(--border));border-radius:11px;background:color-mix(in srgb,var(--accent) 7%,var(--card));}
+.build-contract{margin:0;padding:12px;border:1px solid color-mix(in srgb,var(--accent) 38%,var(--border));border-radius:11px;background:color-mix(in srgb,var(--accent) 7%,var(--card));}
 .build-contract-head{min-width:0;color:var(--text)}
 .build-contract-toggle{display:flex;align-items:center;gap:10px;width:100%;min-width:0;padding:0;border:0;background:transparent;color:var(--text);text-align:left;cursor:pointer}
 .build-contract-toggle strong{font-size:15px;white-space:nowrap}
@@ -278,9 +278,9 @@ input:focus-visible { border-color: var(--accent); }
 .catalog-copy-diagnostics{min-height:34px;padding:0 10px;border:1px solid var(--border);border-radius:7px;background:var(--card2);color:var(--text);font:inherit;cursor:pointer}
 .catalog-copy-diagnostics:hover,.catalog-copy-diagnostics:focus-visible{border-color:var(--accent);color:var(--accent)}
 @keyframes catalog-spin{to{transform:rotate(360deg)}}
-.catalog-locator{position:relative;margin-top:10px}
-.catalog-locator-row{display:flex;align-items:center;gap:10px}
-.catalog-locator-row>input{flex:1;min-width:0;height:42px;padding:0 12px;border:1px solid var(--border);border-radius:9px;background:var(--card);color:var(--text);font:inherit}
+.catalog-overview-row{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(360px,1.1fr);align-items:start;gap:10px;margin-top:10px}
+.catalog-locator{position:relative;min-width:0}
+.catalog-locator>input{width:100%;min-width:0;height:42px;padding:0 12px;border:1px solid var(--border);border-radius:9px;background:var(--card);color:var(--text);font:inherit}
 .minimum-boot-switch{display:flex;align-items:center;gap:7px;min-height:42px;padding:0 13px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:9px;background:color-mix(in srgb,var(--accent) 8%,var(--card));color:var(--text);font-weight:600;white-space:nowrap;cursor:pointer}
 .defconfig-switch{display:flex;align-items:center;gap:7px;min-height:42px;padding:0 12px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:9px;background:color-mix(in srgb,var(--accent) 8%,var(--card));color:var(--text);font-weight:600;white-space:nowrap;cursor:pointer}
 .recommended-config-btn{min-height:42px;padding:0 12px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:9px;background:var(--card2);color:var(--accent);font:inherit;font-weight:600;cursor:pointer}
@@ -293,18 +293,19 @@ input:focus-visible { border-color: var(--accent); }
 .catalog-locator-item small{color:var(--text3);font-size:12px}
 .target-picker label.target-single select{border-style:dashed;color:var(--text2)}
 .target-picker label.target-extra{grid-column:auto}
-.menuconfig-box{margin-top:14px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
-.menuconfig-toggle{display:flex;align-items:center;gap:10px;width:100%;padding:2px;border:0;background:transparent;color:var(--text);text-align:left;cursor:pointer}
+.menuconfig-box{margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+.catalog-feature-row{display:flex;align-items:center;gap:10px;min-width:0}
+.menuconfig-toggle{display:flex;flex:1 1 340px;align-items:center;gap:10px;min-width:0;min-height:42px;padding:0 10px;border:1px solid var(--border);border-radius:9px;background:var(--card2);color:var(--text);text-align:left;cursor:pointer}
 .menuconfig-toggle strong{flex:none;white-space:nowrap}.menuconfig-toggle .hint{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .menuconfig-toggle .hint{margin-left:auto}.menuconfig-chevron{color:var(--text3);transition:transform .15s}
 .menuconfig-toggle[aria-expanded=true] .menuconfig-chevron{transform:rotate(180deg)}
 .menuconfig-workspace{margin-top:12px;overflow:hidden;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--card2) 56%,var(--card))}
 .menuconfig-workspace-head{padding:0 10px 9px;border-bottom:1px solid var(--border);background:var(--card)}
 .menuconfig-scroll{max-height:clamp(280px,55vh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior:contain;scrollbar-gutter:stable;-webkit-overflow-scrolling:touch}
-.menuconfig-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}
+.menuconfig-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;margin-top:10px;overflow-x:auto;overflow-y:hidden;padding-bottom:2px}
 .menuconfig-back{width:34px;height:34px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);cursor:pointer}
 .menuconfig-back:disabled{opacity:.42;cursor:default}
-.menuconfig-breadcrumb{display:flex;min-width:0;max-width:100%;flex:1 1 420px;align-items:center;gap:5px;overflow:hidden;white-space:nowrap;font-size:clamp(12px,1.25vw,16px)}
+.menuconfig-breadcrumb{display:flex;min-width:110px;max-width:260px;flex:0 1 260px;align-items:center;gap:5px;overflow:hidden;white-space:nowrap;font-size:clamp(12px,1.1vw,15px)}
 .menuconfig-breadcrumb::-webkit-scrollbar{display:none}
 .menuconfig-breadcrumb-link{padding:2px 0;border:0;background:transparent;color:var(--accent-text);font:inherit;font-weight:700;cursor:pointer}
 .menuconfig-breadcrumb-link:hover,.menuconfig-breadcrumb-link:focus-visible{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
@@ -333,7 +334,7 @@ input:focus-visible { border-color: var(--accent); }
 .menuconfig-category-text{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .menuconfig-category-count{flex:none;padding-left:8px;color:var(--text3);font-weight:500}
 .menuconfig-panel{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
-.menuconfig-toolbar input[type=search]{flex:0 1 260px;min-width:140px;max-width:260px}
+.menuconfig-toolbar input[type=search]{flex:1 1 280px;min-width:180px;max-width:none}
 .menuconfig-state-help{flex:none;padding:6px 9px;border:1px solid color-mix(in srgb,var(--accent) 40%,var(--border));border-radius:8px;background:color-mix(in srgb,var(--accent) 7%,var(--card2));color:var(--accent-text);font-weight:700;white-space:nowrap;cursor:help}
 .menuconfig-state-help:hover,.menuconfig-state-help:focus-visible{border-color:var(--accent);color:var(--accent)}
 .menuconfig-choice{display:grid;grid-template-columns:minmax(220px,1fr) minmax(220px,360px);gap:12px;align-items:center;margin-bottom:6px;padding:9px 10px;border:1px solid color-mix(in srgb,var(--border) 78%,transparent);border-radius:8px;background:color-mix(in srgb,var(--card) 78%,var(--card2));color:var(--text);font-weight:600}
@@ -341,13 +342,10 @@ input:focus-visible { border-color: var(--accent); }
 .menuconfig-choice select{width:100%;min-width:0;padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text)}
 .menuconfig-option{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:12px;align-items:center;margin-bottom:6px;padding:9px 10px;border:1px solid color-mix(in srgb,var(--border) 78%,transparent);border-radius:8px;background:color-mix(in srgb,var(--card) 78%,var(--card2))}
 .menuconfig-option.has-children{border-left:2px solid color-mix(in srgb,var(--accent) 55%,transparent);padding-left:9px}
-.menuconfig-prompt{display:flex;min-width:0;align-items:baseline;gap:8px;overflow:visible}
-.menuconfig-option-name{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.menuconfig-prompt small{flex:none;max-width:46%;overflow:hidden;color:var(--text3);font-size:11.5px;white-space:nowrap;text-overflow:ellipsis}
 .menuconfig-option.package-option{grid-template-columns:minmax(0,1fr) auto}
-.menuconfig-package{display:grid;grid-template-columns:minmax(260px,1.5fr) minmax(140px,1fr);gap:14px;min-width:0;align-items:baseline}
-.menuconfig-package-name{min-width:0;overflow:hidden;font-weight:650;white-space:nowrap;text-overflow:ellipsis}
-.menuconfig-package-desc{overflow:hidden;color:var(--text2);white-space:nowrap;text-overflow:ellipsis}
+.menuconfig-option-summary{display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden}
+.menuconfig-option-label{display:block;min-width:0;overflow:hidden;font-weight:650;white-space:nowrap;text-overflow:ellipsis}
+.menuconfig-option-label.menu-translation{position:relative;padding-right:31px}
 .menuconfig-option-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px}
 .kconfig-tri{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
 .kconfig-tri button{min-width:34px;padding:5px 8px;border:0;border-right:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer}
@@ -373,8 +371,9 @@ input:focus-visible { border-color: var(--accent); }
 .import-unknown-actions button,.menuconfig-restore{padding:5px 8px;border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--text2);cursor:pointer}
 .import-unknown-actions button:hover,.menuconfig-restore:hover{border-color:var(--accent);color:var(--accent)}
 @media(max-width:640px){
-  .catalog-locator-row{align-items:stretch;flex-wrap:wrap}
-  .catalog-locator-row>input{flex:1 1 100%}
+  .catalog-overview-row{grid-template-columns:1fr}
+  .catalog-feature-row{align-items:stretch;flex-wrap:wrap}
+  .menuconfig-toggle{flex:1 1 100%}
   .minimum-boot-switch{flex:0 0 auto;min-height:38px}
   .defconfig-switch{flex:0 0 auto;min-height:38px}
   .recommended-config-btn{min-height:38px}
@@ -399,15 +398,9 @@ input:focus-visible { border-color: var(--accent); }
   .menuconfig-option{grid-template-columns:minmax(0,1fr) auto;gap:7px}
   .menuconfig-option-actions{justify-content:flex-end}
   .menuconfig-option-actions>input{width:100%;max-width:none}
-  .menuconfig-prompt{position:relative;display:block;min-width:0}
-  .menuconfig-option-name{display:-webkit-box;overflow:hidden;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}
-  .menuconfig-prompt small{display:none}
   .menuconfig-option.package-option{align-items:stretch}
-  .menuconfig-package{position:relative;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,auto);gap:3px;align-content:center;min-width:0}
-  .menuconfig-package-name{display:block;min-width:0;overflow:hidden;font-size:15.5px;line-height:1.3;white-space:nowrap;text-overflow:ellipsis}
-  .menuconfig-package-desc{position:relative;display:-webkit-box;min-width:0;max-height:2.7em;overflow:hidden;line-height:1.35;white-space:normal;text-overflow:ellipsis;-webkit-box-orient:vertical;-webkit-line-clamp:2}
-  .menuconfig-prompt.menu-translation,.menuconfig-package.menu-translation,.menuconfig-package-desc.menu-translation,.menuconfig-choice-text.menu-translation{padding-right:31px}
-  .menuconfig-prompt>.menu-translation-chip,.menuconfig-package>.menu-translation-chip,.menuconfig-package-desc>.menu-translation-chip,.menuconfig-choice-text>.menu-translation-chip{position:absolute;right:0;top:50%;transform:translateY(-50%)}
+  .menuconfig-option-label.menu-translation,.menuconfig-choice-text.menu-translation{padding-right:31px}
+  .menuconfig-option-label>.menu-translation-chip,.menuconfig-choice-text>.menu-translation-chip{position:absolute;right:0;top:50%;transform:translateY(-50%)}
   .kconfig-tri button{min-width:31px;padding-inline:6px}
   html:not([lang=en]) .menu-translation-chip{display:inline-flex;flex:none;align-items:center;justify-content:center;min-width:25px;height:23px;padding:0 5px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--border));border-radius:6px;background:color-mix(in srgb,var(--accent) 8%,var(--card2));color:var(--accent);font-size:12px;font-weight:700;line-height:1}
   .menu-tooltip{max-height:min(42vh,280px);overflow:auto}
@@ -434,13 +427,10 @@ input:focus-visible { border-color: var(--accent); }
 .modal.recommended-config{width:min(920px,calc(100vw - 48px));max-width:none;max-height:min(78vh,720px);display:flex;flex-direction:column;overflow:hidden}
 .modal.recommended-config .modal-body{min-height:0;max-height:calc(min(78vh,720px) - 58px);overflow-y:auto;overscroll-behavior:contain}
 .modal.recommended-config .menuconfig-option{grid-template-columns:minmax(0,1fr) auto;gap:16px}
-.modal.recommended-config .menuconfig-package{grid-template-columns:minmax(210px,1fr) minmax(0,1.5fr);gap:18px}
-.modal.recommended-config .menuconfig-package-name,.modal.recommended-config .menuconfig-package-desc{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .modal.recommended-config .menuconfig-option-actions{flex:none;min-width:max-content;margin-left:4px}
 @media(max-width:640px){
   .modal.recommended-config{width:calc(100vw - 22px);max-width:none;max-height:84vh}
   .modal.recommended-config .modal-body{max-height:calc(84vh - 58px);padding:12px}
-  .modal.recommended-config .menuconfig-package{grid-template-columns:minmax(0,1fr);gap:3px}
 }
 .help-item { display: flex; gap: 12px; align-items: flex-start; margin: 0 0 16px; font-size: 16px; line-height: 1.9; }
 .help-item:last-child { margin-bottom: 4px; }
@@ -552,7 +542,7 @@ input:focus-visible { border-color: var(--accent); }
 .empty-hint { padding: 14px; }
 
 .field-label { display: block; font-size: 15px; color: var(--text2); margin: 0 0 4px; }
-.submit-primary-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.submit-primary-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .rootpw-warning { display: flex; flex-wrap: wrap; gap: 4px 10px; }
 .rootpw-warning strong { color: #dc2626; }
 .rootpw-warning span { color: #b45309; }
@@ -807,11 +797,11 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
   .menuconfig-toggle{align-items:flex-start;flex-wrap:wrap;gap:3px 8px}
   .menuconfig-toggle strong{flex:1 1 calc(100% - 38px);min-width:0;overflow:hidden;text-overflow:ellipsis}
   .menuconfig-toggle .hint{order:3;flex:1 1 100%;margin-left:0;white-space:nowrap}
-  .menuconfig-toolbar{align-items:stretch}
-  .menuconfig-breadcrumb{order:1;flex:1 1 calc(100% - 44px);max-width:calc(100% - 44px);overflow-x:auto;overflow-y:hidden;font-size:15px}
-  .menuconfig-toolbar input[type="search"]{order:2;flex:1 1 100%;max-width:none}
-  .menuconfig-toolbar>label{order:3;flex:1 1 auto;min-width:0}
-  .menuconfig-state-help{order:3;flex:none}
+  .menuconfig-toolbar{align-items:center;overflow-x:auto}
+  .menuconfig-breadcrumb{flex:0 0 150px;max-width:150px;overflow-x:hidden;font-size:14px}
+  .menuconfig-toolbar input[type="search"]{flex:0 0 190px;max-width:190px}
+  .menuconfig-toolbar>label{flex:0 0 auto;min-width:0}
+  .menuconfig-state-help{flex:none}
   .plugin-grid { grid-template-columns: 1fr; }
   .legend,.toolbar,.group{margin-right:52px}
   .legend{align-items:flex-start;padding-right:10px}
@@ -850,7 +840,6 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
   .step h2 { font-size: 15px; }
   .menuconfig-toggle strong{font-size:14px}
   .menuconfig-toggle .hint{font-size:12px}
-  .menuconfig-package-name{font-size:15px}
   .menuconfig-option-actions{gap:4px}
   .kconfig-tri button{min-width:29px;padding-inline:5px}
   .pill { font-size: 13px; padding: 6px 12px; min-height: 38px; }
@@ -860,7 +849,6 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
   .text-btn { padding: 6px 10px; font-size: 12.5px; }
   .target-picker .target-field { flex-basis: 100%; }
   .menuconfig-option:has(input[type=text]),.menuconfig-option:has(input[type=number]){grid-template-columns:1fr}
-  .menuconfig-option:has(input[type=text]) .menuconfig-option-name,.menuconfig-option:has(input[type=number]) .menuconfig-option-name{-webkit-line-clamp:1}
   .menuconfig-option:has(input) .menuconfig-option-actions{justify-content:stretch}
   .menuconfig-option:has(input) .menuconfig-option-actions input{width:100%;max-width:none}
 }
@@ -906,6 +894,5 @@ body.dense .plugin-name.fit-s2 { font-size: 13px; }
 .font-reset { flex: none; }
 
 .hidden-package-option { border-left: 3px solid var(--warn); }
-.hidden-package-option .menuconfig-package-desc::before { content: "Hidden · "; color: var(--muted); }
 
 @media(max-width:560px){.catalog-load-details{grid-template-columns:1fr}.catalog-copy-diagnostics{width:100%}}

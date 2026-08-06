@@ -541,9 +541,10 @@ const tag = String(req.tag || '').replace(/[^\w一-龥-]/g, '').slice(0, 24) || 
 const cleanIdentity = (value) =>
   String(value || '').replace(/[^\w一-龥-]/g, '').slice(0, 24);
 const issueTitleRef = String(process.env.ISSUE_TITLE || '')
-  .match(/^\[build\]\s+([^\s·]+)(?:\s+·|\s*$)/)?.[1] || '';
+  .match(/^\[build\]\s+([^/\s·]+)/)?.[1] || '';
 const attachmentRef = requestAttachmentName.match(/^([A-Za-z0-9]+_[A-Za-z0-9]+)[.-]/)?.[1] || '';
-const buildRef = cleanIdentity(req.requestId || attachmentRef || issueTitleRef || tag) || tag;
+const requestRef = cleanIdentity(req.requestId || attachmentRef || issueTitleRef);
+const buildRef = requestRef ? `${requestRef}-${tag}` : tag;
 
 // 后台登录地址:仅内网 IPv4,非法即回落默认,防注入 / admin LAN IP: private IPv4 only, falls back to default — injection-safe
 const lanip = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/.test(String(req.lanip || ''))

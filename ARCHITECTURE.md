@@ -69,6 +69,16 @@ The page no longer loads the legacy device registry or public base configs. `dev
 An uploaded config waits for the matching source/branch catalog before restoring the Target and known menuconfig values. Uncatalogued symbols remain editable in a paged import workspace, while an unknown Target stays an explicit `custom-target` instead of silently falling back to the first catalog entry. Upstream English is authoritative; reviewed tables carry curated Applications in 11 languages, while the publish stage reuses content-keyed translations and incrementally translates menu levels, choices, and ordinary options. Missing locales fall back to English and remain visible in coverage reports; translation failures do not block catalog publication.
 ```
 
+## D102 页面控制与构建身份 / UI controls and build identity
+
+Catalog 顶部定位框与 Advanced 搜索是两条独立索引：前者只覆盖 Source、Branch、Target System、Subtarget、Target Profile，并位于“当前构建契约”左侧；后者只覆盖软件包/选项名称及其名称译文，不读取用途、长说明、路径或 CONFIG symbol。Advanced 位于推荐项左侧，每个普通选项只渲染一行 `名称（菜单路径）`，页面正文不显示 `CONFIG_` 索引；所有选项在悬浮、键盘聚焦或手机轻触时由统一弹层显示完整文字、当前语言译文和 `CONFIG_` 索引。未收录导入项也使用可读名称，索引只进入弹层。`Top level`、名称搜索、Selected only、Origin 和 `N/M/Y ?` 保持同一横向工具栏。提交设置按后台登录地址、初始密码、构建标识排列。
+
+The Catalog locator and Advanced search use separate indexes. The locator covers only Source, Branch, Target System, Subtarget, and Target Profile and sits to the left of Current build contract. Advanced indexes only package/option names and localized names, not usage, long help, paths, or CONFIG symbols. Advanced sits to the left of Recommended; each ordinary option is one `Name (menu path)` row and never renders its `CONFIG_` index inline. Every option exposes full text, the current-locale translation, and its `CONFIG_` index on hover, keyboard focus, or mobile tap. Uncatalogued imported rows also use readable labels and keep the index in the popup only. `Top level`, name search, Selected only, Origin, and `N/M/Y ?` remain in one horizontal toolbar. Submission fields are ordered as admin address, initial password, and build tag.
+
+选择 `Asia/Shanghai` 且用户未手动选择镜像时，前端从当前 Source 的中国内地镜像白名单中选择第一个可用项；设备清单与 Catalog 清单中的每个现行 Source 都必须至少有一个中国镜像。hanwckf 的 `openwrt-21.02` 兼容源继续复用 USTC/PKU 的 ImmortalWrt 镜像路径。Issue 标题把构建标识放在请求时间戳后，解析器生成 `请求时间戳-构建标识` 的 `build_ref`，因此 CONFIG、日志和固件 Artifact 共用该前缀。
+
+With `Asia/Shanghai`, and before an explicit mirror choice, the frontend selects the first available Mainland China mirror for the current Source; every active Source from both the device registry and Catalog index must expose at least one China mirror. The hanwckf `openwrt-21.02` compatibility source continues to reuse the USTC/PKU ImmortalWrt mirror paths. The Issue title places the build tag after the request timestamp, and the parser emits `request-stamp-build-tag` as `build_ref`, so CONFIG, log, and firmware Artifacts share that prefix.
+
 ## Catalog 选择状态 / Catalog selection state
 
 Catalog Target 页面把当前配置拆成四个语义层，而不是把所有 `y/m` 软件包都算作用户插件：

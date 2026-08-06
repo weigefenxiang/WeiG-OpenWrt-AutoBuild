@@ -474,14 +474,27 @@ JSON.stringify(minimumBootSource) === JSON.stringify(minimumBootPublic) &&
   ? ok(`推荐项预设:${minimumBootSource.items.length} 个可维护项目 + opkg + ${firewallCandidates.length} 个防火墙候选`)
   : bad('minimum-boot.json', '源文件/网页副本不一致、项目 ID/符号重复、opkg 或防火墙候选缺失');
 const mirrorIds = (packageMirrors.presets || []).map((preset) => preset.id);
+const menuCatalogIndex = JSON.parse(
+  readFileSync(join(ROOT, 'site', 'wrt', 'data', 'menuconfig-index.json'), 'utf8'));
+const currentSourceIds = [...new Set([
+  ...dev.devices.flatMap((device) => (device.sources || []).map((source) => source.id)),
+  ...(menuCatalogIndex.sources || []).map((source) => source.id),
+])].sort();
+const mainlandMirrorIds = new Set(['ustc', 'pku', 'tuna', 'bfsu']);
+const mainlandCoverage = currentSourceIds.every((sourceId) =>
+  packageMirrors.presets.some((preset) => mainlandMirrorIds.has(preset.id) && preset.roots?.[sourceId]));
+const mirrorById = new Map((packageMirrors.presets || []).map((preset) => [preset.id, preset]));
+const hanwckfMirrorContract =
+  mirrorById.get('ustc')?.roots?.hanwckf === 'mirrors.ustc.edu.cn/immortalwrt' &&
+  mirrorById.get('pku')?.roots?.hanwckf === 'mirrors.pku.edu.cn/immortalwrt';
 const mirrorRootsOk = packageMirrors.schema === 1 &&
   ['auto', 'ustc', 'tuna', 'bfsu', 'pku', 'official'].every((id) => mirrorIds.includes(id)) &&
-  new Set(mirrorIds).size === mirrorIds.length &&
+  new Set(mirrorIds).size === mirrorIds.length && mainlandCoverage && hanwckfMirrorContract &&
   packageMirrors.presets.every((preset) => preset.id === 'auto' ||
     Object.values(preset.roots || {}).every((root) => /^[A-Za-z0-9.-]+(?:\/[A-Za-z0-9._/-]+)?$/.test(root)));
 mirrorRootsOk
-  ? ok('软件源镜像:网页与 Actions 共用白名单，按源码过滤并在构建时校验分支路径')
-  : bad('package-mirrors.json', '镜像 ID、根路径或来源映射不符合安全格式');
+  ? ok(`软件源镜像:${currentSourceIds.join('/')} 均有中国内地镜像，网页与 Actions 共用白名单`)
+  : bad('package-mirrors.json', '镜像 ID、根路径、安全格式或现行源码的中国内地覆盖不完整');
   const html = readFileSync(join(ROOT, 'site', 'wrt', 'index.html'), 'utf8');
   const js = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
   const catalogLoaderJs = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.js'), 'utf8');
@@ -551,8 +564,7 @@ mirrorRootsOk
   const blogGuide = readFileSync(join(ROOT, 'docs-private', '003.weige-share-blog同步与推送.md'), 'utf8');
   const developerGuideZh = readFileSync(join(ROOT, 'docs', 'DEVELOPER.md'), 'utf8');
   const developerGuideEn = readFileSync(join(ROOT, 'docs', 'DEVELOPER.en.md'), 'utf8');
-  const catalogIndex = JSON.parse(
-    readFileSync(join(ROOT, 'site', 'wrt', 'data', 'menuconfig-index.json'), 'utf8'));
+  const catalogIndex = menuCatalogIndex;
   const assetHash = (name) => createHash('sha256')
     .update(readFileSync(join(ROOT, 'site', 'wrt', name), 'utf8').replace(/\r\n/g, '\n'))
     .digest('hex').slice(0, 10);
@@ -674,20 +686,46 @@ mirrorRootsOk
     js.includes("uiText('推荐项', '推薦項', 'Recommended')") &&
     js.includes('function openMinimumBootModal()') &&
     js.includes('useDefconfig: true') && js.includes('use_defconfig: state.useDefconfig') &&
-    js.includes('function renderMenuOption(option, showPath = false)') &&
+    js.includes('function renderMenuOption(option)') &&
     js.includes('function catalogSelectLock(option)') && js.includes('function catalogSelectLockValue(option, lockedBy)') &&
     js.includes(".filter((stateValue) => stateValue === 'n' || kconfigLevel(stateValue) <= maxLevel)") &&
     js.includes("'# recommended: '");
   recommendedUiContract
     ? ok('推荐项:英文源文案、可关闭配置弹窗与 Catalog 状态复用已接通')
     : bad('recommended UI', '推荐项命名、弹窗或 Catalog N/M/Y/锁定状态复用缺失');
+  const catalogLayoutContract = html.includes('class="catalog-overview-row"') &&
+    html.indexOf('id="catalogLocator"') < html.indexOf('id="buildContract"') &&
+    html.indexOf('id="menuconfigToggle"') < html.indexOf('id="minimumBootToggle"') &&
+    !js.includes("type: 'Menu'") && !js.includes("type: 'Option'") && !js.includes("type: 'Application'") &&
+    js.includes("`${packageName} ${option.prompt || ''} ${option.promptEn || ''} ${option.promptZh || ''} `") &&
+    !js.includes("`${option.usageEn || ''} ${option.usageZh || ''} `") &&
+    html.includes('id="menuconfigSearch"') && html.includes('placeholder="Search option name"') && css.includes('.menuconfig-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:nowrap') &&
+    js.includes("name.className = 'menuconfig-option-label'") &&
+    js.includes("name.textContent = path ? `${label} (${path})` : label") &&
+    js.includes("function menuOptionPopupText(element)") &&
+    js.includes("`${uiText('索引', '索引', 'Index')}: CONFIG_${element.dataset.symbol}`") &&
+    js.includes("if (optionLabel?.dataset.symbol) showMenuOptionTooltip(optionLabel)") &&
+    js.includes("if (optionLabel?.dataset.symbol && !matchMedia('(hover: none)').matches)") &&
+    js.includes("name.dataset.symbol = option.symbol") && js.includes('name.tabIndex = 0') &&
+    !js.includes("name.textContent = `CONFIG_${symbol}`") &&
+    !js.includes('menuconfig-package-desc') && !css.includes('.menuconfig-package-desc');
+  catalogLayoutContract
+    ? ok('Catalog UI:范围搜索、构建契约、Advanced/推荐项顺序、单行名称与工具栏契约已接通')
+    : bad('Catalog UI layout', '搜索范围、控件顺序、Advanced 单行显示或工具栏布局不符合约定');
+  const shanghaiOpkgContract = js.includes("const MAINLAND_PACKAGE_MIRRORS = ['ustc', 'pku', 'tuna', 'bfsu']") &&
+    js.includes("if (state.timezone !== 'Asia/Shanghai') return 'auto'") &&
+    js.includes('opkgSelectionExplicit = true') && mainlandCoverage;
+  shanghaiOpkgContract
+    ? ok('上海时区默认选择当前源码可用的中国内地 opkg 镜像，用户手选后不覆盖')
+    : bad('Shanghai opkg default', '上海时区默认镜像、用户显式选择保护或现行源码镜像覆盖缺失');
   const submitLayoutContract = html.includes('class="submit-primary-fields"') &&
-    html.indexOf('id="lanipBox"') < html.indexOf('id="tagBox"') &&
-    css.includes('.submit-primary-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }') &&
+    html.indexOf('id="lanipBox"') < html.indexOf('id="rootpwBox"') &&
+    html.indexOf('id="rootpwBox"') < html.indexOf('id="tagBox"') &&
+    css.includes('.submit-primary-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }') &&
     css.includes('.submit-primary-fields { grid-template-columns: 1fr; }');
   submitLayoutContract
-    ? ok('提交设置:后台登录地址左侧、构建标识右侧，手机端自动纵向排列')
-    : bad('submit settings layout', '后台登录地址/构建标识的桌面或手机布局不符合约定');
+    ? ok('提交设置:后台登录地址、初始密码、构建标识依次排列，手机端自动纵向排列')
+    : bad('submit settings layout', '后台登录地址/初始密码/构建标识的顺序或响应式布局不符合约定');
   const submitGateContract = html.includes('id="submitBtn" data-i18n="btn.submit" disabled') &&
     js.includes('function submitReadiness()') &&
     js.includes('function updateSubmitGate()') &&
@@ -1034,7 +1072,7 @@ mirrorRootsOk
   const firmwareSettingsContract = workflow.includes('ISSUE_TITLE: ${{ github.event.issue.title }}') &&
     workflow.includes('Verify firmware settings / 核验固件设置') &&
     workflow.includes('firmware-settings.txt') &&
-    requestParser.includes('const buildRef =') &&
+    requestParser.includes('const buildRef = requestRef ? `${requestRef}-${tag}` : tag;') &&
     requestParser.includes('固件设置快照不一致') &&
     requestParser.includes('CONFIG_PACKAGE_${theme}=y') &&
     genericDiy.includes('files/etc/weig-build-info') &&
@@ -1166,10 +1204,17 @@ mirrorRootsOk
     js.includes("setCatalogLoadState('error', error, diagnostics)") &&
     js.includes("setCatalogLoadState('idle')") &&
     !js.includes('translation.usage, packageMeta') &&
-    js.includes("applyMenuTranslation(description, '', translation.usage, true)") &&
-    js.includes('else if (!packageName && (translation.title || translation.usage))') &&
-    js.includes('clippedDescription.dataset.translation') &&
-    js.includes("clippedDescription.scrollWidth > clippedDescription.clientWidth + 1") &&
+    js.includes('function renderMenuOption(option)') &&
+    js.includes("name.className = 'menuconfig-option-label'") &&
+    js.includes("name.textContent = path ? `${label} (${path})` : label") &&
+    js.includes('applyMenuTranslation(name, translation.title, translation.usage, true)') &&
+    js.includes('function showMenuOptionTooltip(element)') &&
+    js.includes('menuOptionPopupText(element)') &&
+    js.includes('element.dataset.fullText') &&
+    !js.includes("menuOptionLabel(option) || option.symbol") &&
+    js.includes('select.title = select.selectedOptions[0]?.title ||') &&
+    !js.includes('clippedDescription') &&
+    !js.includes('function renderMenuOption(option, showPath') &&
     js.includes("'N: Disabled; not built.") &&
     js.includes('function openMenuChildren') &&
     js.includes('function renderMenuLeaf') &&
@@ -1186,14 +1231,15 @@ mirrorRootsOk
     css.includes('.menu-fit-two-line') &&
     css.includes('html:not([lang=en]) .menu-translation-chip') &&
     css.includes('.menuconfig-grid{grid-template-columns:minmax(0,1fr)}') &&
-    css.includes('-webkit-line-clamp:2') &&
-    css.includes('.menuconfig-prompt small{display:none}') &&
+    css.includes('.menuconfig-option-summary{display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden}') &&
+    css.includes('.menuconfig-option-label{display:block;min-width:0;overflow:hidden;font-weight:650;white-space:nowrap;text-overflow:ellipsis}') &&
+    css.includes('.menuconfig-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:nowrap') &&
+    !css.includes('.menuconfig-package-desc') &&
+    !css.includes('.menuconfig-prompt') && !css.includes('.menuconfig-option-name') &&
     css.includes('.menuconfig-choice') &&
     css.includes('.menuconfig-state-help') &&
     css.includes('.catalog-load-spinner') &&
     css.includes('@keyframes catalog-spin') &&
-    css.replace(/\s+/g, ' ').includes('grid-template-columns:minmax(260px,1.5fr) minmax(140px,1fr)') &&
-    css.includes('.menuconfig-package-name{min-width:0;overflow:hidden') &&
     css.includes('.menuconfig-child') &&
     js.includes('function fmtSize(mb)') &&
     js.includes('Math.floor(Math.log10(Math.abs(number)))') &&
@@ -1205,8 +1251,8 @@ mirrorRootsOk
     formatSizeContract(1023) === '0.999 GB' &&
     existsSync(join(ROOT, 'site', 'wrt', 'data', 'menuconfig-index.json'));
     menuconfigContract
-      ? ok('多源码 Catalog → 英文禁译文、手机单列/译文标签、滚动直显与可跳面包屑已接通')
-      : bad('menuconfig catalog contract', '动态 Target、英语译文门禁、手机单列/译文标签、面包屑或 choice 缺失');
+      ? ok('多源码 Catalog → 名称搜索、单行名称/路径、完整悬浮译文与可跳面包屑已接通')
+      : bad('menuconfig catalog contract', '动态 Target、名称搜索、单行名称/路径、悬浮译文、面包屑或 choice 缺失');
     const catalogSchema6PerformanceContract =
       catalogLoaderJs.includes('branch.assets?.core && branch.assets?.graph') &&
       catalogLoaderJs.includes('const [core, graph] = await Promise.all') &&
@@ -1349,7 +1395,7 @@ mirrorRootsOk
     js.includes('function selectedTargetProfileName') &&
     js.includes('function selectedTargetProfileLabel') &&
     js.includes('function requestTargetProfilePart') &&
-    js.includes("const title = '[build] ' + requestStamp + '/' + requestTargetProfilePart() + '/' + state.source.id + '/' + state.version.id + '/' + selectedTargetProfileName()") &&
+    js.includes("const title = '[build] ' + requestStamp + '/' + titleTag + '/' + requestTargetProfilePart() + '/' + state.source.id + '/' + state.version.id + '/' + selectedTargetProfileName()") &&
     js.includes("const filename = [requestStamp, requestTargetProfilePart(true), safeDownloadNamePart(state.source.id, 'source')");
   selfTestContract
     ? ok('网页自检使用 Catalog/上传配置与真实 .config 生成演算')

@@ -127,12 +127,17 @@ const MENU_UI_I18N = {
     de: 'Hauptmenü', fr: 'Menu principal', vi: 'Menu chính',
   },
   locator: {
-    'zh-CN': '搜索源码、分支、Target、菜单或插件', 'zh-TW': '搜尋原始碼、分支、Target、選單或外掛',
-    en: 'Search source, branch, target, menu or package', ru: 'Поиск источника, ветки, цели, меню или пакета',
-    es: 'Buscar fuente, rama, destino, menú o paquete', pt: 'Pesquisar fonte, ramo, destino, menu ou pacote',
-    ja: 'ソース、ブランチ、ターゲット、メニュー、パッケージを検索', ko: '소스, 브랜치, 대상, 메뉴 또는 패키지 검색',
-    de: 'Quelle, Branch, Ziel, Menü oder Paket suchen', fr: 'Rechercher source, branche, cible, menu ou paquet',
-    vi: 'Tìm nguồn, nhánh, đích, menu hoặc gói',
+    'zh-CN': '搜索 Source、Branch、Target System、Subtarget 或 Target Profile',
+    'zh-TW': '搜尋 Source、Branch、Target System、Subtarget 或 Target Profile',
+    en: 'Search Source, Branch, Target System, Subtarget or Target Profile',
+    ru: 'Поиск Source, Branch, Target System, Subtarget или Target Profile',
+    es: 'Buscar Source, Branch, Target System, Subtarget o Target Profile',
+    pt: 'Pesquisar Source, Branch, Target System, Subtarget ou Target Profile',
+    ja: 'Source、Branch、Target System、Subtarget、Target Profile を検索',
+    ko: 'Source, Branch, Target System, Subtarget 또는 Target Profile 검색',
+    de: 'Source, Branch, Target System, Subtarget oder Target Profile suchen',
+    fr: 'Rechercher Source, Branch, Target System, Subtarget ou Target Profile',
+    vi: 'Tìm Source, Branch, Target System, Subtarget hoặc Target Profile',
   },
   min2: {
     'zh-CN': '请输入至少 2 个字符', 'zh-TW': '請輸入至少 2 個字元', en: 'Type at least 2 characters',
@@ -178,12 +183,14 @@ const INITIAL_CATALOG_TARGET = {
   system: 'x86', subtarget: '64', profileSymbol: 'DEVICE_generic',
 };
 let catalogInitialTargetPending = true;
-const DATA_CACHE_VERSION = 'v20-catalog-selection-layers';
+const DATA_CACHE_VERSION = 'v21-d102-ui-layout';
 const NTP_PRESETS = {
   cn: ['ntp.aliyun.com', 'time1.cloud.tencent.com', 'cn.ntp.org.cn', 'cn.pool.ntp.org'],
   global: ['0.openwrt.pool.ntp.org', '1.openwrt.pool.ntp.org', '2.openwrt.pool.ntp.org', '3.openwrt.pool.ntp.org'],
   cloudflare: ['time.cloudflare.com', 'time.google.com', 'time.apple.com', 'pool.ntp.org'],
 };
+const MAINLAND_PACKAGE_MIRRORS = ['ustc', 'pku', 'tuna', 'bfsu'];
+let opkgSelectionExplicit = false;
 function mirrorPreset(id) {
   return (PACKAGE_MIRRORS?.presets || []).find((preset) => preset.id === id) || null;
 }
@@ -198,6 +205,10 @@ function packageMirrorEntries(sourceId = state.source?.id) {
   return (PACKAGE_MIRRORS?.presets || [])
     .filter((preset) => packageMirrorRoot(preset.id, sourceId))
     .map((preset) => [preset.id, preset.label?.[state.lang === 'zh-CN' ? 'zh-CN' : 'en'] || preset.label?.en || preset.id]);
+}
+function defaultPackageMirrorId(sourceId = state.source?.id) {
+  if (state.timezone !== 'Asia/Shanghai') return 'auto';
+  return MAINLAND_PACKAGE_MIRRORS.find((id) => packageMirrorRoot(id, sourceId)) || 'auto';
 }
 let PLUG_I18N = null;                  // 插件名/说明多语言表,非中文界面按需加载 / plugin name/desc i18n table, lazy-loaded for non-Chinese UIs
 let pluginDataPath = '';                  // 当前插件索引来源，避免跨设备误复用 / current plugin-index source; prevents cross-device cache reuse
@@ -935,7 +946,9 @@ function menuPathLabel(name) {
   return String(row.en || name || '').trim();
 }
 function menuOptionLabel(option) {
-  return String(option.promptEn || option.prompt || option.symbol || '').trim();
+  const prompt = String(option.promptEn || option.prompt || '').trim();
+  if (prompt) return prompt;
+  return String(option.symbol || '').replace(/^PACKAGE_/, '').replaceAll('_', ' ').trim();
 }
 function menuOptionTranslation(option) {
   if (option.symbol?.startsWith('PACKAGE_') && PLUGINS?.plugins && state.source) {
@@ -946,9 +959,9 @@ function menuOptionTranslation(option) {
       const row = PLUG_I18N?.plugins?.[plugin.id];
       const desc = state.lang === 'zh-CN' ? plugin.desc
         : state.lang === 'en' ? '' : row?.desc?.[state.lang] || '';
-      // Advanced menuconfig keeps the package symbol/name in its canonical form.
-      // Only the description gets a localized hover/mobile translation.
-      return { title: '', usage: desc };
+      const title = state.lang === 'zh-CN' ? plugin.name
+        : state.lang === 'en' ? '' : row?.name?.[state.lang] || '';
+      return { title, usage: desc };
     }
   }
   return {
@@ -974,6 +987,18 @@ function applyMenuTranslation(element, chinese, usageChinese = '', mobileChip = 
 function showMenuTooltip(element) {
   if (state.lang === 'en' || !element?.dataset.translation) return;
   showMenuPopup(element, element.dataset.translation);
+}
+function menuOptionPopupText(element) {
+  if (!element?.dataset.symbol) return '';
+  return [
+    element.dataset.fullText || element.textContent.trim(),
+    state.lang === 'en' ? '' : element.dataset.translation || '',
+    `${uiText('索引', '索引', 'Index')}: CONFIG_${element.dataset.symbol}`,
+  ].filter(Boolean).join('\n');
+}
+function showMenuOptionTooltip(element) {
+  const text = menuOptionPopupText(element);
+  if (text) showMenuPopup(element, text);
 }
 function showMenuHelp(element) {
   if (!element?.dataset.help) return;
@@ -1336,14 +1361,10 @@ function buildMenuIndexes(catalog) {
   catalogLocatorEntryCache = null;
   for (const option of menuSearchOptions) {
     menuOptionBySymbol.set(option.symbol, option);
+    const packageName = option.symbol.startsWith('PACKAGE_') ? option.symbol.slice(8) : '';
     indexSearchText(option,
-      `${option.prompt} ${option.promptEn || ''} ${option.promptZh || ''} ${option.symbol} ` +
-      `${option.usageEn || ''} ${option.usageZh || ''} ` +
-      `${Object.values(option.promptI18n || {}).join(' ')} ` +
-      `${Object.values(option.usageI18n || {}).join(' ')} ` +
-      `${(option.path || []).join(' ')} ${(option.path || []).map(menuPathLabel).join(' ')} ` +
-      `${option.hidden ? 'hidden generated packageinfo-only internal ' : ''}` +
-      `${(option.path || []).flatMap((name) => Object.values(menuLabelMeta(name).i18n || {})).join(' ')}`);
+      `${packageName} ${option.prompt || ''} ${option.promptEn || ''} ${option.promptZh || ''} ` +
+      `${Object.values(option.promptI18n || {}).join(' ')}`);
     if (option.hidden) continue;
     const path = option.path || [];
     addMenuIndex(menuExactPaths, menuPathKey(path), option);
@@ -2446,7 +2467,7 @@ function renderRecommendedBackend(item, option) {
   row.className = 'menuconfig-option package-option menuconfig-state-help';
   row.dataset.help = minimumBootHelp(item);
   const name = document.createElement('span');
-  name.className = 'menuconfig-package-name';
+  name.className = 'menuconfig-option-label';
   name.textContent = item.id;
   const actions = document.createElement('span');
   actions.className = 'menuconfig-option-actions';
@@ -2658,44 +2679,18 @@ function initMenuconfigControls() {
     if (chip) {
       event.preventDefault();
       event.stopPropagation();
-      showMenuTooltip(chip.closest('.menu-translation'));
+      const translated = chip.closest('.menu-translation');
+      if (translated?.dataset.symbol) showMenuOptionTooltip(translated);
+      else showMenuTooltip(translated);
       return;
     }
-    const packageName = event.target.closest('.menuconfig-package-name');
-    if (packageName && packageName.scrollWidth > packageName.clientWidth + 1) {
-      const packageRow = packageName.closest('.menuconfig-package');
-      const description = packageRow?.querySelector('.menuconfig-package-desc');
-      const full = [
-        packageName.dataset.fullText || packageName.textContent.trim(),
-        description?.dataset.fullText || description?.textContent.trim(),
-        state.lang === 'en' ? '' : description?.dataset.translation || '',
-      ].filter(Boolean).join('\n');
-      showMenuPopup(packageName, full);
-      return;
-    }
-    const description = event.target.closest('.menuconfig-package-desc');
-    if (description && (description.scrollWidth > description.clientWidth + 1 || description.scrollHeight > description.clientHeight + 1)) {
-      if (MENU_CATALOG?.splitAssets && !MENU_CATALOG.menu?.helpLoaded) {
-        await ensureCatalogHelpLoaded().catch((error) => console.warn('[Catalog help shard]', error));
-        const option = menuOptionBySymbol.get(description.dataset.symbol || '');
-        if (option) description.dataset.fullText = option.help || option.usageEn || description.dataset.fullText || '';
-      }
-      const full = [
-        description.dataset.fullText || description.textContent.trim(),
-        state.lang === 'en' ? '' : description.dataset.translation || '',
-      ].filter(Boolean).join('\n');
-      showMenuPopup(description, full);
-    }
+    const optionLabel = event.target.closest('.menuconfig-option-label');
+    if (optionLabel?.dataset.symbol) showMenuOptionTooltip(optionLabel);
   }, true);
   document.addEventListener('pointerover', (event) => {
-    const clippedDescription = event.target.closest('.menuconfig-package-desc');
-    if (clippedDescription &&
-        clippedDescription.scrollWidth > clippedDescription.clientWidth + 1 &&
-        !matchMedia('(hover: none)').matches) {
-      showMenuPopup(clippedDescription, [
-        clippedDescription.dataset.fullText || clippedDescription.textContent.trim(),
-        state.lang === 'en' ? '' : clippedDescription.dataset.translation || '',
-      ].filter(Boolean).join('\n'));
+    const optionLabel = event.target.closest('.menuconfig-option-label');
+    if (optionLabel?.dataset.symbol && !matchMedia('(hover: none)').matches) {
+      showMenuOptionTooltip(optionLabel);
       return;
     }
     const help = event.target.closest('.menuconfig-state-help');
@@ -2709,8 +2704,8 @@ function initMenuconfigControls() {
     }
   });
   document.addEventListener('pointerout', (event) => {
-    if (event.target.closest('.menuconfig-package-desc')) {
-      if (!event.relatedTarget?.closest?.('.menuconfig-package-desc')) hideMenuTooltip();
+    if (event.target.closest('.menuconfig-option-label')) {
+      if (!event.relatedTarget?.closest?.('.menuconfig-option-label')) hideMenuTooltip();
       return;
     }
     if (event.target.closest('.menuconfig-state-help')) {
@@ -2722,6 +2717,11 @@ function initMenuconfigControls() {
     hideMenuTooltip();
   });
   document.addEventListener('focusin', (event) => {
+    const optionLabel = event.target.closest('.menuconfig-option-label');
+    if (optionLabel?.dataset.symbol) {
+      showMenuOptionTooltip(optionLabel);
+      return;
+    }
     const help = event.target.closest('.menuconfig-state-help');
     if (help) {
       showMenuHelp(help);
@@ -2731,11 +2731,11 @@ function initMenuconfigControls() {
     if (translated) showMenuTooltip(translated);
   });
   document.addEventListener('focusout', (event) => {
-    if (event.target.closest('.menu-translation,.menuconfig-state-help') &&
-        !event.relatedTarget?.closest?.('.menu-translation,.menuconfig-state-help')) hideMenuTooltip();
+    if (event.target.closest('.menuconfig-option-label,.menu-translation,.menuconfig-state-help') &&
+        !event.relatedTarget?.closest?.('.menuconfig-option-label,.menu-translation,.menuconfig-state-help')) hideMenuTooltip();
   });
 }
-function renderMenuOption(option, showPath = false) {
+function renderMenuOption(option) {
   const value = menuValues.get(option.symbol) ?? simpleKconfigDefault(option);
   const childCount = menuNestedCounts.get(option.symbol) || 0;
   const row = document.createElement('div');
@@ -2748,12 +2748,15 @@ function renderMenuOption(option, showPath = false) {
   row.className = `menuconfig-option${packageName ? ' package-option' : ''}${childCount ? ' has-children' : ''}${option.hidden ? ' hidden-package-option' : ''}`;
   if (profileRequired) row.classList.add('catalog-profile-required');
   const prompt = document.createElement('span');
-  prompt.className = packageName ? 'menuconfig-package' : 'menuconfig-prompt';
+  prompt.className = 'menuconfig-option-summary';
   const name = document.createElement('span');
-  name.className = packageName ? 'menuconfig-package-name' : 'menuconfig-option-name';
-  name.textContent = packageName || menuOptionLabel(option);
-  if (packageName) name.dataset.fullText = packageName;
-  else name.title = name.textContent;
+  name.className = 'menuconfig-option-label';
+  const path = (option.path || []).map(menuPathLabel).filter(Boolean).join(' › ');
+  const label = menuOptionLabel(option);
+  name.textContent = path ? `${label} (${path})` : label;
+  name.dataset.fullText = name.textContent;
+  name.dataset.symbol = option.symbol;
+  name.tabIndex = 0;
   prompt.appendChild(name);
   if (origin.kind !== 'inactive') {
     const badge = document.createElement('small');
@@ -2762,28 +2765,9 @@ function renderMenuOption(option, showPath = false) {
     badge.title = origin.detail || origin.label;
     prompt.appendChild(badge);
   }
-  if (packageName) {
-    const description = document.createElement('span');
-    description.className = 'menuconfig-package-desc';
-    description.dataset.symbol = option.symbol;
-    const raw = String(option.promptEn || option.prompt || '');
-    description.textContent = String(option.usageEn || raw
-      .replace(new RegExp(`^${packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.*\\s*`, 'i'), '')).trim();
-    description.dataset.fullText = description.textContent;
-    prompt.appendChild(description);
-  }
-  if (!packageName) {
-    const symbol = document.createElement('small');
-    const prefix = showPath && option.path?.length ? `${option.path.map(menuPathLabel).join(' › ')} · ` : '';
-    symbol.textContent = `${prefix}${option.symbol}${childCount ? ` · ${childCount} sub-options` : ''}`;
-    prompt.appendChild(symbol);
-  }
   const translation = menuOptionTranslation(option);
-  if (packageName && translation.usage) {
-    const description = prompt.querySelector('.menuconfig-package-desc');
-    applyMenuTranslation(description, '', translation.usage, true);
-  } else if (!packageName && (translation.title || translation.usage)) {
-    applyMenuTranslation(prompt, translation.title, translation.usage, true);
+  if (translation.title || translation.usage) {
+    applyMenuTranslation(name, translation.title, translation.usage, true);
   }
   row.appendChild(prompt);
   const actions = document.createElement('span');
@@ -2849,7 +2833,7 @@ function renderMenuOption(option, showPath = false) {
   row.appendChild(actions);
   return row;
 }
-function renderMenuLeaf(options, showPath, list) {
+function renderMenuLeaf(options, list) {
   const choiceGroups = new Map();
   const ordinary = [];
   for (const option of options) {
@@ -2879,15 +2863,25 @@ function renderMenuLeaf(options, showPath, list) {
     for (const option of members) {
       const entry = document.createElement('option');
       entry.value = option.symbol;
-      entry.textContent = menuOptionLabel(option) || option.symbol;
+      entry.textContent = menuOptionLabel(option);
       const optionTranslation = menuOptionTranslation(option);
-      entry.title = [optionTranslation.title, optionTranslation.usage].filter(Boolean).join(' — ');
+      entry.title = [
+        entry.textContent,
+        optionTranslation.title,
+        optionTranslation.usage,
+        `CONFIG_${option.symbol}`,
+      ].filter(Boolean).join('\n');
       entry.selected = option.symbol === selected?.symbol;
       select.appendChild(entry);
     }
+    const syncChoiceTitle = () => {
+      select.title = select.selectedOptions[0]?.title || '';
+    };
+    syncChoiceTitle();
     select.onchange = () => {
       const option = menuOptionBySymbol.get(select.value);
       if (option) setMenuValue(option, optionMaxLevel(option) > 1 ? 'y' : 'm');
+      syncChoiceTitle();
     };
     applyMenuTranslation(text,
       choice?.promptI18n?.[state.lang] || (state.lang === 'zh-CN' ? choice?.promptZh : ''),
@@ -2898,7 +2892,7 @@ function renderMenuLeaf(options, showPath, list) {
   }
   const ordinaryBudget = Math.max(0, menuVisibleLimit - visibleChoices.length);
   for (const option of ordinary.slice(0, ordinaryBudget)) {
-    list.appendChild(renderMenuOption(option, showPath));
+    list.appendChild(renderMenuOption(option));
   }
   return choiceEntries.length + ordinary.length;
 }
@@ -3012,7 +3006,6 @@ function renderMenuconfig() {
   const eligible = (option) => eligibleSymbols.has(option.symbol);
   let nodes = [];
   let options = [];
-  let showPath = false;
   let searchPending = false;
   if (query) {
     renderMenuPanelTitle(query.length < 2 ? 'Type at least 2 characters' : 'Search results');
@@ -3020,13 +3013,11 @@ function renderMenuconfig() {
       const matches = searchMenuOptions(query);
       searchPending = matches === null;
       options = (matches || []).filter(eligible);
-      showPath = true;
     }
   } else if (menuOriginFilter !== 'all') {
     const originLabel = $('menuconfigOriginFilter')?.selectedOptions?.[0]?.textContent || 'Origin';
     renderMenuPanelTitle(originLabel);
     options = eligibleOptions;
-    showPath = true;
   } else {
     const key = menuPathKey(menuPath || []);
     renderMenuPanelTitle();
@@ -3087,7 +3078,7 @@ function renderMenuconfig() {
   grid.appendChild(nodeFragment);
   grid.hidden = !nodes.length;
   fitMenuCategoryNames(grid);
-  const ordinaryCount = renderMenuLeaf(options, showPath, list);
+  const ordinaryCount = renderMenuLeaf(options, list);
   if (!nodes.length && !options.length) {
     const empty = document.createElement('p');
     empty.className = 'hint';
@@ -3133,7 +3124,13 @@ function renderImportedUnknownRow(symbol) {
   const row = document.createElement('div');
   row.className = 'import-unknown-row' + (edit ? ' modified' : '');
   const name = document.createElement('code');
-  name.textContent = `CONFIG_${symbol}`;
+  name.className = 'menuconfig-option-label';
+  name.textContent = symbol.startsWith('PACKAGE_')
+    ? symbol.slice('PACKAGE_'.length)
+    : symbol.toLowerCase().replaceAll('_', ' ');
+  name.dataset.fullText = name.textContent;
+  name.dataset.symbol = symbol;
+  name.tabIndex = 0;
   row.appendChild(name);
   let input;
   if ([original, value].some((item) => ['y', 'm', 'n'].includes(item))) {
@@ -3339,67 +3336,6 @@ function buildCatalogLocatorEntries() {
     }
   };
   walk(MENU_CATALOG?.targetTree || []);
-  const seenPaths = new Set();
-  for (const option of menuSearchOptions) {
-    for (let depth = 1; depth <= (option.path || []).length; depth++) {
-      const path = option.path.slice(0, depth);
-      const key = menuPathKey(path);
-      if (seenPaths.has(key)) continue;
-      seenPaths.add(key);
-      const label = path.at(-1);
-      entries.push({
-        type: 'Menu', label: menuPathLabel(label), detail: path.map(menuPathLabel).join(' › '),
-        hay: `${path.join(' ')} ${path.map(menuPathLabel).join(' ')} ${menuLabelMeta(label).zhCN || ''}`,
-        run: () => {
-          menuExpanded = true;
-          menuPath = path;
-          menuParent = '';
-          menuBreadcrumb = [...path];
-          menuHistory = path.map((_, index) => ({
-            path: index ? path.slice(0, index) : null,
-            parent: '',
-            breadcrumb: path.slice(0, index),
-          }));
-          $('menuconfigSearch').value = '';
-          renderMenuconfig();
-          resetMenuScroll();
-        },
-      });
-    }
-    entries.push({
-      type: 'Option', label: menuOptionLabel(option), detail: option.symbol,
-      hay: menuSearchText.get(option.symbol) || option.symbol,
-      run: () => {
-        menuExpanded = true;
-        $('menuconfigSearch').value = option.symbol;
-        $('menuconfigSelectedOnly').checked = false;
-        resetMenuNavigation();
-        renderMenuconfig();
-        resetMenuScroll();
-      },
-    });
-  }
-  for (const plugin of PLUGINS?.plugins || []) {
-    entries.push({
-      type: 'Application', label: pName(plugin), detail: plugin.pkg || plugin.id,
-      hay: searchHay(plugin),
-      run: () => {
-        const option = curatedMenuOption(plugin);
-        if (option) {
-          menuExpanded = true;
-          $('menuconfigSearch').value = option.symbol;
-          $('menuconfigSelectedOnly').checked = false;
-          resetMenuNavigation();
-          renderMenuconfig();
-          resetMenuScroll();
-        } else {
-          $('searchBox').value = plugin.pkg || plugin.id;
-          renderGroups();
-          $('sourceStep').scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      },
-    });
-  }
   return entries.map((entry) => ({ ...entry, hay: String(entry.hay || '').toLowerCase() }));
 }
 function catalogLocatorEntries(query) {
@@ -3690,7 +3626,10 @@ function renderModes() {
   });
   $('fwThemeBox').addEventListener('change', () => setFirmwareTheme($('fwThemeBox').value));
   $('ntpBox').addEventListener('change', () => { state.ntp = $('ntpBox').value; });
-  $('opkgBox').addEventListener('change', () => { state.opkg = $('opkgBox').value; });
+  $('opkgBox').addEventListener('change', () => {
+    state.opkg = $('opkgBox').value;
+    opkgSelectionExplicit = true;
+  });
 }
 
 function fillSelect(id, entries, current) {
@@ -3798,6 +3737,10 @@ function selectTimezone(zone) {
   localStorage.setItem('wrt_timezone', zone.zonename);
   $('timezoneBox').value = timezoneLabel(zone);
   closeTimezoneMenu();
+  if (!opkgSelectionExplicit && state.source) {
+    state.opkg = defaultPackageMirrorId(state.source.id);
+    renderFirmwareSettings();
+  }
 }
 function timezoneMenuKeydown(event) {
   const options = timezoneOptions();
@@ -3844,7 +3787,9 @@ function renderFirmwareSettings() {
     ['cn', t('fw.ntp.cn')], ['global', t('fw.ntp.global')], ['cloudflare', t('fw.ntp.cloud')],
   ], state.ntp);
   const opkgEntries = packageMirrorEntries(state.source.id);
-  if (!opkgEntries.some(([id]) => id === state.opkg)) state.opkg = 'auto';
+  if (!opkgSelectionExplicit || !opkgEntries.some(([id]) => id === state.opkg)) {
+    state.opkg = defaultPackageMirrorId(state.source.id);
+  }
   state.opkg = fillSelect('opkgBox', opkgEntries, state.opkg);
   updateSubmitGate();
 }
@@ -5100,7 +5045,10 @@ function restoreSelections(config, payload) {
     if (zone) state.timezone = zone.zonename;
     if (/^luci-theme-[A-Za-z0-9._+-]+$/.test(String(fw.theme || ''))) state.theme = fw.theme;
     if (NTP_PRESETS[fw.ntp]) state.ntp = fw.ntp;
-    if (packageMirrorRoot(fw.opkg, state.source?.id)) state.opkg = fw.opkg;
+    if (packageMirrorRoot(fw.opkg, state.source?.id)) {
+      state.opkg = fw.opkg;
+      opkgSelectionExplicit = true;
+    }
   }
   renderFirmwareSettings();
   renderGroups();
@@ -5429,7 +5377,8 @@ function openSubmitModal() {
   };
   Object.assign(state, firmware);
   const requestStamp = localStamp();
-  const title = '[build] ' + requestStamp + '/' + requestTargetProfilePart() + '/' + state.source.id + '/' + state.version.id + '/' + selectedTargetProfileName();
+  const titleTag = safeDownloadNamePart(tag, 'anonymous');
+  const title = '[build] ' + requestStamp + '/' + titleTag + '/' + requestTargetProfilePart() + '/' + state.source.id + '/' + state.version.id + '/' + selectedTargetProfileName();
 
   openModal(t('btn.submit'));
   const mb = $('modalBody');
