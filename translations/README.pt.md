@@ -87,7 +87,7 @@ Veja [ARCHITECTURE.md](../ARCHITECTURE.md) (bilíngue, chinês e inglês).
 
 ### Segurança
 
-- Issues aceitam 1–3 anexos hospedados no GitHub e detectam `build-request.json`, `.config` e `config.buildinfo`; campos, listas permitidas, tamanho, assinatura do alvo e opções obrigatórias da fonte são validados. A configuração completa é a entrada oficial por padrão; `make defconfig` roda uma única vez apenas quando Defconfig é ativado explicitamente, protegendo Target, Profile, arquitetura e pacotes obrigatórios.
+- Issues aceitam 1–3 anexos hospedados no GitHub e detectam `build-request.json`, `.config` e `config.buildinfo`; campos, listas permitidas, tamanho, assinatura do alvo e opções obrigatórias da fonte são validados. A configuração completa é a entrada oficial por padrão. Somente quando Defconfig é ativado explicitamente o `make defconfig` oficial roda uma vez; sua saída é usada sem comparação própria do projeto entre Target, Profile ou arquitetura antes e depois.
 - O identificador de build (tag) é sanitizado para conter apenas caracteres chineses e latinos, dígitos e hífens, sendo usado somente para nomear e exibir o artifact;
 - As permissões do workflow são restritas a `contents: read + issues: write`.
 

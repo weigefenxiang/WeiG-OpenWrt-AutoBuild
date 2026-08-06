@@ -87,7 +87,7 @@ OpenWrt 펌웨어 **온라인 커스터마이징 + 클라우드 빌드**. 웹 �
 
 ### 보안
 
-- Issue는 GitHub 첨부 파일 1~3개를 받고 `build-request.json`, `.config`, `config.buildinfo`를 자동 판별합니다. 전체 설정이 기본 권위 입력이며, Defconfig를 명시적으로 켠 경우에만 `make defconfig`를 한 번 실행하고 Target, Profile, 아키텍처와 필수 패키지를 보호 검증합니다.
+- Issue는 GitHub 첨부 파일 1~3개를 받고 `build-request.json`, `.config`, `config.buildinfo`를 자동 판별합니다. 전체 설정이 기본 권위 입력입니다. Defconfig를 명시적으로 켠 경우에만 공식 `make defconfig`를 한 번 실행하며, 그 결과를 프로젝트 자체의 Target, Profile, 아키텍처 전후 비교 없이 사용합니다.
 - 빌드 식별자(tag)는 중문/영문 문자, 숫자, 하이픈만 남도록 정제되며, artifact 이름 지정과 표시에만 사용됩니다.
 - workflow 권한은 `contents: read + issues: write`로 최소화되어 있습니다.
 

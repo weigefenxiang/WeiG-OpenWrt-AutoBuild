@@ -700,11 +700,15 @@ mirrorRootsOk
   const failureDiagnosticsContract = buildWorkflow.includes('apply-config-overrides.mjs') &&
     buildWorkflow.includes('system-overrides.json') &&
     buildWorkflow.includes("grep -Fx 'CONFIG_BUILD_LOG=y' .config") &&
-    buildWorkflow.includes('config_policy=target-locked-defconfig-with-declared-overrides') &&
+    buildWorkflow.includes('config_policy=upstream-defconfig-with-declared-overrides') &&
     buildWorkflow.includes('use_defconfig=') &&
-    buildWorkflow.includes('verify-defconfig.mjs') &&
+    buildWorkflow.includes('make defconfig 2>&1 | tee') &&
+    !buildWorkflow.includes('verify-defconfig.mjs') &&
+    !existsSync(join(ROOT, 'tools', 'verify-defconfig.mjs')) &&
     buildWorkflow.includes('pre-defconfig.config') &&
-    buildWorkflow.includes('defconfig-report.json') &&
+    buildWorkflow.includes('defconfig.diff') &&
+    buildWorkflow.includes('defconfig.log') &&
+    !buildWorkflow.includes('defconfig-report.json') &&
     buildWorkflow.includes('config-overrides.json') &&
     buildWorkflow.includes('config-overrides.diff') &&
     buildWorkflow.includes('build.config') &&
@@ -886,7 +890,8 @@ mirrorRootsOk
     parser.includes("['custom-target', 'catalog-target'].includes(req.device)") &&
     buildWorkflow.includes('cp submitted.config openwrt/.config') &&
     buildWorkflow.includes('use_defconfig=') &&
-    buildWorkflow.includes('verify-defconfig.mjs');
+    buildWorkflow.includes('make defconfig 2>&1 | tee') &&
+    !buildWorkflow.includes('verify-defconfig.mjs');
   customTargetContract
     ? ok('未收录 .config → Custom Target → Issue/Actions 直接配置链路已接通')
     : bad('custom target contract', '网页兜底、解析器、Issue 校验或 Actions 直接配置参数缺失');

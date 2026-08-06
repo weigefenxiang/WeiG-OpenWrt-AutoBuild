@@ -87,7 +87,7 @@ OpenWrt 韌體**線上客製 + 雲端編譯**。在網頁上選原始碼、選�
 
 ### 安全
 
-- Issue 接受 1~3 個 GitHub 自有附件並自動辨識 `build-request.json`、`.config`、`config.buildinfo`;欄位、白名單、大小、機型目標簽章與原始碼必需項都會驗證。完整設定預設為權威輸入；只有明確勾選 Defconfig 時才執行一次 `make defconfig`，並保護驗證 Target、Profile、架構與必需套件。
+- Issue 接受 1~3 個 GitHub 自有附件並自動辨識 `build-request.json`、`.config`、`config.buildinfo`;欄位、白名單、大小、機型目標簽章與原始碼必需項都會驗證。完整設定預設為權威輸入；只有明確勾選 Defconfig 時才執行一次官方 `make defconfig`，其輸出直接用於後續建置，不再由專案自訂腳本比較補全前後的 Target、Profile 或架構。
 - 建置識別名稱(tag)會被清洗為中英文、數字與連字號,僅用於 artifact 命名與顯示;
 - workflow 權限收斂為 `contents: read + issues: write`。
 

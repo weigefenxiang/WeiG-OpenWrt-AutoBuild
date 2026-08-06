@@ -87,7 +87,7 @@ Voir [ARCHITECTURE.md](../ARCHITECTURE.md) (bilingue chinois-anglais).
 
 ### Sécurité
 
-- Les Issues acceptent 1 à 3 pièces jointes hébergées par GitHub et détectent `build-request.json`, `.config` et `config.buildinfo` ; champs, listes autorisées, taille, signature cible et options obligatoires de la source sont validés. La configuration complète fait autorité par défaut ; `make defconfig` ne s’exécute qu’une fois si Defconfig est explicitement activé, avec contrôle de Target, Profile, architecture et paquets requis.
+- Les Issues acceptent 1 à 3 pièces jointes hébergées par GitHub et détectent `build-request.json`, `.config` et `config.buildinfo` ; champs, listes autorisées, taille, signature cible et options obligatoires de la source sont validés. La configuration complète fait autorité par défaut. Si Defconfig est explicitement activé, le `make defconfig` officiel s’exécute une fois et sa sortie est utilisée sans comparaison avant/après propre au projet pour Target, Profile ou l’architecture.
 - L'identifiant de build (tag) est assaini pour ne conserver que caractères chinois, lettres, chiffres et traits d'union, et n'est utilisé que pour le nommage et l'affichage des artifacts ;
 - Les permissions du workflow sont restreintes à `contents: read + issues: write`.
 

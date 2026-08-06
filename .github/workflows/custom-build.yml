@@ -316,17 +316,10 @@ jobs:
             make defconfig 2>&1 | tee "$GITHUB_WORKSPACE/defconfig.log"
             cp .config "$GITHUB_WORKSPACE/defconfig.config"
             diff -u pre-defconfig.config "$GITHUB_WORKSPACE/defconfig.config" > "$GITHUB_WORKSPACE/defconfig.diff" || true
-            PROFILE_PACKAGES="${{ steps.req.outputs.catalog_profile_packages }}"
-            node "$GITHUB_WORKSPACE/tools/verify-defconfig.mjs" \
-              --before pre-defconfig.config \
-              --after "$GITHUB_WORKSPACE/defconfig.config" \
-              --profile-packages "$PROFILE_PACKAGES" \
-              --report "$GITHUB_WORKSPACE/defconfig-report.json"
             cd ..
           else
             cp submitted.config defconfig.config
             : > defconfig.diff
-            printf '{"schema":1,"mode":"disabled","changedCount":0,"valid":true}\n' > defconfig-report.json
             : > defconfig.log
           fi
           cd openwrt
@@ -367,7 +360,6 @@ jobs:
           cd openwrt
           TEST_VERSION="$(tr -d '\r\n' < "$GITHUB_WORKSPACE/VERSION")"
           OVERRIDES_APPLIED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).applied.length' "$GITHUB_WORKSPACE/config-overrides.json")"
-          DEFCONFIG_CHANGES="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).changedCount || 0' "$GITHUB_WORKSPACE/defconfig-report.json")"
           RECOMMENDED_REQUESTED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).counts?.requested || 0' "$GITHUB_WORKSPACE/recommended-report.json")"
           RECOMMENDED_APPLIED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).counts?.applied || 0' "$GITHUB_WORKSPACE/recommended-report.json")"
           RECOMMENDED_SKIPPED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).counts?.skipped || 0' "$GITHUB_WORKSPACE/recommended-report.json")"
@@ -392,13 +384,12 @@ jobs:
             echo "catalog_profile_packages=${{ steps.req.outputs.catalog_profile_packages }}"
             echo "request_mode=${{ steps.req.outputs.request_mode }}"
             echo "use_defconfig=${{ steps.req.outputs.use_defconfig }}"
-            echo "defconfig_changes=$DEFCONFIG_CHANGES"
             echo "recommended_enabled=${{ steps.req.outputs.recommended_enabled }}"
             echo "recommended_requested=$RECOMMENDED_REQUESTED"
             echo "recommended_applied=$RECOMMENDED_APPLIED"
             echo "recommended_skipped=$RECOMMENDED_SKIPPED"
             if [ "${{ steps.req.outputs.use_defconfig }}" = "1" ]; then
-              echo "config_policy=target-locked-defconfig-with-declared-overrides"
+              echo "config_policy=upstream-defconfig-with-declared-overrides"
             else
               echo "config_policy=authoritative-no-defconfig-with-declared-overrides"
             fi
@@ -456,7 +447,6 @@ jobs:
             pre-defconfig.config
             defconfig.config
             defconfig.diff
-            defconfig-report.json
             defconfig.log
             build.config
             build-metadata.txt
@@ -576,7 +566,7 @@ jobs:
           cp build.log build-diagnostic.log download.log failure-logs/ 2>/dev/null || true
           cp build-metadata.txt failure-logs/ 2>/dev/null || true
           cp proxy-selected.txt failure-logs/ 2>/dev/null || true
-          cp submitted.config active-catalog.json config-overrides.json config-overrides.diff recommended-audit.json recommended-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig-report.json defconfig.log build.config failure-logs/ 2>/dev/null || true
+          cp submitted.config active-catalog.json config-overrides.json config-overrides.diff recommended-audit.json recommended-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig.log build.config failure-logs/ 2>/dev/null || true
           cp openwrt/.config failure-logs/final.config 2>/dev/null || true
           # OpenWrt 的 CONFIG_BUILD_LOG=y 会把每个包的日志写到 openwrt/logs/ / With CONFIG_BUILD_LOG=y, OpenWrt writes per-package build logs to openwrt/logs/
           if [ -d openwrt/logs ]; then

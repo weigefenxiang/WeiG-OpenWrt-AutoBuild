@@ -87,7 +87,7 @@ Siehe [ARCHITECTURE.md](../ARCHITECTURE.md) (zweisprachig Chinesisch/Englisch).
 
 ### Sicherheit
 
-- Issues akzeptieren 1–3 auf GitHub gehostete Anhänge und erkennen `build-request.json`, `.config` und `config.buildinfo`; Felder, Positivlisten, Größe, Zielsignatur und erforderliche Quelloptionen werden geprüft. Die vollständige Konfiguration ist standardmäßig maßgeblich; nur bei ausdrücklich aktiviertem Defconfig läuft `make defconfig` einmal mit Schutzprüfung für Target, Profile, Architektur und Pflichtpakete.
+- Issues akzeptieren 1–3 auf GitHub gehostete Anhänge und erkennen `build-request.json`, `.config` und `config.buildinfo`; Felder, Positivlisten, Größe, Zielsignatur und erforderliche Quelloptionen werden geprüft. Die vollständige Konfiguration ist standardmäßig maßgeblich. Nur bei ausdrücklich aktiviertem Defconfig läuft das offizielle `make defconfig` einmal; dessen Ausgabe wird ohne projektspezifischen Vorher/Nachher-Vergleich von Target, Profile oder Architektur verwendet.
 - Die Build-Kennung (tag) wird auf chinesische und lateinische Zeichen, Ziffern und Bindestriche bereinigt und ausschließlich für die artifact-Benennung und die Anzeige verwendet;
 - Die Workflow-Berechtigungen sind auf `contents: read + issues: write` beschränkt.
 

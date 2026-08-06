@@ -145,7 +145,7 @@ WeiG-OpenWrt-AutoBuild/
 
 ### 2.5 构建链路
 
-- Catalog Target 的 `arch`、`archPackages`、Target/Profile 与 Profile 必需包是一个原子构建契约。Catalog 从上游 `Target-Arch` 原样发布真实构建架构；网页写入 `CONFIG_<arch>`、`CONFIG_ARCH`、`CONFIG_TARGET_ARCH_PACKAGES`，自动加入 Profile 必需包，并在主屏展示两类架构。初始化顺序固定为“加载并建模 Catalog → 选定 Target/Profile → 建立 `TARGET_*`/架构/Target Feature 上下文和 Profile 必需包 → 应用默认主题与最低启动预设”。共享引擎对依赖使用统一三态：`satisfied` 表示已满足，`unsatisfied` 表示上下文完整后确认不满足，`deferred` 表示上游隐藏默认值或尚未物化的 Target 状态仍需由 Kconfig/Defconfig 决定。交互与 pre-defconfig 阶段不得把 `deferred` 当错误，也不得删除 Catalog 声明的 Target/Profile 包；已知为假的目标条件仍立即拒绝。post-defconfig 阶段必须把剩余 `deferred` 当错误。推荐预设是可回滚的 UI 层便利功能，失败时只恢复预设快照并保留已加载 Catalog，不能把依赖或预设错误误报为网络/Catalog 加载失败。`parse-request.mjs` 使用同一个上下文模型再次核验，禁止在前端、解析器或 Workflow 中为具体包名增加补丁。不要从软件包架构或旧设备表推断构建架构；Defconfig 默认关闭，只有用户明确勾选后才执行一次，并在其后进入 post-defconfig 严格校验。
+- Catalog Target 的 `arch`、`archPackages`、Target/Profile 与 Profile 必需包是一个原子构建契约。Catalog 从上游 `Target-Arch` 原样发布真实构建架构；网页写入 `CONFIG_<arch>`、`CONFIG_ARCH`、`CONFIG_TARGET_ARCH_PACKAGES`，自动加入 Profile 必需包，并在主屏展示两类架构。初始化顺序固定为“加载并建模 Catalog → 选定 Target/Profile → 建立 `TARGET_*`/架构/Target Feature 上下文和 Profile 必需包 → 应用默认主题与最低启动预设”。共享引擎对依赖使用统一三态：`satisfied` 表示已满足，`unsatisfied` 表示上下文完整后确认不满足，`deferred` 表示上游隐藏默认值或尚未物化的 Target 状态仍需由 Kconfig/Defconfig 决定。交互与 pre-defconfig 阶段不得把 `deferred` 当错误，也不得删除 Catalog 声明的 Target/Profile 包；已知为假的目标条件仍立即拒绝。post-defconfig 阶段必须把剩余 `deferred` 当错误。推荐预设是可回滚的 UI 层便利功能，失败时只恢复预设快照并保留已加载 Catalog，不能把依赖或预设错误误报为网络/Catalog 加载失败。`parse-request.mjs` 使用同一个上下文模型再次核验，禁止在前端、解析器或 Workflow 中为具体包名增加补丁。不要从软件包架构或旧设备表推断构建架构；Defconfig 默认关闭，只有用户明确勾选后才执行一次官方 `make defconfig`。命令成功后以其生成的 `.config` 作为补全结果，不再运行项目自定义的 Defconfig 前后 Target/Profile/架构一致性比较器；后续通用 Catalog 关系校验和系统覆盖仍按既有流程执行。
 
 - Catalog Target 的选择状态必须保持四层语义：`catalogBaselineValues` 保存 Target/Profile 契约和完整目标上下文中成立的上游默认值，`catalogRecommendedValues` 保存网页推荐预设，`catalogUserOverrides` 只保存用户明确操作，`catalogDependencySymbols`/`catalogImportedSymbols` 标记解析与导入来源；`menuValues` 是最终 resolved 状态。`state.sel`/`state.removed` 只能由用户层同步，禁止再从所有非 `n` 的 Catalog 包反向填充，否则首次进入会把基础包误计为用户插件。条件默认值只在 `evaluateExpressionState(...).status === "satisfied"` 时应用，`deferred` 不能当作 `y`。Advanced 必须保留来源筛选、明确排除与“恢复默认”；恢复默认删除 override 后回到导入/推荐/baseline 继承值。D99-A 不允许普通界面关闭 Target/Profile 明确包；基础包精简仍留给暂停中的 D99-B。D99-C 已把 Relations 改为字符串/表达式池、数组记录、位标志与整数关系图，并保留语义等价测试。
 
@@ -168,7 +168,7 @@ WeiG-OpenWrt-AutoBuild/
 
 #### 取消内置项与直接配置构建
 
-- 开发者模式的 `-id` 会把对应 `CONFIG_PACKAGE_*` 写成显式 `# ... is not set`；完整配置默认直接用于构建，只有请求中明确启用 Defconfig 才允许做一次受保护的上游补全。
+- 开发者模式的 `-id` 会把对应 `CONFIG_PACKAGE_*` 写成显式 `# ... is not set`；完整配置默认直接用于构建，只有请求中明确启用 Defconfig 才执行一次官方上游补全。补全结果不再经过项目自定义的前后目标一致性比较。
 - `CONFIG_DEFAULT_*` 只提供默认值,不是强制 `select`;它可以与对应 `CONFIG_PACKAGE_*` 的显式关闭状态并存。
 - 上游构建系统仍可能按 Kconfig 依赖关系处理被其他选项 `select` 的符号；这不是项目主动运行 `make defconfig`。页面标为 `locked` 的系统基础项不允许取消。
 - 因此取消内置项时应先看依赖与风险警示,不要把“显式关闭”误解成“永远不会作为依赖加入”。

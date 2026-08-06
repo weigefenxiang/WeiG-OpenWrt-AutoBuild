@@ -87,7 +87,7 @@ See [ARCHITECTURE.md](../ARCHITECTURE.md) (bilingual, Chinese and English).
 
 ### Security
 
-- Issues accept 1–3 GitHub-hosted attachments and auto-detect `build-request.json`, `.config`, and `config.buildinfo`; fields, whitelists, size, target signature, and source-required options are validated. The submitted full config is authoritative by default; Actions runs `make defconfig` once only when Defconfig is explicitly selected, then guards Target/Profile/architecture and required packages. The effective build config is retained in the artifact.
+- Issues accept 1–3 GitHub-hosted attachments and auto-detect `build-request.json`, `.config`, and `config.buildinfo`; fields, whitelists, size, target signature, and source-required options are validated. The submitted full config is authoritative by default. Only an explicitly selected Defconfig runs the upstream `make defconfig` once; its output is used for the build without a project-specific before/after Target, Profile, or architecture comparison. The effective build config is retained in the artifact.
 - The build tag is sanitized down to Chinese/English characters, digits, and hyphens, and is used only for artifact naming and display;
 - Workflow permissions are narrowed to `contents: read + issues: write`.
 

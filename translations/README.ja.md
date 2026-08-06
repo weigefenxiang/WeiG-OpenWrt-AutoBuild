@@ -87,7 +87,7 @@ OpenWrt ファームウェアの**オンラインカスタマイズ + クラウ�
 
 ### セキュリティ
 
-- Issue は GitHub 上の添付を1～3個受け付け、`build-request.json`、`.config`、`config.buildinfo` を自動判定します。完全設定を既定の正本とし、Defconfig を明示的に有効化した場合だけ `make defconfig` を1回実行して Target、Profile、アーキテクチャ、必須パッケージを保護検証します。
+- Issue は GitHub 上の添付を1～3個受け付け、`build-request.json`、`.config`、`config.buildinfo` を自動判定します。完全設定を既定の正本とします。Defconfig を明示的に有効化した場合だけ公式の `make defconfig` を1回実行し、その出力を Target、Profile、アーキテクチャのプロジェクト独自の前後比較なしで使用します。
 - ビルド識別子(tag)は中国語・英数字とハイフンのみにサニタイズされ、artifact の命名と表示にのみ使用されます。
 - workflow の権限は `contents: read + issues: write` に絞り込まれています。
 

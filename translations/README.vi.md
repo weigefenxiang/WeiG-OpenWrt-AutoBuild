@@ -87,7 +87,7 @@ Xem [ARCHITECTURE.md](../ARCHITECTURE.md) (song ngữ Trung - Anh).
 
 ### Bảo mật
 
-- Issue nhận 1–3 tệp đính kèm do GitHub lưu trữ và tự nhận dạng `build-request.json`, `.config`, `config.buildinfo`; trường dữ liệu, danh sách cho phép, kích thước, chữ ký đích và tùy chọn bắt buộc đều được kiểm tra. Cấu hình đầy đủ là đầu vào chính thức theo mặc định; `make defconfig` chỉ chạy một lần khi Defconfig được bật rõ ràng, kèm kiểm tra bảo vệ Target, Profile, kiến trúc và gói bắt buộc.
+- Issue nhận 1–3 tệp đính kèm do GitHub lưu trữ và tự nhận dạng `build-request.json`, `.config`, `config.buildinfo`; trường dữ liệu, danh sách cho phép, kích thước, chữ ký đích và tùy chọn bắt buộc đều được kiểm tra. Cấu hình đầy đủ là đầu vào chính thức theo mặc định. Chỉ khi Defconfig được bật rõ ràng, `make defconfig` chính thức mới chạy một lần; kết quả được dùng mà không có phép so sánh Target, Profile hoặc kiến trúc trước/sau riêng của dự án.
 - Mã định danh bản dựng (tag) sẽ được làm sạch, chỉ giữ lại chữ Trung, chữ Latinh, chữ số và dấu gạch nối, chỉ dùng để đặt tên artifact và hiển thị;
 - Quyền của workflow được thu hẹp còn `contents: read + issues: write`.
 

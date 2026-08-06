@@ -122,7 +122,7 @@ OpenWrt 固件**在线定制 + 云编译**。在 [网站](https://wrt.weigeshare
 
 ### 安全
 
-- Issue 接受 1~3 个 GitHub 自有附件并自动识别 `build-request.json`、`.config`、`config.buildinfo`;请求字段、插件/软件包 id、配置格式、大小、机型目标签名及源码必需项都会校验。完整配置默认是用户提交的权威输入；只有用户主动勾选 Defconfig 时 Actions 才执行一次 `make defconfig` 并校验 Target/Profile/架构与必需包，实际开编配置会随 artifact 一并保留;
+- Issue 接受 1~3 个 GitHub 自有附件并自动识别 `build-request.json`、`.config`、`config.buildinfo`;请求字段、插件/软件包 id、配置格式、大小、机型目标签名及源码必需项都会校验。完整配置默认是用户提交的权威输入；只有用户主动勾选 Defconfig 时 Actions 才执行一次官方 `make defconfig`，其输出直接作为后续构建配置，不再由项目自定义脚本比较补全前后的 Target/Profile/架构；实际开编配置会随 artifact 一并保留;
 - 构建标识(tag)会被清洗为中英文数字与连字符,仅用于 artifact 命名与展示;
 - workflow 权限收敛为 `contents: read + issues: write`。
 
@@ -140,4 +140,3 @@ OpenWrt 固件**在线定制 + 云编译**。在 [网站](https://wrt.weigeshare
 - **LuCI 插件的全部作者**
 
 - **每一位**参与的小伙伴
-
