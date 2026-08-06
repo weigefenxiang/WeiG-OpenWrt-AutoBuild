@@ -46,6 +46,7 @@
    ├─ fetch-build-request.mjs    # 下载并限制 GitHub Issue 附件 / fetch allowlisted GitHub Issue attachment
    ├─ parse-request.mjs          # 载荷解析 + Catalog 契约/配置校验 / payload parsing + Catalog contract/config validation
    ├─ validate-catalog-config.mjs # 构建前复用同一引擎严格校验 / strict pre-build validation through the same engine
+   ├─ check-text-format.mjs      # 变更文本 LF/CRLF/BOM/EOF 门禁 / changed-text LF/CRLF/BOM/EOF gate
    ├─ sync-blog.mjs              # 精确镜像博客副本并验证回滚 / exact verified blog mirror with rollback
    └─ serve.mjs                  # 本地静态服务器 / local static server
 ```
@@ -81,4 +82,5 @@ Catalog Target 的 `arch`、`archPackages`、Target/Profile 与 Profile 必需�
 
 - 主站 / primary: `site/wrt/` → 任意静态托管 / any static hosting
 - 备用 / mirror: `sync-blog.mjs` 将 `site/wrt/` 完整精确镜像到博客 `source/wrt/`（Hexo skip_render，含 `.config`，删除目标残留，临时校验后原子替换）→ Cloudflare Pages / exact mirror of `site/wrt/` into blog `source/wrt/`, including `.config`, with stale-file removal, verified staging, atomic swap, and rollback
+- 提交前文本门禁 / pre-commit text gate: `check-text-format.mjs --changed` 按 `.gitattributes` 检查本轮变更的 LF/CRLF、UTF-8 无 BOM 与单一 EOF 换行，只报告不改写；`Sync_Deploy.bat` 主仓库操作在 `check-all` 前调用 / validates changed-file LF/CRLF, no-BOM UTF-8, and one final newline before `check-all`, without rewriting files
 - Catalog 运行时数据链 / Catalog runtime data chain: 精确缓存 exact cache → GitHub Raw 最新 index latest index → jsDelivr/GitHub Raw 固定提交分片 pinned-commit shard → 完整 GitHub Release complete Release；VPS 不保存 Catalog，其他静态数据仍使用同目录优先的降级链 / other static data still prefers same-directory fallbacks

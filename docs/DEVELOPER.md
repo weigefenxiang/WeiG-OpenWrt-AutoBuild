@@ -183,6 +183,7 @@ WeiG-OpenWrt-AutoBuild/
 - 页面整个 `site/wrt/` 目录拷走即可用；Catalog 使用精确缓存 → GitHub Raw 最新 index → jsDelivr/GitHub Raw 固定提交分片 → 完整 GitHub Release，VPS 不保存 Catalog；其他静态数据使用相对路径和本地优先降级。`OpenWebPage_打开网页.bat` 只保留一个可见的 `wrt-server` 窗口，关闭该窗口即停止本地预览。
 - Fork 后只需修改 `site/wrt/data/project.json` 的主仓库、Catalog 仓库与博客地址；网页链接、Issue 目标和运行时 Catalog 会自动采用该文件。HTML 中保留的人类可读链接仅是旧部署兜底。
 - 博客副本：`node tools/sync-blog.mjs [博客路径]` 会把 `site/wrt/` 完整精确镜像到博客 `source/wrt/`，包括 `.config`；先复制到临时目录并逐文件校验，再原子替换，失败时保留或恢复旧副本。`--check` 仅比较完整目录树，完全一致返回 0，有差异返回 3。
+- 文本格式门禁：`node tools/check-text-format.mjs <仓库路径> --changed` 只检查当前 Git 变更与未跟踪文本，按 `.gitattributes` 要求验证源码/数据为 LF、BAT/CMD/PowerShell 为 CRLF、UTF-8 无 BOM，且文件末尾只有一个换行；它只报告、不自动改写。`Sync_Deploy.bat` 的主仓库选项会在完整 `check-all` 和 `git diff --check` 前先运行该门禁，Git 的“下次将 CRLF 转为 LF”提示只是信息性 warning，真正阻断项会单独列出。
 
 ### 2.8 云构建测试指南(手动 Run workflow 实战)
 

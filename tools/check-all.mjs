@@ -17,6 +17,7 @@ import {
 } from './source-build-requirements.mjs';
 import { applyConfigOverrides, verifyConfigLayers } from './config-overrides.mjs';
 import { directoriesMatch, syncBlogMirror } from './sync-blog.mjs';
+import { checkTextFiles } from './check-text-format.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 let fail = 0;
@@ -53,6 +54,47 @@ const scripts = [join(ROOT, 'site', 'wrt', 'app.js'),
 for (const f of scripts) {
   const r = spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
   r.status === 0 ? ok(f.replace(ROOT, '.')) : bad(f.replace(ROOT, '.'), (r.stderr || '').split('\n')[0]);
+}
+
+const textFormatCheck = spawnSync(process.execPath, [
+  join(ROOT, 'tools', 'check-text-format.mjs'), ROOT, '--changed',
+], { encoding: 'utf8' });
+textFormatCheck.status === 0
+  ? ok('text format preflight: changed files follow LF/CRLF, UTF-8 no-BOM and single-EOF-newline policy')
+  : bad('text format preflight',
+    (textFormatCheck.stderr || textFormatCheck.stdout || '').trim().slice(0, 500));
+
+const textFormatFixtureRoot = mkdtempSync(join(tmpdir(), 'weig-text-format-'));
+try {
+  const fixtureFiles = {
+    'good.mjs': 'export const good = true;\n',
+    'good.bat': '@echo off\r\nexit /b 0\r\n',
+    'bad-crlf.mjs': 'export const bad = true;\r\n',
+    'bad-lf.bat': '@echo off\n',
+    'bad-eof.json': '{}\n\n',
+  };
+  for (const [name, content] of Object.entries(fixtureFiles)) {
+    writeFileSync(join(textFormatFixtureRoot, name), content);
+  }
+  writeFileSync(join(textFormatFixtureRoot, 'bad-bom.md'),
+    Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('# title\n')]));
+  const fixtureFailures = checkTextFiles(textFormatFixtureRoot, Object.keys({
+    ...fixtureFiles,
+    'bad-bom.md': '',
+  }));
+  const byPath = new Map(fixtureFailures.map((item) => [item.path, item.issues.join(' | ')]));
+  const fixtureOk = !byPath.has('good.mjs') && !byPath.has('good.bat') &&
+    byPath.get('bad-crlf.mjs')?.includes('expected LF') &&
+    byPath.get('bad-lf.bat')?.includes('expected CRLF') &&
+    byPath.get('bad-eof.json')?.includes('blank line at EOF') &&
+    byPath.get('bad-bom.md')?.includes('BOM');
+  fixtureOk
+    ? ok('text format fixtures: LF, CRLF, BOM and blank-EOF failures are classified generically')
+    : bad('text format fixtures', JSON.stringify(Object.fromEntries(byPath)).slice(0, 500));
+} catch (error) {
+  bad('text format fixtures', error.message.slice(0, 300));
+} finally {
+  rmSync(textFormatFixtureRoot, { recursive: true, force: true });
 }
 
 const catalogLoaderTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-catalog-loader.mjs')], {
@@ -391,6 +433,8 @@ mirrorRootsOk
   const project = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
   const deployScript = readFileSync(join(ROOT, 'docs-private', 'Sync_Deploy.bat'), 'utf8');
   const syncBlogSource = readFileSync(join(ROOT, 'tools', 'sync-blog.mjs'), 'utf8');
+  const textFormatSource = readFileSync(join(ROOT, 'tools', 'check-text-format.mjs'), 'utf8');
+  const gitAttributes = readFileSync(join(ROOT, '.gitattributes'), 'utf8');
   const deployGuide = readFileSync(join(ROOT, 'docs-private', '部署与同步.md'), 'utf8');
   const blogGuide = readFileSync(join(ROOT, 'docs-private', '003.weige-share-blog同步与推送.md'), 'utf8');
   const developerGuideZh = readFileSync(join(ROOT, 'docs', 'DEVELOPER.md'), 'utf8');
@@ -438,6 +482,25 @@ mirrorRootsOk
   exactBlogMirrorContract
     ? ok('blog sync: option 3 uses verified exact mirror with rollback; legacy .config filtering is removed')
     : bad('blog exact mirror contract', '同步工具、选项 3 编排、回滚验证或中英文文档仍保留旧过滤逻辑');
+  const textFormatGateContract =
+    textFormatSource.includes("const LF_EXTENSIONS = new Set") &&
+    textFormatSource.includes("const CRLF_EXTENSIONS = new Set") &&
+    textFormatSource.includes("UTF-8 BOM is not allowed") &&
+    textFormatSource.includes("has a blank line at EOF") &&
+    textFormatSource.includes("No files were changed automatically") &&
+    deployScript.includes('call :check_text_format "%REPO%" "%REPO_KIND%"') &&
+    deployScript.indexOf('call :check_text_format "%REPO%" "%REPO_KIND%"') <
+      deployScript.indexOf('call :check_main "%REPO%"') &&
+    deployScript.includes('CRLF/LF conversion warnings are informational') &&
+    gitAttributes.includes('*.mjs text eol=lf') &&
+    gitAttributes.includes('*.bat text eol=crlf') &&
+    deployGuide.includes('check-text-format.mjs') &&
+    blogGuide.includes('check-text-format.mjs') &&
+    developerGuideZh.includes('check-text-format.mjs') &&
+    developerGuideEn.includes('check-text-format.mjs');
+  textFormatGateContract
+    ? ok('text format gate: one generic checker runs before main check-all and documents warning/error separation')
+    : bad('text format gate contract', 'checker policy, Sync_Deploy ordering, .gitattributes or bilingual docs are incomplete');
   const recommendedUiContract = html.includes('id="minimumBootToggle"') &&
     html.includes('id="defconfigToggle"') &&
     html.includes('id="minimumBootConfig"') && !html.includes('id="minimumBootPanel"') &&
