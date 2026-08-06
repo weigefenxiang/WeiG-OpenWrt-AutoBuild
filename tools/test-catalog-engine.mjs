@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
 import {
   applyUserIntent,
   createCatalogModel,
@@ -370,32 +366,4 @@ for (let index = 0; index < matrixTargets.length; index++) {
     `matrix ${index}: deferred target-sensitive preset was rejected`);
 }
 
-const temp = mkdtempSync(join(tmpdir(), 'weig-catalog-engine-'));
-try {
-  const catalogPath = join(temp, 'catalog.json');
-  const preConfigPath = join(temp, 'pre.config');
-  writeFileSync(catalogPath, JSON.stringify(catalog));
-  const targetConfig = [
-    'CONFIG_TARGET_demo=y',
-    'CONFIG_TARGET_demo_full=y',
-    'CONFIG_TARGET_demo_full_DEVICE_alpha=y',
-    'CONFIG_ARCH_DEMO=y',
-    'CONFIG_TARGET_BOARD="demo"',
-    'CONFIG_TARGET_SUBTARGET="full"',
-    'CONFIG_TARGET_PROFILE="DEVICE_alpha"',
-    'CONFIG_PACKAGE_profile-driver=y',
-  ].join('\n') + '\n';
-  writeFileSync(preConfigPath, targetConfig);
-  const cli = join(process.cwd(), 'tools', 'validate-catalog-config.mjs');
-  const run = (...extra) => spawnSync(process.execPath, [cli,
-    '--catalog', catalogPath, '--config', preConfigPath, ...extra], { encoding: 'utf8' });
-  const submittedCli = run();
-  assert(submittedCli.status === 0, `submitted-config CLI diverged from browser engine: ${submittedCli.stderr}`);
-  const removedPostCli = run('--phase', 'post-defconfig');
-  assert(removedPostCli.status === 2 && /removed/i.test(removedPostCli.stderr),
-    'removed post-defconfig mode was unexpectedly accepted');
-} finally {
-  rmSync(temp, { recursive: true, force: true });
-}
-
-console.log('Catalog engine dependency and submitted-config matrix passed');
+console.log('Catalog interactive dependency matrix passed');

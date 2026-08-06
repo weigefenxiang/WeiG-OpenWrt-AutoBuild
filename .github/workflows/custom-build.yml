@@ -1,9 +1,7 @@
 name: Custom Build / 定制构建
-run-name: ${{ github.event_name == 'repository_dispatch' && format('Smoke build · {0} {1}/{2}', github.event.client_payload.source, github.event.client_payload.version, github.event.client_payload.variant) || github.event.issue.title }}
+run-name: ${{ github.event.issue.title }}
 
 on:
-  repository_dispatch:
-    types: [smoke-build]
   issues:
     types: [opened]
 
@@ -18,7 +16,7 @@ permissions:
 jobs:
   admission:
     name: Admission / 构建准入
-    if: github.event_name == 'repository_dispatch' || startsWith(github.event.issue.title, '[build]')
+    if: startsWith(github.event.issue.title, '[build]')
     runs-on: ubuntu-22.04
     timeout-minutes: 3
     outputs:
@@ -33,18 +31,13 @@ jobs:
           MAX_BUILDS_PER_USER: ${{ vars.MAX_BUILDS_PER_USER || '2' }}
         with:
           script: |
-            const isIssue = context.eventName === 'issues';
-            const isSmoke = context.eventName === 'repository_dispatch';
-            const requester = isIssue ? context.payload.issue.user.login
-              : `smoke-${String(context.payload.client_payload?.source || 'internal').toLowerCase()}`;
-            const isRepositoryOwner = isIssue && requester.toLowerCase() === context.repo.owner.toLowerCase();
-            if (isSmoke || isRepositoryOwner) {
+            const requester = context.payload.issue.user.login;
+            const isRepositoryOwner = requester.toLowerCase() === context.repo.owner.toLowerCase();
+            if (isRepositoryOwner) {
               core.setOutput('allowed', 'true');
-              core.setOutput('requester', isRepositoryOwner ? `owner-${context.runId}` : requester);
+              core.setOutput('requester', `owner-${context.runId}`);
               core.setOutput('slot', '0');
-              core.notice(isRepositoryOwner
-                ? `Repository owner build admitted without queue: ${requester}`
-                : `Internal smoke build admitted: ${requester}`);
+              core.notice(`Repository owner build admitted without queue: ${requester}`);
               return;
             }
             const configured = Number(process.env.MAX_BUILDS_PER_USER || '2');
@@ -57,7 +50,7 @@ jobs:
               .filter((run) => String(run.id) !== String(context.runId));
             active.push({
               id: context.runId,
-              created_at: isIssue ? context.payload.issue.created_at : new Date().toISOString(),
+              created_at: context.payload.issue.created_at,
             });
             const unique = [...new Map(active.map((run) => [String(run.id), run])).values()]
               .sort((a, b) => a.created_at.localeCompare(b.created_at) || Number(a.id) - Number(b.id));
@@ -71,7 +64,7 @@ jobs:
               return;
             }
             core.notice(`Build admission refused: ${requester} already has ${limit} active builds.`);
-            if (isIssue) {
+            {
               await github.rest.issues.createComment({
                 owner: context.repo.owner, repo: context.repo.repo,
                 issue_number: context.issue.number,
@@ -102,9 +95,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Read Issue attachment or mobile request / 读取附件或手机请求
-        if: github.event_name == 'issues'
         env:
-          ISSUE_BODY: ${{ github.event.issue.body }}
           REQUEST_MANIFEST_OUT: request-attachments.json
           REQUEST_DIR: request-attachments
         run: node tools/fetch-build-request.mjs
@@ -112,23 +103,13 @@ jobs:
       - name: Parse & validate request / 解析校验请求(白名单)
         id: req
         env:
-          REQUEST_MANIFEST: ${{ github.event_name == 'issues' && 'request-attachments.json' || '' }}
+          REQUEST_MANIFEST: request-attachments.json
           SUBMITTED_CONFIG_OUT: submitted.config
           RECOMMENDED_AUDIT_OUT: recommended-audit.json
-          ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
-          IN_DEVICE: ${{ github.event.client_payload.device }}
-          IN_SOURCE: ${{ github.event.client_payload.source }}
-          IN_VERSION: ${{ github.event.client_payload.version }}
-          IN_VARIANT: ${{ github.event.client_payload.variant }}
-          IN_PLUGINS: ${{ github.event.client_payload.plugins }}
-          IN_TAG: ${{ github.event.client_payload.tag }}
-          IN_PACKAGES: ${{ github.event.client_payload.packages }}
-          IN_USE_DEFCONFIG: ${{ github.event.client_payload.use_defconfig }}
         run: node tools/parse-request.mjs
 
       - name: "Comment on issue: build started / 回评 issue:构建开始"
-        if: github.event_name == 'issues'
         uses: actions/github-script@v7
         with:
           script: |
@@ -140,7 +121,7 @@ jobs:
             });
 
       - name: Comment & close issue on invalid request / 校验失败时回评并关闭 issue
-        if: github.event_name == 'issues' && failure()
+        if: failure()
         uses: actions/github-script@v7
         with:
           script: |
@@ -290,30 +271,8 @@ jobs:
 
       - name: Prepare authoritative .config / 准备权威配置
         run: |
-          if [ "${{ steps.req.outputs.authoritative_config }}" = "1" ]; then
-            cp submitted.config openwrt/.config
-          else
-            # repository_dispatch is the hidden internal smoke compatibility path.
-            node tools/build-config.mjs \
-              --device "${{ steps.req.outputs.device }}" \
-              --source "${{ steps.req.outputs.source }}" \
-              --version "${{ steps.req.outputs.version }}" \
-              --variant "${{ steps.req.outputs.variant }}" \
-               --plugins "${{ steps.req.outputs.plugins }}" \
-                --packages "${{ steps.req.outputs.packages }}" \
-                --theme "${{ steps.req.outputs.theme }}" \
-                --zonename "${{ steps.req.outputs.zonename }}" \
-                --timezone "${{ steps.req.outputs.timezone }}" \
-                --page-version "${{ steps.req.outputs.page_version }}" \
-               --out openwrt/.config
-            cp openwrt/.config submitted.config
-          fi
+          cp submitted.config openwrt/.config
           cp submitted.config openwrt/pre-defconfig.config
-          if [ -n "${{ steps.req.outputs.catalog_file }}" ]; then
-            node "$GITHUB_WORKSPACE/tools/validate-catalog-config.mjs" \
-              --catalog "$GITHUB_WORKSPACE/${{ steps.req.outputs.catalog_file }}" \
-              --config "$GITHUB_WORKSPACE/submitted.config"
-          fi
           if [ "${{ steps.req.outputs.use_defconfig }}" = "1" ]; then
             cd openwrt
             echo "Defconfig enabled / 官方补全已启用: make defconfig"
@@ -332,14 +291,7 @@ jobs:
             --requested "$GITHUB_WORKSPACE/recommended-audit.json" \
             --config .config \
             --report "$GITHUB_WORKSPACE/recommended-report.json"
-          if [ "${{ steps.req.outputs.firmware_snapshot }}" = "1" ]; then
-            grep -Fx "CONFIG_PACKAGE_${{ steps.req.outputs.theme }}=y" .config || {
-              echo "Selected firmware theme is missing from the submitted config: ${{ steps.req.outputs.theme }}" >&2
-              exit 1
-            }
-          fi
           cp .config "$GITHUB_WORKSPACE/build.config"
-          grep '^CONFIG_TARGET_PROFILE' .config
           grep -c '^CONFIG_PACKAGE_luci-app' .config || true
 
       - name: Record effective configuration / 记录实际构建配置
@@ -552,7 +504,7 @@ jobs:
           cp build.log build-diagnostic.log download.log failure-logs/ 2>/dev/null || true
           cp build-metadata.txt failure-logs/ 2>/dev/null || true
           cp proxy-selected.txt failure-logs/ 2>/dev/null || true
-          cp submitted.config active-catalog.json recommended-audit.json recommended-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig.log build.config failure-logs/ 2>/dev/null || true
+          cp submitted.config recommended-audit.json recommended-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig.log build.config failure-logs/ 2>/dev/null || true
           cp openwrt/.config failure-logs/final.config 2>/dev/null || true
           # 失败重试通过 BUILD_LOG=1 请求 OpenWrt 生成分包日志 / The retry requests OpenWrt per-package logs through BUILD_LOG=1
           if [ -d openwrt/logs ]; then

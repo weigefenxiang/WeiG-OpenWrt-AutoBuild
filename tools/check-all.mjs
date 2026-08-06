@@ -9,12 +9,6 @@ import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { applyConfigResolution, configSymbolValues, matchingConfigRules } from './config-rules.mjs';
-import {
-  applyBuildRequirements,
-  missingBuildRequirements,
-  sourceBuildRequirements,
-} from './source-build-requirements.mjs';
 import { directoriesMatch, syncBlogMirror } from './sync-blog.mjs';
 import { checkTextFiles } from './check-text-format.mjs';
 import {
@@ -313,10 +307,8 @@ for (const f of ['site/wrt/data/devices.json', 'site/wrt/data/i18n.json', 'site/
   'site/wrt/data/timezones.json', 'site/wrt/data/plugins-i18n.json',
   'site/wrt/data/menuconfig-index.json', 'site/wrt/data/menuconfig-demo.json',
   'site/wrt/data/project.json', 'site/wrt/data/minimum-boot.json',
-  'site/wrt/data/package-mirrors.json', 'site/wrt/data/config-rules.json',
-  'site/wrt/data/source-build-requirements.json',
-  'config/001.presets/minimum-boot.json', 'config/001.presets/config-rules.json',
-  'config/001.presets/source-build-requirements.json',
+  'site/wrt/data/package-mirrors.json', 'site/wrt/data/source-build-requirements.json',
+  'config/001.presets/minimum-boot.json', 'config/001.presets/source-build-requirements.json',
   'tools/plugins-meta.json', 'tools/plugin-sizes.json', 'tools/i18n-source.json',
   'tools/i18n-translations.json', 'tools/plugins-i18n.json', 'tools/device-catalog.json',
   'tools/package-baseline-360t7.json']) {
@@ -326,43 +318,6 @@ for (const f of ['site/wrt/data/devices.json', 'site/wrt/data/i18n.json', 'site/
 
 console.log('[3/3] 一致性抽查 / consistency spot checks');
 try {
-  const configRuleFixture = 'CONFIG_DEFAULT_libustream-openssl=y\nCONFIG_PACKAGE_luci-ssl=y\nCONFIG_PACKAGE_libustream-openssl=y\n';
-  const configRulesSource = JSON.parse(readFileSync(
-    join(ROOT, 'config', '001.presets', 'config-rules.json'), 'utf8'));
-  const configRulesPublic = JSON.parse(readFileSync(
-    join(ROOT, 'site', 'wrt', 'data', 'config-rules.json'), 'utf8'));
-  const tlsRule = configRulesSource.rules?.find((rule) => rule.id === 'lede-tls-backend');
-  const tlsChoices = tlsRule?.resolutions || [];
-  const ksmbdRule = configRulesSource.rules?.find((rule) => rule.id === 'lede-linux-6.12-ksmbd');
-  const ksmbdFixture = [
-    'CONFIG_LINUX_6_12=y',
-    'CONFIG_PACKAGE_kmod-fs-ksmbd=m',
-    'CONFIG_PACKAGE_luci-i18n-ksmbd-zh-cn=y',
-    'CONFIG_KSMBD_SMB_INSECURE_SERVER=y',
-  ].join('\n');
-  const ksmbdResolution = ksmbdRule?.resolutions?.find((item) => item.id === 'disable-ksmbd');
-  const repairedKsmbd = applyConfigResolution(ksmbdFixture, ksmbdResolution);
-  const repairedKsmbdValues = configSymbolValues(repairedKsmbd);
-  JSON.stringify(configRulesSource) === JSON.stringify(configRulesPublic) &&
-    matchingConfigRules(configRuleFixture, { sourceId: 'lede', branch: 'master' }).length === 1 &&
-    matchingConfigRules(configRuleFixture, { sourceId: 'OpenWrt', branch: 'main' }).length === 0 &&
-    tlsChoices.some((item) => item.id === 'openssl' && item.recommended &&
-      item.set?.['PACKAGE_luci-ssl'] === 'n' && item.set?.['PACKAGE_luci-ssl-openssl'] === 'y') &&
-    tlsChoices.some((item) => item.id === 'mbedtls' &&
-      item.set?.['PACKAGE_libustream-openssl'] === 'n' && item.set?.['PACKAGE_libustream-mbedtls'] === 'y') &&
-    matchingConfigRules(ksmbdFixture, { sourceId: 'lede', branch: 'master' })[0]?.id === ksmbdRule?.id &&
-    matchingConfigRules(ksmbdFixture, { sourceId: 'lede', branch: 'openwrt-24.10' }).length === 0 &&
-    ksmbdRule?.prompt === 'always' &&
-    ksmbdRule?.maintenance?.observedPackage === 'ksmbd 3.5.4' &&
-    /^https:\/\/github\.com\/.+\/actions\/runs\/\d+$/.test(ksmbdRule?.maintenance?.evidence || '') &&
-    ksmbdResolution?.set?.['PACKAGE_kmod-fs-ksmbd'] === 'n' &&
-    ksmbdResolution?.setPrefixes?.['PACKAGE_luci-i18n-ksmbd-'] === 'n' &&
-    repairedKsmbdValues.get('PACKAGE_kmod-fs-ksmbd') === 'n' &&
-    repairedKsmbdValues.get('PACKAGE_luci-i18n-ksmbd-zh-cn') === 'n' &&
-    repairedKsmbdValues.get('KSMBD_SMB_INSECURE_SERVER') === 'n' &&
-    !matchingConfigRules(repairedKsmbd, { sourceId: 'lede', branch: 'master' }).length
-    ? ok('config rules: TLS choices plus LEDE/Linux 6.12 ksmbd y/m guard are synchronized')
-    : bad('config rules', 'public copy, scope/any-state match, prompt, or repair data is invalid');
   const dev = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'devices.json'), 'utf8'));
   const t7 = dev.devices.find((d) => d.id === '360t7');
   const activeSources = new Set(['ImmortalWrt', 'OpenWrt', 'lede']);
@@ -507,40 +462,30 @@ mirrorRootsOk
     : bad('sensitive mask', 'WireGuard 或 Tor 的中文界面打码规则缺失');
   const css = readFileSync(join(ROOT, 'site', 'wrt', 'app.css'), 'utf8');
   const buildWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8');
-  const smokeWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'smoke-all.yml'), 'utf8');
   const syncWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'sync-upstream.yml'), 'utf8');
   const driftSentinel = readFileSync(join(ROOT, 'tools', 'check-drift.mjs'), 'utf8');
   const parser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
+  const requirementsSource = JSON.parse(readFileSync(
+    join(ROOT, 'config', '001.presets', 'source-build-requirements.json'), 'utf8'));
   const requirementsPublic = JSON.parse(readFileSync(
     join(ROOT, 'site', 'wrt', 'data', 'source-build-requirements.json'), 'utf8'));
-  const requirementContext = {
-    sourceId: 'lede',
-    branch: 'master',
-    system: 'x86',
-    subtarget: 'legacy',
-    profile: 'DEVICE_generic',
-  };
-  const requirementFixture = 'CONFIG_TARGET_x86=y\nCONFIG_TARGET_BOARD="x86"\n';
-  const missingRequirements = missingBuildRequirements(requirementFixture, requirementContext);
-  const requirementResolved = applyBuildRequirements(requirementFixture, missingRequirements);
-  const requirementIds = sourceBuildRequirements.requirements?.map((row) => row.id) || [];
-  const sourceRequirementsOk = sourceBuildRequirements.schema === 1 &&
-    JSON.stringify(sourceBuildRequirements) === JSON.stringify(requirementsPublic) &&
+  const requirementIds = requirementsSource.requirements?.map((row) => row.id) || [];
+  const sourceRequirementsOk = requirementsSource.schema === 1 &&
+    JSON.stringify(requirementsSource) === JSON.stringify(requirementsPublic) &&
     requirementIds.length > 0 && new Set(requirementIds).size === requirementIds.length &&
-    sourceBuildRequirements.requirements.every((row) => Array.isArray(row.options) && row.options.length > 0 &&
+    requirementsSource.requirements.every((row) => Array.isArray(row.options) && row.options.length > 0 &&
       row.options.every((option) => /^[A-Z0-9_]+$/.test(option.symbol) && ['n', 'm', 'y'].includes(option.value))) &&
-    missingRequirements.some((row) => row.missingOptions.some((option) => option.symbol === 'HAVE_DOT_CONFIG')) &&
-    missingBuildRequirements(requirementResolved, requirementContext).length === 0 &&
+    requirementsSource.requirements.some((row) =>
+      row.options.some((option) => option.symbol === 'HAVE_DOT_CONFIG' && option.value === 'y')) &&
     js.includes("loadJson('source-build-requirements.json')") &&
-    js.includes('enforceBuildRequirements: true') &&
+    js.includes('function applyBuildRequirements(text)') &&
     js.includes('enforceBuildRequirements && !state.useDefconfig') &&
-    js.includes('openBuildRequirementResolver') &&
-    parser.includes('missingBuildRequirements(config, configRuleContext)') &&
-    parser.includes('if (!useDefconfig && missingRequirements.length)') &&
-    parser.includes('use_defconfig=');
+    !js.includes('openBuildRequirementResolver') &&
+    !parser.includes('missingBuildRequirements') &&
+    !parser.includes('构建必需配置缺失');
   sourceRequirementsOk
-    ? ok('source build requirements: one JSON, explicit web acceptance, and Issue rejection are connected')
-    : bad('source build requirements', 'JSON schema/copy, web resolver, parser guard, or Defconfig branch contract is invalid');
+    ? ok('source build requirements: frontend silently applies HAVE_DOT_CONFIG without backend rejection')
+    : bad('source build requirements', 'frontend marker, JSON copy, or backend-removal contract is invalid');
   const project = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
   const deployScript = readFileSync(join(ROOT, 'docs-private', 'Sync_Deploy.bat'), 'utf8');
   const remoteDeployBase64 = deployScript.match(/set \"REMOTE_B64=([A-Za-z0-9+/=]+)\"/)?.[1] || '';
@@ -749,55 +694,91 @@ mirrorRootsOk
     !buildWorkflow.includes('system-overrides.json') &&
     !buildWorkflow.includes('CONFIG_DEVEL') &&
     !buildWorkflow.includes('CONFIG_BUILD_LOG') &&
-    !buildWorkflow.includes('config-overrides.json') &&
-    !buildWorkflow.includes('config-overrides.diff') &&
-    !existsSync(join(ROOT, 'tools', 'apply-config-overrides.mjs')) &&
-    !existsSync(join(ROOT, 'tools', 'config-overrides.mjs')) &&
-    !existsSync(join(ROOT, 'config', '001.presets', 'system-overrides.json')) &&
+    !buildWorkflow.includes('validate-catalog-config.mjs') &&
+    !existsSync(join(ROOT, 'tools', 'validate-catalog-config.mjs')) &&
+    !existsSync(join(ROOT, 'tools', 'config-rules.mjs')) &&
+    !existsSync(join(ROOT, 'config', '001.presets', 'config-rules.json')) &&
+    !existsSync(join(ROOT, 'site', 'wrt', 'data', 'config-rules.json')) &&
+    !parser.includes('validateConfig(') && !parser.includes('matchingConfigRules(') &&
+    !parser.includes('CONFIG_TARGET_ARCH_PACKAGES 与 Catalog') &&
+    !parser.includes('CONFIG_ARCH 与 Catalog') &&
+    !parser.includes('提交配置没有启用所选固件主题') &&
+    !buildWorkflow.includes('Selected firmware theme is missing') &&
+    !buildWorkflow.includes("grep '^CONFIG_TARGET_PROFILE'") &&
     buildWorkflow.includes('config_policy=upstream-defconfig') &&
     buildWorkflow.includes('config_policy=authoritative-no-defconfig') &&
-    buildWorkflow.includes('use_defconfig=') &&
-    buildWorkflow.includes('validate-catalog-config.mjs') &&
-    buildWorkflow.indexOf('validate-catalog-config.mjs') < buildWorkflow.indexOf('make defconfig 2>&1 | tee') &&
-    !buildWorkflow.includes('--phase post-defconfig') &&
-    !buildWorkflow.includes('CATALOG_PHASE') &&
     buildWorkflow.includes('make defconfig 2>&1 | tee') &&
-    !buildWorkflow.includes('verify-defconfig.mjs') &&
-    !existsSync(join(ROOT, 'tools', 'verify-defconfig.mjs')) &&
     buildWorkflow.includes('pre-defconfig.config') &&
     buildWorkflow.includes('defconfig.config') &&
     buildWorkflow.includes('defconfig.diff') &&
     buildWorkflow.includes('defconfig.log') &&
     buildWorkflow.includes('build.config') &&
-    buildWorkflow.includes('id: compile') &&
-    buildWorkflow.includes('id: diagnose') &&
-    buildWorkflow.includes('continue-on-error: true') &&
-    buildWorkflow.includes('timeout-minutes: 60') &&
     buildWorkflow.includes('make -j1 V=s BUILD_LOG=1') &&
-    buildWorkflow.includes('build-diagnostic.log') &&
     buildWorkflow.includes('Compile was not started because an earlier step failed') &&
-    buildWorkflow.includes('Finalize compile result') &&
-    parser.includes('const configRuleContext = {') && parser.includes('matchingConfigRules(config, configRuleContext)') &&
-    js.includes('matchingConfigRules(config)') &&
-    js.includes('applyConfigRules(config, rules)') &&
-    js.includes('openConfigRuleResolver') && js.includes('generateResolvedConfigText') &&
+    js.includes('function applyBuildRequirements(text)') &&
+    !js.includes('matchingConfigRules(config)') &&
+    !js.includes('openConfigRuleResolver') &&
     !js.includes("window.open('about:blank'") && js.includes('window.location.assign(issueUrl)') &&
     buildWorkflow.includes('实际列出的文件');
   failureDiagnosticsContract
-    ? ok('失败诊断:提交配置预检、官方 Defconfig、BUILD_LOG 单线程诊断与跳过编译保护已接通')
-    : bad('failure diagnostics', '仍有配置覆盖、post-defconfig 验证、诊断命令或跳过编译误报问题');
-  const hiddenSmokeContract = !buildWorkflow.includes('workflow_dispatch:') &&
-    buildWorkflow.includes('repository_dispatch:') &&
-    buildWorkflow.includes('types: [smoke-build]') &&
-    buildWorkflow.includes('github.event.client_payload.device') &&
-    parser.includes("let requestMode = 'smoke-internal';") &&
-    smokeWorkflow.includes('github.rest.repos.createDispatchEvent') &&
-    smokeWorkflow.includes("event_type: 'smoke-build'") &&
-    smokeWorkflow.includes('contents: write') &&
-    !smokeWorkflow.includes('createWorkflowDispatch');
-  hiddenSmokeContract
-    ? ok('构建入口:旧手动表单已移除，Smoke All 通过隐藏 repository_dispatch 独立触发')
-    : bad('build entrypoint', 'Custom Build 仍暴露手动 dispatch，或 Smoke All 隐藏触发链不完整');
+    ? ok('配置边界:后端仅保留 Target/Profile 身份与官方 Defconfig，诊断链完整')
+    : bad('configuration boundary', '仍有 Catalog/兼容/架构/主题阻断或诊断链缺失');
+  const backendBoundaryFixtureRoot = mkdtempSync(join(tmpdir(), 'weig-backend-config-boundary-'));
+  try {
+    const fixtureId = '360t7/ImmortalWrt/master/qihoo_360t7';
+    const fixtureManifest = configManifest.configs[fixtureId];
+    let fixtureConfig = readFileSync(join(ROOT, fixtureManifest.sourcePath), 'utf8')
+      .replace(/^CONFIG_HAVE_DOT_CONFIG=.*\n|^# CONFIG_HAVE_DOT_CONFIG is not set\n/gm, '')
+      .replace(/\s*$/, '\n');
+    fixtureConfig += 'CONFIG_PACKAGE_dnsmasq=y\nCONFIG_PACKAGE_dnsmasq-full=y\nCONFIG_DROPBEAR_ED25519=y\n';
+    const fixtureRequest = {
+      schema: 4, pageVersion: 'v2608062236', configId: fixtureId,
+      device: '360t7', source: 'ImmortalWrt', version: 'master', branch: 'master',
+      variant: 'qihoo_360t7', plugins: [], tag: 'boundary-fixture', config: fixtureConfig,
+      use_defconfig: false,
+      audit: { recommended: { enabled: false, requested: [] }, defconfig: { enabled: false } },
+      firmware: { zonename: 'Asia/Shanghai', timezone: 'CST-8', theme: 'luci-theme-argon', ntp: 'cn', opkg: 'ustc' },
+    };
+    const requestPath = join(backendBoundaryFixtureRoot, 'request.json');
+    const submittedPath = join(backendBoundaryFixtureRoot, 'submitted.config');
+    const auditPath = join(backendBoundaryFixtureRoot, 'audit.json');
+    writeFileSync(requestPath, JSON.stringify(fixtureRequest));
+    const parserEnv = {
+      ...process.env, REQUEST_FILE: requestPath, REQUEST_MANIFEST: '',
+      SUBMITTED_CONFIG_OUT: submittedPath, RECOMMENDED_AUDIT_OUT: auditPath,
+    };
+    const accepted = spawnSync(process.execPath, [join(ROOT, 'tools', 'parse-request.mjs')], {
+      encoding: 'utf8', env: parserEnv,
+    });
+    fixtureRequest.config = fixtureConfig.replace(
+      'CONFIG_TARGET_mediatek_filogic_DEVICE_qihoo_360t7=y',
+      'CONFIG_TARGET_mediatek_filogic_DEVICE_wrong_profile=y');
+    writeFileSync(requestPath, JSON.stringify(fixtureRequest));
+    const rejected = spawnSync(process.execPath, [join(ROOT, 'tools', 'parse-request.mjs')], {
+      encoding: 'utf8', env: parserEnv,
+    });
+    accepted.status === 0 && rejected.status !== 0 &&
+        String(rejected.stderr || rejected.stdout).includes('目标设备签名')
+      ? ok('后端边界夹具:不审判插件依赖/HAVE_DOT_CONFIG,但拒绝错误 Target/Profile')
+      : bad('backend config boundary fixture',
+        `accepted=${accepted.status}, rejected=${rejected.status}, ${(accepted.stderr || rejected.stderr || '').slice(0, 220)}`);
+  } catch (error) {
+    bad('backend config boundary fixture', error.message.slice(0, 300));
+  } finally {
+    rmSync(backendBoundaryFixtureRoot, { recursive: true, force: true });
+  }
+  const issueOnlyBuildContract = !buildWorkflow.includes('workflow_dispatch:') &&
+    !buildWorkflow.includes('repository_dispatch:') &&
+    !buildWorkflow.includes('client_payload') &&
+    !existsSync(join(ROOT, '.github', 'workflows', 'smoke-all.yml')) &&
+    !existsSync(join(ROOT, 'tools', 'build-config.mjs')) &&
+    parser.includes('仅支持网页生成的 build-request.json') &&
+    !parser.includes('smoke-internal') &&
+    !parser.includes('IN_DEVICE') &&
+    !buildWorkflow.includes('authoritative_config');
+  issueOnlyBuildContract
+    ? ok('构建入口:仅接受网页生成的 Issue 权威附件，旧 smoke 生成链已删除')
+    : bad('build entrypoint', '仍残留 repository_dispatch、smoke workflow 或旧配置生成器');
   const driftSentinelContract = driftSentinel.includes("const forbidden = ['lede-17.01', 'pcs-standalone-back', 'master'];") &&
     driftSentinel.includes("names.has('main')") && !driftSentinel.includes('360T7') &&
     !driftSentinel.includes('qihoo_360t7') && !syncWorkflow.includes('360T7');
@@ -876,14 +857,14 @@ mirrorRootsOk
     js.includes("errorStage: 'catalog-refresh-required'") &&
     !js.includes("filter((branch) => branch.state !== 'unavailable')") &&
     parser.includes("async function loadCatalogIndex(revision = 'catalog-data')") &&
-    parser.includes("async function loadCatalog(repo, branch, revision = 'catalog-data')") &&
-    parser.includes('Catalog 缺少构建验证用 legacy 资源契约') &&
-    parser.includes('const indexedLegacy = legacyCatalogContract(catalogBranch)') &&
-    parser.includes('validateConfig(') &&
-    parser.includes('createCatalogModel(activeCatalog)') &&
-    parser.includes('Catalog sourceCommit 与请求契约不一致') &&
-    parser.includes('Catalog 不提供该源码/分支的固件主题') &&
-    parser.includes('catalogBranch.state ===');
+    parser.includes('function legacyCatalogContract(branch)') &&
+    parser.includes('const indexedLegacy = legacyCatalogContract(indexedBranch)') &&
+    parser.includes('Catalog sourceCommit 与固定 index 不一致') &&
+    parser.includes('catalogBranch.state ===') &&
+    !parser.includes('async function loadCatalog(repo, branch') &&
+    !parser.includes('validateConfig(') &&
+    !parser.includes('createCatalogModel(') &&
+    !parser.includes('active-catalog.json');
   catalogProjectContract
     ? ok('Fork 单文件参数 + Catalog 4 源 14 分支 + 构建白名单已接通')
     : bad('project/catalog contract', `源码 ${catalogIndex.sources.length},分支 ${catalogBranches.length},或动态白名单缺失`);
@@ -1044,7 +1025,6 @@ mirrorRootsOk
   const versionWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'site-version.yml'), 'utf8');
   const versionStamper = readFileSync(join(ROOT, 'tools', 'stamp-site-version.mjs'), 'utf8');
   const requestParser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
-  const configBuilder = readFileSync(join(ROOT, 'tools', 'build-config.mjs'), 'utf8');
   const genericDiy = readFileSync(join(ROOT, 'Shell', 'diy2-generic.sh'), 'utf8');
   const mirrorDiy = readFileSync(join(ROOT, 'Shell', 'apply-package-mirror.sh'), 'utf8');
   const issueFieldIds = [...issueForm.matchAll(/^\s+id:\s*([A-Za-z0-9_-]+)\s*$/gm)].map((m) => m[1]);
@@ -1054,7 +1034,8 @@ mirrorRootsOk
     issueFormIsSingleAttachment &&
     workflow.includes('tools/fetch-build-request.mjs') &&
     workflow.includes('cp submitted.config openwrt/.config') &&
-    workflow.includes('authoritative_config');
+    !workflow.includes('authoritative_config') &&
+    !workflow.includes('build-config.mjs');
   contractOk
     ? ok('Issue attachment → submitted.config → openwrt/.config 权威链路已接通')
     : bad('Issue attachment contract', `Issue 表单或 workflow 关键链路缺失；字段=${issueFieldIds.join(',') || '(无)'}`);
@@ -1091,7 +1072,8 @@ mirrorRootsOk
     workflow.includes('firmware-settings.txt') &&
     requestParser.includes('const buildRef = requestRef ? `${requestRef}-${tag}` : tag;') &&
     requestParser.includes('固件设置快照不一致') &&
-    requestParser.includes('CONFIG_PACKAGE_${theme}=y') &&
+    !requestParser.includes('CONFIG_PACKAGE_${theme}=y') &&
+    !workflow.includes('所选主题未保留') &&
     genericDiy.includes('files/etc/weig-build-info') &&
     genericDiy.includes("luci.main.mediaurlbase") &&
     genericDiy.includes("printf '%s\\n'") &&
@@ -1131,7 +1113,8 @@ mirrorRootsOk
     : bad('Actions live log contract', '动态并发、逐行 tee、单次下载、失败诊断或旧过滤清理不完整');
   const buildLimitContract = workflow.includes('MAX_BUILDS_PER_USER') &&
     workflow.includes('Build admission refused') &&
-    workflow.includes('const isRepositoryOwner = isIssue && requester.toLowerCase() === context.repo.owner.toLowerCase();') &&
+    workflow.includes('const requester = context.payload.issue.user.login;') &&
+    workflow.includes('const isRepositoryOwner = requester.toLowerCase() === context.repo.owner.toLowerCase();') &&
     workflow.includes('`owner-${context.runId}`') &&
     workflow.includes('Repository owner build admitted without queue') &&
     workflow.includes('custom-build-user-${{ needs.admission.outputs.requester }}-${{ needs.admission.outputs.slot }}') &&
@@ -1258,10 +1241,11 @@ mirrorRootsOk
       !js.includes('catalogSchema: Number(MENU_CATALOG?.schema') &&
       !js.includes('relationsSchema: Number(MENU_CATALOG?.relations?.schema') &&
       parser.includes('function legacyCatalogContract(branch)') &&
-      parser.includes('固定 Catalog index 缺少构建验证用 legacy 契约') &&
-      parser.includes('Catalog schema contract mismatch / Catalog schema 与请求契约不一致') &&
-      parser.includes('request catalog=${catalogContract.catalogSchema} relations=${catalogContract.relationsSchema}') &&
-      parser.includes('actual catalog=${actualCatalogSchema} relations=${actualRelationsSchema}');
+      parser.includes('const indexedLegacy = legacyCatalogContract(indexedBranch)') &&
+      parser.includes('固定 Catalog index 与请求的 legacy 契约不一致') &&
+      !parser.includes('active-catalog.json') &&
+      !parser.includes('gunzipSync') &&
+      !parser.includes('actualCatalogSchema');
     catalogBuildContractSeparation
       ? ok('Catalog build contract: schema-6 runtime and schema-5 legacy validation assets are separated')
       : bad('Catalog build contract separation', 'runtime schema leaked into build request or legacy index/parser guards are missing');
@@ -1281,12 +1265,13 @@ mirrorRootsOk
       js.includes('function renderProfilePackageModal()') &&
       js.includes('function applyProfilePackageOverrides(text)') &&
       !js.includes('enforceCatalogProfilePackages') &&
-      parser.includes('catalogArch') &&
-      parser.includes('catalogArchPackages') &&
-      parser.includes('packagesAdd') &&
-      !parser.includes('missingProfilePackages') &&
-      parser.includes('CONFIG_ARCH 与 Catalog 不一致') &&
-      parser.includes('CONFIG_TARGET_ARCH_PACKAGES 与 Catalog 不一致') &&
+      parser.includes("const actualBoard = configStringValue(submittedConfig, 'TARGET_BOARD')") &&
+      parser.includes("const actualSubtarget = configStringValue(submittedConfig, 'TARGET_SUBTARGET')") &&
+      parser.includes('actualDeviceSymbols.length !== 1') &&
+      parser.includes('actualDeviceSymbols[0] !== expectedSelector') &&
+      parser.includes('Target/Profile 身份不一致') &&
+      !parser.includes('CONFIG_ARCH 与 Catalog 不一致') &&
+      !parser.includes('CONFIG_TARGET_ARCH_PACKAGES 与 Catalog 不一致') &&
       buildWorkflow.includes('catalog_arch') &&
       buildWorkflow.includes('catalog_arch_packages');
     buildContractUi
@@ -1351,7 +1336,6 @@ mirrorRootsOk
     versionStamper.includes("timezone: 'Asia/Shanghai'") &&
     versionStamper.includes('^v\\d{10}$') &&
     requestParser.includes('v\\d{8}(?:\\d{2})?') &&
-    configBuilder.includes('v\\d{8}(?:\\d{2})?') &&
     js.includes('^v\\d{10}$') &&
     html.indexOf('id="siteVersion"') > html.indexOf('id="submitBtn"') &&
     !html.includes('id="siteVersionMobile"') &&
@@ -1392,12 +1376,10 @@ mirrorRootsOk
     js.includes('`CONFIG_${element.dataset.symbol}`') &&
     js.includes(".join(' › ')") &&
     js.includes('schema: 5') &&
-    buildWorkflow.includes('validate-catalog-config.mjs') &&
-    !buildWorkflow.includes('CATALOG_PHASE') &&
-    !buildWorkflow.includes('--phase "$CATALOG_PHASE"') &&
-    requestParser.includes('createCatalogValidationContext(') &&
-    requestParser.includes("phase: 'pre-defconfig'") &&
-    js.includes('function catalogValidationContext(') &&
+    !buildWorkflow.includes('validate-catalog-config.mjs') &&
+    !requestParser.includes('validateConfig(') &&
+    !requestParser.includes('createCatalogValidationContext(') &&
+    !requestParser.includes('matchingConfigRules(') &&
     buildWorkflow.includes('steps.req.outputs.source_commit');
   catalogEngineUiContract
     ? ok('Advanced 与普通插件共用 Catalog 依赖引擎；Profile 包和完整悬浮信息已接通')
@@ -1419,7 +1401,7 @@ mirrorRootsOk
     catalogMatrixSource.includes('shared dependency was incorrectly pruned') &&
     catalogMatrixSource.includes('explicitly protected dependency was incorrectly pruned') &&
     catalogMatrixSource.includes('weak imply relationship was incorrectly treated') &&
-    catalogMatrixSource.includes('removed post-defconfig mode was unexpectedly accepted') &&
+    !catalogMatrixSource.includes('validate-catalog-config.mjs') &&
     !enginePackageLiteral;
   standardizedContextContract
     ? ok('Catalog 引擎只执行正式强依赖/select，支持反向关闭与安全清理孤立自动依赖')

@@ -62,10 +62,7 @@ const state = {
   importedConfigId: '',
 };
 const LANIP_RE = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/;   // 仅接受内网 IPv4 / private IPv4 only
-let PLUGINS = null, I18N = null, TIMEZONES = null, MINIMUM_BOOT = null,
-  CONFIG_RULES = null, BUILD_REQUIREMENTS = null;
-const configRuleChoices = new Map();
-const acceptedBuildRequirements = new Set();
+let PLUGINS = null, I18N = null, TIMEZONES = null, MINIMUM_BOOT = null, BUILD_REQUIREMENTS = null;
 let PACKAGE_MIRRORS = { presets: [{ id: 'auto', label: { 'zh-CN': '跟随源码默认', en: 'Follow source default' }, roots: {} }] };
 let MENU_INDEX = null, MENU_CATALOG = null, CATALOG_ENGINE = null, CATALOG_MODEL = null;
 let CATALOG_LOADER_MODULE = null, CATALOG_SCHEMA6_MODULE = null, CATALOG_LOADER = null;
@@ -536,12 +533,10 @@ async function init() {
       releaseTag: PROJECT.catalogReleaseTag || 'menuconfig-catalog-complete',
       engine: CATALOG_ENGINE,
     });
-    [PLUGINS, TIMEZONES, MENU_INDEX, MINIMUM_BOOT, PACKAGE_MIRRORS, CONFIG_RULES,
-      BUILD_REQUIREMENTS] = await Promise.all([
+    [PLUGINS, TIMEZONES, MENU_INDEX, MINIMUM_BOOT, PACKAGE_MIRRORS, BUILD_REQUIREMENTS] = await Promise.all([
       loadJson('seed/plugins.json'), loadJson('timezones.json'),
       loadJson('menuconfig-index.json'), loadJson('minimum-boot.json'),
       loadJson('package-mirrors.json').catch(() => PACKAGE_MIRRORS),
-      loadJson('config-rules.json'),
       loadJson('source-build-requirements.json'),
     ]);
     initializeTimezone();
@@ -3328,7 +3323,6 @@ function clearImportedWorkspace() {
   state.importedConfigId = '';
   state.useDefconfig = true;
   if ($('defconfigToggle')) $('defconfigToggle').checked = true;
-  configRuleChoices.clear();
   importedConfigValues.clear();
   importedUnknownOriginal.clear();
   importedUnknownEdits.clear();
@@ -4322,73 +4316,6 @@ function setConfigSymbol(text, symbol, value, type = 'bool') {
   if (pattern.test(text)) return text.replace(pattern, line);
   return text.replace(/\s*$/, '\n') + line + '\n';
 }
-function configSymbolValues(text) {
-  const values = new Map();
-  for (const match of String(text).matchAll(/^CONFIG_([A-Za-z0-9_.+-]+)=([ym])$/gm)) values.set(match[1], match[2]);
-  for (const match of String(text).matchAll(/^# CONFIG_([A-Za-z0-9_.+-]+) is not set$/gm)) values.set(match[1], 'n');
-  return values;
-}
-function configRuleExpectedValueMatches(actual, expected) {
-  return (Array.isArray(expected) ? expected : [expected]).includes(actual);
-}
-function matchingConfigRules(text) {
-  const values = configSymbolValues(text);
-  const target = state.device?.target || {};
-  const targetValue = (symbol) => String(text).match(new RegExp(`^CONFIG_${symbol}="([^"]+)"$`, 'm'))?.[1] || '';
-  const scope = {
-    sourceId: state.source?.id, branch: state.version?.branch,
-    system: targetValue('TARGET_BOARD') || target.system,
-    subtarget: targetValue('TARGET_SUBTARGET') || target.subtarget,
-    profile: targetValue('TARGET_PROFILE') || target.profile || state.variant?.id,
-  };
-  const fields = [['sources', 'sourceId'], ['branches', 'branch'], ['systems', 'system'],
-    ['subtargets', 'subtarget'], ['profiles', 'profile']];
-  return (CONFIG_RULES?.rules || []).filter((rule) =>
-    fields.every(([scopeKey, contextKey]) => !rule.scope?.[scopeKey]?.length || rule.scope[scopeKey].includes(scope[contextKey])) &&
-    Object.entries(rule.when?.all || {}).every(([symbol, expected]) =>
-      configRuleExpectedValueMatches(values.get(symbol), expected)) &&
-    (!Object.keys(rule.when?.any || {}).length ||
-      Object.entries(rule.when.any).some(([symbol, expected]) =>
-        configRuleExpectedValueMatches(values.get(symbol), expected))));
-}
-function configRuleMessage(rules) {
-  const messages = rules.map((rule) => rule.message?.['zh-CN'] || rule.message?.en || rule.id).join(' ');
-  return uiText(messages, messages, rules.map((rule) => rule.message?.en || rule.id).join(' '));
-}
-function configRuleResolution(rule) {
-  const resolutions = rule.resolutions || [];
-  const selected = configRuleChoices.get(rule.id);
-  return resolutions.find((item) => item.id === selected) ||
-    resolutions.find((item) => item.recommended) || resolutions[0] || null;
-}
-function applyConfigRules(text, rules) {
-  for (const rule of rules) {
-    const resolution = configRuleResolution(rule);
-    for (const [symbol, value] of Object.entries(resolution?.set || rule.set || {})) {
-      text = setConfigSymbol(text, symbol, value);
-    }
-    const values = configSymbolValues(text);
-    for (const [prefix, value] of Object.entries(resolution?.setPrefixes || rule.setPrefixes || {})) {
-      for (const symbol of values.keys()) {
-        if (symbol.startsWith(prefix)) text = setConfigSymbol(text, symbol, value);
-      }
-    }
-  }
-  return text;
-}
-class ConfigRuleResolutionRequired extends Error {
-  constructor(rules) {
-    super(configRuleMessage(rules));
-    this.rules = rules;
-  }
-}
-class BuildRequirementResolutionRequired extends Error {
-  constructor(requirements) {
-    super(uiText('构建配置缺少当前源码的必需项。', '建置設定缺少目前原始碼的必要項目。',
-      'The build configuration is missing required options for this source.'));
-    this.requirements = requirements;
-  }
-}
 function requirementScopeMatches(scope = {}, context = {}) {
   const fields = [
     ['sources', 'sourceId'], ['branches', 'branch'], ['systems', 'system'],
@@ -4415,17 +4342,9 @@ function matchingBuildRequirements(text) {
   return (BUILD_REQUIREMENTS?.requirements || []).filter((requirement) =>
     requirementScopeMatches(requirement.scope, context));
 }
-function missingBuildRequirements(text) {
-  return matchingBuildRequirements(text).map((requirement) => ({
-    ...requirement,
-    missingOptions: (requirement.options || []).filter((option) =>
-      configSymbolValue(text, option.symbol) !== option.value),
-  })).filter((requirement) => requirement.missingOptions.length);
-}
-function applyAcceptedBuildRequirements(text) {
+function applyBuildRequirements(text) {
   let menuChanged = false;
   for (const requirement of matchingBuildRequirements(text)) {
-    if (!acceptedBuildRequirements.has(requirement.id)) continue;
     for (const option of requirement.options || []) {
       text = setConfigSymbol(text, option.symbol, option.value);
       if (menuOptionBySymbol.has(option.symbol)) {
@@ -4438,6 +4357,7 @@ function applyAcceptedBuildRequirements(text) {
   if (menuChanged) markCatalogStateChanged();
   return text;
 }
+
 function applyMenuConfig(text) {
   if (!MENU_CATALOG) return text;
   for (const symbol of new Set([
@@ -4573,22 +4493,7 @@ async function generateConfigText({ enforceBuildRequirements = false } = {}) {
     throw new Error('This workspace requires an uploaded authoritative .config');
   }
   let config = applyToConfig(raw, effectiveSelection());
-  for (let pass = 0; pass < 16; pass++) {
-    const rules = matchingConfigRules(config);
-    if (!rules.length) break;
-    const unresolved = rules.filter((rule) => !configRuleChoices.has(rule.id));
-    const needsChoice = unresolved.filter((rule) => state.importedConfig || rule.prompt === 'always');
-    if (needsChoice.length) throw new ConfigRuleResolutionRequired(needsChoice);
-    const updated = applyConfigRules(config, rules);
-    if (updated === config) throw new Error(uiText('配置规则未产生修正，请检查规则文件。', '設定規則未產生修正，請檢查規則檔。', 'The configuration rule made no change; check the rule file.'));
-    config = updated;
-  }
-  if (matchingConfigRules(config).length) throw new Error(uiText('配置规则循环超过 16 次，请检查规则文件。', '設定規則循環超過 16 次，請檢查規則檔。', 'Configuration rules exceeded 16 passes; check the rule file.'));
-  if (enforceBuildRequirements && !state.useDefconfig) {
-    config = applyAcceptedBuildRequirements(config);
-    const missing = missingBuildRequirements(config);
-    if (missing.length) throw new BuildRequirementResolutionRequired(missing);
-  }
+  if (enforceBuildRequirements && !state.useDefconfig) config = applyBuildRequirements(config);
   return config;
 }
 
@@ -4636,7 +4541,7 @@ function showGenerationError(error) {
   openModal(t('generation.error.title'));
   const modal = $('modal').querySelector('.modal');
   modal.classList.remove('modal-wide', 'modal-import-source', 'recommended-config',
-    'config-rule-resolver', 'profile-package-config');
+    'profile-package-config');
   modal.classList.add('generation-error');
   const body = $('modalBody');
   body.textContent = '';
@@ -5127,7 +5032,6 @@ function restoreSelections(config, payload) {
 async function importConfigFile(file) {
   const seq = ++configImportSeq;
   importingConfig = true;
-  configRuleChoices.clear();
   beginImportLog(file);
   try {
     if (!file || file.size < 32 || file.size > 2 * 1024 * 1024) throw new Error(t('import.size'));
@@ -5251,7 +5155,7 @@ function closeModal() {
   const cancel = modalCancelHandler;
   modalCancelHandler = null;
   $('modal').hidden = true;
-  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'config-rule-resolver', 'profile-package-config', 'generation-error');
+  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'profile-package-config', 'generation-error');
   document.body.classList.remove('modal-open');
   if (lastFocus && lastFocus.focus) lastFocus.focus();
   if (cancel) cancel();
@@ -5267,151 +5171,8 @@ $('modal').addEventListener('keydown', (e) => {
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 });
 
-function localizedRuleText(row, key) {
-  const text = row?.[key] || {};
-  return uiText(text['zh-CN'] || text.en || '', text['zh-TW'] || text.en || '', text.en || '');
-}
-function openConfigRuleResolver(rules) {
-  return new Promise((resolve, reject) => {
-    openModal(uiText('处理配置规则', '處理設定規則', 'Resolve configuration rule'));
-    const modal = $('modal').querySelector('.modal');
-    modal.classList.remove('modal-wide', 'modal-import-source', 'recommended-config');
-    modal.classList.add('config-rule-resolver');
-    const body = $('modalBody');
-    body.textContent = '';
-    const intro = document.createElement('p');
-    intro.className = 'import-error';
-    intro.textContent = uiText('检测到需要确认的配置规则。请选择处理方式；不会修改原上传文件，只有继续下载或提交时才写入修正后的配置。',
-      '偵測到需要確認的設定規則。請選擇處理方式；不會修改原上傳檔案，只有繼續下載或提交時才寫入修正後的設定。',
-      'A configuration rule needs your choice. The uploaded file stays unchanged until the corrected configuration is downloaded or submitted.');
-    body.appendChild(intro);
-    const choices = new Map();
-    const continueButton = document.createElement('button');
-    continueButton.type = 'button';
-    continueButton.className = 'btn btn-primary';
-    continueButton.textContent = uiText('应用并继续', '套用並繼續', 'Apply and continue');
-    continueButton.disabled = true;
-    for (const rule of rules) {
-      const card = document.createElement('section');
-      card.className = 'config-rule';
-      const title = document.createElement('h4');
-      title.textContent = rule.id;
-      card.appendChild(title);
-      const message = document.createElement('p');
-      message.textContent = localizedRuleText(rule, 'message');
-      card.appendChild(message);
-      const options = document.createElement('div');
-      options.className = 'config-rule-options';
-      for (const resolution of rule.resolutions || []) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'config-rule-option';
-        const label = document.createElement('strong');
-        label.textContent = localizedRuleText(resolution, 'label');
-        const description = document.createElement('span');
-        description.textContent = localizedRuleText(resolution, 'description');
-        button.append(label, description);
-        button.addEventListener('click', () => {
-          choices.set(rule.id, resolution.id);
-          for (const sibling of options.children) sibling.classList.remove('selected');
-          button.classList.add('selected');
-          continueButton.disabled = choices.size !== rules.length;
-        });
-        options.appendChild(button);
-      }
-      card.appendChild(options);
-      body.appendChild(card);
-    }
-    const actions = document.createElement('div');
-    actions.className = 'modal-actions';
-    continueButton.addEventListener('click', () => {
-      for (const [ruleId, resolutionId] of choices) configRuleChoices.set(ruleId, resolutionId);
-      modalCancelHandler = null;
-      closeModal();
-      resolve();
-    });
-    const cancel = document.createElement('button');
-    cancel.type = 'button';
-    cancel.className = 'btn';
-    cancel.textContent = uiText('暂不处理', '暫不處理', 'Cancel');
-    cancel.addEventListener('click', closeModal);
-    actions.append(continueButton, cancel);
-    body.appendChild(actions);
-    modalCancelHandler = () => reject(new Error(uiText('已取消处理配置规则', '已取消處理設定規則', 'Configuration rule resolution cancelled')));
-  });
-}
-function openBuildRequirementResolver(requirements) {
-  return new Promise((resolve, reject) => {
-    openModal(uiText('应用构建必需项', '套用建置必要項目', 'Apply required build options'));
-    const modal = $('modal').querySelector('.modal');
-    modal.classList.remove('modal-wide', 'modal-import-source', 'recommended-config');
-    modal.classList.add('config-rule-resolver');
-    const body = $('modalBody');
-    body.textContent = '';
-    const intro = document.createElement('p');
-    intro.className = 'import-error';
-    intro.textContent = uiText(
-      '当前源码要求以下配置项。只有明确应用后才能下载构建请求 JSON；Actions 不会替你静默修改，只有勾选 Defconfig 时才会运行一次 make defconfig。',
-      '目前原始碼要求以下設定項目。只有明確套用後才能下載建置請求 JSON；Actions 不會替你靜默修改，只有勾選 Defconfig 時才會執行一次 make defconfig。',
-      'The selected source requires these options. Apply them explicitly before downloading the build-request JSON. Actions never changes them silently and runs make defconfig once only when Defconfig is selected.');
-    body.appendChild(intro);
-    for (const requirement of requirements) {
-      const card = document.createElement('section');
-      card.className = 'config-rule';
-      const title = document.createElement('h4');
-      title.textContent = localizedRuleText(requirement, 'title') || requirement.id;
-      const description = document.createElement('p');
-      description.textContent = localizedRuleText(requirement, 'description');
-      const options = document.createElement('div');
-      options.className = 'config-rule-options';
-      for (const option of requirement.missingOptions || []) {
-        const row = document.createElement('div');
-        row.className = 'config-rule-option selected';
-        const label = document.createElement('strong');
-        label.textContent = `CONFIG_${option.symbol}=${option.value}`;
-        const detail = document.createElement('span');
-        detail.textContent = localizedRuleText(option, 'label');
-        row.append(label, detail);
-        options.appendChild(row);
-      }
-      card.append(title, description, options);
-      body.appendChild(card);
-    }
-    const actions = document.createElement('div');
-    actions.className = 'modal-actions';
-    const apply = document.createElement('button');
-    apply.type = 'button';
-    apply.className = 'btn btn-primary';
-    apply.textContent = uiText('应用必需项并继续', '套用必要項目並繼續', 'Apply required options and continue');
-    apply.addEventListener('click', () => {
-      for (const requirement of requirements) acceptedBuildRequirements.add(requirement.id);
-      modalCancelHandler = null;
-      closeModal();
-      resolve();
-    });
-    const cancel = document.createElement('button');
-    cancel.type = 'button';
-    cancel.className = 'btn';
-    cancel.textContent = uiText('取消，不下载 JSON', '取消，不下載 JSON', 'Cancel without downloading JSON');
-    cancel.addEventListener('click', closeModal);
-    actions.append(apply, cancel);
-    body.appendChild(actions);
-    modalCancelHandler = () => reject(new Error(uiText(
-      '未应用构建必需项，已取消下载 JSON。', '未套用建置必要項目，已取消下載 JSON。',
-      'Required build options were not applied; JSON download was cancelled.')));
-  });
-}
 async function generateResolvedConfigText(options = {}) {
-  while (true) {
-    try {
-      return await generateConfigText(options);
-    } catch (error) {
-      if (error instanceof ConfigRuleResolutionRequired) await openConfigRuleResolver(error.rules);
-      else if (error instanceof BuildRequirementResolutionRequired) {
-        await openBuildRequirementResolver(error.requirements);
-      } else throw error;
-    }
-  }
+  return generateConfigText(options);
 }
 
 function openSubmitModal() {

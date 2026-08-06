@@ -31,7 +31,6 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ cancel-build.yml             Issue 提交者用 /cancel 取消自己的构建
 │  ├─ sync-upstream.yml            每周同步上游:机型目录/种子/插件表/说明页,有 diff 才自动提交
 │  ├─ mirror-upstream.yml          每月镜像上游仓库防删库(需 secrets.MIRROR_TOKEN)
-│  └─ smoke-all.yml                一键触发三源隐藏最小构建(健康巡检)
 ├─ config/                      ✍ base .config 唯一事实源(77 个品牌目录)
 │  ├─ 360/360t7/                   360T7 按源码/分支/Profile 生成的配置
 │  ├─ platform/x86-64-generic/     通用 Target 的版本化 config
@@ -70,10 +69,8 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ gen-plugins.mjs              config × meta → plugins/packages.json + README 计数刷新
 │  ├─ gen-i18n.mjs                 校验合并词条 → i18n.json + 翻译对照表
 │  ├─ gen-pkg-page.mjs             生成 site/wrt/packages.html
-│  ├─ build-config.mjs             仅隐藏 smoke 兼容生成
 │  ├─ fetch-build-request.mjs      下载 GitHub Issue 附件(严格域名/数量/大小)
 │  ├─ parse-request.mjs            载荷解析 + 固定 Catalog/源码契约 + 共享引擎严格校验
-│  ├─ validate-catalog-config.mjs   Defconfig/覆盖项后复用同一引擎做构建前校验
 │  ├─ check-all.mjs                一键体检;check-drift.mjs 上游漂移哨兵
 │  ├─ sync-blog.mjs                Unicode 安全逐文件镜像(分块哈希、原子替换与失败回滚)
 │  └─ serve.mjs                    本地静态服务器(监听 0.0.0.0:8642)
@@ -137,7 +134,7 @@ WeiG-OpenWrt-AutoBuild/
 - Catalog schema 6 将每个分支拆为 `core`、`graph`、`menu`、`hidden`、`help` 和当前语言菜单分片。首次选择分支只并行下载 `core + graph`；展开 Advanced 才下载可见菜单与当前语言，首次搜索再补隐藏显示信息，用户点击被截断的完整说明时才下载长 Help。`graph` 使用 relations schema 3 紧凑数组；schema 5 单体只作为迁移回退。Advanced 每次状态变化递增 revision，Target 上下文、表达式 token、可见性和最大 N/M/Y 等级按 revision 复用；搜索索引在 Worker 中一次建立，输入经 180 ms 防抖，主线程只接收 symbol ID。默认搜索不纳入长 Help，菜单一次最多渲染 80 行并按滚动分页，避免巨大 Catalog 反复创建全部 DOM。
 - Advanced 普通项无论是否截断都可打开统一详情弹层；英文界面同样可查看完整 CONFIG symbol、英文说明和路径，其他语言额外显示真实译文。Source/Branch 加载、Catalog commit/hash/bytes 校验、schema 6 分片与 VPS 无 Catalog 的部署约束保持不变。
 - 桌面使用悬浮/聚焦，手机轻触 ID 或说明打开详情；点击 N/M/Y 只改变状态。浮层宽度受当前行 N/M/Y 左边界限制。分类、choice、分页、搜索 Worker 和响应式控制继续按既有性能设计运行。
-- 网页只接受 schema、commit、压缩字节数与 SHA-256 都符合 index 的 Catalog。新 `build-request` schema 5 同时保存 Catalog 仓库、不可变数据提交、分片名/字节数/SHA-256、Catalog/relations schema、上游仓库和上游源码 commit；Issue 解析必须下载同一提交中的同一分片并按该精确上游 commit 构建。schema 3/4 只作为历史请求兼容。`Top level` 固定为可回跳主菜单；精选 Applications 只是 UI 快捷入口，其可用性和所有依赖都由 Catalog 决定。
+- 网页只接受 schema、commit、压缩字节数与 SHA-256 都符合 index 的 Catalog。新 `build-request` schema 5 同时保存 Catalog 仓库、不可变数据提交、legacy asset/hash/bytes、Catalog/relations schema、上游仓库和源码 commit；Issue 解析器只读取固定 index 并逐字段核对这份版本契约，不再下载单体 Catalog 扫描整份 `.config`，Workflow 按精确上游 commit 构建。schema 3/4 只作为历史请求兼容。`Top level` 固定为可回跳主菜单；精选 Applications 是由浏览器 Catalog 引擎处理依赖的 UI 快捷入口。
 - Catalog 的 Publish 按分支校验当前结果。成功分支立即发布新分片；失败或校验损坏的分支隔离本轮结果并沿用 `catalog-data` 的 last-good，index 分别标为 fresh/stale/unavailable。部分失败时滚动目录仍更新、矩阵 Workflow 仍保持红色；只有所有分支都成功且通过校验时才更新完整 Release。
 - Catalog 翻译任务使用工作流最小权限 `models: read`，默认每周增量处理 500 条文本；翻译警告写入 `translation-summary.json` 和 Publish Summary。人工表、上游英文与已经成功的目录发布不受模型故障影响。
 - 360T7 最小 config 不携带完整 Kconfig 软件包表;开发者搜索所需三源状态保存在 `tools/package-baseline-360t7.json`,由 `gen-plugins` 合并生成 `packages.json`。
@@ -149,21 +146,21 @@ WeiG-OpenWrt-AutoBuild/
 
 - Catalog 选择状态保持基础、推荐、用户覆盖、自动依赖与导入来源层。`catalogDependencySymbols` 只记录引擎自动带入项；关闭插件后，引擎可清理其中不再被任何启用项需要的条目，但 `catalogBaselineValues`、`catalogRecommendedValues`、`catalogImportedSymbols` 和非 `n` 的 `catalogUserOverrides` 均为保护层。Profile 包覆盖另以稀疏 `profilePackageOverrides` 保存，仅记录用户改成 Include/Exclude 的少量条目。
 
-- `.github/workflows/custom-build.yml`:网页用户只通过 Issue 附件构建；`Smoke All` 通过隐藏 `repository_dispatch` 触发兼容构建，因此 Actions 不再展示旧手动参数表单。Issue 标题使用 `[build] 请求时间戳/构建标识/Target/Source/Branch/Profile`；解析器把 `build_ref` 规范化为 `请求时间戳-构建标识`。每个上游 `.img.gz` 以该前缀加原文件名作为独立、无 ZIP 外壳的 Artifact，辅助资料相应命名为 `请求时间戳-构建标识-CONFIG`、`BUILD-LOGS`、`OPTIONAL-PACKAGES`、`FIRMWARE-OTHER`。时区、主题、NTP、opkg 在提交配置、Summary、`firmware-settings.txt` 与固件内 `/etc/weig-build-info` 交叉核验；固件/config 保留 30 天，完整日志保留 14 天。
+- `.github/workflows/custom-build.yml` 只接受网页生成的 Issue 附件，不再提供 `repository_dispatch` 或隐藏 smoke 配置生成入口。Issue 标题使用 `[build] 请求时间戳/构建标识/Target/Source/Branch/Profile`；解析器把 `build_ref` 规范化为 `请求时间戳-构建标识`。每个上游 `.img.gz` 以该前缀加原文件名作为独立、无 ZIP 外壳的 Artifact，辅助资料相应命名为 `请求时间戳-构建标识-CONFIG`、`BUILD-LOGS`、`OPTIONAL-PACKAGES`、`FIRMWARE-OTHER`。时区、主题、NTP、opkg 在提交配置、Summary、`firmware-settings.txt` 与固件内 `/etc/weig-build-info` 交叉核验；固件/config 保留 30 天，完整日志保留 14 天。
 - 软件源镜像由 `diy2-generic.sh` 自动兼容：旧版 opkg 源改写 `distfeeds.conf`；APK 源（25.12+）改写构建期 `VERSION_REPO`，由源码生成 `distfeeds.list`。网页选择 `Asia/Shanghai` 时，如果用户尚未手动选择镜像，会默认选取当前 Source 第一个可用的中国内地镜像；切换 Source 时重新验证可用性。`check-all` 必须保证全部现行 Source（ImmortalWrt、OpenWrt、lede）至少有一个中国内地镜像。不要把 APK 的生成文件当作源码内固定文件。
 - 构建准入默认限制每位提交者同时最多 2 个排队中或运行中的任务；第 3 个 Issue 会自动回评并关闭。仓库所有者按 GitHub 登录名识别，不受此上限限制，并为每次构建使用独立并发组，不会在本项目队列中互相等待。Fork 可在仓库 Variables 设置正整数 `MAX_BUILDS_PER_USER` 覆盖默认值。`cancel-build.yml` 只接受原 Issue 提交者的 `/cancel` 或 `/cancel-build`，先普通取消，15 秒未结束才强制取消；管理员仍可在 Actions 页面管理任意任务。
 - 根目录 `VERSION` 是仓库与网页共用的分钟级 `vYYMMDDHHmm` 版本源；`site-version.json` 是静态部署副本。Actions Summary 同时记录 VERSION、请求网页版本、定制器 commit、上游 commit 和完整输入参数。
-- 下载与并行编译使用动态并发并保留完整日志；并行失败后执行 `make -j1 V=s BUILD_LOG=1`，无需修改 `.config` 即请求上游分包日志。浏览器、`parse-request.mjs` 与 `validate-catalog-config.mjs` 共用 Catalog 引擎，但 CI 只验证提交配置一次；post-defconfig 模式已删除。网页自动执行强依赖、`select`、choice 与反向失效关闭，不自动执行弱 `imply` 或猜测多 provider。人工 `config-rules` 兼容层本轮保持不变。
-- `config/001.presets/source-build-requirements.json` 是 Source/Branch/Target 构建必需项的唯一维护源，`site/wrt/data/source-build-requirements.json` 只是静态网页副本。范围字段支持 `sources`、`branches`、`systems`、`subtargets`、`profiles` 与通配符 `*`；每项只声明明确的 Kconfig `symbol` 和 `n/m/y` 值。网页允许单独下载未补项的 `.config` 供用户编辑，但下载构建请求 JSON 前必须弹窗说明并由用户明确应用；`parse-request.mjs` 使用同一源二次检查，缺项请求在克隆上游前直接拒绝。维护新源只改权威 JSON 并同步网页副本，不得在 Workflow 或插件 JS 中另写特判。
-- schema 5 解析器先按请求中的不可变 Catalog revision/asset/hash/bytes 取得同一分片，核验 Source/Branch/Target/Profile、架构、白名单和提交前标准关系，再输出 Catalog 的 `sourceCommit`。Workflow 获取该精确 commit；可选官方 Defconfig 成功后直接进入编译，不再调用共享引擎做后置否决，也不执行系统配置覆盖。
+- 下载与并行编译使用动态并发并保留完整日志；并行失败后执行 `make -j1 V=s BUILD_LOG=1`，无需修改 `.config` 即请求上游分包日志。Catalog 引擎只在网页交互中执行强依赖、`select`、choice、反向失效关闭和孤立自动依赖清理；后端不再对整份 `.config` 判断插件依赖或冲突，也不保留人工 `config-rules`。用户勾选时仅由官方 `make defconfig` 解析配置；未勾选时直接使用提交配置。
+- `config/001.presets/source-build-requirements.json` 目前只承载前端未勾选 Defconfig 时静默加入的 `CONFIG_HAVE_DOT_CONFIG=y`，`site/wrt/data/source-build-requirements.json` 是静态网页副本。后端不读取该规则，也不因缺失而拒绝请求；若以后所有构建都固定运行 Defconfig，可删除这层前端兼容。
+- schema 5 解析器只读取固定 Catalog index，核对 revision/legacy 元数据与 `sourceCommit`，不再下载 Catalog 单体或扫描整份 `.config`。后端只保留安全白名单和最小 Target/Profile 身份核对，不检查 ARCH/ARCH_PACKAGES、插件关系、人工兼容规则、主题包状态或构建必需项。Workflow 获取精确上游 commit；可选官方 Defconfig 是唯一后端配置解析步骤。
 - `custom-target` 不要求 Profile 预先存在于仓库清单；上传配置中的通用 Target 选择直接作为构建输入，不含 360T7 专用限制，其可用性由所选上游源码负责。
 - 全部版本化 base config 默认关闭 PassWall/SSR Plus/VSSR/TinyProxy 及其代理内核/子选项;`check-all.mjs` 会在任一默认 config 出现代理 `CONFIG_PACKAGE_*=y/m` 时直接失败。config 预检把实际开编配置中已选中的代理相关符号写入 `proxy-selected.txt` 和 Summary,用户主动选择时仍可按正常依赖加入
 - `tools/parse-request.mjs`:全字段白名单(机型/源/版本/变体/插件±前缀/原始软件包/登录地址/初始密码/时区/主题/NTP/opkg)。新手 Issue 只显示一个必填附件框并推荐网页 JSON;解析器仍接受 1~3 个 GitHub 自有附件并识别 JSON、`.config`、`config.buildinfo`,但无网页元数据头的原始配置必须先回网页加载识别。
-- Issue 正式链路不调用 `build-config.mjs`:前端 `applyToConfig()` 生成完整 config → 附件 → `submitted.config` → `openwrt/.config`;`build-config.mjs` 只保留给内部 smoke 的隐藏 `repository_dispatch` 兼容入口。
+- Issue 是唯一构建入口：前端 `applyToConfig()` 生成完整 config → 附件 → `submitted.config` → `openwrt/.config`。旧 `build-config.mjs`、`repository_dispatch` 和 smoke 兼容入口已删除。
 - 时区表在 `site/wrt/data/timezones.json`,来源为 OpenWrt LuCI 的 445 项映射。组合框默认只列约 70 个常用城市并按当前 UTC 偏移从 `UTC-12` 到 `UTC+14` 排序；输入搜索时仍查询完整 445 项，`北京`/`北京时间` 只作为 `Asia/Shanghai` 搜索词，不写入显示值。首次访问且没有用户保存值或导入配置时，优先采用浏览器报告的 IANA 时区；手动选择会保存到本机。前端提交 IANA `zonename`,解析器映射并输出 POSIX `timezone`;三个 diy2 脚本用 `files/etc/uci-defaults/10-weig-timezone` 同时写入两项。控件统一为 44px 高，旧 POSIX 请求继续兼容。
 - Actions 的全局 `TZ` 只控制 Runner 进程日志时间；不要在 GitHub 托管 Runner 调用 `timedatectl set-timezone`，该操作可能因 systemd 权限被拒绝并让依赖安装步骤失败。固件时区始终由请求字段和 diy2 首启脚本写入，与 Runner 系统时区无关。
 - diy 脚本按源区分:官方源用 `diy2-openwrt.sh`,lede 用 `diy2-lede.sh`(都不能复用 ImmortalWrt 系的)
-- `sync-upstream.yml` 每周六 18:37 UTC 自动同步上游并提交;`check-drift.mjs` 只检查通用 OpenWrt 分支策略并在漂移时开 issue;`mirror-upstream.yml` 每月镜像(需 `secrets.MIRROR_TOKEN`);`smoke-all.yml` 一键触发三源隐藏最小构建。
+- `sync-upstream.yml` 每周六 18:37 UTC 自动同步上游并提交；`check-drift.mjs` 只检查通用 OpenWrt 分支策略并在漂移时开 issue；`mirror-upstream.yml` 每月镜像（需 `secrets.MIRROR_TOKEN`）。构建回归测试通过网页生成的真实 Issue 请求执行，不再使用 smoke 派发器。
 - `site-version.yml` 监听 `site/wrt/**` 与 `VERSION` push,按内容指纹同时更新根 `VERSION` 和 `site-version.json`，由机器人一次提交；解析器继续接受旧 `vYYMMDDHH` 请求。桌面端版本号位于“加载配置”左侧，560px 以下改在页脚右侧；`github.actor` 条件防止提交循环。
 
 #### 取消内置项与直接配置构建
@@ -212,7 +209,7 @@ WeiG-OpenWrt-AutoBuild/
 1. **单发验证**:网页选择 Catalog 当前 fresh 的 `ImmortalWrt` 稳定分支、一个常见 Target 与 `ttyd`，失败时先排查基建；
 2. **issue-ops 验证**:本地 bat 打开页面 → 勾 ttyd → 提交云编译 → GitHub 上点 Create,一分钟内应有机器人回评"构建已开始";
 3. **sync-upstream 手动跑一次**:几分钟结束,验证目录抓取与漂移哨兵;
-4. **smoke-all 一键三连发**:三条产线各来一个最小构建;
+4. **真实 Issue 回归构建**：从网页分别生成需要覆盖的源码/分支/Target 请求；
 5. 全绿后再测花活:高级模式(`+homeproxy -turboacc`)、原始软件包(packages 填 `iptables-mod-ipp2p -iptables-mod-ipopt`)、`stock` 变体、自定义 lanip、`@empty` 密码。
 
 #### 失败了怎么读日志
@@ -236,7 +233,7 @@ WeiG-OpenWrt-AutoBuild/
 node tools/parse-request.mjs   # 需先设 ISSUE_BODY 环境变量
 
 # 生成最终 .config(与 CI 完全同规则,直接检查产物)
-node tools/build-config.mjs --device 360t7 --source OpenWrt --version main --variant qihoo_360t7 --plugins "ttyd +homeproxy" --out %TEMP%\t.config
+node tools/parse-request.mjs  # 需通过 REQUEST_FILE 或 REQUEST_MANIFEST 指定网页请求附件
 
 # 全仓库体检(语法/数据/一致性,含全部版本化 base config 的代理默认值扫描)
 node tools/check-all.mjs
@@ -244,7 +241,7 @@ node tools/check-all.mjs
 
 #### 其他实用常识
 
-- 单发构建约 2~3 小时(无缓存);GitHub 免费并发约 20 job,smoke-all 四连发会并行跑;
+- 单发构建约 2~3 小时（无缓存）；批量回归请分别提交网页 Issue 请求并遵守每用户构建上限；
 - Artifacts:独立原始 `.img.gz`、`CONFIG`、`OPTIONAL-PACKAGES`、`FIRMWARE-OTHER` 保留 30 天，`BUILD-LOGS` 保留 14 天，过期重新提交;
 - run 列表按 `Build 定制 · 标识 · 源 版本/变体` 命名,测试时 tag 用带日期的昵称(如 `weige-0727`)方便区分批次;
 - 取消构建:普通提交者在自己的构建 Issue 回复 `/cancel`;管理员也可在 run 页面右上 Cancel。取消后机器人会回评并关单。
