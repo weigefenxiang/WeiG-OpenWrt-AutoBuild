@@ -464,8 +464,8 @@ function setActive(row, pill) {
 async function init() {
   try {
     [CATALOG_ENGINE, CATALOG_LOADER_MODULE] = await Promise.all([
-      import('./lib/catalog-engine.mjs?v=54ba403f60'),
-      import('./lib/catalog-loader.mjs?v=36d916e2d3'),
+      import('./lib/catalog-engine.js?v=54ba403f60'),
+      import('./lib/catalog-loader.js?v=36d916e2d3'),
     ]);
     I18N = await loadJson('i18n.json');
     state.lang = pickLang();

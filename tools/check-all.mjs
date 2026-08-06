@@ -18,6 +18,11 @@ import {
 import { applyConfigOverrides, verifyConfigLayers } from './config-overrides.mjs';
 import { directoriesMatch, syncBlogMirror } from './sync-blog.mjs';
 import { checkTextFiles } from './check-text-format.mjs';
+import {
+  FORBIDDEN_SITE_ARCHIVE_ENTRIES,
+  REQUIRED_SITE_ARCHIVE_ENTRIES,
+  verifySiteArchive,
+} from './verify-site-archive.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 let fail = 0;
@@ -49,6 +54,7 @@ function formatSizeContract(mb) {
 
 console.log('[1/3] JS 语法检查 / syntax check (node --check)');
 const scripts = [join(ROOT, 'site', 'wrt', 'app.js'),
+  ...walkFiles(join(ROOT, 'site', 'wrt', 'lib'), '.js'),
   ...walkFiles(join(ROOT, 'site', 'wrt', 'lib'), '.mjs'),
   ...readdirSync(join(ROOT, 'tools')).filter((f) => f.endsWith('.mjs')).map((f) => join(ROOT, 'tools', f))];
 for (const f of scripts) {
@@ -95,6 +101,68 @@ try {
   bad('text format fixtures', error.message.slice(0, 300));
 } finally {
   rmSync(textFormatFixtureRoot, { recursive: true, force: true });
+}
+
+const siteArchiveTestRoot = mkdtempSync(join(tmpdir(), '威格 archive verifier with spaces-'));
+try {
+  const completeSite = join(siteArchiveTestRoot, '完整 网站 source');
+  const missingSite = join(siteArchiveTestRoot, '缺少 index source');
+  const legacySite = join(siteArchiveTestRoot, '旧模块 source');
+  const validArchive = join(siteArchiveTestRoot, '完整 网站 部署包.tar.gz');
+  const missingArchive = join(siteArchiveTestRoot, '缺少 文件 部署包.tar.gz');
+  const legacyArchive = join(siteArchiveTestRoot, '旧 mjs 部署包.tar.gz');
+  const writeEntry = (root, relativePath, content = `fixture:${relativePath}\n`) => {
+    const target = join(root, ...relativePath.split('/'));
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, content);
+  };
+  for (const entry of REQUIRED_SITE_ARCHIVE_ENTRIES) writeEntry(completeSite, entry);
+  for (const entry of REQUIRED_SITE_ARCHIVE_ENTRIES.filter((entry) => entry !== 'index.html')) {
+    writeEntry(missingSite, entry);
+  }
+  for (const entry of REQUIRED_SITE_ARCHIVE_ENTRIES) writeEntry(legacySite, entry);
+  writeEntry(legacySite, FORBIDDEN_SITE_ARCHIVE_ENTRIES[0], 'legacy\n');
+  const makeArchive = (source, archive) => spawnSync('tar', ['-czf', archive, '-C', source, '.'], {
+    encoding: 'utf8',
+    shell: false,
+  });
+  const archiveBuilds = [
+    makeArchive(completeSite, validArchive),
+    makeArchive(missingSite, missingArchive),
+    makeArchive(legacySite, legacyArchive),
+  ];
+  const validReport = verifySiteArchive(validArchive);
+  const missingReport = verifySiteArchive(missingArchive);
+  const legacyReport = verifySiteArchive(legacyArchive);
+  const missingTarReport = verifySiteArchive(validArchive, {
+    tarCommand: 'weig-tar-command-that-does-not-exist',
+  });
+  const archiveCli = spawnSync(process.execPath, [
+    join(ROOT, 'tools', 'verify-site-archive.mjs'), validArchive,
+  ], { encoding: 'utf8' });
+  const archiveFixtureOk = archiveBuilds.every((result) => result.status === 0) &&
+    validReport.ok && validReport.entries.has('index.html') &&
+    !missingReport.ok && missingReport.category === 'missing' &&
+    missingReport.missing.includes('index.html') &&
+    !legacyReport.ok && legacyReport.category === 'forbidden' &&
+    legacyReport.forbidden.includes(FORBIDDEN_SITE_ARCHIVE_ENTRIES[0]) &&
+    !missingTarReport.ok && missingTarReport.category === 'tool' &&
+    missingTarReport.error.includes('ENOENT') &&
+    archiveCli.status === 0 && archiveCli.stdout.includes('Required files confirmed');
+  archiveFixtureOk
+    ? ok('site archive verifier: Unicode/space paths, required files, legacy rejection and missing tar are classified without shell pipes')
+    : bad('site archive verifier fixtures', JSON.stringify({
+      archiveBuilds: archiveBuilds.map((result) => result.status),
+      valid: validReport.ok,
+      missing: missingReport.missing,
+      forbidden: legacyReport.forbidden,
+      missingTar: missingTarReport.error,
+      cliStatus: archiveCli.status,
+    }).slice(0, 600));
+} catch (error) {
+  bad('site archive verifier fixtures', error.message.slice(0, 400));
+} finally {
+  rmSync(siteArchiveTestRoot, { recursive: true, force: true });
 }
 
 const catalogLoaderTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-catalog-loader.mjs')], {
@@ -408,7 +476,7 @@ mirrorRootsOk
   : bad('package-mirrors.json', '镜像 ID、根路径或来源映射不符合安全格式');
   const html = readFileSync(join(ROOT, 'site', 'wrt', 'index.html'), 'utf8');
   const js = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
-  const catalogLoaderJs = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.mjs'), 'utf8');
+  const catalogLoaderJs = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.js'), 'utf8');
   const genPlugins = readFileSync(join(ROOT, 'tools', 'gen-plugins.mjs'), 'utf8');
   const sensitiveMaskContract = js.includes("'wireguard'") && js.includes("'tor'") &&
     js.includes("/^wireguard$/i.test(w)") && js.includes("w.slice(0, 3) + '***' + w.slice(-3)");
@@ -463,8 +531,11 @@ mirrorRootsOk
     : bad('source build requirements', 'JSON schema/copy, web resolver, parser guard, or Defconfig branch contract is invalid');
   const project = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
   const deployScript = readFileSync(join(ROOT, 'docs-private', 'Sync_Deploy.bat'), 'utf8');
+  const remoteDeployBase64 = deployScript.match(/set \"REMOTE_B64=([A-Za-z0-9+/=]+)\"/)?.[1] || '';
+  const remoteDeploySource = remoteDeployBase64 ? Buffer.from(remoteDeployBase64, 'base64').toString('utf8') : '';
   const syncBlogSource = readFileSync(join(ROOT, 'tools', 'sync-blog.mjs'), 'utf8');
   const textFormatSource = readFileSync(join(ROOT, 'tools', 'check-text-format.mjs'), 'utf8');
+  const archiveVerifierSource = readFileSync(join(ROOT, 'tools', 'verify-site-archive.mjs'), 'utf8');
   const gitAttributes = readFileSync(join(ROOT, '.gitattributes'), 'utf8');
   const deployGuide = readFileSync(join(ROOT, 'docs-private', '部署与同步.md'), 'utf8');
   const blogGuide = readFileSync(join(ROOT, 'docs-private', '003.weige-share-blog同步与推送.md'), 'utf8');
@@ -480,18 +551,57 @@ mirrorRootsOk
     .digest('hex').slice(0, 10);
   const assetVersionOk = html.includes(`app.css?v=${assetHash('app.css')}`) &&
     html.includes(`app.js?v=${assetHash('app.js')}`) &&
-    js.includes(`./lib/catalog-engine.mjs?v=${moduleHash('catalog-engine.mjs')}`) &&
-    js.includes(`./lib/catalog-loader.mjs?v=${moduleHash('catalog-loader.mjs')}`);
+    js.includes(`./lib/catalog-engine.js?v=${moduleHash('catalog-engine.js')}`) &&
+    js.includes(`./lib/catalog-loader.js?v=${moduleHash('catalog-loader.js')}`);
   assetVersionOk
     ? ok('前端 CSS/JS 与动态 Catalog 模块查询版本均和内容指纹一致')
     : bad('frontend asset cache bust', 'index.html 或 app.js 的静态/动态资源查询版本未按内容指纹更新');
+  const catalogModulePackage = JSON.parse(readFileSync(
+    join(ROOT, 'site', 'wrt', 'lib', 'package.json'), 'utf8'));
+  const catalogBrowserModuleContract = catalogModulePackage.type === 'module' &&
+    existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.js')) &&
+    existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.js')) &&
+    !existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.mjs')) &&
+    !existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.mjs')) &&
+    js.includes("import('./lib/catalog-engine.js?v=") &&
+    js.includes("import('./lib/catalog-loader.js?v=") &&
+    !js.includes('catalog-engine.mjs') && !js.includes('catalog-loader.mjs');
+  catalogBrowserModuleContract
+    ? ok('Catalog browser modules use .js with a scoped Node ESM package and no legacy .mjs files')
+    : bad('Catalog browser module layout', '.js modules, scoped package.json, imports, or legacy-file cleanup is incomplete');
+  const siteArchiveVerifierContract =
+    deployScript.includes(String.raw`node "%MAIN_REPO%\tools\verify-site-archive.mjs" "%LOCAL_ARCHIVE%"`) &&
+    !deployScript.includes(':verify_site_archive') &&
+    !deployScript.includes('tar -tzf "%~1" ^| findstr') &&
+    archiveVerifierSource.includes("spawnSync(tarCommand, ['-tzf', archive]") &&
+    archiveVerifierSource.includes('shell: false') &&
+    archiveVerifierSource.includes('Required files confirmed') &&
+    archiveVerifierSource.includes('Legacy .mjs Catalog module(s) found') &&
+    REQUIRED_SITE_ARCHIVE_ENTRIES.every((entry) => archiveVerifierSource.includes(`'${entry}'`)) &&
+    FORBIDDEN_SITE_ARCHIVE_ENTRIES.every((entry) => archiveVerifierSource.includes(`'${entry}'`));
+  siteArchiveVerifierContract
+    ? ok('VPS archive gate uses one shell-free Node verifier; CMD tar/findstr pipelines are forbidden')
+    : bad('site archive verifier contract', 'Sync_Deploy, required/forbidden entries, shell:false, or old CMD pipeline cleanup is incomplete');
   const remoteCatalogDeploymentContract =
     !deployScript.includes('fetch-catalog-mirror.mjs') &&
     !deployScript.includes('CATALOG_MIRROR_ROOT') &&
     !deployScript.includes('catalog-data/index.json') &&
     (deployScript.includes('Browser uses commit-pinned jsDelivr/GitHub Raw with complete Release fallback') ||
       deployScript.includes('Browser uses commit-pinned jsDelivr with GitHub Raw fallback')) &&
-    deployScript.includes(String.raw`tar -czf "%LOCAL_ARCHIVE%" -C "%MAIN_REPO%\site\wrt" .`);
+    deployScript.includes(String.raw`tar -czf "%LOCAL_ARCHIVE%" -C "%MAIN_REPO%\site\wrt" .`) &&
+    deployScript.includes(String.raw`node "%MAIN_REPO%\tools\verify-site-archive.mjs" "%LOCAL_ARCHIVE%"`) &&
+    deployScript.includes('Legacy catalog-engine.mjs must be deleted before deployment.') &&
+    deployScript.includes('Legacy catalog-loader.mjs must be deleted before deployment.') &&
+    remoteDeploySource.includes('ROOT=${WRT_ROOT:-/var/www/wrt}') &&
+    remoteDeploySource.includes('ARCHIVE=${WRT_ARCHIVE:-/tmp/wrt-update.tar.gz}') &&
+    remoteDeploySource.includes('test -s "$NEW/lib/catalog-engine.js"') &&
+    remoteDeploySource.includes('test -s "$NEW/lib/catalog-loader.js"') &&
+    remoteDeploySource.includes('SMOKE_ORIGIN=${WRT_SMOKE_ORIGIN:-http://127.0.0.1:28081}') &&
+    remoteDeploySource.includes('Content-Type:') &&
+    remoteDeploySource.includes('catalog-engine.js') &&
+    remoteDeploySource.includes('catalog-loader.js') &&
+    remoteDeploySource.includes('test ! -e "$NEW/lib/catalog-engine.mjs"') &&
+    remoteDeploySource.includes('test ! -e "$NEW/lib/catalog-loader.mjs"');
   remoteCatalogDeploymentContract
     ? ok('VPS 只部署网页；Catalog 由固定提交 CDN/Raw 与完整 Release 提供')
     : bad('remote Catalog deployment', '部署脚本仍下载/打包 Catalog，或未声明提交固定的远程回退');
@@ -625,13 +735,14 @@ mirrorRootsOk
     previewBat.includes('node tools\\serve.mjs site\\wrt 8642') &&
     previewBat.includes('title wrt-server - local preview 8642') &&
     previewBat.includes('http://localhost:8642/index.html') &&
-    previewBat.includes('http://localhost:8642/lib/catalog-engine.mjs') &&
-    previewBat.includes('http://localhost:8642/lib/catalog-loader.mjs') &&
+    previewBat.includes('http://localhost:8642/lib/catalog-engine.js') &&
+    previewBat.includes('http://localhost:8642/lib/catalog-loader.js') &&
     previewBat.includes("$l.Headers['Content-Type'] -match 'javascript'") &&
     previewBat.includes('start "" /b powershell') &&
     !previewBat.includes('start "wrt-server" /min') &&
     !previewBat.includes('pause\r\nexit /b 0') &&
     previewBat.includes('menuconfigBox') &&
+    previewServer.includes("'.js': 'text/javascript; charset=utf-8'") &&
     previewServer.includes("'.mjs': 'text/javascript; charset=utf-8'") &&
     previewServer.includes("'cache-control': 'no-store'");
   previewBatOk
@@ -1000,7 +1111,7 @@ mirrorRootsOk
     js.includes('function syncCatalogApplications') &&
     js.includes("['Top level', ...menuBreadcrumb]") &&
     !js.includes('`./catalog-data/${asset}`') &&
-    js.includes("import('./lib/catalog-loader.mjs?v=") &&
+    js.includes("import('./lib/catalog-loader.js?v=") &&
     catalogLoaderJs.indexOf("for (const id of ['github-raw', 'jsdelivr', 'github-release'])") >= 0 &&
     catalogLoaderJs.indexOf("const order = ['jsdelivr', 'github-raw', 'github-release']") >= 0 &&
     catalogLoaderJs.includes('/releases/download/${defaultReleaseTag}/index.json') &&
@@ -1138,7 +1249,7 @@ mirrorRootsOk
     : bad('web self-test contract', '种子数据路径、Catalog/上传配置或真实生成演算缺失');
   const catalogEngineUiContract = !html.includes('id="devpkgToggle"') &&
     !js.includes('devPkgs') && !js.includes('PKGDATA') &&
-    js.includes("import('./lib/catalog-engine.mjs?v=") &&
+    js.includes("import('./lib/catalog-engine.js?v=") &&
     js.includes('menuSearchOptions = [...options, ...hiddenOptions]') &&
     js.includes('CATALOG_ENGINE.applyUserIntent') &&
     js.includes('CATALOG_ENGINE.proposeRepairs') &&
@@ -1152,7 +1263,7 @@ mirrorRootsOk
   catalogEngineUiContract
     ? ok('Advanced 已接管隐藏包搜索；网页/Actions 共用 Catalog 引擎，旧原始包入口已退役')
     : bad('Catalog engine UI/CI contract', '共享引擎、隐藏包搜索、精确源码或旧入口清理不完整');
-  const catalogEngineSource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.mjs'), 'utf8');
+  const catalogEngineSource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.js'), 'utf8');
   const catalogMatrixSource = readFileSync(join(ROOT, 'tools', 'test-catalog-engine.mjs'), 'utf8');
   const enginePackageLiteral = /[\"'`]PACKAGE_[A-Za-z0-9_.+@-]+[\"'`]/.test(catalogEngineSource);
   const standardizedContextContract =

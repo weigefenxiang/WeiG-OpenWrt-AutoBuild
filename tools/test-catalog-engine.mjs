@@ -12,7 +12,7 @@ import {
   parseConfigDocument,
   proposeRepairs,
   validateConfig,
-} from '../site/wrt/lib/catalog-engine.mjs';
+} from '../site/wrt/lib/catalog-engine.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);

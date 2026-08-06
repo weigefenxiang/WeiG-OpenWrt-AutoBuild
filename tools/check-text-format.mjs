@@ -23,9 +23,14 @@ const CRITICAL_FILES = [
   '.gitignore',
   'VERSION',
   'OpenWebPage_打开网页.bat',
+  'site/wrt/app.js',
+  'site/wrt/lib/catalog-engine.js',
+  'site/wrt/lib/catalog-loader.js',
+  'site/wrt/lib/package.json',
   'tools/check-all.mjs',
   'tools/check-text-format.mjs',
   'tools/sync-blog.mjs',
+  'tools/verify-site-archive.mjs',
   'docs-private/Sync_Deploy.bat',
 ];
 

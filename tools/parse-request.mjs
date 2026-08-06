@@ -18,7 +18,7 @@ import {
   formatViolations,
   parseConfigDocument,
   validateConfig,
-} from '../site/wrt/lib/catalog-engine.mjs';
+} from '../site/wrt/lib/catalog-engine.js';
 import { matchingConfigRules } from './config-rules.mjs';
 import {
   formatMissingBuildRequirements,

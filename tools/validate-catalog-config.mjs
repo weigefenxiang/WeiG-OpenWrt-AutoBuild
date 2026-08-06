@@ -10,7 +10,7 @@ import {
   parseConfigDocument,
   resolveCatalogTargetContext,
   validateConfig,
-} from '../site/wrt/lib/catalog-engine.mjs';
+} from '../site/wrt/lib/catalog-engine.js';
 
 const args = {};
 for (let i = 2; i < process.argv.length; i++) {

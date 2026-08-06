@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
-import { createCatalogModel } from '../site/wrt/lib/catalog-engine.mjs';
-import { createCatalogLoader, formatCatalogDiagnostics, sha256Hex } from '../site/wrt/lib/catalog-loader.mjs';
+import { createCatalogModel } from '../site/wrt/lib/catalog-engine.js';
+import { createCatalogLoader, formatCatalogDiagnostics, sha256Hex } from '../site/wrt/lib/catalog-loader.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);

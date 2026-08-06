@@ -45,7 +45,9 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ index.html                ✍ 页面骨架
 │  ├─ app.css                   ✍ 样式(浅深双主题×两档密度,1160px 容器,860/560/400 断点)
 │  ├─ app.js                    ✍ UI、Catalog 加载、交互与请求生成；不维护插件专用依赖规则
-│  ├─ lib/catalog-engine.mjs       浏览器/Node 共用的声明式 Catalog 规则解释器
+│  ├─ lib/catalog-engine.js       浏览器/Node 共用的声明式 Catalog 规则解释器
+│  ├─ lib/catalog-loader.js       浏览器 Catalog 下载、缓存与完整性校验
+│  ├─ lib/package.json            仅将 lib/*.js 声明为 Node ESM，不改变仓库其他 .js
 │  ├─ packages.html             ⚙ 软件包用途说明页(gen-pkg-page 产出,11 语内嵌,离线可开)
 │  ├─ Wei.G.ico + Wei.G-favicon_little.png   站点图标
 │  └─ data/                        页面与 CI 共用的运行时数据
@@ -127,7 +129,7 @@ WeiG-OpenWrt-AutoBuild/
 - 注册表:`site/wrt/data/devices.json`(仅供 CI、生成工具和历史请求兼容;网页不再加载。360T7 完整维护,其余为种子机型)
 - 公共网页目录 `site/wrt/data/` 禁止存放 `.config`;唯一权威 base config 位于 `config/`。`gen-plugins.mjs` 会删除旧公共副本并生成插件/软件包索引。
 - 机型目录:`tools/device-catalog.json`,由 `node tools/fetch-catalog.mjs` 逐分支解析真实 `TARGET_DEVICES` 与 `Device/*` 模板继承;随后 `node tools/gen-seed-configs.mjs` 按源码/分支/Profile 重建独立最精简配置。
-- 网页按 Catalog 的 `targetSelectors`/`targetTree` 动态生成 Target 控件，不再把五级结构写死。普通菜单只使用 Catalog 的可见 Kconfig 项；Advanced 搜索同时索引隐藏 Kconfig 和 packageinfo-only 记录，因此 `luci-i18n-*` 等自动生成包可以被搜索、查看状态并清理旧配置残留，但隐藏项默认不能脱离父依赖强行开启。`site/wrt/lib/catalog-engine.mjs` 是唯一标准关系解释器：开启项目时只补齐可唯一确定的必要依赖，关闭项目时沿反向索引重新计算完整表达式并递归关闭真正失效的依赖者；`app.js` 不得出现插件名、语言包前缀或主题依赖特例。分类、批量渲染、面包屑和响应式行为保持原设计。
+- 网页按 Catalog 的 `targetSelectors`/`targetTree` 动态生成 Target 控件，不再把五级结构写死。普通菜单只使用 Catalog 的可见 Kconfig 项；Advanced 搜索同时索引隐藏 Kconfig 和 packageinfo-only 记录，因此 `luci-i18n-*` 等自动生成包可以被搜索、查看状态并清理旧配置残留，但隐藏项默认不能脱离父依赖强行开启。`site/wrt/lib/catalog-engine.js` 是唯一标准关系解释器：开启项目时只补齐可唯一确定的必要依赖，关闭项目时沿反向索引重新计算完整表达式并递归关闭真正失效的依赖者；`app.js` 不得出现插件名、语言包前缀或主题依赖特例。分类、批量渲染、面包屑和响应式行为保持原设计。
 - 用户加载 `.config`、JSON 或 `config.buildinfo` 时，网页先等待对应 Catalog，再恢复 Target/menuconfig。恢复完成后共享引擎先生成修复预览：无效隐藏残留和依赖链不会静默留到 Actions；用户确认后才按行修改。未收录 Target 保持为 `custom-target`，真正不在 Catalog 的符号继续进入导入工作区。上传的完整配置始终是唯一权威配置。
 - Catalog 以源码 `.packageinfo`/Kconfig 英文为权威名称，在 `translations/zh-CN.json` 维护精选 Applications 的 11 语名称与用途，在 `translations/menu-i18n.json` 维护人工校对菜单；发布阶段用 `i18n-cache.json` 复用历史译文，只把新增/变化文本交给 GitHub Models。额度不足或翻译服务异常会保留官方英文并记录待译数量，不阻断成功分支。Advanced menuconfig 只把英文作为主界面文字，当前语言名称与用途在桌面悬停/键盘聚焦或手机轻触时显示；软件包名优先获得横向空间、始终保持单行并在溢出时省略，名称悬停只在当前语言有真实译文时显示译文。工作区的 `N/M/Y ?` 总说明统一解释三态：N 禁用且不编译，M 模块化或生成默认不写入固件的独立安装包，Y 启用并编译进固件。搜索匹配源码、分支、Target、任意菜单层级、英文、译文、symbol 与用途。
 - Advanced 软件包名只有存在当前语言真实译文时才建立翻译提示，不使用英文回退或裸 `PACKAGE_` symbol；说明文字只在视觉截断时通过统一委托事件显示全文，完整行不产生提示。Source/Branch 选定后，详细 Target Catalog 尚未返回期间由剩余列显示加载圆圈；成功后替换为 Target 控件，失败则显示可点击重试。浏览器按 Catalog index 的 commit/hash/bytes 精确契约，优先从 GitHub Raw 获取最新 index；分片按 jsDelivr 固定提交、GitHub Raw 固定提交、完整 GitHub Release 的顺序尝试。每个候选必须通过压缩字节数、SHA-256、gzip、JSON、Catalog schema 5、relations schema 2 和共享引擎建模后才可接受。失败面板会显示并复制逐供应商诊断，重试会清理 Cache API 与内存索引。VPS 不保存 `catalog-data`，存在精确契约时不得用旧本地分片兜底。Catalog Actions 负责生成数据，固件编译 Actions 不参与页面加载。
@@ -146,7 +148,7 @@ WeiG-OpenWrt-AutoBuild/
 - 软件源镜像由 `diy2-generic.sh` 自动兼容：旧版 opkg 源改写 `distfeeds.conf`；APK 源（25.12+）改写构建期 `VERSION_REPO`，由源码生成 `distfeeds.list`。不要把 APK 的生成文件当作源码内固定文件。
 - 构建准入默认限制每位提交者同时最多 2 个排队中或运行中的任务；第 3 个 Issue 会自动回评并关闭。仓库所有者按 GitHub 登录名识别，不受此上限限制，并为每次构建使用独立并发组，不会在本项目队列中互相等待。Fork 可在仓库 Variables 设置正整数 `MAX_BUILDS_PER_USER` 覆盖默认值。`cancel-build.yml` 只接受原 Issue 提交者的 `/cancel` 或 `/cancel-build`，先普通取消，15 秒未结束才强制取消；管理员仍可在 Actions 页面管理任意任务。
 - 根目录 `VERSION` 是仓库与网页共用的分钟级 `vYYMMDDHHmm` 版本源；`site-version.json` 是静态部署副本。Actions Summary 同时记录 VERSION、请求网页版本、定制器 commit、上游 commit 和完整输入参数。
-- 下载与编译统一使用动态并发并保留完整日志。浏览器、`parse-request.mjs` 与 `validate-catalog-config.mjs` 导入同一 `site/wrt/lib/catalog-engine.mjs`，对 Kconfig/packageinfo 依赖、反向依赖、choice、select、imply、conflict、provider 和隐藏残留执行一致校验。`pre-defconfig` 使用完整 Target/Profile 上下文、信任 Catalog 声明的目标契约包并延后不可判定的隐藏默认值；`post-defconfig` 不再信任契约豁免，任何未解析或不满足关系都报错。CI 两阶段都只报告，不静默改写提交配置。新增故障必须通过 Catalog 声明关系、通用三态求值或独立兼容规则表达，禁止在 `app.js`、共享引擎、解析器或 Workflow 中加入具体包名分支。`config/001.presets/config-rules.json`（网页副本在 `site/wrt/data/`）暂时继续作为人工语义选择和实际构建兼容规则层，例如现有 ksmbd 规则；用户已明确暂缓迁入 Catalog，因此相关 JSON、`tools/config-rules.mjs` 和通用选择弹窗本轮必须保留。网页完成 Catalog 标准关系与本地兼容规则两层处理后才打开 GitHub。
+- 下载与编译统一使用动态并发并保留完整日志。浏览器、`parse-request.mjs` 与 `validate-catalog-config.mjs` 导入同一 `site/wrt/lib/catalog-engine.js`，对 Kconfig/packageinfo 依赖、反向依赖、choice、select、imply、conflict、provider 和隐藏残留执行一致校验。`pre-defconfig` 使用完整 Target/Profile 上下文、信任 Catalog 声明的目标契约包并延后不可判定的隐藏默认值；`post-defconfig` 不再信任契约豁免，任何未解析或不满足关系都报错。CI 两阶段都只报告，不静默改写提交配置。新增故障必须通过 Catalog 声明关系、通用三态求值或独立兼容规则表达，禁止在 `app.js`、共享引擎、解析器或 Workflow 中加入具体包名分支。`config/001.presets/config-rules.json`（网页副本在 `site/wrt/data/`）暂时继续作为人工语义选择和实际构建兼容规则层，例如现有 ksmbd 规则；用户已明确暂缓迁入 Catalog，因此相关 JSON、`tools/config-rules.mjs` 和通用选择弹窗本轮必须保留。网页完成 Catalog 标准关系与本地兼容规则两层处理后才打开 GitHub。
 - `config/001.presets/source-build-requirements.json` 是 Source/Branch/Target 构建必需项的唯一维护源，`site/wrt/data/source-build-requirements.json` 只是静态网页副本。范围字段支持 `sources`、`branches`、`systems`、`subtargets`、`profiles` 与通配符 `*`；每项只声明明确的 Kconfig `symbol` 和 `n/m/y` 值。网页允许单独下载未补项的 `.config` 供用户编辑，但下载构建请求 JSON 前必须弹窗说明并由用户明确应用；`parse-request.mjs` 使用同一源二次检查，缺项请求在克隆上游前直接拒绝。维护新源只改权威 JSON 并同步网页副本，不得在 Workflow 或插件 JS 中另写特判。
 - schema 5 解析器先按请求中的不可变 Catalog revision/asset/hash/bytes 取得同一分片，核验 Source/Branch/Target/Profile、架构、必需包和完整标准关系，再输出 Catalog 记录的 `sourceCommit`。Workflow 以 detached HEAD 获取该精确 commit；Defconfig 或系统覆盖完成后再次调用共享引擎严格校验，再进入编译。旧 schema 3/4 仍按分支兼容。
 - `custom-target` 不要求 Profile 预先存在于仓库清单；上传配置中的通用 Target 选择直接作为构建输入，不含 360T7 专用限制，其可用性由所选上游源码负责。
@@ -181,6 +183,7 @@ WeiG-OpenWrt-AutoBuild/
 ### 2.7 部署与迁移
 
 - 页面整个 `site/wrt/` 目录拷走即可用；Catalog 使用精确缓存 → GitHub Raw 最新 index → jsDelivr/GitHub Raw 固定提交分片 → 完整 GitHub Release，VPS 不保存 Catalog；其他静态数据使用相对路径和本地优先降级。`OpenWebPage_打开网页.bat` 只保留一个可见的 `wrt-server` 窗口，关闭该窗口即停止本地预览。
+- 浏览器动态导入的 Catalog 模块固定为 `lib/catalog-engine.js` 与 `lib/catalog-loader.js`。使用 `.js` 是为了直接复用普通静态服务器已有的 JavaScript MIME 映射；`lib/package.json` 的 `type: module` 只负责 Node/CI 导入。旧 `.mjs` 必须删除，部署脚本在打包、远端切换和切换后 HTTP 冒烟三个阶段校验两模块；返回非 JavaScript MIME、HTML 回退或缺文件都会恢复上一版。部署包清单统一由 `tools/verify-site-archive.mjs` 以 `shell: false` 调用 `tar` 并一次验证必需/禁止条目，BAT 禁止使用 `tar | findstr`，因此中文、空格路径和 CMD 括号上下文不会改变参数解析。
 - Fork 后只需修改 `site/wrt/data/project.json` 的主仓库、Catalog 仓库与博客地址；网页链接、Issue 目标和运行时 Catalog 会自动采用该文件。HTML 中保留的人类可读链接仅是旧部署兜底。
 - 博客副本：`node tools/sync-blog.mjs [博客路径]` 会把 `site/wrt/` 完整精确镜像到博客 `source/wrt/`，包括 `.config` 和空目录。实现不使用 `fs.cpSync()`，而是按 Catalog 无关的通用目录树逐目录创建、逐文件复制，并以分块 SHA-256 校验临时副本后原子替换；中文、空格路径和大二进制文件使用同一逻辑，失败时保留或恢复旧副本。CLI 会输出复制进度；`--check` 仅比较完整目录树，完全一致返回 0，有差异返回 3。
 - 文本格式门禁：`node tools/check-text-format.mjs <仓库路径> --changed` 只检查当前 Git 变更与未跟踪文本，按 `.gitattributes` 要求验证源码/数据为 LF、BAT/CMD/PowerShell 为 CRLF、UTF-8 无 BOM，且文件末尾只有一个换行；它只报告、不自动改写。`Sync_Deploy.bat` 的主仓库选项会在完整 `check-all` 和 `git diff --check` 前先运行该门禁，Git 的“下次将 CRLF 转为 LF”提示只是信息性 warning，真正阻断项会单独列出。
