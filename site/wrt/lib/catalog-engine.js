@@ -29,8 +29,13 @@ function ruleParts(raw) {
   return match ? { symbol: match[1], condition: match[2] || '' } : { symbol: '', condition: '' };
 }
 
+const EXPRESSION_TOKEN_CACHE = new Map();
 function expressionTokens(expression) {
-  return String(expression || '').match(/\|\||&&|!=|<=|>=|=|<|>|!|\(|\)|"(?:[^"\\]|\\.)*"|[A-Za-z0-9_+@./-]+/g) || [];
+  const source = String(expression || '');
+  if (!EXPRESSION_TOKEN_CACHE.has(source)) {
+    EXPRESSION_TOKEN_CACHE.set(source, source.match(/\|\||&&|!=|<=|>=|=|<|>|!|\(|\)|"(?:[^"\\]|\\.)*"|[A-Za-z0-9_+@./-]+/g) || []);
+  }
+  return EXPRESSION_TOKEN_CACHE.get(source);
 }
 
 function evaluateExpressionRaw(expression, inputValues, options = {}) {
@@ -122,6 +127,83 @@ export function evaluateExpression(expression, inputValues, options = {}) {
   return 2;
 }
 
+function compactStates(mask) {
+  return ['n', 'm', 'y'].filter((_, index) => Number(mask || 0) & (1 << index));
+}
+
+export function expandCompactRelations(compact) {
+  if (Number(compact?.schema || 0) !== 3) throw new Error('Catalog relations schema 3 is required');
+  const strings = compact.strings || [];
+  const expressions = compact.expressions || [];
+  const stringLists = compact.stringLists || [];
+  const expressionLists = compact.expressionLists || [];
+  const variants = compact.expressionVariants || [];
+  const flags = compact.flags || { visible: 1, userSettable: 2, canDisable: 4, hasKconfig: 8, package: 16 };
+  const list = (id) => id < 0 ? [] : (stringLists[id] || []).map((item) => strings[item] || '');
+  const expressionRows = (id) => id < 0 ? [] : (variants[id] || []).map((listId) =>
+    (expressionLists[listId] || []).map((item) => expressions[item] || ''));
+  const indexes = (rows) => Object.fromEntries((rows || []).map(([keyId, listId]) => [
+    strings[keyId] || '', list(listId),
+  ]));
+  const records = (compact.records || []).map((row) => {
+    const [symbolId, recordFlags, typeCode, originCode, statesMask, choiceId, defaultsId,
+      dependsId, selectsId, impliesId, packageDependenciesId, providesId, conflictsId] = row;
+    const symbol = strings[symbolId] || '';
+    const isPackage = Boolean(recordFlags & flags.package);
+    const hasKconfig = Boolean(recordFlags & flags.hasKconfig);
+    const dependsExpressions = expressionRows(dependsId);
+    const selectsExpressions = expressionRows(selectsId);
+    const impliesExpressions = expressionRows(impliesId);
+    const packageDepends = (compact.packageDependencies?.[packageDependenciesId] || []).map(
+      ([required, conditionId, rawId, packagesId]) => ({
+        raw: strings[rawId] || '',
+        required: Boolean(required),
+        condition: conditionId < 0 ? '' : expressions[conditionId] || '',
+        packages: list(packagesId),
+      }),
+    );
+    const defaults = (compact.defaults?.[defaultsId] || []).map(([valueId, conditionId]) => {
+      const value = strings[valueId] || '';
+      const condition = conditionId < 0 ? '' : expressions[conditionId] || '';
+      return condition ? `${value} if ${condition}` : value;
+    });
+    const provides = list(providesId);
+    const conflicts = list(conflictsId);
+    return {
+      kind: isPackage ? 'package' : 'config',
+      package: isPackage && symbol.startsWith('PACKAGE_') ? symbol.slice(8) : '',
+      configSymbol: symbol,
+      kconfigSymbol: hasKconfig ? symbol : '',
+      symbol: hasKconfig ? symbol : '',
+      origin: compact.origins?.[originCode] || '',
+      states: compactStates(statesMask),
+      visible: Boolean(recordFlags & flags.visible),
+      hidden: !(recordFlags & flags.visible),
+      userSettable: Boolean(recordFlags & flags.userSettable),
+      canDisable: Boolean(recordFlags & flags.canDisable),
+      choice: choiceId < 0 ? '' : strings[choiceId] || '',
+      type: compact.types?.[typeCode] || '',
+      defaults,
+      kconfig: { dependsExpressions, selectsExpressions, impliesExpressions },
+      packageInfo: { depends: packageDepends, provides, conflicts },
+      provides,
+      conflicts,
+    };
+  });
+  return {
+    schema: 2,
+    records,
+    indexes: {
+      providers: indexes(compact.indexes?.providers),
+      reverseDependencies: indexes(compact.indexes?.reverseDependencies),
+      reverseKconfig: indexes(compact.indexes?.reverseKconfig),
+      choices: indexes(compact.indexes?.choices),
+    },
+    summary: compact.summary || {},
+    validation: compact.validation || {},
+  };
+}
+
 function normalizeRecord(record) {
   const configSymbol = record.configSymbol || record.symbol ||
     (record.package ? `PACKAGE_${record.package}` : '');
@@ -176,10 +258,13 @@ function featureSymbolCandidates(feature, bySymbol) {
 }
 
 export function createCatalogModel(catalog) {
-  if (!catalog || Number(catalog.schema || 0) < 5 || Number(catalog.relations?.schema || 0) < 2) {
-    throw new Error('Catalog schema 5 / relations schema 2 is required');
+  const schema = Number(catalog?.schema || 0);
+  const relationsSchema = Number(catalog?.relations?.schema || 0);
+  if (!catalog || schema < 5 || ![2, 3].includes(relationsSchema)) {
+    throw new Error('Catalog schema 5+ / relations schema 2 or 3 is required');
   }
-  const records = (catalog.relations.records || []).map(normalizeRecord);
+  const relations = relationsSchema === 3 ? expandCompactRelations(catalog.relations) : catalog.relations;
+  const records = (relations.records || []).map(normalizeRecord);
   const bySymbol = new Map();
   const byPackage = new Map();
   for (const record of records) {
@@ -187,19 +272,19 @@ export function createCatalogModel(catalog) {
     if (record.package) byPackage.set(record.package, record);
   }
   const providers = new Map();
-  for (const [name, rows] of Object.entries(catalog.relations.indexes?.providers || {})) {
+  for (const [name, rows] of Object.entries(relations.indexes?.providers || {})) {
     providers.set(name, [...rows]);
   }
   const reverseDependencies = new Map();
-  for (const [name, rows] of Object.entries(catalog.relations.indexes?.reverseDependencies || {})) {
+  for (const [name, rows] of Object.entries(relations.indexes?.reverseDependencies || {})) {
     reverseDependencies.set(name, [...rows]);
   }
   const reverseKconfig = new Map();
-  for (const [symbol, rows] of Object.entries(catalog.relations.indexes?.reverseKconfig || {})) {
+  for (const [symbol, rows] of Object.entries(relations.indexes?.reverseKconfig || {})) {
     reverseKconfig.set(symbol, [...rows]);
   }
   const choices = new Map();
-  for (const [id, rows] of Object.entries(catalog.relations.indexes?.choices || {})) {
+  for (const [id, rows] of Object.entries(relations.indexes?.choices || {})) {
     choices.set(id, [...rows]);
   }
   const featureSymbols = new Map();

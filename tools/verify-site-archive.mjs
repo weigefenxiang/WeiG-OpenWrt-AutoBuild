@@ -15,6 +15,8 @@ export const REQUIRED_SITE_ARCHIVE_ENTRIES = Object.freeze([
   'data/site-version.json',
   'lib/catalog-engine.js',
   'lib/catalog-loader.js',
+  'lib/catalog-schema6.js',
+  'lib/catalog-search-worker.js',
   'lib/package.json',
 ]);
 

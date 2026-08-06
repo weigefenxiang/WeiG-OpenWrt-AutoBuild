@@ -1,7 +1,7 @@
 const MIN_INDEX_SCHEMA = 2;
 const MIN_CATALOG_SCHEMA = 5;
 const MIN_RELATIONS_SCHEMA = 2;
-export const CATALOG_CACHE_NAME = 'wrt-catalog-cache-v2';
+export const CATALOG_CACHE_NAME = 'wrt-catalog-cache-v3';
 
 function safeRepository(value) {
   const repository = String(value || '').trim();
@@ -154,8 +154,8 @@ export function validateCatalogDocument(data, expected, engine) {
   const schema = Number(data?.schema || 0);
   const relationsSchema = Number(data?.relations?.schema || 0);
   if (schema < MIN_CATALOG_SCHEMA) throw new Error(`Catalog schema ${schema}; required ${MIN_CATALOG_SCHEMA}`);
-  if (relationsSchema < MIN_RELATIONS_SCHEMA) {
-    throw new Error(`Catalog relations schema ${relationsSchema}; required ${MIN_RELATIONS_SCHEMA}`);
+  if (![2, 3].includes(relationsSchema)) {
+    throw new Error(`Catalog relations schema ${relationsSchema}; required 2 or 3`);
   }
   const expectedCommit = String(expected?.commit || '');
   const actualCommit = String(data?.source?.commit || '');
@@ -165,7 +165,7 @@ export function validateCatalogDocument(data, expected, engine) {
   return engine.createCatalogModel(data);
 }
 
-async function readCatalogBuffer(buffer, expected, engine, subtle, Decompression) {
+async function readDocumentBuffer(buffer, expected, subtle, Decompression) {
   if (expected?.bytes && Number(expected.bytes) !== buffer.byteLength) {
     throw new Error(`Catalog byte length mismatch: ${buffer.byteLength} != ${expected.bytes}`);
   }
@@ -173,7 +173,11 @@ async function readCatalogBuffer(buffer, expected, engine, subtle, Decompression
     const actual = await sha256Hex(buffer, subtle);
     if (actual !== String(expected.hash).toLowerCase()) throw new Error('Catalog compressed SHA-256 mismatch');
   }
-  const data = await decodeCatalogBytes(buffer, Decompression);
+  return decodeCatalogBytes(buffer, Decompression);
+}
+
+async function readCatalogBuffer(buffer, expected, engine, subtle, Decompression) {
+  const data = await readDocumentBuffer(buffer, expected, subtle, Decompression);
   const model = validateCatalogDocument(data, expected, engine);
   return { data, model };
 }
@@ -198,7 +202,7 @@ function validateIndex(index) {
 
 function cacheKey(repository, asset, expected) {
   const revision = String(expected?.hash || expected?.commit || 'latest').replace(/[^A-Za-z0-9._-]/g, '_');
-  return `./catalog-cache-v2/${repository}/${asset}?revision=${revision}`;
+  return `./catalog-cache-v3/${repository}/${asset}?revision=${revision}`;
 }
 
 export function formatCatalogDiagnostics(diagnostics = []) {
@@ -253,33 +257,85 @@ export function createCatalogLoader({
     return indexPromise;
   }
 
-  async function readCache(asset, branch, diagnostics) {
+  async function readCachedBuffer(asset, contract, diagnostics, stage = 'cache') {
     if (!cacheStorage?.open) return null;
     const cache = await cacheStorage.open(CATALOG_CACHE_NAME);
-    const key = cacheKey(repository, asset, branch);
+    const key = cacheKey(repository, asset, contract);
     const response = await cache.match(key);
     if (!response) return null;
     try {
       const buffer = await response.arrayBuffer();
-      const parsed = await readCatalogBuffer(buffer, branch, engine, subtle, Decompression);
-      diagnostic(diagnostics, 'cache', 'cache-api', true,
-        `schema ${parsed.data.schema}; relations ${parsed.data.relations.schema}`, key);
-      return { ...parsed, url: `cache:${key}`, provider: 'cache' };
+      await readDocumentBuffer(buffer, contract, subtle, Decompression);
+      diagnostic(diagnostics, stage, 'cache-api', true, `bytes ${buffer.byteLength}`, key);
+      return { buffer, key };
     } catch (error) {
       await cache.delete(key).catch(() => {});
-      diagnostic(diagnostics, 'cache', 'cache-api', false, error.message, key);
+      diagnostic(diagnostics, stage, 'cache-api', false, error.message, key);
       return null;
     }
   }
 
-  async function writeCache(asset, branch, buffer) {
+  async function writeCache(asset, contract, buffer) {
     if (!cacheStorage?.open) return;
     const cache = await cacheStorage.open(CATALOG_CACHE_NAME).catch(() => null);
     if (!cache) return;
-    const key = cacheKey(repository, asset, branch);
+    const key = cacheKey(repository, asset, contract);
     await cache.put(key, new Response(buffer, {
       headers: { 'content-type': 'application/gzip', 'cache-control': 'no-store' },
     })).catch(() => {});
+  }
+
+  function assetProviderOrder(preferredAssetProvider = '') {
+    const order = ['jsdelivr', 'github-raw', 'github-release'];
+    if (order.includes(preferredAssetProvider)) {
+      order.splice(order.indexOf(preferredAssetProvider), 1);
+      order.unshift(preferredAssetProvider);
+    }
+    return order;
+  }
+
+  async function fetchAssetDocument({
+    asset,
+    contract,
+    index,
+    signal,
+    diagnostics,
+    preferredAssetProvider = '',
+    forceRefresh = false,
+    stage = 'asset',
+  }) {
+    const safeAsset = safeCatalogAsset(asset);
+    if (!forceRefresh) {
+      const cached = await readCachedBuffer(safeAsset, contract, diagnostics, `${stage}-cache`);
+      if (cached) {
+        return {
+          data: await decodeCatalogBytes(cached.buffer, Decompression),
+          buffer: cached.buffer,
+          provider: 'cache',
+          url: `cache:${cached.key}`,
+        };
+      }
+    }
+    const ref = exactAssetRef(index);
+    const errors = [];
+    for (const id of assetProviderOrder(preferredAssetProvider)) {
+      const provider = providerMap[id];
+      const url = provider.assetUrl(safeAsset, ref, index);
+      try {
+        const response = await fetchImpl(url, { cache: 'no-store', signal });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const buffer = await response.arrayBuffer();
+        const data = await readDocumentBuffer(buffer, contract, subtle, Decompression);
+        await writeCache(safeAsset, contract, buffer);
+        diagnostic(diagnostics, stage, id, true, `bytes ${buffer.byteLength}; schema ${data?.schema || '-'}`, url);
+        return { data, buffer, provider: id, url };
+      } catch (error) {
+        if (error?.name === 'AbortError') throw error;
+        diagnostic(diagnostics, stage, id, false, error.message, url);
+        errors.push(`${id}: ${error.message}`);
+      }
+    }
+    throw loaderError(`Catalog asset unavailable: ${safeAsset}\n${errors.join('\n')}`, diagnostics);
   }
 
   async function fetchBundle({
@@ -293,47 +349,100 @@ export function createCatalogLoader({
     const indexResult = await fetchIndex({ signal, forceRefresh, diagnostics });
     const index = indexResult.index;
     const { source, branch } = branchFromIndex(index, sourceId, branchName);
-    if (!source || !branch || !branch.asset || branch.state === 'unavailable') {
+    if (!source || !branch || branch.state === 'unavailable') {
       throw loaderError(`Catalog branch unavailable: ${sourceId}/${branchName}`, diagnostics);
     }
-    if (!branch.hash || !branch.bytes) {
+
+    const split = branch.assets?.core && branch.assets?.graph;
+    if (split) {
+      const coreContract = branch.assets.core;
+      const graphContract = branch.assets.graph;
+      const [core, graph] = await Promise.all([
+        fetchAssetDocument({
+          asset: coreContract.asset, contract: coreContract, index, signal, diagnostics,
+          preferredAssetProvider, forceRefresh, stage: 'core',
+        }),
+        fetchAssetDocument({
+          asset: graphContract.asset, contract: graphContract, index, signal, diagnostics,
+          preferredAssetProvider, forceRefresh, stage: 'graph',
+        }),
+      ]);
+      if (Number(core.data?.schema || 0) < 6 || Number(graph.data?.relations?.schema || 0) !== 3) {
+        throw loaderError('Catalog split assets do not satisfy schema 6 / relations 3', diagnostics);
+      }
+      const expectedCommit = String(branch.commit || '');
+      for (const data of [core.data, graph.data]) {
+        const actualCommit = String(data?.source?.commit || '');
+        if (expectedCommit && actualCommit !== expectedCommit) {
+          throw loaderError(`Catalog source commit mismatch: ${actualCommit || '(missing)'} != ${expectedCommit}`, diagnostics);
+        }
+      }
+      const data = {
+        ...core.data,
+        relations: graph.data.relations,
+        menu: { categories: [], labels: {}, options: [], choices: [] },
+        splitAssets: true,
+      };
+      const model = engine.createCatalogModel(data);
+      const loadedShards = new Map();
+      const loadShard = async (logical, options = {}) => {
+        if (loadedShards.has(logical) && !options.forceRefresh) return loadedShards.get(logical);
+        const contract = branch.assets?.[logical];
+        if (!contract?.asset) throw new Error(`Catalog shard is unavailable: ${logical}`);
+        const result = await fetchAssetDocument({
+          asset: contract.asset,
+          contract,
+          index,
+          signal: options.signal || signal,
+          diagnostics,
+          preferredAssetProvider: options.preferredAssetProvider || preferredAssetProvider,
+          forceRefresh: options.forceRefresh === true,
+          stage: `shard:${logical}`,
+        });
+        loadedShards.set(logical, result.data);
+        return result.data;
+      };
+      return {
+        data, model, index, indexProvider: indexResult.provider,
+        provider: `${core.provider}+${graph.provider}`,
+        branch, source, url: `${core.url} + ${graph.url}`, diagnostics,
+        loadShard,
+      };
+    }
+
+    if (!branch.asset || !branch.hash || !branch.bytes) {
       throw loaderError('Catalog index lacks an exact compressed bytes/hash contract', diagnostics);
     }
     const asset = safeCatalogAsset(branch.asset);
-    const ref = exactAssetRef(index);
-    if (!forceRefresh) {
-      const cached = await readCache(asset, branch, diagnostics);
-      if (cached) return { ...cached, index, indexProvider: indexResult.provider, branch, source, diagnostics };
+    const result = await fetchAssetDocument({
+      asset,
+      contract: branch,
+      index,
+      signal,
+      diagnostics,
+      preferredAssetProvider,
+      forceRefresh,
+      stage: 'asset',
+    });
+    let model;
+    try {
+      model = validateCatalogDocument(result.data, branch, engine);
+    } catch (error) {
+      diagnostic(diagnostics, 'asset-schema', result.provider, false, error.message, result.url);
+      throw loaderError(`Catalog bundle unavailable: ${error.message}`, diagnostics, error);
     }
-    const order = ['jsdelivr', 'github-raw', 'github-release'];
-    if (order.includes(preferredAssetProvider)) {
-      order.splice(order.indexOf(preferredAssetProvider), 1);
-      order.unshift(preferredAssetProvider);
-    }
-    const errors = [];
-    for (const id of order) {
-      const provider = providerMap[id];
-      const url = provider.assetUrl(asset, ref, index);
-      try {
-        const response = await fetchImpl(url, { cache: 'no-store', signal });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const buffer = await response.arrayBuffer();
-        const parsed = await readCatalogBuffer(buffer, branch, engine, subtle, Decompression);
-        await writeCache(asset, branch, buffer);
-        diagnostic(diagnostics, 'asset', id, true,
-          `bytes ${buffer.byteLength}; schema ${parsed.data.schema}; relations ${parsed.data.relations.schema}`, url);
-        return {
-          ...parsed, index, indexProvider: indexResult.provider, provider: id,
-          branch, source, url, diagnostics,
-        };
-      } catch (error) {
-        if (error?.name === 'AbortError') throw error;
-        diagnostic(diagnostics, 'asset', id, false, error.message, url);
-        errors.push(`${id}: ${error.message}`);
-      }
-    }
-    throw loaderError(`Catalog bundle unavailable: ${sourceId}/${branchName}\n${errors.join('\n')}`,
-      diagnostics);
+    return {
+      data: result.data,
+      model,
+      index,
+      indexProvider: indexResult.provider,
+      provider: result.provider,
+      branch,
+      source,
+      url: result.url,
+      diagnostics,
+      loadShard: null,
+    };
   }
 
   async function clearCache() {

@@ -104,6 +104,24 @@ const catalog = {
   },
 };
 const model = createCatalogModel(catalog);
+const compactModel = createCatalogModel({
+  schema: 6,
+  targets: [],
+  relations: {
+    schema: 3,
+    flags: { visible: 1, userSettable: 2, canDisable: 4, hasKconfig: 8, package: 16 },
+    types: ['', 'bool', 'tristate', 'string', 'int', 'hex'],
+    origins: ['', 'kconfig-only', 'kconfig+packageinfo', 'hidden-kconfig-only',
+      'hidden-kconfig+packageinfo', 'packageinfo-only'],
+    strings: ['PACKAGE_compact-addon'], expressions: [], stringLists: [[]],
+    expressionLists: [[]], expressionVariants: [[]], defaults: [[]], packageDependencies: [[]],
+    records: [[0, 31, 2, 2, 7, -1, 0, 0, 0, 0, 0, 0, 0]],
+    indexes: { providers: [], reverseDependencies: [], reverseKconfig: [], choices: [] },
+  },
+});
+assert(compactModel.byPackage.get('compact-addon')?.configSymbol === 'PACKAGE_compact-addon' &&
+  compactModel.bySymbol.get('PACKAGE_compact-addon')?.states.join(',') === 'n,m,y',
+  'compact relations schema 3 was not decoded into the canonical engine model');
 const selectedTarget = {
   system: targetFull.board,
   board: targetFull.board,

@@ -180,6 +180,14 @@ catalogEngineMatrixTest.status === 0
   : bad('Catalog engine matrix tests',
     (catalogEngineMatrixTest.stderr || catalogEngineMatrixTest.stdout || '').trim().slice(0, 320));
 
+const catalogPerformanceTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-catalog-performance.mjs')], {
+  encoding: 'utf8',
+});
+catalogPerformanceTest.status === 0
+  ? ok(`Catalog performance: compact 12k-record graph and worker search ${catalogPerformanceTest.stdout.trim()}`)
+  : bad('Catalog performance tests',
+    (catalogPerformanceTest.stderr || catalogPerformanceTest.stdout || '').trim().slice(0, 400));
+
 const blogMirrorTestRoot = mkdtempSync(join(tmpdir(), '威格 blog mirror with spaces-'));
 try {
   const sourceDir = join(blogMirrorTestRoot, '主仓库 with spaces', 'site', 'wrt');
@@ -477,6 +485,8 @@ mirrorRootsOk
   const html = readFileSync(join(ROOT, 'site', 'wrt', 'index.html'), 'utf8');
   const js = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
   const catalogLoaderJs = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.js'), 'utf8');
+  const catalogSchema6Js = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-schema6.js'), 'utf8');
+  const catalogSearchWorkerJs = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-search-worker.js'), 'utf8');
   const genPlugins = readFileSync(join(ROOT, 'tools', 'gen-plugins.mjs'), 'utf8');
   const sensitiveMaskContract = js.includes("'wireguard'") && js.includes("'tor'") &&
     js.includes("/^wireguard$/i.test(w)") && js.includes("w.slice(0, 3) + '***' + w.slice(-3)");
@@ -552,7 +562,9 @@ mirrorRootsOk
   const assetVersionOk = html.includes(`app.css?v=${assetHash('app.css')}`) &&
     html.includes(`app.js?v=${assetHash('app.js')}`) &&
     js.includes(`./lib/catalog-engine.js?v=${moduleHash('catalog-engine.js')}`) &&
-    js.includes(`./lib/catalog-loader.js?v=${moduleHash('catalog-loader.js')}`);
+    js.includes(`./lib/catalog-loader.js?v=${moduleHash('catalog-loader.js')}`) &&
+    js.includes(`./lib/catalog-schema6.js?v=${moduleHash('catalog-schema6.js')}`) &&
+    js.includes(`./lib/catalog-search-worker.js?v=${moduleHash('catalog-search-worker.js')}`);
   assetVersionOk
     ? ok('前端 CSS/JS 与动态 Catalog 模块查询版本均和内容指纹一致')
     : bad('frontend asset cache bust', 'index.html 或 app.js 的静态/动态资源查询版本未按内容指纹更新');
@@ -561,10 +573,14 @@ mirrorRootsOk
   const catalogBrowserModuleContract = catalogModulePackage.type === 'module' &&
     existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.js')) &&
     existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.js')) &&
+    existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-schema6.js')) &&
+    existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-search-worker.js')) &&
     !existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.mjs')) &&
     !existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.mjs')) &&
     js.includes("import('./lib/catalog-engine.js?v=") &&
     js.includes("import('./lib/catalog-loader.js?v=") &&
+    js.includes("import('./lib/catalog-schema6.js?v=") &&
+    js.includes("new Worker('./lib/catalog-search-worker.js?v=") &&
     !js.includes('catalog-engine.mjs') && !js.includes('catalog-loader.mjs');
   catalogBrowserModuleContract
     ? ok('Catalog browser modules use .js with a scoped Node ESM package and no legacy .mjs files')
@@ -600,6 +616,8 @@ mirrorRootsOk
     remoteDeploySource.includes('Content-Type:') &&
     remoteDeploySource.includes('catalog-engine.js') &&
     remoteDeploySource.includes('catalog-loader.js') &&
+    remoteDeploySource.includes('catalog-schema6.js') &&
+    remoteDeploySource.includes('catalog-search-worker.js') &&
     remoteDeploySource.includes('test ! -e "$NEW/lib/catalog-engine.mjs"') &&
     remoteDeploySource.includes('test ! -e "$NEW/lib/catalog-loader.mjs"');
   remoteCatalogDeploymentContract
@@ -737,6 +755,8 @@ mirrorRootsOk
     previewBat.includes('http://localhost:8642/index.html') &&
     previewBat.includes('http://localhost:8642/lib/catalog-engine.js') &&
     previewBat.includes('http://localhost:8642/lib/catalog-loader.js') &&
+    previewBat.includes('http://localhost:8642/lib/catalog-schema6.js') &&
+    previewBat.includes('http://localhost:8642/lib/catalog-search-worker.js') &&
     previewBat.includes("$l.Headers['Content-Type'] -match 'javascript'") &&
     previewBat.includes('start "" /b powershell') &&
     !previewBat.includes('start "wrt-server" /min') &&
@@ -1118,9 +1138,9 @@ mirrorRootsOk
     catalogLoaderJs.includes('/releases/download/${tag}/${asset}') &&
     js.includes("releaseTag: PROJECT.catalogReleaseTag || 'menuconfig-catalog-complete'") &&
     catalogLoaderJs.includes('wrt_refresh=${nonce}') &&
-    catalogLoaderJs.includes("export const CATALOG_CACHE_NAME = 'wrt-catalog-cache-v2'") &&
+    catalogLoaderJs.includes("export const CATALOG_CACHE_NAME = 'wrt-catalog-cache-v3'") &&
     catalogLoaderJs.includes('Catalog schema ${schema}; required ${MIN_CATALOG_SCHEMA}') &&
-    catalogLoaderJs.includes('Catalog relations schema ${relationsSchema}; required ${MIN_RELATIONS_SCHEMA}') &&
+    catalogLoaderJs.includes('Catalog relations schema ${relationsSchema}; required 2 or 3') &&
     catalogLoaderJs.includes('Catalog compressed SHA-256 mismatch') &&
     catalogLoaderJs.includes('await cacheStorage.delete(CATALOG_CACHE_NAME)') &&
     js.includes('async function fetchCatalogBundle') &&
@@ -1182,6 +1202,32 @@ mirrorRootsOk
     menuconfigContract
       ? ok('多源码 Catalog → 英文禁译文、手机单列/译文标签、滚动直显与可跳面包屑已接通')
       : bad('menuconfig catalog contract', '动态 Target、英语译文门禁、手机单列/译文标签、面包屑或 choice 缺失');
+    const catalogSchema6PerformanceContract =
+      catalogLoaderJs.includes('branch.assets?.core && branch.assets?.graph') &&
+      catalogLoaderJs.includes('const [core, graph] = await Promise.all') &&
+      catalogLoaderJs.includes('const loadShard = async (logical') &&
+      catalogLoaderJs.includes('Catalog split assets do not satisfy schema 6 / relations 3') &&
+      catalogSchema6Js.includes('export function createRuntimeMenu') &&
+      catalogSchema6Js.includes('export function mergeMenuShards') &&
+      catalogSchema6Js.includes('export function mergeHiddenShard') &&
+      catalogSchema6Js.includes('export function applyHelpShard') &&
+      js.includes('async function ensureCatalogMenuLoaded(includeHidden = false)') &&
+      js.includes("loader?.('menu')") &&
+      js.includes("loader?.('hidden')") &&
+      js.includes("loader?.('help')") &&
+      js.includes('catalogStateRevision++') &&
+      js.includes('catalogContextCache') &&
+      js.includes('menuVisibilityCache') &&
+      js.includes('menuMaxLevelCache') &&
+      js.includes('startCatalogSearchWorker()') &&
+      js.includes("new Worker('./lib/catalog-search-worker.js?v=") &&
+      js.includes('searchPending = matches === null') &&
+      catalogSearchWorkerJs.includes('function intersectSorted') &&
+      catalogSearchWorkerJs.includes("message.type === 'query'") &&
+      catalogSearchWorkerJs.includes("self.postMessage({ type: 'ready'");
+    catalogSchema6PerformanceContract
+      ? ok('Catalog schema 6: core/graph initial load, lazy display shards, revision caches and worker search are connected')
+      : bad('Catalog schema 6 performance contract', 'split loading, compact graph, lazy shards, caches or worker search is incomplete');
     const buildContractUi = html.includes('id="buildContract"') &&
       html.includes('id="buildContractToggle"') &&
       html.includes('aria-expanded="false" aria-controls="buildContractBody"') &&
@@ -1236,7 +1282,9 @@ mirrorRootsOk
       js.includes('catalogUserOverrides.delete(option.symbol)') &&
       js.includes('catalogInheritedValue(option.symbol)') &&
       js.includes("else if (menuOriginFilter !== 'all')") &&
-      js.includes('options = menuSearchOptions.filter(eligible)') &&
+      js.includes('options = eligibleOptions') &&
+      js.includes('const matches = searchMenuOptions(query)') &&
+      js.includes('options = (matches || []).filter(eligible)') &&
       js.includes("contractText('基础 / 上游默认'") &&
       js.includes("contractText('用户启用 / 排除'") &&
       css.includes('.catalog-origin') &&

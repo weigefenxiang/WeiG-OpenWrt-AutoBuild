@@ -24,7 +24,9 @@
 ├─ site/wrt/                     # 定制页面,整目录可搬家 / the customizer page, fully portable
 │  ├─ index.html / app.css / app.js
 │  ├─ lib/catalog-engine.js     # 浏览器/Node 共用的 Catalog 规则解释器 / shared Catalog rule engine for browser and Node
-│  ├─ lib/catalog-loader.js     # 浏览器 Catalog 下载/缓存/校验器 / browser Catalog fetch/cache/validation loader
+│  ├─ lib/catalog-loader.js     # 浏览器 Catalog 分片下载/缓存/校验器 / split Catalog fetch/cache/validation loader
+│  ├─ lib/catalog-schema6.js    # schema 6 显示分片合并器 / schema-6 display-shard merger
+│  ├─ lib/catalog-search-worker.js # Advanced 搜索 Worker / Advanced search worker
 │  ├─ lib/package.json          # 仅把 lib/*.js 标记为 Node ESM / scopes lib/*.js as Node ESM only
 │  └─ data/                      # 页面与 CI 共用的数据 / data shared by page and CI
 │     ├─ project.json            # Fork 只需改这一份仓库参数 / one-file fork settings
@@ -107,3 +109,13 @@ Catalog Target 的 `arch`、`archPackages`、Target/Profile 与 Profile 必需�
 - 备用 / mirror: `sync-blog.mjs` 将 `site/wrt/` 以 Unicode 安全的逐目录/逐文件复制完整镜像到博客 `source/wrt/`（Hexo skip_render，含 `.config`/空目录，删除目标残留，以分块 SHA-256 验证临时副本后原子替换）→ Cloudflare Pages / Unicode-safe iterative exact mirror of `site/wrt/` into blog `source/wrt/`, including `.config`/empty directories, stale-file removal, chunked SHA-256 staging verification, atomic swap, and rollback
 - 提交前文本门禁 / pre-commit text gate: `check-text-format.mjs --changed` 按 `.gitattributes` 检查本轮变更的 LF/CRLF、UTF-8 无 BOM 与单一 EOF 换行，只报告不改写；`Sync_Deploy.bat` 主仓库操作在 `check-all` 前调用 / validates changed-file LF/CRLF, no-BOM UTF-8, and one final newline before `check-all`, without rewriting files
 - Catalog 运行时数据链 / Catalog runtime data chain: 精确缓存 exact cache → GitHub Raw 最新 index latest index → jsDelivr/GitHub Raw 固定提交分片 pinned-commit shard → 完整 GitHub Release complete Release；VPS 不保存 Catalog，其他静态数据仍使用同目录优先的降级链 / other static data still prefers same-directory fallbacks
+
+## Catalog schema 6 与 Advanced 性能 / Catalog schema 6 and Advanced performance
+
+Catalog 运行时不再把 Target、完整关系、菜单、隐藏说明、长 Help 和所有语言塞进一个对象。浏览器初始只取 `core + graph`；Advanced 按需加载 `menu`、当前语言、隐藏显示信息和 Help。`graph` 使用 relations schema 3 的字符串/表达式池、数组记录、位标志和整数邻接表；旧 schema 5 单体在迁移期仅作回退。
+
+The runtime no longer puts Targets, the full relation graph, display menus, hidden descriptions, long Help, and every locale into one object. Initial selection fetches only `core + graph`; Advanced lazily fetches menu, current-locale, hidden-display, and Help shards. The graph uses relations schema 3 string/expression pools, array records, bit flags, and integer adjacency lists; the schema-5 monolith is migration fallback only.
+
+Advanced 在状态 revision 内复用 Target 上下文、表达式 token、可见性、最大状态和目录索引；搜索由独立 Worker 建立二元词索引并返回 symbol ID。默认搜索排除长 Help，显示列表按 80 行分页，避免每次展开或键入都重新扫描、解析并重建全部 DOM。
+
+Within one state revision, Advanced reuses Target context, expression tokens, visibility, maximum state, and path indexes. A dedicated Worker builds a bigram search index and returns symbol IDs. Default search excludes long Help, and display is paged in bounded 80-row chunks so expansion and typing do not repeatedly parse and rebuild the entire DOM.

@@ -16,9 +16,9 @@ const APP = join(SITE, 'app.js');
 const contentDigest = (path) => createHash('sha256')
   .update(readFileSync(path, 'utf8').replace(/\r\n/g, '\n')).digest('hex').slice(0, 10);
 let app = readFileSync(APP, 'utf8');
-for (const moduleName of ['catalog-engine.js', 'catalog-loader.js']) {
+for (const moduleName of ['catalog-engine.js', 'catalog-loader.js', 'catalog-schema6.js', 'catalog-search-worker.js']) {
   const digest = contentDigest(join(SITE, 'lib', moduleName));
-  app = app.replace(new RegExp(`\\./lib/${moduleName.replace('.', '\\.')}(?:\\?v=[A-Fa-f0-9]+)?`, 'g'),
+  app = app.replace(new RegExp(`\\./lib/${moduleName.replace('.', '\\.')}\\?v=[^\"']+|\\./lib/${moduleName.replace('.', '\\.')}`, 'g'),
     `./lib/${moduleName}?v=${digest}`);
 }
 if (app !== readFileSync(APP, 'utf8')) writeFileSync(APP, app);

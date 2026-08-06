@@ -191,9 +191,69 @@ try {
 } catch (error) {
   staleError = error;
 }
-assert(staleError && /Catalog bundle unavailable/.test(staleError.message),
+assert(staleError && /Catalog schema 4; required 5/.test(staleError.message),
 'stale Catalog schema was not rejected');
 assert(formatCatalogDiagnostics(staleError.diagnostics).includes('Catalog schema 4; required 5'),
 'stale schema reason is missing from diagnostics');
+
+const splitCommit = '4'.repeat(40);
+const compactEmpty = {
+  schema: 3,
+  fields: [],
+  flags: { visible: 1, userSettable: 2, canDisable: 4, hasKconfig: 8, package: 16 },
+  types: ['', 'bool', 'tristate', 'string', 'int', 'hex'],
+  origins: ['', 'kconfig-only', 'kconfig+packageinfo', 'hidden-kconfig-only',
+    'hidden-kconfig+packageinfo', 'packageinfo-only'],
+  strings: [], expressions: [], stringLists: [], expressionLists: [], expressionVariants: [],
+  defaults: [], packageDependencies: [], records: [],
+  indexes: { providers: [], reverseDependencies: [], reverseKconfig: [], choices: [] },
+  summary: {}, validation: { structurallyValid: true },
+};
+const splitDocuments = {
+  core: compressedDocument({
+    schema: 6, source: { repo: 'example/upstream', commit: splitCommit },
+    targets: [], targetTree: [], targetSelectors: [], counts: {},
+  }),
+  graph: compressedDocument({
+    schema: 6, kind: 'graph', source: { repo: 'example/upstream', commit: splitCommit },
+    relations: compactEmpty,
+  }),
+  menu: compressedDocument({ schema: 1, kind: 'menu', options: [], choices: [], labels: {}, categories: [] }),
+};
+const splitAssets = Object.fromEntries(Object.entries(splitDocuments).map(([logical, payload]) => [logical, {
+  asset: `immortalwrt--openwrt-25.12.${logical}.json.gz`,
+  bytes: payload.bytes.length,
+  hash: payload.hash,
+}]));
+const splitIndex = indexFor(asset, valid, splitCommit, '5'.repeat(40));
+splitIndex.sources[0].branches[0] = {
+  ...splitIndex.sources[0].branches[0], commit: splitCommit, schema: 6, assets: splitAssets,
+};
+const splitCalls = [];
+const splitLoader = createCatalogLoader({
+  repository: 'owner/catalog',
+  engine: { createCatalogModel },
+  cacheStorage: fakeCaches(),
+  subtle: null,
+  fetchImpl: async (url) => {
+    splitCalls.push(url);
+    if (url.includes('index.json')) return new Response(JSON.stringify(splitIndex), { status: 200 });
+    for (const [logical, contract] of Object.entries(splitAssets)) {
+      if (url.includes(contract.asset)) return new Response(splitDocuments[logical].bytes, { status: 200 });
+    }
+    return new Response('unexpected', { status: 404 });
+  },
+});
+const splitBundle = await splitLoader.fetchBundle({ sourceId: 'ImmortalWrt', branchName: 'openwrt-25.12' });
+assert(splitBundle.data.schema === 6 && splitBundle.data.splitAssets === true &&
+  splitBundle.model.catalog.relations.schema === 3, 'schema 6 core/graph bundle was not assembled');
+assert(!splitCalls.some((url) => url.includes(splitAssets.menu.asset)),
+  'menu shard was downloaded before Advanced requested it');
+const splitMenu = await splitBundle.loadShard('menu');
+assert(splitMenu.kind === 'menu' && splitCalls.some((url) => url.includes(splitAssets.menu.asset)),
+  'lazy menu shard was not downloaded on demand');
+const splitCallCount = splitCalls.length;
+await splitBundle.loadShard('menu');
+assert(splitCalls.length === splitCallCount, 'loaded menu shard was not reused');
 
 console.log('Catalog loader tests passed / Catalog 加载器测试通过');
