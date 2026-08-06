@@ -3,11 +3,15 @@
 // Exact-mirrors the main repository's site/wrt/ into the Hexo blog's source/wrt/.
 // 用法 / Usage: node tools/sync-blog.mjs [博客仓库路径 blog repo path] [--check]
 
+import { createHash } from 'node:crypto';
 import {
-  cpSync,
+  closeSync,
+  copyFileSync,
   existsSync,
   lstatSync,
-  readFileSync,
+  mkdirSync,
+  openSync,
+  readSync,
   readdirSync,
   renameSync,
   rmSync,
@@ -20,6 +24,8 @@ const ROOT = resolve(dirname(MODULE_PATH), '..');
 const DEFAULT_SOURCE = join(ROOT, 'site', 'wrt');
 const DEFAULT_BLOG = resolve(ROOT, '..', 'weige-share-blog');
 const REQUIRED_SOURCE_FILES = ['index.html', 'app.js', join('data', 'site-version.json')];
+const HASH_BUFFER_BYTES = 1024 * 1024;
+const COPY_PROGRESS_INTERVAL = 100;
 
 function samePath(left, right) {
   const a = resolve(left);
@@ -47,6 +53,22 @@ function assertRegularFile(path, label) {
   if (stat.isSymbolicLink() || !stat.isFile()) {
     throw new Error(`${label} must be a regular file / 必须是普通文件: ${path}`);
   }
+}
+
+function sha256File(path) {
+  const hash = createHash('sha256');
+  const buffer = Buffer.allocUnsafe(HASH_BUFFER_BYTES);
+  const descriptor = openSync(path, 'r');
+  try {
+    while (true) {
+      const bytesRead = readSync(descriptor, buffer, 0, buffer.length, null);
+      if (!bytesRead) break;
+      hash.update(buffer.subarray(0, bytesRead));
+    }
+  } finally {
+    closeSync(descriptor);
+  }
+  return hash.digest('hex');
 }
 
 export function collectTree(root) {
@@ -77,6 +99,83 @@ export function collectTree(root) {
   return entries;
 }
 
+function sortedTreeEntries(entries, type) {
+  return [...entries.entries()]
+    .filter(([, entry]) => entry.type === type)
+    .sort(([left], [right]) => {
+      if (type === 'dir') {
+        const depthDifference = left.split('/').length - right.split('/').length;
+        if (depthDifference) return depthDifference;
+      }
+      return left.localeCompare(right);
+    });
+}
+
+function treeStatsFromEntries(entries) {
+  let files = 0;
+  let directories = 0;
+  let bytes = 0;
+  for (const entry of entries.values()) {
+    if (entry.type === 'dir') directories++;
+    else {
+      files++;
+      bytes += entry.size;
+    }
+  }
+  return { files, directories, bytes };
+}
+
+function copyTree(sourceDir, destinationDir, hooks = {}) {
+  const source = resolve(sourceDir);
+  const destination = resolve(destinationDir);
+  if (existsSync(destination)) {
+    throw new Error(`Temporary destination already exists / 临时目标已存在: ${destination}`);
+  }
+
+  const entries = collectTree(source);
+  const directories = sortedTreeEntries(entries, 'dir');
+  const files = sortedTreeEntries(entries, 'file');
+  const stats = treeStatsFromEntries(entries);
+
+  mkdirSync(destination);
+  for (const [rel] of directories) {
+    mkdirSync(join(destination, ...rel.split('/')));
+  }
+
+  const reportProgress = (copied, relativePath = '') => {
+    if (typeof hooks.onProgress !== 'function') return;
+    if (copied === 0 || copied === files.length || copied % COPY_PROGRESS_INTERVAL === 0) {
+      hooks.onProgress({ copied, total: files.length, relativePath, stats });
+    }
+  };
+
+  reportProgress(0);
+  for (let index = 0; index < files.length; index++) {
+    const [rel, sourceEntry] = files[index];
+    const destinationPath = join(destination, ...rel.split('/'));
+    const details = {
+      index,
+      copied: index,
+      total: files.length,
+      relativePath: rel,
+      source: sourceEntry.path,
+      destination: destinationPath,
+    };
+    if (typeof hooks.beforeCopyFile === 'function') hooks.beforeCopyFile(details);
+    try {
+      copyFileSync(sourceEntry.path, destinationPath);
+    } catch (error) {
+      throw new Error(`File copy failed / 文件复制失败 (${rel}): ${error?.message || error}`, { cause: error });
+    }
+    if (typeof hooks.afterCopyFile === 'function') {
+      hooks.afterCopyFile({ ...details, copied: index + 1 });
+    }
+    reportProgress(index + 1, rel);
+  }
+
+  return { entries, stats };
+}
+
 export function directoriesMatch(sourceDir, destinationDir) {
   if (!existsSync(destinationDir)) return false;
   const source = collectTree(sourceDir);
@@ -88,7 +187,7 @@ export function directoriesMatch(sourceDir, destinationDir) {
     if (!destinationEntry || sourceEntry.type !== destinationEntry.type) return false;
     if (sourceEntry.type === 'file') {
       if (sourceEntry.size !== destinationEntry.size) return false;
-      if (!readFileSync(sourceEntry.path).equals(readFileSync(destinationEntry.path))) return false;
+      if (sha256File(sourceEntry.path) !== sha256File(destinationEntry.path)) return false;
     }
   }
   return true;
@@ -127,18 +226,7 @@ function validateLayout(sourceDir, blogRepo) {
 }
 
 function treeStats(root) {
-  const entries = collectTree(root);
-  let files = 0;
-  let directories = 0;
-  let bytes = 0;
-  for (const entry of entries.values()) {
-    if (entry.type === 'dir') directories++;
-    else {
-      files++;
-      bytes += entry.size;
-    }
-  }
-  return { files, directories, bytes };
+  return treeStatsFromEntries(collectTree(root));
 }
 
 export function syncBlogMirror({
@@ -149,6 +237,7 @@ export function syncBlogMirror({
 } = {}) {
   const layout = validateLayout(sourceDir, blogRepo);
   const { source, destination, temporary, previous } = layout;
+  if (typeof hooks.onStart === 'function') hooks.onStart({ ...layout, checkOnly });
 
   if (checkOnly) {
     return {
@@ -166,12 +255,7 @@ export function syncBlogMirror({
   rmSync(temporary, { recursive: true, force: true });
 
   try {
-    cpSync(source, temporary, {
-      recursive: true,
-      force: false,
-      errorOnExist: true,
-      verbatimSymlinks: true,
-    });
+    copyTree(source, temporary, hooks);
     if (typeof hooks.afterCopy === 'function') hooks.afterCopy({ ...layout });
     if (!directoriesMatch(source, temporary)) {
       throw new Error('Temporary mirror verification failed / 临时镜像校验失败');
@@ -226,10 +310,21 @@ function parseCli(argv) {
 function runCli() {
   try {
     const options = parseCli(process.argv.slice(2));
+    const hooks = options.checkOnly ? {} : {
+      onStart: ({ source, destination }) => {
+        console.log(`[blog:source] ${source}`);
+        console.log(`[blog:destination] ${destination}`);
+      },
+      onProgress: ({ copied, total, relativePath }) => {
+        const suffix = relativePath ? ` (${relativePath})` : '';
+        console.log(`[blog:copy] ${copied}/${total} files${suffix}`);
+      },
+    };
     const result = syncBlogMirror({
       sourceDir: DEFAULT_SOURCE,
       blogRepo: options.blogRepo,
       checkOnly: options.checkOnly,
+      hooks,
     });
 
     if (options.checkOnly) {
@@ -241,8 +336,6 @@ function runCli() {
       return 3;
     }
 
-    console.log(`[blog:source] ${result.source}`);
-    console.log(`[blog:destination] ${result.destination}`);
     console.log('[blog:verify] Exact mirror confirmed / 已确认精确镜像');
     console.log(`[blog:summary] ${result.stats.files} files, ${result.stats.directories} directories, ${result.stats.bytes} bytes`);
     return 0;

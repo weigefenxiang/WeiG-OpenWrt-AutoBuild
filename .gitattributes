@@ -17,6 +17,8 @@
 *.yaml text eol=lf
 *.config text eol=lf
 VERSION text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
 
 # Binary assets must never be normalized.
 *.gz binary

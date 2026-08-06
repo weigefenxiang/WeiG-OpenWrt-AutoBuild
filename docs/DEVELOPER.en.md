@@ -70,7 +70,7 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ parse-request.mjs            payload + pinned Catalog/source contract + strict shared-engine validation
 │  ├─ validate-catalog-config.mjs   revalidates after Defconfig/system overrides with the same engine
 │  ├─ check-all.mjs                health check; check-drift.mjs upstream drift sentinel
-│  ├─ sync-blog.mjs                exact-mirror the blog copy (verified staging, atomic swap, rollback)
+│  ├─ sync-blog.mjs                Unicode-safe iterative mirror (chunked hash, atomic swap, rollback)
 │  └─ serve.mjs                    local static server (0.0.0.0:8642)
 ├─ docs/                           developer docs that ship (only these two)
 │  ├─ DEVELOPER.md                 the guide (Chinese)
@@ -165,7 +165,7 @@ Type scale: 17px body (15.5px compact via the Aa toggle); 15px pills/plugin cell
 
 - Copy the whole `site/wrt/` folder anywhere. Catalog data uses exact cache → latest GitHub Raw index → pinned-commit jsDelivr/GitHub Raw shard → complete GitHub Release; the VPS stores no Catalog, while other static data keeps relative paths and local-first fallback. `OpenWebPage_打开网页.bat` keeps only one visible `wrt-server` window; closing it stops the local preview.
 - After a fork, edit only `site/wrt/data/project.json` for the main repository, Catalog repository, and blog URL. Runtime links, Issue targets, and Catalog loading follow that file; literal HTML links remain old-deployment fallbacks.
-- Blog mirror: `node tools/sync-blog.mjs [blog path]` exact-mirrors the whole `site/wrt/` tree into blog `source/wrt/`, including `.config` files. It verifies a staging copy before an atomic swap and preserves or restores the previous mirror on failure. `--check` compares the complete tree: exit 0 means exact, exit 3 means synchronization is needed.
+- Blog mirror: `node tools/sync-blog.mjs [blog path]` exact-mirrors the whole `site/wrt/` tree into blog `source/wrt/`, including `.config` files and empty directories. It does not use `fs.cpSync()`; one generic tree walker creates directories, copies files individually, and verifies staging content with chunked SHA-256 before the atomic swap. Unicode/space paths and large binary files use the same path-independent logic. The CLI reports copy progress, failures preserve or restore the previous mirror, and `--check` returns 0 for an exact tree or 3 when synchronization is needed.
 - Text-format gate: `node tools/check-text-format.mjs <repository path> --changed` checks only current Git changes and untracked text files. It enforces LF for source/data files, CRLF for BAT/CMD/PowerShell, UTF-8 without BOM, and exactly one final newline according to `.gitattributes`; it reports errors but never rewrites files. The main-repository actions in `Sync_Deploy.bat` run this gate before the full `check-all` and `git diff --check`. Git messages saying CRLF will later be replaced by LF are informational warnings; the actual blocking error is printed separately.
 
 ### 2.8 Cloud-build testing guide (manual Run workflow)

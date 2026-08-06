@@ -112,39 +112,70 @@ catalogEngineMatrixTest.status === 0
   : bad('Catalog engine matrix tests',
     (catalogEngineMatrixTest.stderr || catalogEngineMatrixTest.stdout || '').trim().slice(0, 320));
 
-const blogMirrorTestRoot = mkdtempSync(join(tmpdir(), 'weig-blog-mirror-'));
+const blogMirrorTestRoot = mkdtempSync(join(tmpdir(), '威格 blog mirror with spaces-'));
 try {
-  const sourceDir = join(blogMirrorTestRoot, 'main', 'site', 'wrt');
-  const blogRepo = join(blogMirrorTestRoot, 'weige-share-blog');
+  const sourceDir = join(blogMirrorTestRoot, '主仓库 with spaces', 'site', 'wrt');
+  const blogRepo = join(blogMirrorTestRoot, '博客仓库 with spaces');
   const blogDestination = join(blogRepo, 'source', 'wrt');
+  const unicodeNested = join(sourceDir, 'nested', '中文 空格');
   mkdirSync(join(sourceDir, 'data'), { recursive: true });
-  mkdirSync(join(sourceDir, 'nested', 'empty'), { recursive: true });
+  mkdirSync(join(unicodeNested, 'empty'), { recursive: true });
   writeFileSync(join(sourceDir, 'index.html'), '<!doctype html>');
   writeFileSync(join(sourceDir, 'app.js'), 'console.log("source");\n');
   writeFileSync(join(sourceDir, 'data', 'site-version.json'), '{"version":"test"}\n');
-  writeFileSync(join(sourceDir, 'nested', 'base.config'), 'CONFIG_TEST=y\n');
-  writeFileSync(join(sourceDir, 'nested', 'asset.txt'), 'asset\n');
+  writeFileSync(join(unicodeNested, 'base.config'), 'CONFIG_TEST=y\n');
+  writeFileSync(join(unicodeNested, 'asset.txt'), 'asset\n');
+  writeFileSync(join(unicodeNested, 'large-binary.bin'), Buffer.alloc(3 * 1024 * 1024 + 123, 0xa5));
   mkdirSync(join(blogRepo, '.git'), { recursive: true });
   mkdirSync(join(blogDestination, 'old'), { recursive: true });
   writeFileSync(join(blogRepo, '_config.yml'), 'skip_render:\n  - wrt/**\n');
   writeFileSync(join(blogDestination, 'old', 'zombie.txt'), 'stale\n');
   writeFileSync(join(blogDestination, 'app.js'), 'old\n');
 
+  const progress = [];
   const before = syncBlogMirror({ sourceDir, blogRepo, checkOnly: true });
-  const first = syncBlogMirror({ sourceDir, blogRepo });
+  const first = syncBlogMirror({
+    sourceDir,
+    blogRepo,
+    hooks: { onProgress: (event) => progress.push(event) },
+  });
   const after = syncBlogMirror({ sourceDir, blogRepo, checkOnly: true });
   const exactAfterFirst = !before.current && first.current && after.current &&
     directoriesMatch(sourceDir, blogDestination) &&
-    readFileSync(join(blogDestination, 'nested', 'base.config'), 'utf8') === 'CONFIG_TEST=y\n' &&
-    existsSync(join(blogDestination, 'nested', 'empty')) &&
+    readFileSync(join(blogDestination, 'nested', '中文 空格', 'base.config'), 'utf8') === 'CONFIG_TEST=y\n' &&
+    existsSync(join(blogDestination, 'nested', '中文 空格', 'empty')) &&
+    readFileSync(join(blogDestination, 'nested', '中文 空格', 'large-binary.bin')).length ===
+      3 * 1024 * 1024 + 123 &&
     !existsSync(join(blogDestination, 'old', 'zombie.txt')) &&
     !existsSync(join(blogRepo, 'source', 'wrt.sync-tmp')) &&
-    !existsSync(join(blogRepo, 'source', 'wrt.sync-prev'));
+    !existsSync(join(blogRepo, 'source', 'wrt.sync-prev')) &&
+    progress[0]?.copied === 0 && progress.at(-1)?.copied === progress.at(-1)?.total;
 
   writeFileSync(join(blogDestination, 'app.js'), 'changed\n');
   const changedDetected = !syncBlogMirror({ sourceDir, blogRepo, checkOnly: true }).current;
   syncBlogMirror({ sourceDir, blogRepo });
-  const destinationBeforeFailedCopy = readFileSync(join(blogDestination, 'app.js'));
+  const destinationBeforeFailures = readFileSync(join(blogDestination, 'app.js'));
+
+  let iterativeCopyFailureRejected = false;
+  try {
+    syncBlogMirror({
+      sourceDir,
+      blogRepo,
+      hooks: {
+        beforeCopyFile: ({ index }) => {
+          if (index === 2) throw new Error('simulated iterative copy failure');
+        },
+      },
+    });
+  } catch {
+    iterativeCopyFailureRejected = true;
+  }
+  const iterativeCopyFailurePreserved = iterativeCopyFailureRejected &&
+    destinationBeforeFailures.equals(readFileSync(join(blogDestination, 'app.js'))) &&
+    directoriesMatch(sourceDir, blogDestination) &&
+    !existsSync(join(blogRepo, 'source', 'wrt.sync-tmp')) &&
+    !existsSync(join(blogRepo, 'source', 'wrt.sync-prev'));
+
   let temporaryVerificationRejected = false;
   try {
     syncBlogMirror({
@@ -158,7 +189,7 @@ try {
     temporaryVerificationRejected = true;
   }
   const oldDestinationPreserved = temporaryVerificationRejected &&
-    destinationBeforeFailedCopy.equals(readFileSync(join(blogDestination, 'app.js'))) &&
+    destinationBeforeFailures.equals(readFileSync(join(blogDestination, 'app.js'))) &&
     directoriesMatch(sourceDir, blogDestination) &&
     !existsSync(join(blogRepo, 'source', 'wrt.sync-tmp')) &&
     !existsSync(join(blogRepo, 'source', 'wrt.sync-prev'));
@@ -176,7 +207,7 @@ try {
     activationVerificationRejected = true;
   }
   const activationRollbackRestoredOld = activationVerificationRejected &&
-    destinationBeforeFailedCopy.equals(readFileSync(join(blogDestination, 'app.js'))) &&
+    destinationBeforeFailures.equals(readFileSync(join(blogDestination, 'app.js'))) &&
     directoriesMatch(sourceDir, blogDestination) &&
     !existsSync(join(blogRepo, 'source', 'wrt.sync-tmp')) &&
     !existsSync(join(blogRepo, 'source', 'wrt.sync-prev'));
@@ -189,14 +220,14 @@ try {
     incompleteSourceRejected = true;
   }
   const incompleteSourcePreservedDestination = incompleteSourceRejected &&
-    destinationBeforeFailedCopy.equals(readFileSync(join(blogDestination, 'app.js')));
+    destinationBeforeFailures.equals(readFileSync(join(blogDestination, 'app.js')));
 
-  exactAfterFirst && changedDetected && oldDestinationPreserved && activationRollbackRestoredOld &&
-    incompleteSourcePreservedDestination
-    ? ok('blog mirror: exact tree, .config, stale removal, check mode, temp/activation rollback, safety guard')
-    : bad('blog mirror runtime tests', 'exact mirror, rollback, complete-tree or source safety contract failed');
+  exactAfterFirst && changedDetected && iterativeCopyFailurePreserved && oldDestinationPreserved &&
+    activationRollbackRestoredOld && incompleteSourcePreservedDestination
+    ? ok('blog mirror: Unicode/space paths, iterative copy, chunked hash, binary/.config/empty dirs, rollback')
+    : bad('blog mirror runtime tests', 'Unicode-safe copy, exact mirror, progress, rollback or source safety failed');
 } catch (error) {
-  bad('blog mirror runtime tests', error.message.slice(0, 240));
+  bad('blog mirror runtime tests', error.message.slice(0, 300));
 } finally {
   rmSync(blogMirrorTestRoot, { recursive: true, force: true });
 }
@@ -470,11 +501,17 @@ mirrorRootsOk
     syncBlogSource.includes('Temporary mirror verification failed') &&
     syncBlogSource.includes('Activated mirror verification failed') &&
     syncBlogSource.includes("assertRegularFile(join(source, rel)") &&
+    syncBlogSource.includes('copyFileSync(sourceEntry.path, destinationPath)') &&
+    syncBlogSource.includes("createHash('sha256')") &&
+    syncBlogSource.includes('readSync(descriptor, buffer') &&
+    syncBlogSource.includes('[blog:copy] ${copied}/${total} files') &&
+    !syncBlogSource.includes('cpSync') &&
     syncBlogSource.includes('return 3;') &&
     !syncBlogSource.includes("endsWith('.config')") &&
     deployScript.includes(String.raw`node tools\sync-blog.mjs "%BLOG_REPO%"`) &&
     deployScript.includes('call :verify_blog_mirror || exit /b 1') &&
     deployScript.includes('update blog, exact-mirror site/wrt to source/wrt') &&
+    deployScript.includes('0xC0000409') &&
     !deployGuide.includes('剔除全部 `*.config`') &&
     !blogGuide.includes('排除 base `*.config`') &&
     !developerGuideZh.includes('自动剔除 *.config') &&
@@ -494,6 +531,8 @@ mirrorRootsOk
     deployScript.includes('CRLF/LF conversion warnings are informational') &&
     gitAttributes.includes('*.mjs text eol=lf') &&
     gitAttributes.includes('*.bat text eol=crlf') &&
+    gitAttributes.includes('.gitignore text eol=lf') &&
+    gitAttributes.includes('.gitattributes text eol=lf') &&
     deployGuide.includes('check-text-format.mjs') &&
     blogGuide.includes('check-text-format.mjs') &&
     developerGuideZh.includes('check-text-format.mjs') &&
