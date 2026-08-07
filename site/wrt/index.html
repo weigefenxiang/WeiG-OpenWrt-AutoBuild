@@ -6,7 +6,7 @@
 <meta name="description" data-i18n="app.desc" content="OpenWrt 固件在线定制:选源码、勾插件,GitHub Actions 云编译,免费自取">
 <title>Wei.G · OpenWrt 固件在线定制</title>
 <link rel="icon" href="Wei.G.ico">
-<link rel="stylesheet" href="app.css?v=b6fb7731ef">
+<link rel="stylesheet" href="app.css?v=45c8d88e72">
 </head>
 <body>
 <header class="site-header">
@@ -279,7 +279,17 @@
       <button type="button" class="btn" id="importBtn" data-i18n="btn.import">加载配置</button>
       <button type="button" class="btn" id="importLogBtn" data-i18n="import.downloadLog" hidden>下载加载日志</button>
       <button type="button" class="btn btn-primary" id="submitBtn" data-i18n="btn.submit" disabled aria-disabled="true">提交云编译</button>
-      <span class="site-version site-version-action site-version-value" id="siteVersion">v----------</span>
+      <div class="site-version-action build-info" id="buildInfo">
+        <button type="button" class="site-version" id="siteVersion" aria-expanded="false" aria-controls="buildInfoCard">--------</button>
+        <div class="build-info-card" id="buildInfoCard" role="dialog" aria-label="Build Information">
+          <div class="build-info-title">Build Information</div>
+          <dl>
+            <div><dt>Version</dt><dd class="site-version-value">v----------</dd></div>
+            <div><dt>Commit</dt><dd><button type="button" class="build-info-commit" id="buildInfoCommit" aria-label="Commit">—</button></dd></div>
+            <div><dt>Built</dt><dd id="buildInfoBuilt">—</dd></div>
+          </dl>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -318,6 +328,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <noscript><p class="wrap" style="padding:2rem 0">本页面需要启用 JavaScript 才能使用。/ JavaScript is required.</p></noscript>
-<script src="app.js?v=0d0d02597b"></script>
+<script src="app.js?v=9e1f53666f"></script>
 </body>
 </html>

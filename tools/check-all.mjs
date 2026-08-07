@@ -132,20 +132,25 @@ try {
     writeStampFixture(`site/wrt/lib/${moduleName}`, `export const name = '${moduleName}';\n`);
   }
   writeStampFixture('VERSION', 'v0000000000\n');
-  const runStamp = () => spawnSync(process.execPath, [
-    join(versionStampFixtureRoot, 'tools', 'stamp-site-version.mjs'),
+  const runStamp = (args = []) => spawnSync(process.execPath, [
+    join(versionStampFixtureRoot, 'tools', 'stamp-site-version.mjs'), ...args,
   ], { encoding: 'utf8' });
   const readStamp = () => JSON.parse(readFileSync(
     join(versionStampFixtureRoot, 'site', 'wrt', 'data', 'site-version.json'), 'utf8'));
 
   const firstRun = runStamp();
   const firstStamp = readStamp();
+  const firstCheck = runStamp(['--check']);
   const firstApp = readFileSync(join(versionStampFixtureRoot, 'site', 'wrt', 'app.js'), 'utf8');
   const firstHtml = readFileSync(join(versionStampFixtureRoot, 'site', 'wrt', 'index.html'), 'utf8');
   const secondRun = runStamp();
   const secondStampText = readFileSync(
     join(versionStampFixtureRoot, 'site', 'wrt', 'data', 'site-version.json'), 'utf8');
   const firstStampText = JSON.stringify(firstStamp, null, 2) + '\n';
+  writeStampFixture('site/wrt/data/build-meta.json', '{\"version\":\"ignored\"}\n');
+  const buildMetaCheck = runStamp(['--check']);
+  const afterBuildMeta = readFileSync(
+    join(versionStampFixtureRoot, 'site', 'wrt', 'data', 'site-version.json'), 'utf8');
   writeStampFixture('Shell/diy.sh', '#!/bin/sh\r\n');
   const lineEndingRun = runStamp();
   const afterLineEnding = readFileSync(
@@ -161,19 +166,24 @@ try {
   let scopesChanged = true;
   for (const [relativePath, content] of scopeMutations) {
     writeStampFixture(relativePath, content);
+    const staleCheck = runStamp(['--check']);
     const result = runStamp();
+    const freshCheck = runStamp(['--check']);
     const stamp = readStamp();
-    scopesChanged &&= result.status === 0 && stamp.fingerprint !== previousFingerprint;
+    scopesChanged &&= staleCheck.status === 1 && result.status === 0 && freshCheck.status === 0 &&
+      stamp.fingerprint !== previousFingerprint;
     previousFingerprint = stamp.fingerprint;
   }
   const beforeDocs = readFileSync(
     join(versionStampFixtureRoot, 'site', 'wrt', 'data', 'site-version.json'), 'utf8');
   writeStampFixture('docs/DEVELOPER.md', '# unrelated docs fixture\n');
+  const docsCheck = runStamp(['--check']);
   const docsRun = runStamp();
   const afterDocs = readFileSync(
     join(versionStampFixtureRoot, 'site', 'wrt', 'data', 'site-version.json'), 'utf8');
-  const stampFixtureOk = firstRun.status === 0 && secondRun.status === 0 &&
-    lineEndingRun.status === 0 && docsRun.status === 0 &&
+  const stampFixtureOk = firstRun.status === 0 && firstCheck.status === 0 && secondRun.status === 0 &&
+    buildMetaCheck.status === 0 && afterBuildMeta === firstStampText &&
+    lineEndingRun.status === 0 && docsCheck.status === 0 && docsRun.status === 0 &&
     /^v\d{10}$/.test(firstStamp.version) && firstStamp.timezone === 'Asia/Shanghai' &&
     /^[a-f0-9]{64}$/.test(firstStamp.fingerprint) && secondStampText === firstStampText &&
     afterLineEnding === firstStampText &&
@@ -188,7 +198,9 @@ try {
     ? ok('version stamp fixtures: tracked scopes change the fingerprint; LF/CRLF-only and unrelated docs do not')
     : bad('version stamp fixtures', JSON.stringify({
       firstStatus: firstRun.status,
+      firstCheckStatus: firstCheck.status,
       secondStatus: secondRun.status,
+      buildMetaCheckStatus: buildMetaCheck.status,
       lineEndingStatus: lineEndingRun.status,
       docsStatus: docsRun.status,
       firstStamp,
@@ -643,8 +655,8 @@ mirrorRulesOk
     : bad('source build requirements', 'frontend marker, JSON copy, or backend-removal contract is invalid');
   const project = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
   const deployScript = readFileSync(join(ROOT, 'docs-private', 'Sync_Deploy.bat'), 'utf8');
-  const remoteDeployBase64 = deployScript.match(/set \"REMOTE_B64=([A-Za-z0-9+/=]+)\"/)?.[1] || '';
-  const remoteDeploySource = remoteDeployBase64 ? Buffer.from(remoteDeployBase64, 'base64').toString('utf8') : '';
+  const remoteDeploySource = readFileSync(join(ROOT, 'docs-private', 'deploy-vps-site.sh'), 'utf8');
+  const devAssistant = readFileSync(join(ROOT, 'tools', 'dev-assistant.mjs'), 'utf8');
   const syncBlogSource = readFileSync(join(ROOT, 'tools', 'sync-blog.mjs'), 'utf8');
   const textFormatSource = readFileSync(join(ROOT, 'tools', 'check-text-format.mjs'), 'utf8');
   const archiveVerifierSource = readFileSync(join(ROOT, 'tools', 'verify-site-archive.mjs'), 'utf8');
@@ -721,12 +733,9 @@ mirrorRulesOk
     !deployScript.includes('fetch-catalog-mirror.mjs') &&
     !deployScript.includes('CATALOG_MIRROR_ROOT') &&
     !deployScript.includes('catalog-data/index.json') &&
-    (deployScript.includes('Browser uses commit-pinned jsDelivr/GitHub Raw with complete Release fallback') ||
-      deployScript.includes('Browser uses commit-pinned jsDelivr with GitHub Raw fallback')) &&
     deployScript.includes(String.raw`tar -czf "%LOCAL_ARCHIVE%" -C "%MAIN_REPO%\site\wrt" .`) &&
     deployScript.includes(String.raw`node "%MAIN_REPO%\tools\verify-site-archive.mjs" "%LOCAL_ARCHIVE%"`) &&
-    deployScript.includes('Legacy catalog-engine.mjs must be deleted before deployment.') &&
-    deployScript.includes('Legacy catalog-loader.mjs must be deleted before deployment.') &&
+    deployScript.includes('local-env.cmd') && !/set "VPS_HOST=\d+\./.test(deployScript) &&
     remoteDeploySource.includes('ROOT=${WRT_ROOT:-/var/www/wrt}') &&
     remoteDeploySource.includes('ARCHIVE=${WRT_ARCHIVE:-/tmp/wrt-update.tar.gz}') &&
     remoteDeploySource.includes('test -s "$NEW/lib/catalog-engine.js"') &&
@@ -755,16 +764,16 @@ mirrorRulesOk
     !syncBlogSource.includes('cpSync') &&
     syncBlogSource.includes('return 3;') &&
     !syncBlogSource.includes("endsWith('.config')") &&
-    deployScript.includes(String.raw`node tools\sync-blog.mjs "%BLOG_REPO%"`) &&
-    deployScript.includes('call :verify_blog_mirror || exit /b 1') &&
-    deployScript.includes('update blog, exact-mirror site/wrt to source/wrt') &&
-    deployScript.includes('0xC0000409') &&
+    devAssistant.includes("'tools/sync-blog.mjs'") &&
+    devAssistant.includes("command === 'sync-blog'") &&
+    devAssistant.includes("command === 'verify-blog'") &&
+    !devAssistant.includes("run('git', ['commit'") && !devAssistant.includes("run('git', ['push'") &&
     !deployGuide.includes('剔除全部 `*.config`') &&
     !blogGuide.includes('排除 base `*.config`') &&
     !developerGuideZh.includes('自动剔除 *.config') &&
     !developerGuideEn.includes('strips *.config');
   exactBlogMirrorContract
-    ? ok('blog sync: option 3 uses verified exact mirror with rollback; legacy .config filtering is removed')
+    ? ok('blog sync: dev assistant mirrors/verifies files only; Git remains manual and legacy .config filtering is removed')
     : bad('blog exact mirror contract', '同步工具、选项 3 编排、回滚验证或中英文文档仍保留旧过滤逻辑');
   const textFormatGateContract =
     textFormatSource.includes("const LF_EXTENSIONS = new Set") &&
@@ -773,10 +782,10 @@ mirrorRulesOk
     textFormatSource.includes("UTF-8 BOM is not allowed") &&
     textFormatSource.includes("has a blank line at EOF") &&
     textFormatSource.includes("No files were changed automatically") &&
-    deployScript.includes('call :check_text_format "%REPO%" "%REPO_KIND%"') &&
-    deployScript.indexOf('call :check_text_format "%REPO%" "%REPO_KIND%"') <
-      deployScript.indexOf('call :check_main "%REPO%"') &&
-    deployScript.includes('CRLF/LF conversion warnings are informational') &&
+    devAssistant.includes("['tools/check-text-format.mjs', '.', '--changed']") &&
+    devAssistant.indexOf("tools/stamp-site-version.mjs") < devAssistant.indexOf("tools/check-text-format.mjs") &&
+    devAssistant.indexOf("tools/check-text-format.mjs") < devAssistant.indexOf("tools/check-all.mjs") &&
+    !devAssistant.includes("run('git', ['add'") && !devAssistant.includes("run('git', ['commit'") &&
     gitAttributes.includes('*.mjs text eol=lf') &&
     gitAttributes.includes('*.bat text eol=crlf') &&
     gitAttributes.includes('.gitignore text eol=lf') &&
@@ -786,7 +795,7 @@ mirrorRulesOk
     developerGuideZh.includes('check-text-format.mjs') &&
     developerGuideEn.includes('check-text-format.mjs');
   textFormatGateContract
-    ? ok('text format gate: one generic checker runs before main check-all and documents warning/error separation')
+    ? ok('prepare helper: stamp -> text format -> check-all -> git diff; Git staging/commit/push stay manual')
     : bad('text format gate contract', 'checker policy, Sync_Deploy ordering, .gitattributes or bilingual docs are incomplete');
   const recommendedUiContract = html.includes('id="minimumBootToggle"') &&
     html.includes('id="defconfigToggle"') &&
@@ -1209,6 +1218,7 @@ mirrorRulesOk
     .replace(/\r\n/g, '\n');
   const versionWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'site-version.yml'), 'utf8');
   const versionStamper = readFileSync(join(ROOT, 'tools', 'stamp-site-version.mjs'), 'utf8');
+  const buildMetaGenerator = readFileSync(join(ROOT, 'tools', 'gen-build-meta.mjs'), 'utf8');
   const requestParser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
   const genericDiy = readFileSync(join(ROOT, 'Shell', 'diy2-generic.sh'), 'utf8');
   const mirrorDiy = readFileSync(join(ROOT, 'Shell', 'apply-package-mirror.sh'), 'utf8');
@@ -1578,12 +1588,12 @@ mirrorRulesOk
     '"tools/**"',
     '"VERSION"',
   ].every((entry) => versionWorkflow.includes(entry)) &&
-    versionWorkflow.includes("github.actor != 'github-actions[bot]'") &&
+    versionWorkflow.includes('pull_request:') &&
     versionWorkflow.includes('permissions:') &&
-    versionWorkflow.includes('contents: write') &&
-    versionWorkflow.includes('tools/stamp-site-version.mjs') &&
-    versionWorkflow.includes('site/wrt/data/site-version.json') &&
-    versionWorkflow.includes('git add VERSION site/wrt/data/site-version.json site/wrt/app.js site/wrt/index.html') &&
+    versionWorkflow.includes('contents: read') &&
+    versionWorkflow.includes('tools/stamp-site-version.mjs --check') &&
+    !versionWorkflow.includes('git commit') && !versionWorkflow.includes('git push') &&
+    !versionWorkflow.includes('contents: write') &&
     versionStamper.includes('vYYMMDDHHmm') &&
     versionStamper.includes("const ROOT_VERSION = join(ROOT, 'VERSION')") &&
     versionStamper.includes("'.github/workflows'") &&
@@ -1591,7 +1601,9 @@ mirrorRulesOk
     versionStamper.includes("'config'") &&
     versionStamper.includes("'site/wrt'") &&
     versionStamper.includes("'tools'") &&
-    versionStamper.includes("new Set(['site/wrt/data/site-version.json'])") &&
+    versionStamper.includes("'site/wrt/data/build-meta.json'") &&
+    versionStamper.includes("'site/wrt/data/site-version.json'") &&
+    versionStamper.includes('CHECK_ONLY') &&
     versionStamper.includes('FINGERPRINT_TEXT_EXTENSIONS') &&
     versionStamper.includes('normalizeText') &&
     versionStamper.includes('writeFileSync(ROOT_VERSION, version') &&
@@ -1601,14 +1613,18 @@ mirrorRulesOk
     versionStamper.includes('^v\\d{10}$') &&
     requestParser.includes('v\\d{8}(?:\\d{2})?') &&
     js.includes('^v\\d{10}$') &&
+    js.includes('shortSiteVersion') && js.includes("fetch('./data/build-meta.json'") &&
+    js.includes('formatBuildTime') &&
     html.indexOf('id="siteVersion"') > html.indexOf('id="submitBtn"') &&
-    !html.includes('id="siteVersionMobile"') &&
-    !html.includes('id="siteVersionFooter"') &&
-    css.includes('.site-version-action { order: 0; }') &&
-    css.includes('.site-version-action { order: 3;');
+    html.includes('id="buildInfoCard"') && html.includes('id="buildInfoCommit"') &&
+    !html.includes('id="siteVersionMobile"') && !html.includes('id="siteVersionFooter"') &&
+    css.includes('.site-version-action { position: relative; order: 0;') &&
+    css.includes('.build-info-card') && css.includes('.site-version-action { order: 3;') &&
+    buildMetaGenerator.includes('CF_PAGES_COMMIT_SHA') && buildMetaGenerator.includes('WEIG_BUILD_COMMIT') &&
+    buildMetaGenerator.includes("timezone: 'Asia/Shanghai'");
   versionContract
-    ? ok('tools/Workflow/Shell/config/site 变更共用分钟版本、旧八位兼容与双端显示已接通')
-    : bad('project version contract', '触发范围、指纹范围、分钟时间戳、Actions 防循环或双端显示位置缺失');
+    ? ok('项目版本由本地生成、CI 只验证；build-meta 可选且网页短版本维护卡已接通')
+    : bad('project version contract', '本地版本生成、CI 只读验证、build-meta 或网页维护信息契约缺失');
   const selfTestContract = js.includes("const path2 = 'seed/plugins.json'") &&
     js.includes("state.device?.id === 'catalog-target'") &&
     js.includes("state.device?.id === 'custom-target' && state.importedConfig") &&

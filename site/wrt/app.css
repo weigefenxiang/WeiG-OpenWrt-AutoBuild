@@ -614,8 +614,32 @@ input:focus-visible { border-color: var(--accent); }
 .cap-fill.over { background: var(--danger); }
 .cap-text { font-size: 13.5px; color: var(--text3); white-space: nowrap; }
 .actions { margin-left: auto; display: flex; gap: 10px; flex: none; }
-.site-version { align-self: center; color: var(--text3); font: 12px/1.2 ui-monospace, Consolas, monospace; white-space: nowrap; }
-.site-version-action { order: 0; }
+.site-version-action { position: relative; order: 0; align-self: center; }
+.site-version {
+  border: 0; border-radius: 999px; padding: 5px 8px; background: transparent; color: var(--text3);
+  font: 12px/1.2 ui-monospace, Consolas, monospace; white-space: nowrap; cursor: pointer;
+}
+.site-version:hover, .site-version:focus-visible { background: var(--card2); color: var(--text); outline: none; }
+.build-info-card {
+  position: absolute; right: 0; bottom: calc(100% + 9px); z-index: 45; width: min(330px, calc(100vw - 24px));
+  padding: 12px 13px; border: 1px solid var(--border); border-radius: 12px; background: var(--card);
+  box-shadow: 0 10px 28px rgba(16, 24, 40, .18); opacity: 0; visibility: hidden; pointer-events: none;
+  transform: translateY(4px); transition: opacity .14s ease, transform .14s ease, visibility .14s;
+}
+.build-info:hover .build-info-card, .build-info.is-open .build-info-card {
+  opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0);
+}
+.build-info-title { margin-bottom: 8px; color: var(--text); font-size: 13px; font-weight: 650; letter-spacing: .01em; }
+.build-info-card dl { margin: 0; display: grid; gap: 6px; }
+.build-info-card dl > div { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.build-info-card dt { color: var(--text3); font-size: 12px; }
+.build-info-card dd { margin: 0; min-width: 0; color: var(--text2); font: 12px/1.45 ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.build-info-commit {
+  max-width: 100%; border: 0; padding: 0; background: none; color: var(--accent-text); font: inherit;
+  text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.build-info-commit:disabled { color: var(--text2); cursor: default; }
+.build-info-commit:not(:disabled):hover { text-decoration: underline; }
 .actions .btn { order: 1; }
 .actions .btn-primary { order: 2; }
 .btn {

@@ -58,6 +58,7 @@ const state = {
   ntp: 'cn',
   packageMirror: 'source-default',
   siteVersion: 'v----------',
+  buildMeta: null,
   importedConfig: null,
   importedConfigId: '',
 };
@@ -507,6 +508,57 @@ function setActive(row, pill) {
   pill.setAttribute('aria-pressed', 'true');
 }
 
+function shortSiteVersion(version) {
+  return /^v\d{10}$/.test(version || '') ? version.slice(3) : '--------';
+}
+function formatBuildTime(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):\d{2}\+08:00$/.exec(value || '');
+  return match ? `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]} CST` : '—';
+}
+async function loadBuildMeta() {
+  try {
+    const response = await fetch('./data/build-meta.json', { cache: 'no-store' });
+    if (!response.ok) return null;
+    const meta = await response.json();
+    if (meta.version !== state.siteVersion || meta.timezone !== 'Asia/Shanghai' || !/^[a-f0-9]{7,64}$/i.test(meta.commit || '') || formatBuildTime(meta.builtAt) === '—') return null;
+    return meta;
+  } catch (e) { return null; }
+}
+function renderBuildInfo() {
+  const trigger = $('siteVersion');
+  const panel = $('buildInfo');
+  const commit = $('buildInfoCommit');
+  trigger.textContent = shortSiteVersion(state.siteVersion);
+  document.querySelectorAll('.site-version-value').forEach((node) => { node.textContent = state.siteVersion; });
+  const meta = state.buildMeta;
+  if (meta?.commit) {
+    commit.textContent = meta.commit.length > 12 ? `${meta.commit.slice(0, 12)}…` : meta.commit;
+    commit.title = meta.commit;
+    commit.disabled = false;
+    commit.onclick = async () => {
+      try { await navigator.clipboard.writeText(meta.commit); }
+      catch (e) { /* clipboard permission can be unavailable on plain HTTP */ }
+    };
+  } else {
+    commit.textContent = '—';
+    commit.title = '';
+    commit.disabled = true;
+    commit.onclick = null;
+  }
+  $('buildInfoBuilt').textContent = formatBuildTime(meta?.builtAt);
+  trigger.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const open = panel.classList.toggle('is-open');
+    trigger.setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('click', (event) => {
+    if (!panel.contains(event.target)) { panel.classList.remove('is-open'); trigger.setAttribute('aria-expanded', 'false'); }
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { panel.classList.remove('is-open'); trigger.setAttribute('aria-expanded', 'false'); }
+  });
+}
+
 /* ============ 初始化 / Init ============ */
 async function init() {
   try {
@@ -552,9 +604,8 @@ async function init() {
       const stamp = await loadJson('site-version.json');
       if (/^v\d{10}$/.test(stamp.version)) state.siteVersion = stamp.version;
     } catch (e) { /* 旧部署没有版本文件时保持占位符 / old deployments keep the placeholder */ }
-    document.querySelectorAll('.site-version-value').forEach((node) => {
-      node.textContent = state.siteVersion;
-    });
+    state.buildMeta = await loadBuildMeta();
+    renderBuildInfo();
     resetPluginWorkspace(PLUGINS, 'seed/plugins.json');
     renderDevices();
     renderModes();

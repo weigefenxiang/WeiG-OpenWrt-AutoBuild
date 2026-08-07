@@ -30,7 +30,7 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ cancel-build.yml             Issue 提交者用 /cancel 取消自己的构建
 │  ├─ sync-upstream.yml            每周同步上游:机型目录/种子/插件表/说明页,有 diff 才自动提交
 │  ├─ mirror-upstream.yml          每月镜像上游仓库防删库(需 secrets.MIRROR_TOKEN)
-│  └─ site-version.yml              tools/Workflow/Shell/config/site 统一版本指纹与自动盖章
+│  └─ site-version.yml              只读验证 VERSION/site-version/资源指纹是否已在提交前生成
 ├─ config/                      ✍ base .config 唯一事实源(77 个品牌目录)
 │  ├─ 360/360t7/                   360T7 按源码/分支/Profile 生成的配置
 │  ├─ platform/x86-64-generic/     通用 Target 的版本化 config
@@ -72,7 +72,9 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ fetch-build-request.mjs      下载 GitHub Issue 附件(严格域名/数量/大小)
 │  ├─ parse-request.mjs            载荷解析 + 固定 Catalog/源码契约 + 共享引擎严格校验
 │  ├─ check-all.mjs                一键体检;check-drift.mjs 上游漂移哨兵
-│  ├─ stamp-site-version.mjs       统一版本输入指纹、上海时间盖章与网页资源查询指纹
+│  ├─ stamp-site-version.mjs       本地生成 VERSION；--check 供 CI 只读验证
+│  ├─ gen-build-meta.mjs           可选生成部署实例 Version/Commit/Built 静态元数据
+│  ├─ dev-assistant.mjs            Prepare/Verify 编排；不执行 git add/commit/push
 │  ├─ sync-blog.mjs                Unicode 安全逐文件镜像(分块哈希、原子替换与失败回滚)
 │  └─ serve.mjs                    本地静态服务器(监听 0.0.0.0:8642)
 └─ docs/                           上传的开发者文档(仅此二件)
@@ -145,7 +147,7 @@ WeiG-OpenWrt-AutoBuild/
 - `.github/workflows/custom-build.yml` 只接受网页生成的 Issue 附件，不再提供 `repository_dispatch` 或隐藏 smoke 配置生成入口。Issue 标题使用 `[build] 请求时间戳/构建标识/Target/Source/Branch/Profile`；解析器把 `build_ref` 规范化为 `请求时间戳-构建标识`。每个上游 `.img.gz` 以该前缀加原文件名作为独立、无 ZIP 外壳的 Artifact，辅助资料相应命名为 `请求时间戳-构建标识-CONFIG`、`BUILD-LOGS`、`OPTIONAL-PACKAGES`、`FIRMWARE-OTHER`。时区、主题、NTP、请求/生效软件包镜像与 APK/OPKG 检测结果在提交配置、Summary、`package-mirror-report.json`、`firmware-settings.txt` 与固件内 `/etc/weig-build-info` 交叉核验；固件/config 保留 30 天，完整日志保留 14 天。
 - 软件包镜像唯一规范为 `config/001.presets/package-mirrors.json`。修改 Source family、官方 origin、adapter、镜像或回退顺序后运行 `node tools/gen-package-mirrors.mjs`，不得直接维护网页投影。`Shell/apply-package-mirror.sh` 只做非阻断流程包装，`tools/package-mirror-engine.mjs` 根据实际 `.config`、规范 JSON 登记的 capability 文件与 adapter 文件识别 APK/OPKG，不按 Branch 名猜测；只替换已登记根地址，保留陌生自定义 `CONFIG_VERSION_REPO`。自动策略 USTC→PKU→源码默认，手动失败→源码默认，任何镜像问题都不能终止构建。运行 `node tools/test-package-mirror.mjs` 覆盖 OpenWrt/ImmortalWrt/LEDE、未来分支、混合 adapter 与回退矩阵。
 - 构建准入默认限制每位提交者同时最多 2 个排队中或运行中的任务；第 3 个 Issue 会自动回评并关闭。仓库所有者按 GitHub 登录名识别，不受此上限限制，并为每次构建使用独立并发组，不会在本项目队列中互相等待。Fork 可在仓库 Variables 设置正整数 `MAX_BUILDS_PER_USER` 覆盖默认值。`cancel-build.yml` 只接受原 Issue 提交者的 `/cancel` 或 `/cancel-build`，先普通取消，15 秒未结束才强制取消；管理员仍可在 Actions 页面管理任意任务。
-- 根目录 `VERSION` 是仓库与网页共用的分钟级 `vYYMMDDHHmm` 版本源；`site-version.json` 是静态部署副本。Actions Summary 同时记录 VERSION、请求网页版本、定制器 commit、上游 commit 和完整输入参数。
+- 根目录 `VERSION` 是仓库与网页共用的分钟级 `vYYMMDDHHmm` 代码版本；`site-version.json` 保存同一版本与统一输入指纹。正式改动在提交前本地运行 `node tools/stamp-site-version.mjs`；CI 仅用 `--check` 验证，不再自动修改或提交版本文件。`dev → staging → main` 的环境晋级本身不重新生成 VERSION。网页常驻显示 `MMDDHHmm` 短版本；可选 `build-meta.json` 提供部署实例的 Commit/Built，缺失时不影响定制器功能。Actions Summary 仍记录 VERSION、请求网页版本、定制器 commit、上游 commit 和完整输入参数。
 - 下载与并行编译使用动态并发并保留完整日志；并行失败后执行 `make -j1 V=s BUILD_LOG=1`，无需修改 `.config` 即请求上游分包日志。Catalog 引擎只在网页交互中执行强依赖、`select`、choice、反向失效关闭和孤立自动依赖清理；后端不再对整份 `.config` 判断插件依赖或冲突，也不保留人工 `config-rules`。用户勾选时仅由官方 `make defconfig` 解析配置；未勾选时直接使用提交配置。
 - `config/001.presets/source-build-requirements.json` 目前只承载前端未勾选 Defconfig 时静默加入的 `CONFIG_HAVE_DOT_CONFIG=y`，`site/wrt/data/source-build-requirements.json` 是静态网页副本。后端不读取该规则，也不因缺失而拒绝请求；若以后所有构建都固定运行 Defconfig，可删除这层前端兼容。
 - schema 5 解析器只读取固定 Catalog index，核对 revision/legacy 元数据与 `sourceCommit`，不再下载 Catalog 单体或扫描整份 `.config`。后端只保留安全白名单和最小 Target/Profile 身份核对，不检查 ARCH/ARCH_PACKAGES、插件关系、人工兼容规则、主题包状态或构建必需项。Workflow 获取精确上游 commit；可选官方 Defconfig 是唯一后端配置解析步骤。
@@ -157,7 +159,7 @@ WeiG-OpenWrt-AutoBuild/
 - Actions 的全局 `TZ` 只控制 Runner 进程日志时间；不要在 GitHub 托管 Runner 调用 `timedatectl set-timezone`，该操作可能因 systemd 权限被拒绝并让依赖安装步骤失败。固件时区始终由请求字段和 diy2 首启脚本写入，与 Runner 系统时区无关。
 - diy 脚本按源区分:官方源用 `diy2-openwrt.sh`,lede 用 `diy2-lede.sh`(都不能复用 ImmortalWrt 系的)
 - `sync-upstream.yml` 每周六 18:37 UTC 自动同步上游并提交；`check-drift.mjs` 只检查通用 OpenWrt 分支策略并在漂移时开 issue；`mirror-upstream.yml` 每月镜像（需 `secrets.MIRROR_TOKEN`）。构建回归测试通过网页生成的真实 Issue 请求执行，不再使用 smoke 派发器。
-- `site-version.yml` 监听 `tools/**`、`.github/workflows/**`、`Shell/**`、`config/**`、`site/wrt/**` 与 `VERSION` push，按同一版本输入指纹同时更新根 `VERSION` 和 `site-version.json`，由机器人一次提交；解析器继续接受旧 `vYYMMDDHH` 请求。桌面端版本号位于“加载配置”左侧，560px 以下改在页脚右侧；`github.actor` 条件防止提交循环。
+- `site-version.yml` 监听版本影响路径的 push / pull request，只以 `contents: read` 运行 `node tools/stamp-site-version.mjs --check`；若开发者忘记在本地刷新 VERSION/site-version/资源查询指纹，CI 直接失败并提示本地修复，不再由机器人回写仓库。
 
 #### 取消内置项与直接配置构建
 
@@ -180,7 +182,7 @@ WeiG-OpenWrt-AutoBuild/
 - 浏览器动态导入的 Catalog 模块固定为 `lib/catalog-engine.js`、`lib/catalog-loader.js` 与 `lib/catalog-schema6.js`，Advanced 搜索使用 `lib/catalog-search-worker.js`。使用 `.js` 是为了直接复用普通静态服务器已有的 JavaScript MIME 映射；`lib/package.json` 的 `type: module` 只负责 Node/CI 导入。旧 `.mjs` 必须删除，部署脚本在打包、远端切换和切换后 HTTP 冒烟三个阶段校验四个脚本；返回非 JavaScript MIME、HTML 回退或缺文件都会恢复上一版。部署包清单统一由 `tools/verify-site-archive.mjs` 以 `shell: false` 调用 `tar` 并一次验证必需/禁止条目，BAT 禁止使用 `tar | findstr`，因此中文、空格路径和 CMD 括号上下文不会改变参数解析。
 - Fork 后只需修改 `site/wrt/data/project.json` 的主仓库、Catalog 仓库与博客地址；网页链接、Issue 目标和运行时 Catalog 会自动采用该文件。HTML 中保留的人类可读链接仅是旧部署兜底。
 - 博客副本：`node tools/sync-blog.mjs [博客路径]` 会把 `site/wrt/` 完整精确镜像到博客 `source/wrt/`，包括 `.config` 和空目录。实现不使用 `fs.cpSync()`，而是按 Catalog 无关的通用目录树逐目录创建、逐文件复制，并以分块 SHA-256 校验临时副本后原子替换；中文、空格路径和大二进制文件使用同一逻辑，失败时保留或恢复旧副本。CLI 会输出复制进度；`--check` 仅比较完整目录树，完全一致返回 0，有差异返回 3。
-- 文本格式门禁：`node tools/check-text-format.mjs <仓库路径> --changed` 只检查当前 Git 变更与未跟踪文本，按 `.gitattributes` 要求验证源码/数据为 LF、BAT/CMD/PowerShell 为 CRLF、UTF-8 无 BOM，且文件末尾只有一个换行；它只报告、不自动改写。`Sync_Deploy.bat` 的主仓库选项会在完整 `check-all` 和 `git diff --check` 前先运行该门禁，Git 的“下次将 CRLF 转为 LF”提示只是信息性 warning，真正阻断项会单独列出。
+- 文本格式门禁：`node tools/check-text-format.mjs <仓库路径> --changed` 只检查当前 Git 变更与未跟踪文本，按 `.gitattributes` 要求验证源码/数据为 LF、BAT/CMD/PowerShell 为 CRLF、UTF-8 无 BOM，且文件末尾只有一个换行；它只报告、不自动改写。`tools/dev-assistant.mjs prepare`（Windows 可由 `Sync_Deploy.bat` 调用）会按 stamp → 文本门禁 → `check-all` → `git diff --check` 的顺序执行；它只提供 Git 状态/建议，不运行 `git add`、`commit` 或 `push`。Git 的“下次将 CRLF 转为 LF”提示只是信息性 warning，真正阻断项会单独列出。
 
 ### 2.8 云构建测试指南(手动 Run workflow 实战)
 

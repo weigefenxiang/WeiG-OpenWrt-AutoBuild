@@ -4,3 +4,6 @@ docs-private/
 # 本地工具与依赖 / local tooling & deps
 node_modules/
 .vscode/
+
+# Deployment-local metadata / 部署实例元数据
+site/wrt/data/build-meta.json

@@ -9,36 +9,30 @@ on:
       - "site/wrt/**"
       - "tools/**"
       - "VERSION"
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - "Shell/**"
+      - "config/**"
+      - "site/wrt/**"
+      - "tools/**"
+      - "VERSION"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: site-version-${{ github.ref }}
-  cancel-in-progress: false
+  group: project-version-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  stamp:
-    if: github.actor != 'github-actions[bot]'
+  validate:
+    name: Validate project version / 验证项目版本
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout / 检出代码
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref_name }}
 
-      - name: Stamp changed project inputs / 更新项目版本时间戳
-        run: node tools/stamp-site-version.mjs
-
-      - name: Commit generated version files / 提交生成的版本文件
-        run: |
-          if git diff --quiet -- VERSION site/wrt/data/site-version.json site/wrt/app.js site/wrt/index.html; then
-            echo "Project version is current / 项目版本无需更新"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add VERSION site/wrt/data/site-version.json site/wrt/app.js site/wrt/index.html
-          git commit -m "chore(version): update project version [skip ci]"
-          git push
+      - name: Verify generated version state / 验证版本生成状态
+        run: node tools/stamp-site-version.mjs --check
