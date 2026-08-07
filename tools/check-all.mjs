@@ -815,11 +815,11 @@ mirrorRulesOk
     stagingDeployScript.includes('origin/staging') &&
     stagingDeployScript.includes('local-env.cmd') && !/set "VPS_HOST=\d+\./.test(stagingDeployScript) &&
     !syncDeployScript.includes('Legacy VPS deploy') && !syncDeployScript.includes(':deploy') &&
-    remoteDeploySource.includes('test -s "$NEW/data/build-meta.json"') &&
-    remoteDeploySource.includes('test -s "$NEW/lib/catalog-engine.js"') &&
+    remoteDeploySource.includes('require_nonempty_file "$NEW/data/build-meta.json" "data/build-meta.json"') &&
+    remoteDeploySource.includes('require_nonempty_file "$NEW/lib/catalog-engine.js" "lib/catalog-engine.js"') &&
     remoteDeploySource.includes('Content-Type:') &&
     remoteDeploySource.includes('catalog-search-worker.js') &&
-    remoteDeploySource.includes('test ! -e "$NEW/lib/catalog-engine.mjs"');
+    remoteDeploySource.includes('require_absent_path "$NEW/lib/catalog-engine.mjs" "lib/catalog-engine.mjs"');
   remoteCatalogDeploymentContract
     ? ok('VPS staging deploys only origin/staging exact web content; legacy Sync_Deploy VPS path is removed')
     : bad('remote Catalog deployment', 'staging deploy, private env isolation, build-meta gate or legacy VPS cleanup is incomplete');
@@ -830,7 +830,9 @@ mirrorRulesOk
     stagingDeployScript.includes('WRT_SMOKE_ORIGIN_FILE=/tmp/wrt-smoke-origin.txt /tmp/deploy-wrt.sh') &&
     remoteDeploySource.includes('BACKUP_ARCHIVE=${WRT_BACKUP_ARCHIVE:-${PARENT}/wrt_prev.tar.gz}') &&
     remoteDeploySource.includes('tar -czf "$BACKUP_TMP" -C "$PARENT" "$BASE"') &&
-    remoteDeploySource.includes('tar -tzf "$BACKUP_TMP" >/dev/null') &&
+    remoteDeploySource.includes('tar -tzf "$BACKUP_TMP" > "$BACKUP_LIST"') &&
+    !remoteDeploySource.includes('tar -tzf "$BACKUP_TMP" |') &&
+    remoteDeploySource.includes('grep -Fxq "$BASE/index.html" "$BACKUP_LIST"') &&
     remoteDeploySource.includes('mv -f -- "$BACKUP_TMP" "$BACKUP_ARCHIVE"') &&
     remoteDeploySource.includes('restore_previous_site') &&
     remoteDeploySource.includes('previous site restored and smoke-checked') &&
@@ -838,6 +840,21 @@ mirrorRulesOk
   vpsTransactionalDeployContract
     ? ok('VPS deploy transport uses SCP files and keeps a verified wrt_prev.tar.gz transactional rollback archive')
     : bad('VPS transactional deploy', 'base64 transport returned, SCP script/origin transfer is incomplete, or verified previous-site rollback is missing');
+  const vpsDeploymentDiagnosticsContract =
+    stagingDeployScript.includes('echo [ssh] execute remote deployment - attempt 1/1') &&
+    remoteDeploySource.includes('DEPLOY_STAGE=init') &&
+    remoteDeploySource.includes("printf '[deploy:error] stage=%s line=%s exit=%s\\n'") &&
+    remoteDeploySource.includes('[deploy:extract] extracting candidate archive') &&
+    remoteDeploySource.includes('[deploy:validate] ERROR missing or empty $label') &&
+    remoteDeploySource.includes('data/build-meta.json') &&
+    remoteDeploySource.includes('lib/package.json') &&
+    remoteDeploySource.includes('[deploy:backup] ERROR previous-site archive failed tar verification') &&
+    remoteDeploySource.includes('[deploy:smoke] ERROR request failed for $module') &&
+    remoteDeploySource.includes('[deploy:rollback] ERROR automatic rollback failed; manual recovery is required') &&
+    !remoteDeploySource.includes('[deploy:error] command=');
+  vpsDeploymentDiagnosticsContract
+    ? ok('VPS deploy diagnostics identify remote stage/validation failures without printing the private origin')
+    : bad('VPS deploy diagnostics', 'remote execution label, stage/error markers, validation details, backup diagnostics or privacy guard is incomplete');
   const releaseToolContract =
     promoteSource.includes("merge-base', '--is-ancestor'") &&
     promoteSource.includes('git push origin ${candidate}:refs/heads/staging') &&
