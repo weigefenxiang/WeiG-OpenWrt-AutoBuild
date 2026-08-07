@@ -86,6 +86,11 @@ const asset = 'immortalwrt--openwrt-25.12.json.gz';
 const valid = compressedDocument(catalog(commit));
 const index = indexFor(asset, valid, commit);
 const wrong = Buffer.from('not-the-catalog');
+let catalogDecodeCount = 0;
+function CountingDecompressionStream(format) {
+  catalogDecodeCount++;
+  return new DecompressionStream(format);
+}
 const calls = [];
 const fetchImpl = async (url) => {
   calls.push(url);
@@ -106,12 +111,14 @@ const loader = createCatalogLoader({
   fetchImpl,
   cacheStorage: fakeCaches(),
   subtle: null,
+  Decompression: CountingDecompressionStream,
   now: () => 123,
 });
 const first = await loader.fetchBundle({ sourceId: 'ImmortalWrt', branchName: 'openwrt-25.12' });
 assert(first.provider === 'github-raw', 'invalid jsDelivr asset did not fall back to GitHub Raw');
 assert(first.indexProvider === 'github-raw', 'latest index was not loaded from GitHub Raw first');
 assert(first.model.catalog.schema === 5, 'validated Catalog model was not returned');
+assert(catalogDecodeCount === 1, `network Catalog decoded ${catalogDecodeCount} times; expected once`);
 assert(first.diagnostics.some((row) => !row.ok && row.provider === 'jsdelivr' && /byte length|SHA-256/.test(row.detail)),
 'jsDelivr hash failure was not diagnosed');
 assert(!calls.some((url) => url.includes('cdn.jsdelivr.net') && url.includes('index.json')),
@@ -121,6 +128,8 @@ const beforeCache = calls.length;
 const cached = await loader.fetchBundle({ sourceId: 'ImmortalWrt', branchName: 'openwrt-25.12' });
 assert(cached.provider === 'cache', 'validated Catalog cache was not reused');
 assert(calls.length === beforeCache, 'cache reuse performed an unexpected network request');
+assert(catalogDecodeCount === 2,
+  `cached Catalog decoded ${catalogDecodeCount - 1} times; expected exactly once on cache hit`);
 
 await loader.clearCache();
 const fallbackCalls = [];

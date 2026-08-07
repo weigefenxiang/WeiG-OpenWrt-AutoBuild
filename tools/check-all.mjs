@@ -424,7 +424,7 @@ const catalogPerformanceTest = spawnSync(process.execPath, [join(ROOT, 'tools', 
   encoding: 'utf8',
 });
 catalogPerformanceTest.status === 0
-  ? ok(`Catalog performance: compact 12k-record graph and worker search ${catalogPerformanceTest.stdout.trim()}`)
+  ? ok(`Catalog performance: 12k graph, lazy startup indexes, baseline context reuse and worker search ${catalogPerformanceTest.stdout.trim()}`)
   : bad('Catalog performance tests',
     (catalogPerformanceTest.stderr || catalogPerformanceTest.stdout || '').trim().slice(0, 400));
 

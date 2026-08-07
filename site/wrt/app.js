@@ -73,6 +73,7 @@ let menuCatalogKey = '', menuLoadingKey = '', menuCatalogSeq = 0, menuCatalogPro
 let menuCatalogAbortController = null, menuIndexAbortController = null;
 let menuIndexProvider = '', menuAssetProvider = '';
 let catalogLoadMode = 'idle', catalogLoadError = '', catalogLoadDiagnostics = [];
+let catalogAutoloadReady = false;
 let menuPath = null, menuParent = '', menuExpanded = false, menuSelectedExpanded = false;
 let buildContractExpanded = false;
 let menuVisibleLimit = 80, menuHistory = [], menuBreadcrumb = [];
@@ -560,11 +561,21 @@ function renderBuildInfo() {
 }
 
 /* ============ 初始化 / Init ============ */
+function startCatalogAfterFirstPaint() {
+  const start = () => {
+    catalogAutoloadReady = true;
+    renderDevices();
+    refreshMenuIndex();
+  };
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(start, 0)));
+  } else setTimeout(start, 0);
+}
 async function init() {
   try {
     [CATALOG_ENGINE, CATALOG_LOADER_MODULE, CATALOG_SCHEMA6_MODULE] = await Promise.all([
       import('./lib/catalog-engine.js?v=9f03d1396d'),
-      import('./lib/catalog-loader.js?v=319e7a7c96'),
+      import('./lib/catalog-loader.js?v=e1801742f9'),
       import('./lib/catalog-schema6.js?v=0a165903c2'),
     ]);
     I18N = await loadJson('i18n.json');
@@ -625,7 +636,7 @@ async function init() {
     $('form').hidden = false;
     $('actionbar').hidden = false;
     if (localStorage.getItem('wrt_risk') !== 'ok') $('riskBar').hidden = false;
-    refreshMenuIndex();
+    startCatalogAfterFirstPaint();
   } catch (err) {
     $('loading').textContent = (I18N ? t('loading.fail', { msg: err.message }) : '加载失败: ' + err.message);
   }
@@ -1373,18 +1384,39 @@ function relationMenuOption(record) {
     origin: record.origin || 'relations',
   };
 }
-function buildMenuIndexes(catalog) {
-  menuTargetSymbols = new Set(['TARGET_BOARD', 'TARGET_SUBTARGET', 'TARGET_PROFILE']);
+function catalogTargetSymbolSet(catalog) {
+  const symbols = new Set(['TARGET_BOARD', 'TARGET_SUBTARGET', 'TARGET_PROFILE']);
   for (const target of catalog.targets || []) {
     const targetSelector = target.targetSelector || target.contract?.targetSelector ||
       `TARGET_${target.board}${target.subtarget ? `_${target.subtarget}` : ''}`;
-    menuTargetSymbols.add(targetSelector);
+    symbols.add(targetSelector);
     for (const profile of target.profiles || []) {
-      menuTargetSymbols.add(profile.selector || profile.profileSelector ||
-        `${targetSelector}_${profile.id}`);
-      if (profile.targetSelector) menuTargetSymbols.add(profile.targetSelector);
+      symbols.add(profile.selector || profile.profileSelector || `${targetSelector}_${profile.id}`);
+      if (profile.targetSelector) symbols.add(profile.targetSelector);
     }
   }
+  return symbols;
+}
+function buildMenuStartupIndexes(catalog) {
+  menuTargetSymbols = catalogTargetSymbolSet(catalog);
+  menuSearchOptions = (catalog.menu?.options || []).filter((option) =>
+    option?.symbol && !menuTargetSymbols.has(option.symbol));
+  menuOptionBySymbol = new Map(menuSearchOptions.map((option) => [option.symbol, option]));
+  menuChoiceOptions = new Map();
+  for (const option of menuSearchOptions) {
+    if (option.choice) addMenuIndex(menuChoiceOptions, option.choice, option);
+  }
+  menuExactPaths = new Map();
+  menuChildPaths = new Map();
+  menuDescendants = new Map();
+  menuChildrenByParent = new Map();
+  menuNestedCounts = new Map();
+  menuSearchText = new Map();
+  catalogLocatorEntryCache = null;
+  stopCatalogSearchWorker();
+}
+function buildMenuIndexes(catalog) {
+  menuTargetSymbols = catalogTargetSymbolSet(catalog);
   const menuDisplayOptions = catalog.menu.displayOptions || catalog.menu.options || [];
   const options = menuDisplayOptions.filter((option) =>
     option.hidden !== true && option.path?.[0] !== 'Target Devices' && !menuTargetSymbols.has(option.symbol));
@@ -1487,7 +1519,8 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
     if (catalog.splitAssets) catalog.menu = CATALOG_SCHEMA6_MODULE.createRuntimeMenu(CATALOG_MODEL);
     MENU_CATALOG = catalog;
     menuCatalogKey = key;
-    buildMenuIndexes(catalog);
+    if (catalog.splitAssets) buildMenuStartupIndexes(catalog);
+    else buildMenuIndexes(catalog);
     resetCatalogSelectionLayers();
     minimumBootOriginal.clear();
     minimumBootTouchedOriginal.clear();
@@ -1575,7 +1608,7 @@ function renderCatalogPicker(preferState = true, requested = null) {
   }
   const key = `${source.id}/${branch.branch}`;
   if (!MENU_CATALOG || menuCatalogKey !== key) {
-    loadCatalog(source, branch, true, targetRequest).catch(() => {});
+    if (catalogAutoloadReady) loadCatalog(source, branch, true, targetRequest).catch(() => {});
     return null;
   }
   const preferred = targetRequest ||
@@ -1955,12 +1988,12 @@ function resetCatalogSelectionLayers() {
   if ($('menuconfigOriginFilter')) $('menuconfigOriginFilter').value = 'all';
   markCatalogStateChanged();
 }
-function defaultConditionState(condition) {
+function defaultConditionState(condition, context = null) {
   if (!condition) return { status: 'satisfied', level: 2 };
   if (CATALOG_ENGINE?.evaluateExpressionState) {
-    const context = catalogValidationContext(menuValues, 'interactive');
+    const activeContext = context || catalogValidationContext(menuValues, 'interactive');
     return CATALOG_ENGINE.evaluateExpressionState(
-      condition, context.values, context.validationOptions,
+      condition, activeContext.values, activeContext.validationOptions,
     );
   }
   return { status: kconfigExpr(condition) > 0 ? 'satisfied' : 'unsatisfied', level: null };
@@ -1981,13 +2014,26 @@ function initializeCatalogBaseline() {
   // cache while this batch mutates menuValues, then publish one new revision at the end.
   catalogContextCacheBypass = true;
   try {
+    const needsConditionalContext = menuSearchOptions.some((option) =>
+      !option.hidden && (option.defaults || []).some((raw) => /\s+if\s+/.test(raw)));
     for (let pass = 0; pass < 8; pass++) {
       let changed = false;
+      const passContext = needsConditionalContext
+        ? catalogValidationContext(menuValues, 'interactive') : null;
+      const contextOwnedSymbols = new Set([
+        ...(passContext?.changes || []).map((change) => change.symbol),
+        ...menuTargetSymbols,
+        'TARGET_BOARD', 'TARGET_SUBTARGET', 'TARGET_PROFILE', 'TARGET_ARCH_PACKAGES',
+        'ARCH_PACKAGES', 'ARCH',
+      ]);
       for (const option of menuSearchOptions) {
         if (option.hidden) continue;
-        const value = simpleKconfigDefault(option);
+        const value = simpleKconfigDefault(option, passContext);
         if (value === '' || menuValues.get(option.symbol) === value) continue;
         menuValues.set(option.symbol, value);
+        if (passContext && !contextOwnedSymbols.has(option.symbol)) {
+          passContext.values.set(option.symbol, value);
+        }
         changed = true;
       }
       if (!changed) break;
@@ -2089,10 +2135,10 @@ function restoreCatalogDefault(option) {
   renderGroups();
   updateStats();
 }
-function simpleKconfigDefault(option) {
+function simpleKconfigDefault(option, context = null) {
   for (const raw of option.defaults || []) {
     const [value, condition] = raw.split(/\s+if\s+/, 2);
-    const evaluated = defaultConditionState(condition);
+    const evaluated = defaultConditionState(condition, context);
     if (evaluated.status === 'satisfied') return value.replace(/^"|"$/g, '');
   }
   return option.type === 'string' ? '' : 'n';

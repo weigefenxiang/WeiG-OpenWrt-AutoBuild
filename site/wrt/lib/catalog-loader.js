@@ -281,9 +281,9 @@ export function createCatalogLoader({
     if (!response) return null;
     try {
       const buffer = await response.arrayBuffer();
-      await readDocumentBuffer(buffer, contract, subtle, Decompression);
+      const data = await readDocumentBuffer(buffer, contract, subtle, Decompression);
       diagnostic(diagnostics, stage, 'cache-api', true, `bytes ${buffer.byteLength}`, key);
-      return { buffer, key };
+      return { buffer, data, key };
     } catch (error) {
       await cache.delete(key).catch(() => {});
       diagnostic(diagnostics, stage, 'cache-api', false, error.message, key);
@@ -325,7 +325,7 @@ export function createCatalogLoader({
       const cached = await readCachedBuffer(safeAsset, contract, diagnostics, `${stage}-cache`);
       if (cached) {
         return {
-          data: await decodeCatalogBytes(cached.buffer, Decompression),
+          data: cached.data,
           buffer: cached.buffer,
           provider: 'cache',
           url: `cache:${cached.key}`,
