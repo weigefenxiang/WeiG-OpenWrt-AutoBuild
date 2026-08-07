@@ -736,6 +736,45 @@ mirrorRulesOk
   const cleanupPrivateBat = readFileSync(join(ROOT, 'docs-private', 'Cleanup_Private.bat'), 'utf8');
   const packProjectBat = readFileSync(join(ROOT, 'docs-private', 'Pack_Project.bat'), 'utf8');
   const remoteDeploySource = readFileSync(join(ROOT, 'docs-private', 'deploy-vps-site.sh'), 'utf8');
+  const smokeWriterMatch = stagingDeployScript.match(/node -e "([^"\r\n]+)" "%LOCAL_SMOKE_FILE%"/);
+  const smokeOriginFixtureRoot = mkdtempSync(join(tmpdir(), 'weig-smoke-origin-'));
+  try {
+    const smokeFile = join(smokeOriginFixtureRoot, 'origin.txt');
+    const invalidSmokeFile = join(smokeOriginFixtureRoot, 'invalid-origin.txt');
+    const smokeWriter = smokeWriterMatch?.[1] || '';
+    const validWrite = smokeWriter
+      ? spawnSync(process.execPath, ['-e', smokeWriter, smokeFile], {
+        encoding: 'utf8',
+        shell: false,
+        env: { ...process.env, VPS_SMOKE_ORIGIN: 'http://127.0.0.1:18081' },
+      })
+      : { status: 1 };
+    const bytes = existsSync(smokeFile) ? readFileSync(smokeFile) : Buffer.alloc(0);
+    const expectedBytes = Buffer.from('http://127.0.0.1:18081\n');
+    const invalidWrite = smokeWriter
+      ? spawnSync(process.execPath, ['-e', smokeWriter, invalidSmokeFile], {
+        encoding: 'utf8',
+        shell: false,
+        env: { ...process.env, VPS_SMOKE_ORIGIN: 'http://127.0.0.1:18081/path' },
+      })
+      : { status: 0 };
+    const smokeWriterFixtureOk = validWrite.status === 0 && bytes.equals(expectedBytes) &&
+      bytes.length === 23 && bytes.at(-1) === 0x0a &&
+      !bytes.includes(Buffer.from('\\\\n')) &&
+      invalidWrite.status === 2 && !existsSync(invalidSmokeFile);
+    smokeWriterFixtureOk
+      ? ok('VPS smoke-origin writer: exact LF byte, no literal backslash-n, invalid path rejected')
+      : bad('VPS smoke-origin writer fixture', JSON.stringify({
+        writerFound: Boolean(smokeWriter),
+        validStatus: validWrite.status,
+        invalidStatus: invalidWrite.status,
+        bytes: bytes.toString('hex'),
+      }).slice(0, 500));
+  } catch (error) {
+    bad('VPS smoke-origin writer fixture', error.message.slice(0, 300));
+  } finally {
+    rmSync(smokeOriginFixtureRoot, { recursive: true, force: true });
+  }
   const devAssistant = readFileSync(join(ROOT, 'tools', 'dev-assistant.mjs'), 'utf8');
   const syncBlogSource = readFileSync(join(ROOT, 'tools', 'sync-blog.mjs'), 'utf8');
   const textFormatSource = readFileSync(join(ROOT, 'tools', 'check-text-format.mjs'), 'utf8');
@@ -827,7 +866,13 @@ mirrorRulesOk
     !stagingDeployScript.toLowerCase().includes('base64') &&
     stagingDeployScript.includes('scp_upload "%DEPLOY_SCRIPT%" "%REMOTE_SCRIPT%"') &&
     stagingDeployScript.includes('scp_upload "%LOCAL_SMOKE_FILE%" "%REMOTE_SMOKE_FILE%"') &&
+    stagingDeployScript.includes("fs.writeFileSync(process.argv[1],u.origin+'\\n');") &&
+    !stagingDeployScript.includes("fs.writeFileSync(process.argv[1],u.origin+'\\\\n');") &&
     stagingDeployScript.includes('WRT_SMOKE_ORIGIN_FILE=/tmp/wrt-smoke-origin.txt /tmp/deploy-wrt.sh') &&
+    remoteDeploySource.includes('SMOKE_ORIGIN=$(<"$WRT_SMOKE_ORIGIN_FILE")') &&
+    remoteDeploySource.includes("SMOKE_ORIGIN=${SMOKE_ORIGIN%$'\\r'}") &&
+    remoteDeploySource.includes('[[ "$SMOKE_ORIGIN" == *\\\\* ]]') &&
+    !remoteDeploySource.includes('IFS= read -r SMOKE_ORIGIN') &&
     remoteDeploySource.includes('BACKUP_ARCHIVE=${WRT_BACKUP_ARCHIVE:-${PARENT}/wrt_prev.tar.gz}') &&
     remoteDeploySource.includes('tar -czf "$BACKUP_TMP" -C "$PARENT" "$BASE"') &&
     remoteDeploySource.includes('tar -tzf "$BACKUP_TMP" > "$BACKUP_LIST"') &&
@@ -838,8 +883,8 @@ mirrorRulesOk
     remoteDeploySource.includes('previous site restored and smoke-checked') &&
     remoteDeploySource.includes('previous archive retained at $BACKUP_ARCHIVE');
   vpsTransactionalDeployContract
-    ? ok('VPS deploy transport uses SCP files and keeps a verified wrt_prev.tar.gz transactional rollback archive')
-    : bad('VPS transactional deploy', 'base64 transport returned, SCP script/origin transfer is incomplete, or verified previous-site rollback is missing');
+    ? ok('VPS deploy transport uses exact-LF smoke origin, tolerant remote reading and a verified wrt_prev.tar.gz rollback archive')
+    : bad('VPS transactional deploy', 'smoke-origin byte/read contract, SCP transport, or verified previous-site rollback is incomplete');
   const vpsDeploymentDiagnosticsContract =
     stagingDeployScript.includes('echo [ssh] execute remote deployment - attempt 1/1') &&
     remoteDeploySource.includes('DEPLOY_STAGE=init') &&
