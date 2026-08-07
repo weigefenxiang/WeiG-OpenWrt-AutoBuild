@@ -1,9 +1,13 @@
-name: Site Version / 网页版本
+name: Project Version / 项目版本
 
 on:
   push:
     paths:
+      - ".github/workflows/**"
+      - "Shell/**"
+      - "config/**"
       - "site/wrt/**"
+      - "tools/**"
       - "VERSION"
 
 permissions:
@@ -24,17 +28,17 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
 
-      - name: Stamp only changed site content / 仅网页内容变化时更新时间戳
+      - name: Stamp changed project inputs / 更新项目版本时间戳
         run: node tools/stamp-site-version.mjs
 
-      - name: Commit stamp when needed / 需要时提交版本文件
+      - name: Commit generated version files / 提交生成的版本文件
         run: |
-          if git diff --quiet -- VERSION site/wrt/data/site-version.json; then
-            echo "Site version is current / 网页版本无需更新"
+          if git diff --quiet -- VERSION site/wrt/data/site-version.json site/wrt/app.js site/wrt/index.html; then
+            echo "Project version is current / 项目版本无需更新"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add VERSION site/wrt/data/site-version.json
-          git commit -m "chore(site): update page version [skip ci]"
+          git add VERSION site/wrt/data/site-version.json site/wrt/app.js site/wrt/index.html
+          git commit -m "chore(version): update project version [skip ci]"
           git push

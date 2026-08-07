@@ -106,6 +106,103 @@ try {
   rmSync(textFormatFixtureRoot, { recursive: true, force: true });
 }
 
+const versionStampFixtureRoot = mkdtempSync(join(tmpdir(), 'weig-version-stamp-'));
+try {
+  const writeStampFixture = (relativePath, content) => {
+    const target = join(versionStampFixtureRoot, ...relativePath.split('/'));
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, content);
+  };
+  writeStampFixture('tools/stamp-site-version.mjs', readFileSync(join(ROOT, 'tools', 'stamp-site-version.mjs')));
+  writeStampFixture('tools/helper.mjs', 'export const helper = 1;\n');
+  writeStampFixture('.github/workflows/build.yml', 'name: fixture\n');
+  writeStampFixture('Shell/diy.sh', '#!/bin/sh\n');
+  writeStampFixture('config/device.config', 'CONFIG_FIXTURE=y\n');
+  writeStampFixture('site/wrt/app.css', 'body { color: black; }\n');
+  writeStampFixture('site/wrt/app.js', [
+    "import('./lib/catalog-engine.js');",
+    "import('./lib/catalog-loader.js');",
+    "import('./lib/catalog-schema6.js');",
+    "new Worker('./lib/catalog-search-worker.js');",
+    '',
+  ].join('\n'));
+  writeStampFixture('site/wrt/index.html', '<link rel="stylesheet" href="app.css?v=old">\n<script src="app.js?v=old"></script>\n');
+  writeStampFixture('site/wrt/data/runtime.json', '{"fixture":1}\n');
+  for (const moduleName of ['catalog-engine.js', 'catalog-loader.js', 'catalog-schema6.js', 'catalog-search-worker.js']) {
+    writeStampFixture(`site/wrt/lib/${moduleName}`, `export const name = '${moduleName}';\n`);
+  }
+  writeStampFixture('VERSION', 'v0000000000\n');
+  const runStamp = () => spawnSync(process.execPath, [
+    join(versionStampFixtureRoot, 'tools', 'stamp-site-version.mjs'),
+  ], { encoding: 'utf8' });
+  const readStamp = () => JSON.parse(readFileSync(
+    join(versionStampFixtureRoot, 'site', 'wrt', 'data', 'site-version.json'), 'utf8'));
+
+  const firstRun = runStamp();
+  const firstStamp = readStamp();
+  const firstApp = readFileSync(join(versionStampFixtureRoot, 'site', 'wrt', 'app.js'), 'utf8');
+  const firstHtml = readFileSync(join(versionStampFixtureRoot, 'site', 'wrt', 'index.html'), 'utf8');
+  const secondRun = runStamp();
+  const secondStampText = readFileSync(
+    join(versionStampFixtureRoot, 'site', 'wrt', 'data', 'site-version.json'), 'utf8');
+  const firstStampText = JSON.stringify(firstStamp, null, 2) + '\n';
+  writeStampFixture('Shell/diy.sh', '#!/bin/sh\r\n');
+  const lineEndingRun = runStamp();
+  const afterLineEnding = readFileSync(
+    join(versionStampFixtureRoot, 'site', 'wrt', 'data', 'site-version.json'), 'utf8');
+  const scopeMutations = [
+    ['tools/helper.mjs', 'export const helper = 2;\n'],
+    ['.github/workflows/build.yml', 'name: fixture-updated\n'],
+    ['Shell/diy.sh', '#!/bin/sh\necho updated\n'],
+    ['config/device.config', 'CONFIG_FIXTURE=m\n'],
+    ['site/wrt/data/runtime.json', '{"fixture":2}\n'],
+  ];
+  let previousFingerprint = firstStamp.fingerprint;
+  let scopesChanged = true;
+  for (const [relativePath, content] of scopeMutations) {
+    writeStampFixture(relativePath, content);
+    const result = runStamp();
+    const stamp = readStamp();
+    scopesChanged &&= result.status === 0 && stamp.fingerprint !== previousFingerprint;
+    previousFingerprint = stamp.fingerprint;
+  }
+  const beforeDocs = readFileSync(
+    join(versionStampFixtureRoot, 'site', 'wrt', 'data', 'site-version.json'), 'utf8');
+  writeStampFixture('docs/DEVELOPER.md', '# unrelated docs fixture\n');
+  const docsRun = runStamp();
+  const afterDocs = readFileSync(
+    join(versionStampFixtureRoot, 'site', 'wrt', 'data', 'site-version.json'), 'utf8');
+  const stampFixtureOk = firstRun.status === 0 && secondRun.status === 0 &&
+    lineEndingRun.status === 0 && docsRun.status === 0 &&
+    /^v\d{10}$/.test(firstStamp.version) && firstStamp.timezone === 'Asia/Shanghai' &&
+    /^[a-f0-9]{64}$/.test(firstStamp.fingerprint) && secondStampText === firstStampText &&
+    afterLineEnding === firstStampText &&
+    firstApp.includes('./lib/catalog-engine.js?v=') &&
+    firstApp.includes('./lib/catalog-loader.js?v=') &&
+    firstApp.includes('./lib/catalog-schema6.js?v=') &&
+    firstApp.includes('./lib/catalog-search-worker.js?v=') &&
+    firstHtml.includes('app.css?v=') && !firstHtml.includes('app.css?v=old') &&
+    firstHtml.includes('app.js?v=') && !firstHtml.includes('app.js?v=old') &&
+    scopesChanged && beforeDocs === afterDocs;
+  stampFixtureOk
+    ? ok('version stamp fixtures: tracked scopes change the fingerprint; LF/CRLF-only and unrelated docs do not')
+    : bad('version stamp fixtures', JSON.stringify({
+      firstStatus: firstRun.status,
+      secondStatus: secondRun.status,
+      lineEndingStatus: lineEndingRun.status,
+      docsStatus: docsRun.status,
+      firstStamp,
+      idempotent: secondStampText === firstStampText,
+      lineEndingsStable: afterLineEnding === firstStampText,
+      scopesChanged,
+      docsIgnored: beforeDocs === afterDocs,
+    }).slice(0, 700));
+} catch (error) {
+  bad('version stamp fixtures', error.message.slice(0, 400));
+} finally {
+  rmSync(versionStampFixtureRoot, { recursive: true, force: true });
+}
+
 const siteArchiveTestRoot = mkdtempSync(join(tmpdir(), '威格 archive verifier with spaces-'));
 try {
   const completeSite = join(siteArchiveTestRoot, '完整 网站 source');
@@ -556,6 +653,11 @@ mirrorRulesOk
   const blogGuide = readFileSync(join(ROOT, 'docs-private', '003.weige-share-blog同步与推送.md'), 'utf8');
   const developerGuideZh = readFileSync(join(ROOT, 'docs', 'DEVELOPER.md'), 'utf8');
   const developerGuideEn = readFileSync(join(ROOT, 'docs', 'DEVELOPER.en.md'), 'utf8');
+  const publicDeveloperDocsContract = !developerGuideZh.includes('docs-private') &&
+    !developerGuideEn.includes('docs-private');
+  publicDeveloperDocsContract
+    ? ok('公开开发者指南不暴露私有文档目录或路径')
+    : bad('public developer docs', 'DEVELOPER.md 或 DEVELOPER.en.md 仍包含 docs-private');
   const catalogIndex = menuCatalogIndex;
   const assetHash = (name) => createHash('sha256')
     .update(readFileSync(join(ROOT, 'site', 'wrt', name), 'utf8').replace(/\r\n/g, '\n'))
@@ -1468,16 +1570,30 @@ mirrorRulesOk
     catalogSelectionLayerContract
       ? ok('Catalog 选择状态已分为基础/推荐/用户覆盖/依赖/导入层；首次用户插件计数不再吸收上游默认')
       : bad('Catalog selection layers', '状态分层、deferred 默认、来源筛选、恢复默认或用户计数隔离不完整');
-    const versionContract = versionWorkflow.includes('"site/wrt/**"') &&
-    versionWorkflow.includes('"VERSION"') &&
+    const versionContract = [
+    '".github/workflows/**"',
+    '"Shell/**"',
+    '"config/**"',
+    '"site/wrt/**"',
+    '"tools/**"',
+    '"VERSION"',
+  ].every((entry) => versionWorkflow.includes(entry)) &&
     versionWorkflow.includes("github.actor != 'github-actions[bot]'") &&
     versionWorkflow.includes('permissions:') &&
     versionWorkflow.includes('contents: write') &&
     versionWorkflow.includes('tools/stamp-site-version.mjs') &&
     versionWorkflow.includes('site/wrt/data/site-version.json') &&
-    versionWorkflow.includes('git add VERSION site/wrt/data/site-version.json') &&
+    versionWorkflow.includes('git add VERSION site/wrt/data/site-version.json site/wrt/app.js site/wrt/index.html') &&
     versionStamper.includes('vYYMMDDHHmm') &&
     versionStamper.includes("const ROOT_VERSION = join(ROOT, 'VERSION')") &&
+    versionStamper.includes("'.github/workflows'") &&
+    versionStamper.includes("'Shell'") &&
+    versionStamper.includes("'config'") &&
+    versionStamper.includes("'site/wrt'") &&
+    versionStamper.includes("'tools'") &&
+    versionStamper.includes("new Set(['site/wrt/data/site-version.json'])") &&
+    versionStamper.includes('FINGERPRINT_TEXT_EXTENSIONS') &&
+    versionStamper.includes('normalizeText') &&
     versionStamper.includes('writeFileSync(ROOT_VERSION, version') &&
     versionStamper.includes("minute: '2-digit'") &&
     versionStamper.includes("timeZone: 'Asia/Shanghai'") &&
@@ -1491,8 +1607,8 @@ mirrorRulesOk
     css.includes('.site-version-action { order: 0; }') &&
     css.includes('.site-version-action { order: 3;');
   versionContract
-    ? ok('根 VERSION/网页副本共用分钟版本、旧八位兼容与双端显示已接通')
-    : bad('site version contract', '分钟时间戳、旧版兼容、Actions 防循环或双端显示位置缺失');
+    ? ok('tools/Workflow/Shell/config/site 变更共用分钟版本、旧八位兼容与双端显示已接通')
+    : bad('project version contract', '触发范围、指纹范围、分钟时间戳、Actions 防循环或双端显示位置缺失');
   const selfTestContract = js.includes("const path2 = 'seed/plugins.json'") &&
     js.includes("state.device?.id === 'catalog-target'") &&
     js.includes("state.device?.id === 'custom-target' && state.importedConfig") &&

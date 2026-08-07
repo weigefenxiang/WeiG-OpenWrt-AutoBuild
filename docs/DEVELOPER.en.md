@@ -1,8 +1,7 @@
 # Developer Guide
 
 > **Language**: [简体中文](DEVELOPER.md) · English
-> Everything under `docs/` ships to GitHub; private ops docs live in `docs-private/` (gitignored).
-> **Rule: this file is an operations manual only — no revision changelog is kept here (history lives in the private docs); every change must stay in sync with the Chinese `DEVELOPER.md`.**
+> **Rule: this file is an operations manual only — no revision changelog is kept here; every change must stay in sync with the Chinese `DEVELOPER.md`.**
 
 ---
 
@@ -16,7 +15,7 @@
 
 ### 1.1 Full directory tree
 
-> Legend: ✍ hand-maintained · ⚙ generated (never hand-edit; re-run the generator) · 🔒 not shipped to GitHub; unmarked = code/scripts, edit normally.
+> Legend: ✍ hand-maintained · ⚙ generated (never hand-edit; re-run the generator); unmarked = code/scripts, edit normally.
 
 ```text
 WeiG-OpenWrt-AutoBuild/
@@ -30,6 +29,7 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ cancel-build.yml             lets an Issue author cancel their own build with /cancel
 │  ├─ sync-upstream.yml            weekly upstream sync: catalog/seeds/plugin tables/package page, auto-commit on diff
 │  ├─ mirror-upstream.yml          monthly upstream mirrors (anti-takedown, needs secrets.MIRROR_TOKEN)
+│  └─ site-version.yml              shared tools/workflow/Shell/config/site fingerprint and automatic stamp
 ├─ config/                      ✍ base .config single source of truth (77 brand dirs)
 │  ├─ 360/360t7/                   360T7 configs by source/branch/profile
 │  ├─ platform/x86-64-generic/     versioned config for the generic Target
@@ -71,18 +71,12 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ fetch-build-request.mjs      fetches one allowlisted GitHub Issue attachment
 │  ├─ parse-request.mjs            payload + pinned Catalog/source contract + strict shared-engine validation
 │  ├─ check-all.mjs                health check; check-drift.mjs upstream drift sentinel
+│  ├─ stamp-site-version.mjs       shared version-input fingerprint, Shanghai stamp, and asset query hashes
 │  ├─ sync-blog.mjs                Unicode-safe iterative mirror (chunked hash, atomic swap, rollback)
 │  └─ serve.mjs                    local static server (0.0.0.0:8642)
-├─ docs/                           developer docs that ship (only these two)
-│  ├─ DEVELOPER.md                 the guide (Chinese)
-│  └─ DEVELOPER.en.md              this English counterpart (kept in sync)
-└─ docs-private/                🔒 private docs (gitignored, never shipped)
-   ├─ AI交接指南.txt               handover must-read (rules / pitfalls / debts / open work)
-   ├─ 定制器-最终方案.txt          as-built spec (refreshed every round)
-   ├─ 方案记录.txt                 full revision history (append-only)
-   ├─ 部署与同步.md                deployment & ops (private domains etc.)
-   ├─ 翻译对照表.md              ⚙ 10-language string table (by gen-i18n)
-   └─ temp/                        staging area (backup/ = pristine copies; move back only when done)
+└─ docs/                           developer docs that ship (only these two)
+   ├─ DEVELOPER.md                 the guide (Chinese)
+   └─ DEVELOPER.en.md              this English counterpart (kept in sync)
 ```
 
 ## 2. Where to change what
@@ -98,7 +92,7 @@ Type scale: 17px body (15.5px compact via the Aa toggle); 15px pills/plugin cell
 
 - Chinese source: `tools/i18n-source.json` (the only hand-edited entry point; keep `{x}` placeholders intact)
 - Other 10 languages: `tools/i18n-translations.json` (including Traditional Chinese)
-- Then run `node tools/gen-i18n.mjs` → emits `site/wrt/data/i18n.json` + `docs-private/翻译对照表.md`
+- Then run `node tools/gen-i18n.mjs` → emits `site/wrt/data/i18n.json`
 - Validation: all 11 UI languages must be complete; `check-all` rejects any missing entry
 - `i18n.json` is network-first and uses localStorage only as an offline fallback, preventing a newly deployed key from being hidden by a stale table for the current page. When a `data-i18n` key is absent, keep the human-readable HTML fallback instead of exposing an internal key.
 
@@ -149,7 +143,7 @@ Type scale: 17px body (15.5px compact via the Aa toggle); 15px pills/plugin cell
 - `site/wrt/data/timezones.json` carries the 445-entry OpenWrt LuCI timezone table. With an empty search, the combobox shows about 70 common cities ordered by the current offset from `UTC-12` to `UTC+14`; typing searches all 445 entries. `Beijing` and its Chinese aliases are search-only aliases for `Asia/Shanghai`. On a first visit with no saved choice or imported configuration, the browser-reported IANA timezone is selected; a manual choice is stored locally. The page submits an IANA `zonename`; the parser maps it to the POSIX `timezone`, and all three diy2 scripts write both through `files/etc/uci-defaults/10-weig-timezone`. The control remains 44px high and legacy POSIX values remain accepted.
 - The workflow-level `TZ` controls process timestamps only. Do not call `timedatectl set-timezone` on a GitHub-hosted runner: systemd may deny it and fail the dependency-install step. Firmware timezone handling is independent and remains request/diy2 driven.
 - `sync-upstream.yml` (weekly, off-peak) refreshes the catalog/seeds and auto-commits; `check-drift.mjs` checks only the shared OpenWrt branch policy and opens an issue on drift; `mirror-upstream.yml` (monthly, needs `secrets.MIRROR_TOKEN`) mirrors upstreams. Build regression tests use real web-generated Issue requests rather than a smoke dispatcher.
-- `site-version.yml` watches `site/wrt/**` and `VERSION`, updates root `VERSION` and `site-version.json` together by content fingerprint, then bot-commits them once. Parsers still accept legacy `vYYMMDDHH` requests. Desktop shows the version immediately left of Load configuration, while screens at 560px or below keep it in the right-aligned footer. The actor condition prevents commit loops.
+- `site-version.yml` watches `tools/**`, `.github/workflows/**`, `Shell/**`, `config/**`, `site/wrt/**`, and `VERSION`; one shared input fingerprint updates root `VERSION` and `site-version.json`, then the bot commits generated version files once. Parsers still accept legacy `vYYMMDDHH` requests. Desktop shows the version immediately left of Load configuration, while screens at 560px or below keep it in the right-aligned footer. The actor condition prevents commit loops.
 
 #### Removing builtins with direct-config builds
 
@@ -165,7 +159,6 @@ Type scale: 17px body (15.5px compact via the Aa toggle); 15px pills/plugin cell
 | `README.md` + `translations/README.<lang>.md` | ✅ | user docs, 11 languages; **sync translations after every Chinese edit** |
 | `ARCHITECTURE.md` | ✅ | structure & architecture (bilingual) |
 | `docs/DEVELOPER.md` + `docs/DEVELOPER.en.md` | ✅ | developer operations guide (keep both languages in sync; no revision log) |
-| `docs-private/*` | ❌ | revision history, as-built spec, translation table, private ops |
 
 ### 2.7 Deploy & migrate
 

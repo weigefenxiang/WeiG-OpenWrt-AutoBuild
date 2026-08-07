@@ -1,9 +1,8 @@
 # 开发者指南
 
 > **语言**:简体中文 · [English](DEVELOPER.en.md)
-> docs/ 目录整个上传 GitHub;私有运维文档在根目录 docs-private/(gitignore,不上传)。
 > 目标:让任何开发者不看对话记录也能接手、修改、迁移本项目。
-> **规矩:本文只做"操作手册",不记修订流水账(历史见 docs-private/方案记录.txt);任何改动必须同步英文版 DEVELOPER.en.md。**
+> **规矩:本文只做“操作手册”,不记修订流水账;任何改动必须同步英文版 DEVELOPER.en.md。**
 
 ---
 
@@ -17,7 +16,7 @@
 
 ### 1.1 全景目录架构
 
-> 标注:✍ 人工维护 · ⚙ 生成物(勿手改,改上游源后重跑生成器)· 🔒 不上传 GitHub;未标注 = 代码/脚本,按常规改。
+> 标注:✍ 人工维护 · ⚙ 生成物(勿手改,改上游源后重跑生成器);未标注 = 代码/脚本,按常规改。
 
 ```text
 WeiG-OpenWrt-AutoBuild/
@@ -31,6 +30,7 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ cancel-build.yml             Issue 提交者用 /cancel 取消自己的构建
 │  ├─ sync-upstream.yml            每周同步上游:机型目录/种子/插件表/说明页,有 diff 才自动提交
 │  ├─ mirror-upstream.yml          每月镜像上游仓库防删库(需 secrets.MIRROR_TOKEN)
+│  └─ site-version.yml              tools/Workflow/Shell/config/site 统一版本指纹与自动盖章
 ├─ config/                      ✍ base .config 唯一事实源(77 个品牌目录)
 │  ├─ 360/360t7/                   360T7 按源码/分支/Profile 生成的配置
 │  ├─ platform/x86-64-generic/     通用 Target 的版本化 config
@@ -72,18 +72,12 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ fetch-build-request.mjs      下载 GitHub Issue 附件(严格域名/数量/大小)
 │  ├─ parse-request.mjs            载荷解析 + 固定 Catalog/源码契约 + 共享引擎严格校验
 │  ├─ check-all.mjs                一键体检;check-drift.mjs 上游漂移哨兵
+│  ├─ stamp-site-version.mjs       统一版本输入指纹、上海时间盖章与网页资源查询指纹
 │  ├─ sync-blog.mjs                Unicode 安全逐文件镜像(分块哈希、原子替换与失败回滚)
 │  └─ serve.mjs                    本地静态服务器(监听 0.0.0.0:8642)
-├─ docs/                           上传的开发者文档(仅此二件)
-│  ├─ DEVELOPER.md                 本指南(纯中文)
-│  └─ DEVELOPER.en.md              英文版(逐轮同步)
-└─ docs-private/                🔒 私有文档(gitignore,永不上传)
-   ├─ AI交接指南.txt               交接必读(规矩/坑/债务/进行中工单)
-   ├─ 定制器-最终方案.txt          As-Built 规格书(每轮整体刷新)
-   ├─ 方案记录.txt                 全部修订历史(只追加)
-   ├─ 部署与同步.md                部署运维(私有域名等)
-   ├─ 翻译对照表.md              ⚙ 11 语对照表(gen-i18n 产出)
-   └─ temp/                        改动暂存区(backup/=原件备份;弄完才移回正式位置)
+└─ docs/                           上传的开发者文档(仅此二件)
+   ├─ DEVELOPER.md                 本指南(纯中文)
+   └─ DEVELOPER.en.md              英文版(逐轮同步)
 ```
 
 ## 2. 分述:改哪里、怎么改
@@ -108,7 +102,7 @@ WeiG-OpenWrt-AutoBuild/
 
 - 中文源:`tools/i18n-source.json`(唯一手改入口,`{x}` 占位符别动)
 - 其他 10 语:`tools/i18n-translations.json`(含繁中)
-- 改完跑 `node tools/gen-i18n.mjs` → 产出 `site/wrt/data/i18n.json` + `docs-private/翻译对照表.md`
+- 改完跑 `node tools/gen-i18n.mjs` → 产出 `site/wrt/data/i18n.json`
 - 校验规则:网页 11 语必须全部完整,`check-all` 遇到任一缺词条直接失败
 - 浏览器语言自动匹配;完全无匹配默认英文
 - `i18n.json` 使用网络优先、localStorage 仅作断网回退,避免部署新增词条后本次页面仍使用旧表;`data-i18n` 缺键时保留 HTML 人类可读兜底,不得显示内部键名
@@ -163,7 +157,7 @@ WeiG-OpenWrt-AutoBuild/
 - Actions 的全局 `TZ` 只控制 Runner 进程日志时间；不要在 GitHub 托管 Runner 调用 `timedatectl set-timezone`，该操作可能因 systemd 权限被拒绝并让依赖安装步骤失败。固件时区始终由请求字段和 diy2 首启脚本写入，与 Runner 系统时区无关。
 - diy 脚本按源区分:官方源用 `diy2-openwrt.sh`,lede 用 `diy2-lede.sh`(都不能复用 ImmortalWrt 系的)
 - `sync-upstream.yml` 每周六 18:37 UTC 自动同步上游并提交；`check-drift.mjs` 只检查通用 OpenWrt 分支策略并在漂移时开 issue；`mirror-upstream.yml` 每月镜像（需 `secrets.MIRROR_TOKEN`）。构建回归测试通过网页生成的真实 Issue 请求执行，不再使用 smoke 派发器。
-- `site-version.yml` 监听 `site/wrt/**` 与 `VERSION` push,按内容指纹同时更新根 `VERSION` 和 `site-version.json`，由机器人一次提交；解析器继续接受旧 `vYYMMDDHH` 请求。桌面端版本号位于“加载配置”左侧，560px 以下改在页脚右侧；`github.actor` 条件防止提交循环。
+- `site-version.yml` 监听 `tools/**`、`.github/workflows/**`、`Shell/**`、`config/**`、`site/wrt/**` 与 `VERSION` push，按同一版本输入指纹同时更新根 `VERSION` 和 `site-version.json`，由机器人一次提交；解析器继续接受旧 `vYYMMDDHH` 请求。桌面端版本号位于“加载配置”左侧，560px 以下改在页脚右侧；`github.actor` 条件防止提交循环。
 
 #### 取消内置项与直接配置构建
 
@@ -179,10 +173,6 @@ WeiG-OpenWrt-AutoBuild/
 | `README.md` + `translations/README.<语言>.md` | ✅ | 用户文档,11 语;**中文 md 改动后必须同步各语言版本** |
 | `ARCHITECTURE.md` | ✅ | 目录结构与架构(中英) |
 | `docs/DEVELOPER.md`(纯中文)+ `docs/DEVELOPER.en.md`(纯英文) | ✅ | 开发者操作指南,两版内容保持一致;不记修订流水账 |
-| `docs-private/方案记录.txt` | ❌ | 历史修订记录(逐轮追加) |
-| `docs-private/定制器-最终方案.txt` | ❌ | As-Built 规格书(每轮整体刷新) |
-| `docs-private/翻译对照表.md` | ❌ | 生成物,人工校对用 |
-| `docs-private/部署与同步.md` | ❌ | 部署运维(域名/CDN 等私有信息) |
 
 ### 2.7 部署与迁移
 
