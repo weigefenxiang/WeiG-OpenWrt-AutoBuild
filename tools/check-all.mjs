@@ -815,6 +815,21 @@ mirrorRulesOk
   remoteCatalogDeploymentContract
     ? ok('VPS staging deploys only origin/staging exact web content; legacy Sync_Deploy VPS path is removed')
     : bad('remote Catalog deployment', 'staging deploy, private env isolation, build-meta gate or legacy VPS cleanup is incomplete');
+  const vpsTransactionalDeployContract =
+    !stagingDeployScript.toLowerCase().includes('base64') &&
+    stagingDeployScript.includes('scp_upload "%DEPLOY_SCRIPT%" "%REMOTE_SCRIPT%"') &&
+    stagingDeployScript.includes('scp_upload "%LOCAL_SMOKE_FILE%" "%REMOTE_SMOKE_FILE%"') &&
+    stagingDeployScript.includes('WRT_SMOKE_ORIGIN_FILE=/tmp/wrt-smoke-origin.txt /tmp/deploy-wrt.sh') &&
+    remoteDeploySource.includes('BACKUP_ARCHIVE=${WRT_BACKUP_ARCHIVE:-${PARENT}/wrt_prev.tar.gz}') &&
+    remoteDeploySource.includes('tar -czf "$BACKUP_TMP" -C "$PARENT" "$BASE"') &&
+    remoteDeploySource.includes('tar -tzf "$BACKUP_TMP" >/dev/null') &&
+    remoteDeploySource.includes('mv -f -- "$BACKUP_TMP" "$BACKUP_ARCHIVE"') &&
+    remoteDeploySource.includes('restore_previous_site') &&
+    remoteDeploySource.includes('previous site restored and smoke-checked') &&
+    remoteDeploySource.includes('previous archive retained at $BACKUP_ARCHIVE');
+  vpsTransactionalDeployContract
+    ? ok('VPS deploy transport uses SCP files and keeps a verified wrt_prev.tar.gz transactional rollback archive')
+    : bad('VPS transactional deploy', 'base64 transport returned, SCP script/origin transfer is incomplete, or verified previous-site rollback is missing');
   const releaseToolContract =
     promoteSource.includes("merge-base', '--is-ancestor'") &&
     promoteSource.includes('git push origin ${candidate}:refs/heads/staging') &&
