@@ -11,6 +11,8 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { directoriesMatch, syncBlogMirror } from './sync-blog.mjs';
+import { checkDevToStaging, checkStagingToMain } from './promote-release.mjs';
+import { prepareSiteDeployment } from './prepare-site-deployment.mjs';
 import { checkTextFiles } from './check-text-format.mjs';
 import {
   FORBIDDEN_SITE_ARCHIVE_ENTRIES,
@@ -277,6 +279,62 @@ try {
   rmSync(siteArchiveTestRoot, { recursive: true, force: true });
 }
 
+const releaseFixtureRoot = mkdtempSync(join(tmpdir(), 'weig-release-promotion-'));
+try {
+  const repo = join(releaseFixtureRoot, 'repo');
+  const origin = join(releaseFixtureRoot, 'origin.git');
+  mkdirSync(repo, { recursive: true });
+  const runGit = (cwd, args) => spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', shell: false });
+  const mustGit = (cwd, args) => {
+    const result = runGit(cwd, args);
+    if (result.status !== 0) throw new Error((result.stderr || result.stdout || `git ${args.join(' ')}`).trim());
+    return result.stdout.trim();
+  };
+  mustGit(repo, ['init']);
+  mustGit(repo, ['config', 'user.email', 'fixture@example.invalid']);
+  mustGit(repo, ['config', 'user.name', 'Fixture']);
+  const writeReleaseState = (version, body) => {
+    mkdirSync(join(repo, 'site', 'wrt', 'data'), { recursive: true });
+    mkdirSync(join(repo, 'site', 'wrt', 'lib'), { recursive: true });
+    writeFileSync(join(repo, 'VERSION'), `${version}\n`);
+    writeFileSync(join(repo, 'site', 'wrt', 'data', 'site-version.json'), `${JSON.stringify({ version })}\n`);
+    writeFileSync(join(repo, 'site', 'wrt', 'index.html'), '<!doctype html>menuconfigBox\n');
+    writeFileSync(join(repo, 'site', 'wrt', 'app.js'), `${body}\n`);
+    for (const module of ['catalog-engine.js', 'catalog-loader.js', 'catalog-schema6.js', 'catalog-search-worker.js']) {
+      writeFileSync(join(repo, 'site', 'wrt', 'lib', module), 'export const fixture = true;\n');
+    }
+    writeFileSync(join(repo, 'site', 'wrt', 'lib', 'package.json'), '{"type":"module"}\n');
+  };
+  writeReleaseState('v2608071200', 'A');
+  mustGit(repo, ['add', '.']); mustGit(repo, ['commit', '-m', 'A']); mustGit(repo, ['branch', '-M', 'main']);
+  mustGit(releaseFixtureRoot, ['init', '--bare', origin]);
+  mustGit(repo, ['remote', 'add', 'origin', origin]); mustGit(repo, ['push', '-u', 'origin', 'main']);
+  mustGit(repo, ['switch', '-c', 'dev']);
+  writeReleaseState('v2608071201', 'B'); mustGit(repo, ['add', '.']); mustGit(repo, ['commit', '-m', 'B']);
+  writeReleaseState('v2608071202', 'C'); mustGit(repo, ['add', '.']); mustGit(repo, ['commit', '-m', 'C']); const candidate = mustGit(repo, ['rev-parse', 'HEAD']);
+  writeReleaseState('v2608071203', 'D'); mustGit(repo, ['add', '.']); mustGit(repo, ['commit', '-m', 'D']); mustGit(repo, ['push', '-u', 'origin', 'dev']);
+  const devPromotion = checkDevToStaging(repo, candidate);
+  mustGit(repo, ['push', 'origin', `${candidate}:refs/heads/staging`]); mustGit(repo, ['fetch', 'origin']);
+  const prodPromotion = checkStagingToMain(repo);
+  writeFileSync(join(repo, 'site', 'wrt', 'app.js'), 'LOCAL-UNCOMMITTED\n');
+  const archive = join(releaseFixtureRoot, 'staging.tar.gz');
+  const staged = prepareSiteDeployment({ repo, ref: 'origin/staging', output: archive, builtAt: '2026-08-07T14:30:00+08:00' });
+  const extracted = join(releaseFixtureRoot, 'extract'); mkdirSync(extracted);
+  const untar = spawnSync('tar', ['-xzf', archive, '-C', extracted], { encoding: 'utf8', shell: false });
+  const meta = JSON.parse(readFileSync(join(extracted, 'data', 'build-meta.json'), 'utf8'));
+  const releaseFixtureOk = devPromotion.candidate === candidate && devPromotion.version === 'v2608071202' &&
+    devPromotion.createsStaging === true && prodPromotion.candidate === candidate &&
+    staged.commit === candidate && meta.commit === candidate && meta.version === 'v2608071202' &&
+    untar.status === 0 && readFileSync(join(extracted, 'app.js'), 'utf8').trim() === 'C';
+  releaseFixtureOk
+    ? ok('release promotion/deployment: exact dev candidate, FF-only staging/main, dirty worktree exclusion and build-meta identity')
+    : bad('release promotion/deployment fixture', JSON.stringify({ devPromotion, prodPromotion, staged, meta }).slice(0, 700));
+} catch (error) {
+  bad('release promotion/deployment fixture', error.message.slice(0, 500));
+} finally {
+  rmSync(releaseFixtureRoot, { recursive: true, force: true });
+}
+
 const catalogLoaderTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-catalog-loader.mjs')], {
   encoding: 'utf8',
 });
@@ -337,15 +395,18 @@ try {
   writeFileSync(join(blogDestination, 'app.js'), 'old\n');
 
   const progress = [];
-  const before = syncBlogMirror({ sourceDir, blogRepo, checkOnly: true });
+  const sourceIdentity = { version: 'v2608071201', commit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' };
+  const before = syncBlogMirror({ sourceDir, blogRepo, checkOnly: true, sourceIdentity });
   const first = syncBlogMirror({
     sourceDir,
     blogRepo,
+    sourceIdentity,
     hooks: { onProgress: (event) => progress.push(event) },
   });
-  const after = syncBlogMirror({ sourceDir, blogRepo, checkOnly: true });
+  const after = syncBlogMirror({ sourceDir, blogRepo, checkOnly: true, sourceIdentity });
   const exactAfterFirst = !before.current && first.current && after.current &&
-    directoriesMatch(sourceDir, blogDestination) &&
+    directoriesMatch(sourceDir, blogDestination, { ignoredPaths: ['data/build-meta.json'] }) &&
+    JSON.parse(readFileSync(join(blogDestination, 'data', 'build-meta.json'), 'utf8')).commit === sourceIdentity.commit &&
     readFileSync(join(blogDestination, 'nested', '中文 空格', 'base.config'), 'utf8') === 'CONFIG_TEST=y\n' &&
     existsSync(join(blogDestination, 'nested', '中文 空格', 'empty')) &&
     readFileSync(join(blogDestination, 'nested', '中文 空格', 'large-binary.bin')).length ===
@@ -353,6 +414,8 @@ try {
     !existsSync(join(blogDestination, 'old', 'zombie.txt')) &&
     !existsSync(join(blogRepo, 'source', 'wrt.sync-tmp')) &&
     !existsSync(join(blogRepo, 'source', 'wrt.sync-prev')) &&
+    JSON.parse(readFileSync(join(blogRepo, '.wrt-source.json'), 'utf8')).commit === sourceIdentity.commit &&
+    !syncBlogMirror({ sourceDir, blogRepo, checkOnly: true, sourceIdentity: { ...sourceIdentity, commit: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' } }).current &&
     progress[0]?.copied === 0 && progress.at(-1)?.copied === progress.at(-1)?.total;
 
   writeFileSync(join(blogDestination, 'app.js'), 'changed\n');
@@ -630,6 +693,7 @@ mirrorRulesOk
   const css = readFileSync(join(ROOT, 'site', 'wrt', 'app.css'), 'utf8');
   const buildWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8');
   const syncWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'sync-upstream.yml'), 'utf8');
+  const pagesWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'pages.yml'), 'utf8');
   const driftSentinel = readFileSync(join(ROOT, 'tools', 'check-drift.mjs'), 'utf8');
   const parser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
   const requirementsSource = JSON.parse(readFileSync(
@@ -654,7 +718,15 @@ mirrorRulesOk
     ? ok('source build requirements: frontend silently applies HAVE_DOT_CONFIG without backend rejection')
     : bad('source build requirements', 'frontend marker, JSON copy, or backend-removal contract is invalid');
   const project = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
-  const deployScript = readFileSync(join(ROOT, 'docs-private', 'Sync_Deploy.bat'), 'utf8');
+  const syncDeployScript = readFileSync(join(ROOT, 'docs-private', 'Sync_Deploy.bat'), 'utf8');
+  const stagingDeployScript = readFileSync(join(ROOT, 'docs-private', 'Deploy_Staging.bat'), 'utf8');
+  const openWebPageBat = readFileSync(join(ROOT, 'OpenWebPage_打开网页.bat'), 'utf8');
+  const promoteBat = readFileSync(join(ROOT, 'Promote_Release.bat'), 'utf8');
+  const promoteSource = readFileSync(join(ROOT, 'tools', 'promote-release.mjs'), 'utf8');
+  const exactDeploySource = readFileSync(join(ROOT, 'tools', 'prepare-site-deployment.mjs'), 'utf8');
+  const privateMaintenanceSource = readFileSync(join(ROOT, 'docs-private', 'private-maintenance.mjs'), 'utf8');
+  const cleanupPrivateBat = readFileSync(join(ROOT, 'docs-private', 'Cleanup_Private.bat'), 'utf8');
+  const packProjectBat = readFileSync(join(ROOT, 'docs-private', 'Pack_Project.bat'), 'utf8');
   const remoteDeploySource = readFileSync(join(ROOT, 'docs-private', 'deploy-vps-site.sh'), 'utf8');
   const devAssistant = readFileSync(join(ROOT, 'tools', 'dev-assistant.mjs'), 'utf8');
   const syncBlogSource = readFileSync(join(ROOT, 'tools', 'sync-blog.mjs'), 'utf8');
@@ -717,40 +789,57 @@ mirrorRulesOk
     ? ok('Catalog browser modules use .js with a scoped Node ESM package and no legacy .mjs files')
     : bad('Catalog browser module layout', '.js modules, scoped package.json, imports, or legacy-file cleanup is incomplete');
   const siteArchiveVerifierContract =
-    deployScript.includes(String.raw`node "%MAIN_REPO%\tools\verify-site-archive.mjs" "%LOCAL_ARCHIVE%"`) &&
-    !deployScript.includes(':verify_site_archive') &&
-    !deployScript.includes('tar -tzf "%~1" ^| findstr') &&
+    exactDeploySource.includes("verifySiteArchive(archive, { requiredEntries }") &&
+    exactDeploySource.includes("'data/build-meta.json'") &&
+    stagingDeployScript.includes('tools\\prepare-site-deployment.mjs --ref origin/staging') &&
+    !stagingDeployScript.includes('tar -tzf "%~1" ^| findstr') &&
     archiveVerifierSource.includes("spawnSync(tarCommand, ['-tzf', archive]") &&
     archiveVerifierSource.includes('shell: false') &&
-    archiveVerifierSource.includes('Required files confirmed') &&
-    archiveVerifierSource.includes('Legacy .mjs Catalog module(s) found') &&
     REQUIRED_SITE_ARCHIVE_ENTRIES.every((entry) => archiveVerifierSource.includes(`'${entry}'`)) &&
     FORBIDDEN_SITE_ARCHIVE_ENTRIES.every((entry) => archiveVerifierSource.includes(`'${entry}'`));
   siteArchiveVerifierContract
-    ? ok('VPS archive gate uses one shell-free Node verifier; CMD tar/findstr pipelines are forbidden')
-    : bad('site archive verifier contract', 'Sync_Deploy, required/forbidden entries, shell:false, or old CMD pipeline cleanup is incomplete');
+    ? ok('VPS staging archive comes from an exact Git ref and uses the shell-free Node verifier')
+    : bad('site archive verifier contract', 'exact-ref packaging, build-meta, required/forbidden entries or shell-free verification is incomplete');
   const remoteCatalogDeploymentContract =
-    !deployScript.includes('fetch-catalog-mirror.mjs') &&
-    !deployScript.includes('CATALOG_MIRROR_ROOT') &&
-    !deployScript.includes('catalog-data/index.json') &&
-    deployScript.includes(String.raw`tar -czf "%LOCAL_ARCHIVE%" -C "%MAIN_REPO%\site\wrt" .`) &&
-    deployScript.includes(String.raw`node "%MAIN_REPO%\tools\verify-site-archive.mjs" "%LOCAL_ARCHIVE%"`) &&
-    deployScript.includes('local-env.cmd') && !/set "VPS_HOST=\d+\./.test(deployScript) &&
-    remoteDeploySource.includes('ROOT=${WRT_ROOT:-/var/www/wrt}') &&
-    remoteDeploySource.includes('ARCHIVE=${WRT_ARCHIVE:-/tmp/wrt-update.tar.gz}') &&
+    !stagingDeployScript.includes('fetch-catalog-mirror.mjs') &&
+    !stagingDeployScript.includes('CATALOG_MIRROR_ROOT') &&
+    stagingDeployScript.includes('git fetch origin staging') &&
+    stagingDeployScript.includes('origin/staging') &&
+    stagingDeployScript.includes('local-env.cmd') && !/set "VPS_HOST=\d+\./.test(stagingDeployScript) &&
+    !syncDeployScript.includes('Legacy VPS deploy') && !syncDeployScript.includes(':deploy') &&
+    remoteDeploySource.includes('test -s "$NEW/data/build-meta.json"') &&
     remoteDeploySource.includes('test -s "$NEW/lib/catalog-engine.js"') &&
-    remoteDeploySource.includes('test -s "$NEW/lib/catalog-loader.js"') &&
-    remoteDeploySource.includes('SMOKE_ORIGIN=${WRT_SMOKE_ORIGIN:-http://127.0.0.1:28081}') &&
     remoteDeploySource.includes('Content-Type:') &&
-    remoteDeploySource.includes('catalog-engine.js') &&
-    remoteDeploySource.includes('catalog-loader.js') &&
-    remoteDeploySource.includes('catalog-schema6.js') &&
     remoteDeploySource.includes('catalog-search-worker.js') &&
-    remoteDeploySource.includes('test ! -e "$NEW/lib/catalog-engine.mjs"') &&
-    remoteDeploySource.includes('test ! -e "$NEW/lib/catalog-loader.mjs"');
+    remoteDeploySource.includes('test ! -e "$NEW/lib/catalog-engine.mjs"');
   remoteCatalogDeploymentContract
-    ? ok('VPS 只部署网页；Catalog 由固定提交 CDN/Raw 与完整 Release 提供')
-    : bad('remote Catalog deployment', '部署脚本仍下载/打包 Catalog，或未声明提交固定的远程回退');
+    ? ok('VPS staging deploys only origin/staging exact web content; legacy Sync_Deploy VPS path is removed')
+    : bad('remote Catalog deployment', 'staging deploy, private env isolation, build-meta gate or legacy VPS cleanup is incomplete');
+  const releaseToolContract =
+    promoteSource.includes("merge-base', '--is-ancestor'") &&
+    promoteSource.includes('git push origin ${candidate}:refs/heads/staging') &&
+    promoteSource.includes('git push origin ${staging}:refs/heads/main') &&
+    !promoteSource.includes("spawnSync('git', ['push'") &&
+    promoteBat.includes('Check dev -^> staging') && promoteBat.includes('Check staging -^> main') &&
+    openWebPageBat.includes('Staging Pair') && openWebPageBat.includes('GITHUB_PAGES_URL') &&
+    openWebPageBat.includes('STANDALONE_PRODUCTION_URL') && openWebPageBat.includes('BLOG_PRODUCTION_URL') &&
+    openWebPageBat.includes('OpenWebPage.local.cmd');
+  releaseToolContract
+    ? ok('release helpers: FF-only exact SHA checks, manual push, multi-environment web launcher')
+    : bad('release helper contract', 'promotion safety or portable web launcher contract is incomplete');
+  const privateRetentionContract =
+    privateMaintenanceSource.includes('const KEEP_BACKUPS = 3') &&
+    privateMaintenanceSource.includes('14 * 24 * 60 * 60 * 1000') &&
+    privateMaintenanceSource.includes('50 * 1024 * 1024') &&
+    privateMaintenanceSource.includes("rel === 'docs-private/temp'") &&
+    privateMaintenanceSource.includes("rel === 'docs-private/logs'") &&
+    privateMaintenanceSource.includes("rel === 'docs-private/local-env.cmd'") &&
+    privateMaintenanceSource.includes("rel === 'docs-private/ssh-key'") &&
+    cleanupPrivateBat.includes('private-maintenance.mjs cleanup') &&
+    packProjectBat.includes('private-maintenance.mjs pack-stage');
+  privateRetentionContract
+    ? ok('private retention: temp cleanup, 3 backups, 14-day/50MB logs and clean project pack exclusions')
+    : bad('private retention contract', 'temp/log retention or clean-pack exclusions are incomplete');
   const exactBlogMirrorContract =
     syncBlogSource.includes("const temporary = join(blogSource, 'wrt.sync-tmp')") &&
     syncBlogSource.includes("const previous = join(blogSource, 'wrt.sync-prev')") &&
@@ -763,6 +852,10 @@ mirrorRulesOk
     syncBlogSource.includes('[blog:copy] ${copied}/${total} files') &&
     !syncBlogSource.includes('cpSync') &&
     syncBlogSource.includes('return 3;') &&
+    syncBlogSource.includes("SOURCE_META_FILE = '.wrt-source.json'") &&
+    syncBlogSource.includes("join(root, 'data', 'build-meta.json')") &&
+    syncBlogSource.includes("timezone: 'Asia/Shanghai'") &&
+    syncBlogSource.includes("'--source-repo'") && syncBlogSource.includes("'--ref'") &&
     !syncBlogSource.includes("endsWith('.config')") &&
     devAssistant.includes("'tools/sync-blog.mjs'") &&
     devAssistant.includes("command === 'sync-blog'") &&
@@ -771,10 +864,28 @@ mirrorRulesOk
     !deployGuide.includes('剔除全部 `*.config`') &&
     !blogGuide.includes('排除 base `*.config`') &&
     !developerGuideZh.includes('自动剔除 *.config') &&
-    !developerGuideEn.includes('strips *.config');
+    !developerGuideEn.includes('strips *.config') &&
+    syncDeployScript.includes('Blog production mirror always uses origin/main exact commit.') &&
+    !blogGuide.includes('wrt-preview-dev') && !blogGuide.includes('wrt-preview-staging');
   exactBlogMirrorContract
     ? ok('blog sync: dev assistant mirrors/verifies files only; Git remains manual and legacy .config filtering is removed')
     : bad('blog exact mirror contract', '同步工具、选项 3 编排、回滚验证或中英文文档仍保留旧过滤逻辑');
+  const standalonePagesContract =
+    pagesWorkflow.includes('branches:\n      - main') &&
+    pagesWorkflow.includes('node tools/prepare-web-deployment.mjs --commit "$GITHUB_SHA"') &&
+    pagesWorkflow.includes('actions/configure-pages@v5') &&
+    pagesWorkflow.includes('actions/upload-pages-artifact@v4') &&
+    pagesWorkflow.includes('path: site/wrt') &&
+    pagesWorkflow.includes('actions/deploy-pages@v4') &&
+    pagesWorkflow.includes('pages: write') && pagesWorkflow.includes('id-token: write') &&
+    !pagesWorkflow.includes('git push') && !pagesWorkflow.includes('git commit') &&
+    developerGuideZh.includes('Production branch=`main`') && developerGuideZh.includes('Preview branches=`dev/staging`') &&
+    developerGuideEn.includes('Production branch=`main`') && developerGuideEn.includes('Preview branches=`dev/staging`') &&
+    deployGuide.includes('Standalone Cloudflare Pages') && deployGuide.includes('Standalone GitHub Pages') &&
+    !deployGuide.includes('wrt-preview-dev') && !deployGuide.includes('wrt-preview-staging');
+  standalonePagesContract
+    ? ok('A+ standalone web: Cloudflare dev/staging previews + main production, GitHub Pages main deployment, no blog preview fork')
+    : bad('A+ standalone deployment contract', 'Pages workflow, standalone deployment docs, or blog-preview removal is incomplete');
   const textFormatGateContract =
     textFormatSource.includes("const LF_EXTENSIONS = new Set") &&
     textFormatSource.includes("const CRLF_EXTENSIONS = new Set") &&
@@ -1002,6 +1113,14 @@ mirrorRulesOk
   previewBatOk
     ? ok('本地预览单窗口启动，ES modules MIME/无缓存检查与 ASCII+CRLF 均已接通')
     : bad('local preview', '单窗口启动、模块健康检查、MIME、无缓存或 bat 编码不正确');
+  const portableSubpathContract =
+    !/(?:src|href)="\/(?!\/)/i.test(html) &&
+    !/fetch\(\s*['"]\/(?!\/)/.test(js) &&
+    !/import\(\s*['"]\/(?!\/)/.test(js) &&
+    !/new Worker\(\s*['"]\/(?!\/)/.test(js);
+  portableSubpathContract
+    ? ok('portable static web: no root-relative app/data/module URLs block project-subpath hosting')
+    : bad('portable static web', 'root-relative local URL found; GitHub Project Pages or copied subdirectory deployment may break');
   const ids = [...js.matchAll(/\$\('([A-Za-z]\w+)'\)/g)].map((m) => m[1]);
   const dynamicIds = new Set(['targetSystem', 'targetSubtarget', 'targetProfile']);
   const missing = [...new Set(ids)].filter((id) => !html.includes(`id="${id}"`) && !dynamicIds.has(id));

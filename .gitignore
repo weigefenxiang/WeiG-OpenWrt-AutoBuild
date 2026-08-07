@@ -7,3 +7,6 @@ node_modules/
 
 # Deployment-local metadata / 部署实例元数据
 site/wrt/data/build-meta.json
+
+# Local web environment launcher settings / 本机网页环境入口
+OpenWebPage.local.cmd

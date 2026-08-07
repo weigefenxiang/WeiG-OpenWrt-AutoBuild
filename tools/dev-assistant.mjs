@@ -70,17 +70,17 @@ function status() {
   console.log('  git commit -m "<English commit title>"');
   console.log(`  git push origin ${branch}`);
 }
-function syncBlog(checkOnly = false) {
+function syncBlog(checkOnly = false, ref = '') {
   if (!existsSync(BLOG)) throw new Error(`Blog repository not found: ${BLOG}`);
-  run(process.execPath, ['tools/sync-blog.mjs', BLOG, ...(checkOnly ? ['--check'] : [])]);
+  run(process.execPath, ['tools/sync-blog.mjs', BLOG, ...(checkOnly ? ['--check'] : []), ...(ref ? ['--ref', ref] : [])]);
 }
 
 try {
   if (command === 'prepare') prepare();
   else if (command === 'verify') verify();
   else if (command === 'status') status();
-  else if (command === 'sync-blog') syncBlog(false);
-  else if (command === 'verify-blog') syncBlog(true);
+  else if (command === 'sync-blog') syncBlog(false, process.argv[3] || '');
+  else if (command === 'verify-blog') syncBlog(true, process.argv[3] || '');
   else throw new Error(`Unknown command: ${command}`);
 } catch (error) {
   console.error(`ERROR: ${error.message}`);

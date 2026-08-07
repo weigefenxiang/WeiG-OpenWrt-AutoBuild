@@ -9,7 +9,7 @@
 ## 1. 总览
 
 - 架构与目录(简版):见根目录 [ARCHITECTURE.md](../ARCHITECTURE.md)(中英双语);**全景详版见下方 1.1**
-- 本地预览:双击 `OpenWebPage_打开网页.bat`(会打印手机可访问的局域网地址)
+- 网页入口:双击 `OpenWebPage_打开网页.bat`；Local Preview 无配置即可用，其他环境从本机 `OpenWebPage.local.cmd` 读取 URL，源码不保存服务器地址
 - 一键体检:双击 `Check_检查.bat`(全脚本语法 + 全数据 JSON + 一致性抽查)
 - 改动后三板斧:`node tools/gen-plugins.mjs` → 本地预览页面点右上角"自检" → `node tools/sync-blog.mjs`
 - 所有生成器只依赖 Node.js ≥18 标准库,无 npm 依赖
@@ -178,10 +178,14 @@ WeiG-OpenWrt-AutoBuild/
 
 ### 2.7 部署与迁移
 
+- 发布分支采用 `dev → staging → main`。`Promote_Release.bat` 只检查 fast-forward 和 exact SHA，并输出人工执行的 push 命令；正常晋级不会重新生成 VERSION。VPS staging 必须由 `origin/staging` 的 exact commit 打包，不能直接复制当前工作区。
+- `OpenWebPage_打开网页.bat` 可打开 Local、Standalone Dev Preview、Standalone Staging Preview、VPS Staging、Standalone Cloudflare Production、Standalone GitHub Pages、Blog Production，或同时打开 Staging Preview + VPS。环境 URL 只存在本机覆盖文件，公开代码没有具体主机/IP。
+
 - 页面整个 `site/wrt/` 目录拷走即可用；Catalog 使用精确缓存 → GitHub Raw 最新 index → jsDelivr/GitHub Raw 固定提交分片 → 完整 GitHub Release，VPS 不保存 Catalog；其他静态数据使用相对路径和本地优先降级。`OpenWebPage_打开网页.bat` 只保留一个可见的 `wrt-server` 窗口，关闭该窗口即停止本地预览。
 - 浏览器动态导入的 Catalog 模块固定为 `lib/catalog-engine.js`、`lib/catalog-loader.js` 与 `lib/catalog-schema6.js`，Advanced 搜索使用 `lib/catalog-search-worker.js`。使用 `.js` 是为了直接复用普通静态服务器已有的 JavaScript MIME 映射；`lib/package.json` 的 `type: module` 只负责 Node/CI 导入。旧 `.mjs` 必须删除，部署脚本在打包、远端切换和切换后 HTTP 冒烟三个阶段校验四个脚本；返回非 JavaScript MIME、HTML 回退或缺文件都会恢复上一版。部署包清单统一由 `tools/verify-site-archive.mjs` 以 `shell: false` 调用 `tar` 并一次验证必需/禁止条目，BAT 禁止使用 `tar | findstr`，因此中文、空格路径和 CMD 括号上下文不会改变参数解析。
 - Fork 后只需修改 `site/wrt/data/project.json` 的主仓库、Catalog 仓库与博客地址；网页链接、Issue 目标和运行时 Catalog 会自动采用该文件。HTML 中保留的人类可读链接仅是旧部署兜底。
-- 博客副本：`node tools/sync-blog.mjs [博客路径]` 会把 `site/wrt/` 完整精确镜像到博客 `source/wrt/`，包括 `.config` 和空目录。实现不使用 `fs.cpSync()`，而是按 Catalog 无关的通用目录树逐目录创建、逐文件复制，并以分块 SHA-256 校验临时副本后原子替换；中文、空格路径和大二进制文件使用同一逻辑，失败时保留或恢复旧副本。CLI 会输出复制进度；`--check` 仅比较完整目录树，完全一致返回 0，有差异返回 3。
+- 独立站部署：`site/wrt/` 本身就是一级静态应用。Cloudflare Pages 建议设置 Production branch=`main`、Preview branches=`dev/staging`、Build command=`node tools/prepare-web-deployment.mjs`、Output directory=`site/wrt`；GitHub Pages 由 `.github/workflows/pages.yml` 在 `main` 上发布同一目录。所有应用资源使用相对路径，因此 `/`、`/wrt/` 与 GitHub Project Pages 子目录都不得依赖平台特例。
+- 博客发布镜像：正式版晋级 `main` 后运行 `node tools/sync-blog.mjs [博客路径] --ref origin/main`，从 exact AutoBuild commit 镜像 `site/wrt/` 到博客 `source/wrt/`，并在博客根写 `.wrt-source.json` 记录 AutoBuild Version/Commit；`--check` 同时核对完整目录树与源身份。省略 `--ref` 仅用于本地镜像调试。Blog 不承担 dev/staging Preview，也不得发展第二套 WRT 业务代码。
 - 文本格式门禁：`node tools/check-text-format.mjs <仓库路径> --changed` 只检查当前 Git 变更与未跟踪文本，按 `.gitattributes` 要求验证源码/数据为 LF、BAT/CMD/PowerShell 为 CRLF、UTF-8 无 BOM，且文件末尾只有一个换行；它只报告、不自动改写。`tools/dev-assistant.mjs prepare`（Windows 可由 `Sync_Deploy.bat` 调用）会按 stamp → 文本门禁 → `check-all` → `git diff --check` 的顺序执行；它只提供 Git 状态/建议，不运行 `git add`、`commit` 或 `push`。Git 的“下次将 CRLF 转为 LF”提示只是信息性 warning，真正阻断项会单独列出。
 
 ### 2.8 云构建测试指南(手动 Run workflow 实战)
