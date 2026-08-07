@@ -1,0 +1,57 @@
+name: Required CI / 必需检查
+run-name: Required CI 必需检查 · ${{ github.ref_name }}
+
+on:
+  push:
+    branches:
+      - dev
+      - staging
+      - main
+  pull_request:
+    branches:
+      - dev
+      - staging
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: required-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  required-ci:
+    name: Required CI / 必需检查
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout full history / 检出完整历史
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify generated version state / 验证版本生成状态
+        run: node tools/stamp-site-version.mjs --check
+
+      - name: Validate all text files / 校验全仓文本格式
+        run: node tools/check-text-format.mjs . --all
+
+      - name: Run project contract checks / 运行项目契约检查
+        run: node tools/check-all.mjs
+
+      - name: Check changed-line whitespace / 检查提交差异空白
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            git diff --check "$BASE_SHA...$HEAD_SHA"
+          elif printf '%s' "$BEFORE_SHA" | grep -Eq '^0+$'; then
+            git show --check --format= "$HEAD_SHA"
+          else
+            git diff --check "$BEFORE_SHA..$HEAD_SHA"
+          fi

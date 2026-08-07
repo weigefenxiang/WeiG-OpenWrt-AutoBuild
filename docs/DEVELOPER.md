@@ -25,12 +25,13 @@ WeiG-OpenWrt-AutoBuild/
 ├─ README.md                    ✍ 用户文档中文源(插件计数标记由 gen-plugins 自动刷新)
 ├─ ARCHITECTURE.md              ✍ 目录与架构总览(公开,中英双语)
 ├─ translations/                ⚙ README 十语译文(zh-TW/en/ru/es/pt/ja/ko/de/fr/vi,工作流翻译)
-├─ .github/workflows/              GitHub Actions 五条
+├─ .github/workflows/              GitHub Actions 六条
 │  ├─ custom-build.yml             ★核心:Issue 构建 + 隐藏 smoke 触发;独立固件 + 四类辅助产物
 │  ├─ cancel-build.yml             Issue 提交者用 /cancel 取消自己的构建
 │  ├─ sync-upstream.yml            每周同步上游:机型目录/种子/插件表/说明页,有 diff 才自动提交
 │  ├─ mirror-upstream.yml          每月镜像上游仓库防删库(需 secrets.MIRROR_TOKEN)
-│  └─ site-version.yml              只读验证 VERSION/site-version/资源指纹是否已在提交前生成
+│  ├─ pages.yml                    main 发布 standalone GitHub Pages
+│  └─ ci.yml                       唯一 Required CI:版本/全仓文本/项目契约/差异空白检查
 ├─ config/                      ✍ base .config 唯一事实源(77 个品牌目录)
 │  ├─ 360/360t7/                   360T7 按源码/分支/Profile 生成的配置
 │  ├─ platform/x86-64-generic/     通用 Target 的版本化 config
@@ -158,8 +159,8 @@ WeiG-OpenWrt-AutoBuild/
 - 时区表在 `site/wrt/data/timezones.json`,来源为 OpenWrt LuCI 的 445 项映射。组合框默认只列约 70 个常用城市并按当前 UTC 偏移从 `UTC-12` 到 `UTC+14` 排序；输入搜索时仍查询完整 445 项，`北京`/`北京时间` 只作为 `Asia/Shanghai` 搜索词，不写入显示值。首次访问且没有用户保存值或导入配置时，优先采用浏览器报告的 IANA 时区；手动选择会保存到本机。前端提交 IANA `zonename`,解析器映射并输出 POSIX `timezone`;三个 diy2 脚本用 `files/etc/uci-defaults/10-weig-timezone` 同时写入两项。控件统一为 44px 高，旧 POSIX 请求继续兼容。
 - Actions 的全局 `TZ` 只控制 Runner 进程日志时间；不要在 GitHub 托管 Runner 调用 `timedatectl set-timezone`，该操作可能因 systemd 权限被拒绝并让依赖安装步骤失败。固件时区始终由请求字段和 diy2 首启脚本写入，与 Runner 系统时区无关。
 - diy 脚本按源区分:官方源用 `diy2-openwrt.sh`,lede 用 `diy2-lede.sh`(都不能复用 ImmortalWrt 系的)
-- `sync-upstream.yml` 每周六 18:37 UTC 自动同步上游并提交；`check-drift.mjs` 只检查通用 OpenWrt 分支策略并在漂移时开 issue；`mirror-upstream.yml` 每月镜像（需 `secrets.MIRROR_TOKEN`）。构建回归测试通过网页生成的真实 Issue 请求执行，不再使用 smoke 派发器。
-- `site-version.yml` 监听版本影响路径的 push / pull request，只以 `contents: read` 运行 `node tools/stamp-site-version.mjs --check`；若开发者忘记在本地刷新 VERSION/site-version/资源查询指纹，CI 直接失败并提示本地修复，不再由机器人回写仓库。
+- `sync-upstream.yml` 每周六 18:37 UTC 自动同步上游，只 checkout/commit/push `dev`；自动提交不得使用 `[skip ci]`，因此所有同步结果都必须进入同一个 Required CI。`check-drift.mjs` 只检查通用 OpenWrt 分支策略并在漂移时开 issue；`mirror-upstream.yml` 每月镜像（需 `secrets.MIRROR_TOKEN`）。构建回归测试通过网页生成的真实 Issue 请求执行，不再使用 smoke 派发器。
+- `.github/workflows/ci.yml` 是唯一 Required CI，固定 Job 名 `Required CI / 必需检查`。它对 `dev`/`staging`/`main` 的 push 和指向三者的 PR 运行，且故意不使用 `paths:` 过滤；依次验证 VERSION、全仓文本格式、`check-all` 与提交差异空白。CI 只有 `contents: read`，不得改 VERSION、commit 或 push。公开仓库不包含本地私有维护文件时，`check-all` 会明确跳过仅依赖这些私有部署文件的夹具，其余公开契约照常全量执行；本地完整项目仍执行私有夹具。
 
 #### 取消内置项与直接配置构建
 
@@ -179,6 +180,7 @@ WeiG-OpenWrt-AutoBuild/
 ### 2.7 部署与迁移
 
 - 发布分支采用 `dev → staging → main`。`Promote_Release.bat` 会先 fetch 并检查 fast-forward、exact SHA 与 VERSION/site-version；只有用户明确输入 `y` 才执行 exact push，push 后再次 fetch 并验证 source/target 都等于候选 SHA。Enter、`n` 或其他输入均取消且不修改 refs；禁止 force push。正常晋级不会重新生成 VERSION。VPS staging 必须由 `origin/staging` 的 exact commit 打包，不能直接复制当前工作区。
+- GitHub 对 `staging` 与 `main` 使用 Ruleset：要求 status check `Required CI / 必需检查`、Require linear history、阻止 force push、阻止删除；**不启用 Require a pull request before merging**。这不会禁止任何人提交 PR，只是不强制正式 exact-SHA 晋级先制造 PR/merge commit。外部 PR 仍可正常提出，正式发布纪律是先把确认后的修改进入 `dev`，等待同一 SHA 的 Required CI 通过，再 exact promote 到 `staging`/`main`。
 - `OpenWebPage_打开网页.bat` 可打开 Local、Standalone Dev Preview、Standalone Staging Preview、VPS Staging、Standalone Cloudflare Production、Standalone GitHub Pages、Blog Production，或同时打开 Staging Preview + VPS。环境 URL 只存在本机覆盖文件，公开代码没有具体主机/IP。
 
 - 页面整个 `site/wrt/` 目录拷走即可用；Catalog 使用精确缓存 → GitHub Raw 最新 index → jsDelivr/GitHub Raw 固定提交分片 → 完整 GitHub Release，VPS 不保存 Catalog；其他静态数据使用相对路径和本地优先降级。`OpenWebPage_打开网页.bat` 只保留一个可见的 `wrt-server` 窗口，关闭该窗口即停止本地预览。

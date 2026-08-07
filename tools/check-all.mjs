@@ -748,6 +748,7 @@ mirrorRulesOk
   const buildWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8');
   const syncWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'sync-upstream.yml'), 'utf8');
   const pagesWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'pages.yml'), 'utf8');
+  const ciWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'ci.yml'), 'utf8');
   const driftSentinel = readFileSync(join(ROOT, 'tools', 'check-drift.mjs'), 'utf8');
   const parser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
   const requirementsSource = JSON.parse(readFileSync(
@@ -772,62 +773,69 @@ mirrorRulesOk
     ? ok('source build requirements: frontend silently applies HAVE_DOT_CONFIG without backend rejection')
     : bad('source build requirements', 'frontend marker, JSON copy, or backend-removal contract is invalid');
   const project = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
-  const syncDeployScript = readFileSync(join(ROOT, 'docs-private', 'Sync_Deploy.bat'), 'utf8');
-  const stagingDeployScript = readFileSync(join(ROOT, 'docs-private', 'Deploy_Staging.bat'), 'utf8');
+  const privateRoot = join(ROOT, 'docs-private');
+  const privateChecksAvailable = existsSync(privateRoot);
+  const readPrivate = (name) => privateChecksAvailable ? readFileSync(join(privateRoot, name), 'utf8') : '';
+  const syncDeployScript = readPrivate('Sync_Deploy.bat');
+  const stagingDeployScript = readPrivate('Deploy_Staging.bat');
   const openWebPageBat = readFileSync(join(ROOT, 'OpenWebPage_打开网页.bat'), 'utf8');
   const promoteBat = readFileSync(join(ROOT, 'Promote_Release.bat'), 'utf8');
   const promoteSource = readFileSync(join(ROOT, 'tools', 'promote-release.mjs'), 'utf8');
   const exactDeploySource = readFileSync(join(ROOT, 'tools', 'prepare-site-deployment.mjs'), 'utf8');
-  const privateMaintenanceSource = readFileSync(join(ROOT, 'docs-private', 'private-maintenance.mjs'), 'utf8');
-  const cleanupPrivateBat = readFileSync(join(ROOT, 'docs-private', 'Cleanup_Private.bat'), 'utf8');
-  const packProjectBat = readFileSync(join(ROOT, 'docs-private', 'Pack_Project.bat'), 'utf8');
-  const remoteDeploySource = readFileSync(join(ROOT, 'docs-private', 'deploy-vps-site.sh'), 'utf8');
-  const smokeWriterMatch = stagingDeployScript.match(/node -e "([^"\r\n]+)" "%LOCAL_SMOKE_FILE%"/);
-  const smokeOriginFixtureRoot = mkdtempSync(join(tmpdir(), 'weig-smoke-origin-'));
-  try {
-    const smokeFile = join(smokeOriginFixtureRoot, 'origin.txt');
-    const invalidSmokeFile = join(smokeOriginFixtureRoot, 'invalid-origin.txt');
-    const smokeWriter = smokeWriterMatch?.[1] || '';
-    const validWrite = smokeWriter
-      ? spawnSync(process.execPath, ['-e', smokeWriter, smokeFile], {
-        encoding: 'utf8',
-        shell: false,
-        env: { ...process.env, VPS_SMOKE_ORIGIN: 'http://127.0.0.1:18081' },
-      })
-      : { status: 1 };
-    const bytes = existsSync(smokeFile) ? readFileSync(smokeFile) : Buffer.alloc(0);
-    const expectedBytes = Buffer.from('http://127.0.0.1:18081\n');
-    const invalidWrite = smokeWriter
-      ? spawnSync(process.execPath, ['-e', smokeWriter, invalidSmokeFile], {
-        encoding: 'utf8',
-        shell: false,
-        env: { ...process.env, VPS_SMOKE_ORIGIN: 'http://127.0.0.1:18081/path' },
-      })
-      : { status: 0 };
-    const smokeWriterFixtureOk = validWrite.status === 0 && bytes.equals(expectedBytes) &&
-      bytes.length === 23 && bytes.at(-1) === 0x0a &&
-      !bytes.includes(Buffer.from('\\\\n')) &&
-      invalidWrite.status === 2 && !existsSync(invalidSmokeFile);
-    smokeWriterFixtureOk
-      ? ok('VPS smoke-origin writer: exact LF byte, no literal backslash-n, invalid path rejected')
-      : bad('VPS smoke-origin writer fixture', JSON.stringify({
-        writerFound: Boolean(smokeWriter),
-        validStatus: validWrite.status,
-        invalidStatus: invalidWrite.status,
-        bytes: bytes.toString('hex'),
-      }).slice(0, 500));
-  } catch (error) {
-    bad('VPS smoke-origin writer fixture', error.message.slice(0, 300));
-  } finally {
-    rmSync(smokeOriginFixtureRoot, { recursive: true, force: true });
+  const privateMaintenanceSource = readPrivate('private-maintenance.mjs');
+  const cleanupPrivateBat = readPrivate('Cleanup_Private.bat');
+  const packProjectBat = readPrivate('Pack_Project.bat');
+  const remoteDeploySource = readPrivate('deploy-vps-site.sh');
+  if (!privateChecksAvailable) {
+    ok('private VPS fixtures skipped in public checkout (docs-private is intentionally unshipped)');
+  } else {
+    const smokeWriterMatch = stagingDeployScript.match(/node -e "([^"\r\n]+)" "%LOCAL_SMOKE_FILE%"/);
+    const smokeOriginFixtureRoot = mkdtempSync(join(tmpdir(), 'weig-smoke-origin-'));
+    try {
+      const smokeFile = join(smokeOriginFixtureRoot, 'origin.txt');
+      const invalidSmokeFile = join(smokeOriginFixtureRoot, 'invalid-origin.txt');
+      const smokeWriter = smokeWriterMatch?.[1] || '';
+      const validWrite = smokeWriter
+        ? spawnSync(process.execPath, ['-e', smokeWriter, smokeFile], {
+          encoding: 'utf8',
+          shell: false,
+          env: { ...process.env, VPS_SMOKE_ORIGIN: 'http://127.0.0.1:18081' },
+        })
+        : { status: 1 };
+      const bytes = existsSync(smokeFile) ? readFileSync(smokeFile) : Buffer.alloc(0);
+      const expectedBytes = Buffer.from('http://127.0.0.1:18081\n');
+      const invalidWrite = smokeWriter
+        ? spawnSync(process.execPath, ['-e', smokeWriter, invalidSmokeFile], {
+          encoding: 'utf8',
+          shell: false,
+          env: { ...process.env, VPS_SMOKE_ORIGIN: 'http://127.0.0.1:18081/path' },
+        })
+        : { status: 0 };
+      const smokeWriterFixtureOk = validWrite.status === 0 && bytes.equals(expectedBytes) &&
+        bytes.length === 23 && bytes.at(-1) === 0x0a &&
+        !bytes.includes(Buffer.from('\\\\n')) &&
+        invalidWrite.status === 2 && !existsSync(invalidSmokeFile);
+      smokeWriterFixtureOk
+        ? ok('VPS smoke-origin writer: exact LF byte, no literal backslash-n, invalid path rejected')
+        : bad('VPS smoke-origin writer fixture', JSON.stringify({
+          writerFound: Boolean(smokeWriter),
+          validStatus: validWrite.status,
+          invalidStatus: invalidWrite.status,
+          bytes: bytes.toString('hex'),
+        }).slice(0, 500));
+    } catch (error) {
+      bad('VPS smoke-origin writer fixture', error.message.slice(0, 300));
+    } finally {
+      rmSync(smokeOriginFixtureRoot, { recursive: true, force: true });
+    }
   }
   const devAssistant = readFileSync(join(ROOT, 'tools', 'dev-assistant.mjs'), 'utf8');
   const syncBlogSource = readFileSync(join(ROOT, 'tools', 'sync-blog.mjs'), 'utf8');
   const textFormatSource = readFileSync(join(ROOT, 'tools', 'check-text-format.mjs'), 'utf8');
   const archiveVerifierSource = readFileSync(join(ROOT, 'tools', 'verify-site-archive.mjs'), 'utf8');
   const gitAttributes = readFileSync(join(ROOT, '.gitattributes'), 'utf8');
-  const deployGuide = readFileSync(join(ROOT, 'docs-private', '部署与同步.md'), 'utf8');
-  const blogGuide = readFileSync(join(ROOT, 'docs-private', '003.weige-share-blog同步与推送.md'), 'utf8');
+  const deployGuide = readPrivate('部署与同步.md');
+  const blogGuide = readPrivate('003.weige-share-blog同步与推送.md');
   const developerGuideZh = readFileSync(join(ROOT, 'docs', 'DEVELOPER.md'), 'utf8');
   const developerGuideEn = readFileSync(join(ROOT, 'docs', 'DEVELOPER.en.md'), 'utf8');
   const publicDeveloperDocsContract = !developerGuideZh.includes('docs-private') &&
@@ -884,8 +892,10 @@ mirrorRulesOk
   const siteArchiveVerifierContract =
     exactDeploySource.includes("verifySiteArchive(archive, { requiredEntries }") &&
     exactDeploySource.includes("'data/build-meta.json'") &&
-    stagingDeployScript.includes('tools\\prepare-site-deployment.mjs --ref origin/staging') &&
-    !stagingDeployScript.includes('tar -tzf "%~1" ^| findstr') &&
+    (!privateChecksAvailable || (
+      stagingDeployScript.includes('tools\\prepare-site-deployment.mjs --ref origin/staging') &&
+      !stagingDeployScript.includes('tar -tzf "%~1" ^| findstr')
+    )) &&
     archiveVerifierSource.includes("spawnSync(tarCommand, ['-tzf', archive]") &&
     archiveVerifierSource.includes('shell: false') &&
     REQUIRED_SITE_ARCHIVE_ENTRIES.every((entry) => archiveVerifierSource.includes(`'${entry}'`)) &&
@@ -905,8 +915,10 @@ mirrorRulesOk
     remoteDeploySource.includes('Content-Type:') &&
     remoteDeploySource.includes('catalog-search-worker.js') &&
     remoteDeploySource.includes('require_absent_path "$NEW/lib/catalog-engine.mjs" "lib/catalog-engine.mjs"');
-  remoteCatalogDeploymentContract
-    ? ok('VPS staging deploys only origin/staging exact web content; legacy Sync_Deploy VPS path is removed')
+  !privateChecksAvailable
+    ? ok('VPS staging deployment contract: skipped in public checkout')
+    : remoteCatalogDeploymentContract
+      ? ok('VPS staging deploys only origin/staging exact web content; legacy Sync_Deploy VPS path is removed')
     : bad('remote Catalog deployment', 'staging deploy, private env isolation, build-meta gate or legacy VPS cleanup is incomplete');
   const vpsTransactionalDeployContract =
     !stagingDeployScript.toLowerCase().includes('base64') &&
@@ -928,8 +940,10 @@ mirrorRulesOk
     remoteDeploySource.includes('restore_previous_site') &&
     remoteDeploySource.includes('previous site restored and smoke-checked') &&
     remoteDeploySource.includes('previous archive retained at $BACKUP_ARCHIVE');
-  vpsTransactionalDeployContract
-    ? ok('VPS deploy transport uses exact-LF smoke origin, tolerant remote reading and a verified wrt_prev.tar.gz rollback archive')
+  !privateChecksAvailable
+    ? ok('VPS transactional deploy contract: skipped in public checkout')
+    : vpsTransactionalDeployContract
+      ? ok('VPS deploy transport uses exact-LF smoke origin, tolerant remote reading and a verified wrt_prev.tar.gz rollback archive')
     : bad('VPS transactional deploy', 'smoke-origin byte/read contract, SCP transport, or verified previous-site rollback is incomplete');
   const vpsDeploymentDiagnosticsContract =
     stagingDeployScript.includes('echo [ssh] execute remote deployment - attempt 1/1') &&
@@ -943,8 +957,10 @@ mirrorRulesOk
     remoteDeploySource.includes('[deploy:smoke] ERROR request failed for $module') &&
     remoteDeploySource.includes('[deploy:rollback] ERROR automatic rollback failed; manual recovery is required') &&
     !remoteDeploySource.includes('[deploy:error] command=');
-  vpsDeploymentDiagnosticsContract
-    ? ok('VPS deploy diagnostics identify remote stage/validation failures without printing the private origin')
+  !privateChecksAvailable
+    ? ok('VPS deploy diagnostics contract: skipped in public checkout')
+    : vpsDeploymentDiagnosticsContract
+      ? ok('VPS deploy diagnostics identify remote stage/validation failures without printing the private origin')
     : bad('VPS deploy diagnostics', 'remote execution label, stage/error markers, validation details, backup diagnostics or privacy guard is incomplete');
   const releaseToolContract =
     promoteSource.includes("merge-base', '--is-ancestor'") &&
@@ -962,8 +978,10 @@ mirrorRulesOk
     !promoteBat.includes('Check dev -^> staging') && !promoteBat.includes('Check staging -^> main') &&
     promoteBat.includes('tools\\promote-release.mjs promote dev-staging') &&
     promoteBat.includes('tools\\promote-release.mjs promote staging-main') &&
-    stagingDeployScript.includes('call "%MAIN_REPO%\\OpenWebPage_打开网页.bat" vps') &&
-    !stagingDeployScript.includes('start "" "%MAIN_REPO%\\OpenWebPage_打开网页.bat" vps') &&
+    (!privateChecksAvailable || (
+      stagingDeployScript.includes('call "%MAIN_REPO%\\OpenWebPage_打开网页.bat" vps') &&
+      !stagingDeployScript.includes('start "" "%MAIN_REPO%\\OpenWebPage_打开网页.bat" vps')
+    )) &&
     openWebPageBat.includes('Staging Pair') && openWebPageBat.includes('GITHUB_PAGES_URL') &&
     openWebPageBat.includes('STANDALONE_PRODUCTION_URL') && openWebPageBat.includes('BLOG_PRODUCTION_URL') &&
     openWebPageBat.includes('OpenWebPage.local.cmd');
@@ -980,8 +998,10 @@ mirrorRulesOk
     privateMaintenanceSource.includes("rel === 'docs-private/ssh-key'") &&
     cleanupPrivateBat.includes('private-maintenance.mjs cleanup') &&
     packProjectBat.includes('private-maintenance.mjs pack-stage');
-  privateRetentionContract
-    ? ok('private retention: temp cleanup, 3 backups, 14-day/50MB logs and clean project pack exclusions')
+  !privateChecksAvailable
+    ? ok('private retention contract: skipped in public checkout')
+    : privateRetentionContract
+      ? ok('private retention: temp cleanup, 3 backups, 14-day/50MB logs and clean project pack exclusions')
     : bad('private retention contract', 'temp/log retention or clean-pack exclusions are incomplete');
   const exactBlogMirrorContract =
     syncBlogSource.includes("const temporary = join(blogSource, 'wrt.sync-tmp')") &&
@@ -1004,12 +1024,16 @@ mirrorRulesOk
     devAssistant.includes("command === 'sync-blog'") &&
     devAssistant.includes("command === 'verify-blog'") &&
     !devAssistant.includes("run('git', ['commit'") && !devAssistant.includes("run('git', ['push'") &&
-    !deployGuide.includes('剔除全部 `*.config`') &&
-    !blogGuide.includes('排除 base `*.config`') &&
+    (!privateChecksAvailable || (
+      !deployGuide.includes('剔除全部 `*.config`') &&
+      !blogGuide.includes('排除 base `*.config`')
+    )) &&
     !developerGuideZh.includes('自动剔除 *.config') &&
     !developerGuideEn.includes('strips *.config') &&
-    syncDeployScript.includes('Blog production mirror always uses origin/main exact commit.') &&
-    !blogGuide.includes('wrt-preview-dev') && !blogGuide.includes('wrt-preview-staging');
+    (!privateChecksAvailable || (
+      syncDeployScript.includes('Blog production mirror always uses origin/main exact commit.') &&
+      !blogGuide.includes('wrt-preview-dev') && !blogGuide.includes('wrt-preview-staging')
+    ));
   exactBlogMirrorContract
     ? ok('blog sync: dev assistant mirrors/verifies files only; Git remains manual and legacy .config filtering is removed')
     : bad('blog exact mirror contract', '同步工具、选项 3 编排、回滚验证或中英文文档仍保留旧过滤逻辑');
@@ -1024,11 +1048,40 @@ mirrorRulesOk
     !pagesWorkflow.includes('git push') && !pagesWorkflow.includes('git commit') &&
     developerGuideZh.includes('Production branch=`main`') && developerGuideZh.includes('Preview branches=`dev/staging`') &&
     developerGuideEn.includes('Production branch=`main`') && developerGuideEn.includes('Preview branches=`dev/staging`') &&
-    deployGuide.includes('Standalone Cloudflare Pages') && deployGuide.includes('Standalone GitHub Pages') &&
-    !deployGuide.includes('wrt-preview-dev') && !deployGuide.includes('wrt-preview-staging');
+    (!privateChecksAvailable || (
+      deployGuide.includes('Standalone Cloudflare Pages') && deployGuide.includes('Standalone GitHub Pages') &&
+      !deployGuide.includes('wrt-preview-dev') && !deployGuide.includes('wrt-preview-staging')
+    ));
   standalonePagesContract
     ? ok('A+ standalone web: Cloudflare dev/staging previews + main production, GitHub Pages main deployment, no blog preview fork')
     : bad('A+ standalone deployment contract', 'Pages workflow, standalone deployment docs, or blog-preview removal is incomplete');
+  const requiredCiContract =
+    (ciWorkflow.match(/name: Required CI \/ 必需检查/g) || []).length >= 2 &&
+    ciWorkflow.includes('push:') && ciWorkflow.includes('pull_request:') &&
+    ciWorkflow.includes('- dev') && ciWorkflow.includes('- staging') && ciWorkflow.includes('- main') &&
+    !/^\s+paths:/m.test(ciWorkflow) &&
+    ciWorkflow.includes('contents: read') && !ciWorkflow.includes('contents: write') &&
+    ciWorkflow.includes('fetch-depth: 0') &&
+    ciWorkflow.includes('node tools/stamp-site-version.mjs --check') &&
+    ciWorkflow.includes('node tools/check-text-format.mjs . --all') &&
+    ciWorkflow.includes('node tools/check-all.mjs') &&
+    ciWorkflow.includes('git diff --check "$BASE_SHA...$HEAD_SHA"') &&
+    ciWorkflow.includes('git diff --check "$BEFORE_SHA..$HEAD_SHA"') &&
+    !ciWorkflow.includes('git commit') && !ciWorkflow.includes('git push') &&
+    !existsSync(join(ROOT, '.github', 'workflows', 'site-version.yml')) &&
+    developerGuideZh.includes('Required CI / 必需检查') &&
+    developerGuideEn.includes('Required CI / 必需检查') &&
+    (!privateChecksAvailable || (deployGuide.includes('Require linear history') && deployGuide.includes('Require status checks')));
+  requiredCiContract
+    ? ok('D116 Required CI: stable job, full text/version/contracts/diff gates, no path skip or write-back')
+    : bad('D116 Required CI contract', 'ci.yml, retired site-version workflow, Ruleset docs, or required gate command is incomplete');
+  const upstreamSyncBranchContract =
+    syncWorkflow.includes('ref: dev') && syncWorkflow.includes('fetch-depth: 0') &&
+    syncWorkflow.includes('git push origin HEAD:dev') &&
+    !syncWorkflow.includes('[skip ci]') && !syncWorkflow.includes('git push\n');
+  upstreamSyncBranchContract
+    ? ok('D116 upstream sync: generated commits stay on dev and must enter Required CI')
+    : bad('D116 upstream sync branch contract', 'sync-upstream must checkout/push dev explicitly without skip-ci');
   const textFormatGateContract =
     textFormatSource.includes("const LF_EXTENSIONS = new Set") &&
     textFormatSource.includes("const CRLF_EXTENSIONS = new Set") &&
@@ -1044,8 +1097,10 @@ mirrorRulesOk
     gitAttributes.includes('*.bat text eol=crlf') &&
     gitAttributes.includes('.gitignore text eol=lf') &&
     gitAttributes.includes('.gitattributes text eol=lf') &&
-    deployGuide.includes('check-text-format.mjs') &&
-    blogGuide.includes('check-text-format.mjs') &&
+    (!privateChecksAvailable || (
+      deployGuide.includes('check-text-format.mjs') &&
+      blogGuide.includes('check-text-format.mjs')
+    )) &&
     developerGuideZh.includes('check-text-format.mjs') &&
     developerGuideEn.includes('check-text-format.mjs');
   textFormatGateContract
@@ -1478,7 +1533,6 @@ mirrorRulesOk
   const issueRequestReader = readFileSync(join(ROOT, 'tools', 'fetch-build-request.mjs'), 'utf8');
   const cancelWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'cancel-build.yml'), 'utf8')
     .replace(/\r\n/g, '\n');
-  const versionWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'site-version.yml'), 'utf8');
   const versionStamper = readFileSync(join(ROOT, 'tools', 'stamp-site-version.mjs'), 'utf8');
   const buildMetaGenerator = readFileSync(join(ROOT, 'tools', 'gen-build-meta.mjs'), 'utf8');
   const requestParser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
@@ -1842,20 +1896,13 @@ mirrorRulesOk
     catalogSelectionLayerContract
       ? ok('Catalog 选择状态已分为基础/推荐/用户覆盖/依赖/导入层；首次用户插件计数不再吸收上游默认')
       : bad('Catalog selection layers', '状态分层、deferred 默认、来源筛选、恢复默认或用户计数隔离不完整');
-    const versionContract = [
-    '".github/workflows/**"',
-    '"Shell/**"',
-    '"config/**"',
-    '"site/wrt/**"',
-    '"tools/**"',
-    '"VERSION"',
-  ].every((entry) => versionWorkflow.includes(entry)) &&
-    versionWorkflow.includes('pull_request:') &&
-    versionWorkflow.includes('permissions:') &&
-    versionWorkflow.includes('contents: read') &&
-    versionWorkflow.includes('tools/stamp-site-version.mjs --check') &&
-    !versionWorkflow.includes('git commit') && !versionWorkflow.includes('git push') &&
-    !versionWorkflow.includes('contents: write') &&
+    const versionContract =
+    !existsSync(join(ROOT, '.github', 'workflows', 'site-version.yml')) &&
+    ciWorkflow.includes('permissions:') &&
+    ciWorkflow.includes('contents: read') &&
+    ciWorkflow.includes('tools/stamp-site-version.mjs --check') &&
+    !ciWorkflow.includes('git commit') && !ciWorkflow.includes('git push') &&
+    !ciWorkflow.includes('contents: write') &&
     versionStamper.includes('vYYMMDDHHmm') &&
     versionStamper.includes("const ROOT_VERSION = join(ROOT, 'VERSION')") &&
     versionStamper.includes("'.github/workflows'") &&
@@ -1879,11 +1926,7 @@ mirrorRulesOk
     js.includes('formatBuildTime') &&
     html.indexOf('id="siteVersion"') > html.indexOf('id="submitBtn"') &&
     html.includes('id="buildInfoCard"') && html.includes('id="buildInfoCommit"') &&
-    !html.includes('id="siteVersionMobile"') && !html.includes('id="siteVersionFooter"') &&
-    css.includes('.site-version-action { position: relative; order: 0;') &&
-    css.includes('.build-info-card') && css.includes('.site-version-action { order: 3;') &&
-    buildMetaGenerator.includes('CF_PAGES_COMMIT_SHA') && buildMetaGenerator.includes('WEIG_BUILD_COMMIT') &&
-    buildMetaGenerator.includes("timezone: 'Asia/Shanghai'");
+    !html.includes('id="siteVersionModal"');
   versionContract
     ? ok('项目版本由本地生成、CI 只验证；build-meta 可选且网页短版本维护卡已接通')
     : bad('project version contract', '本地版本生成、CI 只读验证、build-meta 或网页维护信息契约缺失');
