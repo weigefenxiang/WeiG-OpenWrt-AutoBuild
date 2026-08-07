@@ -33,8 +33,8 @@ Hiện tại **360T7 (MT7981)** là thiết bị được bảo trì đầy đ�
    - `thời-gian-CONFIG`: cấu hình đã gửi/thực tế và siêu dữ liệu;
    - `thời-gian-BUILD-LOGS`: log đầy đủ và lỗi, giữ 14 ngày;
    - `thời-gian-OPTIONAL-PACKAGES` / `thời-gian-FIRMWARE-OTHER`: gói M và tài liệu phụ.
-5. Nếu không cần biên dịch, chọn **Gửi bản dựng đám mây → Chỉ tải .config**. Actions chỉ chạy `make defconfig` khi người dùng chủ động bật **Defconfig**; nếu không, `.config` đầy đủ vẫn là đầu vào có thẩm quyền. Tùy chọn bắt buộc chỉ được áp dụng sau khi xác nhận.
-6. Trang nạp được `build-request.json`, `.config` và `config.buildinfo`. Trường múi giờ tìm kiếm toàn bộ danh sách IANA của OpenWrt/LuCI theo định dạng thống nhất `(UTC±HH:MM) Region/City`; đồng thời có thể chọn giao diện LuCI, NTP và máy chủ opkg.
+5. Nếu không cần biên dịch, chọn **Gửi bản dựng đám mây → Chỉ tải .config**. Actions chỉ chạy `make defconfig` khi **Defconfig** được bật rõ ràng; nếu không, `.config` đầy đủ vẫn là đầu vào có thẩm quyền. Khi tắt Defconfig, trang âm thầm thêm `CONFIG_HAVE_DOT_CONFIG=y`; backend không từ chối vì dấu này hoặc vì tự kiểm tra phụ thuộc.
+6. Trang nạp được `build-request.json`, `.config` và `config.buildinfo`. Trường múi giờ tìm kiếm toàn bộ danh sách IANA OpenWrt/LuCI theo dạng `(UTC±HH:MM) Region/City`; đồng thời có thể chọn giao diện LuCI, NTP và **máy chủ gương gói (APK / OPKG)**. Múi giờ trình duyệt Trung Quốc đại lục tự động USTC → PKU → nguồn mặc định; khu vực khác theo nguồn và lỗi gương không bao giờ chặn biên dịch.
 
 > 💡 Sau khi flash firmware xong: dùng trình duyệt truy cập **192.168.1.1** (hoặc địa chỉ bạn đã tùy chỉnh ở trang gửi), tên đăng nhập **root**; **mật khẩu để trống** (lần đăng nhập đầu tiên hãy đặt mật khẩu ngay) — riêng nguồn Lean LEDE có mật khẩu ban đầu là `password`.
 >
@@ -87,7 +87,7 @@ Xem [ARCHITECTURE.md](../ARCHITECTURE.md) (song ngữ Trung - Anh).
 
 ### Bảo mật
 
-- Issue nhận 1–3 tệp đính kèm do GitHub lưu trữ và tự nhận dạng `build-request.json`, `.config`, `config.buildinfo`; trường dữ liệu, danh sách cho phép, kích thước, chữ ký đích và tùy chọn bắt buộc đều được kiểm tra. Cấu hình đầy đủ là đầu vào chính thức theo mặc định. Chỉ khi Defconfig được bật rõ ràng, `make defconfig` chính thức mới chạy một lần; kết quả được dùng mà không có phép so sánh Target, Profile hoặc kiến trúc trước/sau riêng của dự án.
+- Issue nhận 1–3 tệp đính kèm GitHub và tự nhận dạng `build-request.json`, `.config`, `config.buildinfo`; trường dữ liệu, danh sách cho phép, kích thước, hợp đồng nguồn và danh tính Target/Profile tối thiểu được kiểm tra. Cấu hình đầy đủ là đầu vào chính thức. Chỉ khi bật Defconfig rõ ràng, `make defconfig` chính thức mới chạy một lần; backend không xét lại phụ thuộc, trường kiến trúc suy ra, trạng thái giao diện hay yêu cầu dựng riêng.
 - Mã định danh bản dựng (tag) sẽ được làm sạch, chỉ giữ lại chữ Trung, chữ Latinh, chữ số và dấu gạch nối, chỉ dùng để đặt tên artifact và hiển thị;
 - Quyền của workflow được thu hẹp còn `contents: read + issues: write`.
 

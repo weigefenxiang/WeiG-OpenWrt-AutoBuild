@@ -1,51 +1,98 @@
 {
-  "schema": 1,
+  "schema": 2,
   "presets": [
     {
       "id": "auto",
-      "label": { "zh-CN": "跟随源码默认", "en": "Follow source default" },
-      "roots": {}
+      "kind": "policy",
+      "label": {
+        "zh-CN": "自动（USTC → PKU → 源码默认）",
+        "en": "Automatic (USTC → PKU → source default)"
+      },
+      "sources": [
+        "ImmortalWrt",
+        "OpenWrt",
+        "hanwckf",
+        "lede"
+      ]
+    },
+    {
+      "id": "source-default",
+      "kind": "default",
+      "label": {
+        "zh-CN": "跟随源码默认",
+        "en": "Follow source default"
+      },
+      "sources": [
+        "ImmortalWrt",
+        "OpenWrt",
+        "hanwckf",
+        "lede"
+      ]
     },
     {
       "id": "ustc",
-      "label": { "zh-CN": "中科大 USTC（推荐）", "en": "USTC (recommended)" },
-      "roots": {
-        "OpenWrt": "mirrors.ustc.edu.cn/openwrt",
-        "ImmortalWrt": "mirrors.ustc.edu.cn/immortalwrt",
-        "lede": "mirrors.ustc.edu.cn/openwrt",
-        "hanwckf": "mirrors.ustc.edu.cn/immortalwrt"
-      }
-    },
-    {
-      "id": "tuna",
-      "label": { "zh-CN": "清华 TUNA", "en": "TUNA" },
-      "roots": {
-        "OpenWrt": "mirrors.tuna.tsinghua.edu.cn/openwrt",
-        "lede": "mirrors.tuna.tsinghua.edu.cn/openwrt"
-      }
-    },
-    {
-      "id": "bfsu",
-      "label": { "zh-CN": "北外 BFSU", "en": "BFSU" },
-      "roots": {
-        "OpenWrt": "mirrors.bfsu.edu.cn/openwrt",
-        "lede": "mirrors.bfsu.edu.cn/openwrt"
-      }
+      "kind": "mirror",
+      "label": {
+        "zh-CN": "中科大 USTC（推荐）",
+        "en": "USTC (recommended)"
+      },
+      "sources": [
+        "ImmortalWrt",
+        "OpenWrt",
+        "hanwckf",
+        "lede"
+      ]
     },
     {
       "id": "pku",
-      "label": { "zh-CN": "北大 PKU（备用）", "en": "PKU (backup)" },
-      "roots": {
-        "OpenWrt": "mirrors.pku.edu.cn/openwrt",
-        "ImmortalWrt": "mirrors.pku.edu.cn/immortalwrt",
-        "lede": "mirrors.pku.edu.cn/openwrt",
-        "hanwckf": "mirrors.pku.edu.cn/immortalwrt"
-      }
+      "kind": "mirror",
+      "label": {
+        "zh-CN": "北大 PKU（备用）",
+        "en": "PKU (backup)"
+      },
+      "sources": [
+        "ImmortalWrt",
+        "OpenWrt",
+        "hanwckf",
+        "lede"
+      ]
     },
     {
-      "id": "official",
-      "label": { "zh-CN": "官方 OpenWrt", "en": "Official OpenWrt" },
-      "roots": { "OpenWrt": "downloads.openwrt.org", "lede": "downloads.openwrt.org" }
+      "id": "tuna",
+      "kind": "mirror",
+      "label": {
+        "zh-CN": "清华 TUNA",
+        "en": "TUNA"
+      },
+      "sources": [
+        "OpenWrt",
+        "lede"
+      ]
+    },
+    {
+      "id": "bfsu",
+      "kind": "mirror",
+      "label": {
+        "zh-CN": "北外 BFSU",
+        "en": "BFSU"
+      },
+      "sources": [
+        "OpenWrt",
+        "lede"
+      ]
     }
-  ]
+  ],
+  "aliases": {
+    "official": "source-default"
+  },
+  "policies": {
+    "auto": [
+      "ustc",
+      "pku",
+      "source-default"
+    ],
+    "manualFailure": [
+      "source-default"
+    ]
+  }
 }

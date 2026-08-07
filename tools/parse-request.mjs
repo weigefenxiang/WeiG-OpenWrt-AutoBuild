@@ -15,8 +15,8 @@ const CONFIG_MANIFEST = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data'
 const PROJECT = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
 const LOCAL_CATALOG_INDEX = JSON.parse(
   readFileSync(join(ROOT, 'site', 'wrt', 'data', 'menuconfig-index.json'), 'utf8'));
-const PACKAGE_MIRRORS = JSON.parse(
-  readFileSync(join(ROOT, 'site', 'wrt', 'data', 'package-mirrors.json'), 'utf8'));
+const PACKAGE_MIRROR_RULES = JSON.parse(
+  readFileSync(join(ROOT, 'config', '001.presets', 'package-mirrors.json'), 'utf8'));
 
 function fail(msg) { console.error('校验失败: ' + msg); process.exit(1); }
 function configStringValue(text, symbol) {
@@ -146,7 +146,7 @@ if (requestManifest) {
     const header = submittedConfig.match(/^# device=([^\s]+) source=([^\s]+) version=([^\s]+)(?: \(([^)]+)\))? variant=([^\s]+)$/m);
     if (!header) fail('原始配置缺少机型元数据。请先在定制网页点“加载配置”,识别机型后再点“提交云编译”');
     const fwHeader = submittedConfig.match(
-      /^# firmware-settings: zonename=([^\s]+) timezone=([^\s]+) theme=([^\s]+) ntp=([^\s]+) opkg=([^\s]+)$/m);
+      /^# firmware-settings: zonename=([^\s]+) timezone=([^\s]+) theme=([^\s]+) ntp=([^\s]+) (?:package-mirror|opkg)=([^\s]+)$/m);
     req = {
       device: header[1],
       source: header[2],
@@ -157,7 +157,7 @@ if (requestManifest) {
       plugins: [],
       config: submittedConfig,
       firmware: fwHeader ? {
-        zonename: fwHeader[1], timezone: fwHeader[2], theme: fwHeader[3], ntp: fwHeader[4], opkg: fwHeader[5],
+        zonename: fwHeader[1], timezone: fwHeader[2], theme: fwHeader[3], ntp: fwHeader[4], packageMirror: fwHeader[5],
       } : undefined,
     };
     req.configId = [req.device, req.source, req.version, req.variant].join('/');
@@ -384,9 +384,6 @@ const NTP = {
   global: ['0.openwrt.pool.ntp.org', '1.openwrt.pool.ntp.org', '2.openwrt.pool.ntp.org', '3.openwrt.pool.ntp.org'],
   cloudflare: ['time.cloudflare.com', 'time.google.com', 'time.apple.com', 'pool.ntp.org'],
 };
-const requestedMirrorId = String(fw.opkg || 'auto');
-const mirrorPreset = (PACKAGE_MIRRORS.presets || []).find((preset) => preset.id === requestedMirrorId);
-if (!mirrorPreset) fail(`未知 opkg 镜像预设:${requestedMirrorId}`);
 const selectedZone = TIMEZONES.find((zone) => zone.zonename === fw.zonename) ||
   TIMEZONES.find((zone) => zone.zonename === fw.timezone) ||
   TIMEZONES.find((zone) => zone.timezone === fw.timezone) ||
@@ -394,11 +391,16 @@ const selectedZone = TIMEZONES.find((zone) => zone.zonename === fw.zonename) ||
 const zonename = selectedZone.zonename;
 const timezone = selectedZone.timezone;
 const ntpId = Object.hasOwn(NTP, fw.ntp) ? fw.ntp : 'cn';
-const opkgId = mirrorPreset.id;
-const opkgMirror = opkgId === 'auto' ? '@default' : String(mirrorPreset?.roots?.[source.id] || '');
-if (!/^(?:@default|[A-Za-z0-9.-]+(?:\/[A-Za-z0-9._/-]+)?)$/.test(opkgMirror)) {
-  fail(`${source.id} 不接受所选 opkg 镜像预设:${String(fw.opkg || '')}`);
+const requestedMirrorInput = String(fw.packageMirror || fw.opkg || 'source-default').toLowerCase();
+const requestedMirrorId = String(PACKAGE_MIRROR_RULES.aliases?.[requestedMirrorInput] || requestedMirrorInput);
+const mirrorPreset = (PACKAGE_MIRROR_RULES.presets || []).find((preset) => preset.id === requestedMirrorId);
+if (!mirrorPreset) fail(`未知软件包镜像预设:${requestedMirrorInput}`);
+const sourceFamily = String(PACKAGE_MIRROR_RULES.sourceFamilies?.[source.id] || '');
+if (!sourceFamily) fail(`软件包镜像没有登记源码:${source.id}`);
+if (mirrorPreset.kind === 'mirror' && !mirrorPreset.roots?.[sourceFamily]) {
+  fail(`${source.id} 不接受所选软件包镜像预设:${requestedMirrorInput}`);
 }
+const packageMirrorId = mirrorPreset.id;
 const theme = String(fw.theme || (['OpenWrt', 'lede'].includes(source.id) ? 'luci-theme-bootstrap' : 'luci-theme-argon'));
 if (!/^luci-theme-[A-Za-z0-9._+-]{1,48}$/.test(theme)) fail('固件主题格式非法');
 const packageTable = join(ROOT, 'site', 'wrt', 'data', device.id, 'packages.json');
@@ -408,11 +410,11 @@ if (existsSync(packageTable)) {
 }
 
 const firmwareHeader = submittedConfig.match(
-  /^# firmware-settings: zonename=([^\s]+) timezone=([^\s]+) theme=([^\s]+) ntp=([^\s]+) opkg=([^\s]+)$/m);
+  /^# firmware-settings: zonename=([^\s]+) timezone=([^\s]+) theme=([^\s]+) ntp=([^\s]+) (?:package-mirror|opkg)=([^\s]+)$/m);
 const hasFirmwareSnapshot = Boolean(req.firmware || firmwareHeader);
 if (firmwareHeader) {
   const actual = [firmwareHeader[1], firmwareHeader[2], firmwareHeader[3], firmwareHeader[4], firmwareHeader[5]];
-  const expected = [zonename, timezone, theme, ntpId, opkgId];
+  const expected = [zonename, timezone, theme, ntpId, packageMirrorId];
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     fail(`固件设置快照不一致:config=${actual.join(' / ')},request=${expected.join(' / ')}`);
   }
@@ -467,8 +469,7 @@ const out = [
   `ntp_2=${NTP[ntpId][1]}`,
   `ntp_3=${NTP[ntpId][2]}`,
   `ntp_4=${NTP[ntpId][3]}`,
-  `opkg_id=${opkgId}`,
-  `opkg_mirror=${opkgMirror}`,
+  `package_mirror_id=${packageMirrorId}`,
   `firmware_snapshot=${hasFirmwareSnapshot ? 1 : 0}`,
   `use_defconfig=${useDefconfig ? 1 : 0}`,
   `recommended_enabled=${recommendationAudit.recommended.enabled ? 1 : 0}`,

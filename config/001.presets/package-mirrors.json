@@ -1,0 +1,146 @@
+{
+  "schema": 2,
+  "sourceFamilies": {
+    "OpenWrt": "openwrt",
+    "ImmortalWrt": "immortalwrt",
+    "lede": "openwrt",
+    "hanwckf": "immortalwrt"
+  },
+  "origins": {
+    "openwrt": [
+      "https://downloads.openwrt.org"
+    ],
+    "immortalwrt": [
+      "https://downloads.immortalwrt.org",
+      "https://mirrors.vsean.net/openwrt"
+    ]
+  },
+  "adapters": [
+    {
+      "id": "version-repository",
+      "paths": [
+        "include/version.mk",
+        ".config"
+      ]
+    },
+    {
+      "id": "opkg-distfeeds",
+      "manager": "opkg",
+      "paths": [
+        "package/base-files/files/etc/opkg/distfeeds.conf",
+        "files/etc/opkg/distfeeds.conf"
+      ]
+    },
+    {
+      "id": "apk-distfeeds",
+      "manager": "apk",
+      "paths": [
+        "package/base-files/files/etc/apk/repositories.d/distfeeds.list",
+        "files/etc/apk/repositories.d/distfeeds.list"
+      ]
+    },
+    {
+      "id": "immortal-default-settings",
+      "paths": [
+        "package/emortal/default-settings/files/99-default-settings-chinese"
+      ]
+    }
+  ],
+  "managerDetection": {
+    "configPath": ".config",
+    "apkSymbol": "CONFIG_USE_APK",
+    "capabilityPaths": [
+      "package/base-files/Makefile",
+      "include/feeds.mk"
+    ],
+    "markers": {
+      "apk": [
+        "FeedSourcesAppendAPK"
+      ],
+      "opkg": [
+        "FeedSourcesAppendOPKG"
+      ]
+    }
+  },
+  "presets": [
+    {
+      "id": "auto",
+      "kind": "policy",
+      "label": {
+        "zh-CN": "自动（USTC → PKU → 源码默认）",
+        "en": "Automatic (USTC → PKU → source default)"
+      },
+      "roots": {}
+    },
+    {
+      "id": "source-default",
+      "kind": "default",
+      "label": {
+        "zh-CN": "跟随源码默认",
+        "en": "Follow source default"
+      },
+      "roots": {}
+    },
+    {
+      "id": "ustc",
+      "kind": "mirror",
+      "label": {
+        "zh-CN": "中科大 USTC（推荐）",
+        "en": "USTC (recommended)"
+      },
+      "roots": {
+        "openwrt": "https://mirrors.ustc.edu.cn/openwrt",
+        "immortalwrt": "https://mirrors.ustc.edu.cn/immortalwrt"
+      }
+    },
+    {
+      "id": "pku",
+      "kind": "mirror",
+      "label": {
+        "zh-CN": "北大 PKU（备用）",
+        "en": "PKU (backup)"
+      },
+      "roots": {
+        "openwrt": "https://mirrors.pku.edu.cn/openwrt",
+        "immortalwrt": "https://mirrors.pku.edu.cn/immortalwrt"
+      }
+    },
+    {
+      "id": "tuna",
+      "kind": "mirror",
+      "label": {
+        "zh-CN": "清华 TUNA",
+        "en": "TUNA"
+      },
+      "roots": {
+        "openwrt": "https://mirrors.tuna.tsinghua.edu.cn/openwrt"
+      }
+    },
+    {
+      "id": "bfsu",
+      "kind": "mirror",
+      "label": {
+        "zh-CN": "北外 BFSU",
+        "en": "BFSU"
+      },
+      "roots": {
+        "openwrt": "https://mirrors.bfsu.edu.cn/openwrt"
+      }
+    }
+  ],
+  "aliases": {
+    "official": "source-default"
+  },
+  "policies": {
+    "auto": [
+      "ustc",
+      "pku",
+      "source-default"
+    ],
+    "manualFailure": [
+      "source-default"
+    ],
+    "neverFailBuild": true,
+    "probeTimeoutMs": 15000
+  }
+}

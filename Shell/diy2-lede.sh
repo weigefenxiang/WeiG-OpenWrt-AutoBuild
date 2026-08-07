@@ -18,7 +18,6 @@ if [ -f "$WRT_DEFAULTS" ]; then source "$WRT_DEFAULTS"; fi
 : "${WRT_NTP_2:=time1.cloud.tencent.com}"
 : "${WRT_NTP_3:=cn.ntp.org.cn}"
 : "${WRT_NTP_4:=cn.pool.ntp.org}"
-: "${WRT_OPKG_MIRROR:=@default}"
 
 CG=package/base-files/files/bin/config_generate
 
@@ -38,9 +37,5 @@ fi
 if [ -f "$CG" ]; then
   sed -i "s/0.openwrt.pool.ntp.org/$WRT_NTP_1/g; s/1.openwrt.pool.ntp.org/$WRT_NTP_2/g; s/2.openwrt.pool.ntp.org/$WRT_NTP_3/g; s/3.openwrt.pool.ntp.org/$WRT_NTP_4/g" "$CG"
 fi
-MIRROR_HELPER="$(dirname "${BASH_SOURCE[0]}")/apply-package-mirror.sh"
-[ -f "$MIRROR_HELPER" ] || { echo "Package mirror helper is missing" >&2; exit 1; }
-source "$MIRROR_HELPER"
-apply_package_mirror
 
 echo '--- lede default settings applied ---'

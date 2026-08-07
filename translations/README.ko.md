@@ -33,8 +33,8 @@ OpenWrt 펌웨어 **온라인 커스터마이징 + 클라우드 빌드**. 웹 �
    - `시간-CONFIG`: 제출/실효 설정과 메타데이터;
    - `시간-BUILD-LOGS`: 전체 로그와 오류이며 14일 보관합니다;
    - `시간-OPTIONAL-PACKAGES` / `시간-FIRMWARE-OTHER`:M 패키지와 보조 자료입니다.
-5. 빌드하지 않으려면 **클라우드 빌드 제출 → .config만 다운로드**를 선택합니다. Actions는 사용자가 **Defconfig**를 명시적으로 켠 경우에만 `make defconfig`를 실행하며, 그 외에는 전체 `.config`가 권위 입력입니다. 필수 항목은 확인 후에만 적용됩니다.
-6. `build-request.json`, `.config`, `config.buildinfo`를 불러올 수 있습니다. 시간대는 OpenWrt/LuCI 전체 IANA 목록을 검색하며 `(UTC±HH:MM) Region/City` 형식으로 통일됩니다. LuCI 테마, NTP, opkg 미러도 선택할 수 있습니다.
+5. 빌드하지 않으려면 **클라우드 빌드 제출 → .config만 다운로드**를 선택합니다. Actions는 **Defconfig**를 명시적으로 켠 경우에만 `make defconfig`를 실행하며, 그 외에는 전체 `.config`가 권위 입력입니다. Defconfig가 꺼져 있으면 페이지가 `CONFIG_HAVE_DOT_CONFIG=y`를 조용히 추가하고, 백엔드는 이 표식이나 자체 의존성 판단 때문에 요청을 거부하지 않습니다.
+6. `build-request.json`, `.config`, `config.buildinfo`를 불러올 수 있습니다. 시간대는 OpenWrt/LuCI 전체 IANA 목록을 `(UTC±HH:MM) Region/City` 형식으로 검색합니다. LuCI 테마, NTP, **패키지 미러 (APK / OPKG)**도 선택할 수 있으며 중국 본토 브라우저 시간대는 USTC → PKU → 소스 기본값으로 자동 전환합니다. 다른 지역은 소스를 따르고 미러 장애는 빌드를 중단하지 않습니다.
 
 > 💡 펌웨어를 플래싱한 뒤: 브라우저에서 **192.168.1.1**(또는 제출 페이지에서 직접 지정한 주소)로 접속하세요. 사용자 이름은 **root**, **비밀번호는 비어 있습니다**(첫 로그인 시 즉시 설정하세요). 단, Lean LEDE 소스만 초기 비밀번호가 `password`입니다.
 >
@@ -87,7 +87,7 @@ OpenWrt 펌웨어 **온라인 커스터마이징 + 클라우드 빌드**. 웹 �
 
 ### 보안
 
-- Issue는 GitHub 첨부 파일 1~3개를 받고 `build-request.json`, `.config`, `config.buildinfo`를 자동 판별합니다. 전체 설정이 기본 권위 입력입니다. Defconfig를 명시적으로 켠 경우에만 공식 `make defconfig`를 한 번 실행하며, 그 결과를 프로젝트 자체의 Target, Profile, 아키텍처 전후 비교 없이 사용합니다.
+- Issue는 GitHub 첨부 파일 1~3개를 받고 `build-request.json`, `.config`, `config.buildinfo`를 자동 판별합니다. 필드, 허용 목록, 크기, 소스 계약, 최소 Target/Profile 정체성을 검사합니다. 전체 설정이 권위 입력이며 Defconfig를 명시했을 때만 공식 `make defconfig`를 한 번 실행합니다. 백엔드는 패키지 의존성, 파생 아키텍처 필드, 테마 상태, 자체 빌드 요구사항을 다시 판단하지 않습니다.
 - 빌드 식별자(tag)는 중문/영문 문자, 숫자, 하이픈만 남도록 정제되며, artifact 이름 지정과 표시에만 사용됩니다.
 - workflow 권한은 `contents: read + issues: write`로 최소화되어 있습니다.
 

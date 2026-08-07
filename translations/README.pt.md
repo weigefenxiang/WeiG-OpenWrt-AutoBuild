@@ -33,8 +33,8 @@ Atualmente o **360T7 (MT7981)** é o modelo com manutenção completa; os mais d
    - `data-CONFIG`: configurações enviada/efetiva e metadados;
    - `data-BUILD-LOGS`: logs completos e erros, mantidos por 14 dias;
    - `data-OPTIONAL-PACKAGES` / `data-FIRMWARE-OTHER`: pacotes M e arquivos auxiliares.
-5. Para não compilar, escolha **Enviar compilação na nuvem → Baixar apenas .config**. Actions só executa `make defconfig` quando o usuário ativa **Defconfig**; caso contrário, o `.config` completo continua sendo a entrada oficial. As opções obrigatórias só são aplicadas após confirmação.
-6. A página carrega `build-request.json`, `.config` e `config.buildinfo`. O campo de fuso horário pesquisa a lista IANA completa do OpenWrt/LuCI no formato uniforme `(UTC±HH:MM) Region/City`; também permite escolher tema LuCI, NTP e espelho opkg.
+5. Para não compilar, escolha **Enviar compilação na nuvem → Baixar apenas .config**. Actions só executa `make defconfig` quando **Defconfig** é ativado explicitamente; caso contrário, o `.config` completo continua sendo a entrada oficial. Sem Defconfig, a página adiciona silenciosamente `CONFIG_HAVE_DOT_CONFIG=y`; o backend não rejeita o pedido por essa marca nem por verificações próprias de dependências.
+6. A página carrega `build-request.json`, `.config` e `config.buildinfo`. O fuso horário pesquisa a lista IANA completa do OpenWrt/LuCI no formato `(UTC±HH:MM) Region/City`; também permite escolher tema LuCI, NTP e **espelho de pacotes (APK / OPKG)**. Fusos da China continental usam automaticamente USTC → PKU → padrão da fonte; outras regiões seguem a fonte, e falhas de espelho nunca bloqueiam a compilação.
 
 > 💡 Depois de gravar o firmware: acesse **192.168.1.1** no navegador (ou o endereço que você personalizou na página de envio), usuário **root**; **a senha fica em branco** (defina uma imediatamente no primeiro login) — apenas na fonte Lean LEDE a senha inicial é `password`.
 >
@@ -87,7 +87,7 @@ Veja [ARCHITECTURE.md](../ARCHITECTURE.md) (bilíngue, chinês e inglês).
 
 ### Segurança
 
-- Issues aceitam 1–3 anexos hospedados no GitHub e detectam `build-request.json`, `.config` e `config.buildinfo`; campos, listas permitidas, tamanho, assinatura do alvo e opções obrigatórias da fonte são validados. A configuração completa é a entrada oficial por padrão. Somente quando Defconfig é ativado explicitamente o `make defconfig` oficial roda uma vez; sua saída é usada sem comparação própria do projeto entre Target, Profile ou arquitetura antes e depois.
+- Issues aceitam 1–3 anexos do GitHub e detectam `build-request.json`, `.config` e `config.buildinfo`; campos, listas permitidas, tamanho, contrato da fonte e identidade mínima Target/Profile são validados. A configuração completa é oficial. Só com Defconfig explícito o `make defconfig` oficial roda uma vez; o backend não reavalia dependências, campos derivados de arquitetura, estado do tema ou requisitos próprios de compilação.
 - O identificador de build (tag) é sanitizado para conter apenas caracteres chineses e latinos, dígitos e hífens, sendo usado somente para nomear e exibir o artifact;
 - As permissões do workflow são restritas a `contents: read + issues: write`.
 

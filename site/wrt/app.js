@@ -56,14 +56,14 @@ const state = {
   minimumBoot: true,
   useDefconfig: true,
   ntp: 'cn',
-  opkg: 'auto',
+  packageMirror: 'source-default',
   siteVersion: 'v----------',
   importedConfig: null,
   importedConfigId: '',
 };
 const LANIP_RE = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/;   // 仅接受内网 IPv4 / private IPv4 only
 let PLUGINS = null, I18N = null, TIMEZONES = null, MINIMUM_BOOT = null, BUILD_REQUIREMENTS = null;
-let PACKAGE_MIRRORS = { presets: [{ id: 'auto', label: { 'zh-CN': '跟随源码默认', en: 'Follow source default' }, roots: {} }] };
+let PACKAGE_MIRRORS = { schema: 2, presets: [{ id: 'source-default', label: { 'zh-CN': '跟随源码默认', en: 'Follow source default' }, sources: [] }] };
 let MENU_INDEX = null, MENU_CATALOG = null, CATALOG_ENGINE = null, CATALOG_MODEL = null;
 let CATALOG_LOADER_MODULE = null, CATALOG_SCHEMA6_MODULE = null, CATALOG_LOADER = null;
 let catalogShardLoader = null, catalogMenuLoadingPromise = null;
@@ -183,26 +183,33 @@ const NTP_PRESETS = {
   global: ['0.openwrt.pool.ntp.org', '1.openwrt.pool.ntp.org', '2.openwrt.pool.ntp.org', '3.openwrt.pool.ntp.org'],
   cloudflare: ['time.cloudflare.com', 'time.google.com', 'time.apple.com', 'pool.ntp.org'],
 };
-const MAINLAND_PACKAGE_MIRRORS = ['ustc', 'pku', 'tuna', 'bfsu'];
-let opkgSelectionExplicit = false;
+const MAINLAND_BROWSER_TIMEZONES = new Set([
+  'Asia/Shanghai', 'Asia/Beijing', 'Asia/Chongqing', 'Asia/Harbin', 'PRC',
+]);
+let packageMirrorSelectionExplicit = false;
 function mirrorPreset(id) {
-  return (PACKAGE_MIRRORS?.presets || []).find((preset) => preset.id === id) || null;
+  const normalized = PACKAGE_MIRRORS?.aliases?.[id] || id;
+  return (PACKAGE_MIRRORS?.presets || []).find((preset) => preset.id === normalized) || null;
 }
-function packageMirrorRoot(id, sourceId = state.source?.id) {
+function packageMirrorAvailable(id, sourceId = state.source?.id) {
   const preset = mirrorPreset(id);
-  if (!preset) return null;
-  if (id === 'auto') return '@default';
-  const root = preset.roots?.[sourceId];
-  return /^[A-Za-z0-9.-]+(?:\/[A-Za-z0-9._/-]+)?$/.test(root || '') ? root : null;
+  return Boolean(preset && (!sourceId || (preset.sources || []).includes(sourceId)));
 }
 function packageMirrorEntries(sourceId = state.source?.id) {
   return (PACKAGE_MIRRORS?.presets || [])
-    .filter((preset) => packageMirrorRoot(preset.id, sourceId))
+    .filter((preset) => packageMirrorAvailable(preset.id, sourceId))
     .map((preset) => [preset.id, preset.label?.[state.lang === 'zh-CN' ? 'zh-CN' : 'en'] || preset.label?.en || preset.id]);
 }
+function browserUsesMainlandPackageMirror() {
+  try {
+    return MAINLAND_BROWSER_TIMEZONES.has(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  } catch {
+    return false;
+  }
+}
 function defaultPackageMirrorId(sourceId = state.source?.id) {
-  if (state.timezone !== 'Asia/Shanghai') return 'auto';
-  return MAINLAND_PACKAGE_MIRRORS.find((id) => packageMirrorRoot(id, sourceId)) || 'auto';
+  const preferred = browserUsesMainlandPackageMirror() ? 'auto' : 'source-default';
+  return packageMirrorAvailable(preferred, sourceId) ? preferred : 'source-default';
 }
 let PLUG_I18N = null;                  // 插件名/说明多语言表,非中文界面按需加载 / plugin name/desc i18n table, lazy-loaded for non-Chinese UIs
 let pluginDataPath = '';                  // 当前插件索引来源，避免跨设备误复用 / current plugin-index source; prevents cross-device cache reuse
@@ -3866,9 +3873,9 @@ function renderModes() {
   });
   $('fwThemeBox').addEventListener('change', () => setFirmwareTheme($('fwThemeBox').value));
   $('ntpBox').addEventListener('change', () => { state.ntp = $('ntpBox').value; });
-  $('opkgBox').addEventListener('change', () => {
-    state.opkg = $('opkgBox').value;
-    opkgSelectionExplicit = true;
+  $('packageMirrorBox').addEventListener('change', () => {
+    state.packageMirror = $('packageMirrorBox').value;
+    packageMirrorSelectionExplicit = true;
   });
 }
 
@@ -3977,10 +3984,6 @@ function selectTimezone(zone) {
   localStorage.setItem('wrt_timezone', zone.zonename);
   $('timezoneBox').value = timezoneLabel(zone);
   closeTimezoneMenu();
-  if (!opkgSelectionExplicit && state.source) {
-    state.opkg = defaultPackageMirrorId(state.source.id);
-    renderFirmwareSettings();
-  }
 }
 function timezoneMenuKeydown(event) {
   const options = timezoneOptions();
@@ -4026,11 +4029,11 @@ function renderFirmwareSettings() {
   state.ntp = fillSelect('ntpBox', [
     ['cn', t('fw.ntp.cn')], ['global', t('fw.ntp.global')], ['cloudflare', t('fw.ntp.cloud')],
   ], state.ntp);
-  const opkgEntries = packageMirrorEntries(state.source.id);
-  if (!opkgSelectionExplicit || !opkgEntries.some(([id]) => id === state.opkg)) {
-    state.opkg = defaultPackageMirrorId(state.source.id);
+  const packageMirrorEntriesForSource = packageMirrorEntries(state.source.id);
+  if (!packageMirrorSelectionExplicit || !packageMirrorEntriesForSource.some(([id]) => id === state.packageMirror)) {
+    state.packageMirror = defaultPackageMirrorId(state.source.id);
   }
-  state.opkg = fillSelect('opkgBox', opkgEntries, state.opkg);
+  state.packageMirror = fillSelect('packageMirrorBox', packageMirrorEntriesForSource, state.packageMirror);
   updateSubmitGate();
 }
 function setFirmwareTheme(theme) {
@@ -4636,7 +4639,7 @@ function applyToConfig(text, sel) {
     '# device=' + state.device.id + ' source=' + src + ' version=' + state.version.id +
     ' (' + state.version.branch + ') variant=' + state.variant.id + '\n' +
     '# firmware-settings: zonename=' + zone.zonename + ' timezone=' + zone.timezone + ' theme=' + resolvedTheme +
-    ' ntp=' + state.ntp + ' opkg=' + state.opkg + '\n' +
+    ' ntp=' + state.ntp + ' package-mirror=' + state.packageMirror + '\n' +
     (minimum ? '# recommended: ' + minimum + '\n' : '') +
     '# plugins: ' + (sel.normal.map((p) => p.id).join(' ') || '(none)') + '\n' +
     (sel.forced.length ? '# forced (advanced): ' + sel.forced.map((p) => p.id).join(' ') + '\n' : '') +
@@ -4651,7 +4654,7 @@ function resolveConfigTheme(text, fallback = true) {
 function configFirmwareSettings(text) {
   const match = String(text).match(/^# firmware-settings: .* theme=([^\s]+) ntp=/m);
   return { timezone: state.timezone, theme: match?.[1] || resolveConfigTheme(text),
-    ntp: state.ntp, opkg: state.opkg };
+    ntp: state.ntp, packageMirror: state.packageMirror };
 }
 
 async function generateConfigText({ enforceBuildRequirements = false } = {}) {
@@ -5193,9 +5196,10 @@ function restoreSelections(config, payload) {
     if (zone) state.timezone = zone.zonename;
     if (/^luci-theme-[A-Za-z0-9._+-]+$/.test(String(fw.theme || ''))) state.theme = fw.theme;
     if (NTP_PRESETS[fw.ntp]) state.ntp = fw.ntp;
-    if (packageMirrorRoot(fw.opkg, state.source?.id)) {
-      state.opkg = fw.opkg;
-      opkgSelectionExplicit = true;
+    const importedMirror = fw.packageMirror || fw.opkg;
+    if (packageMirrorAvailable(importedMirror, state.source?.id)) {
+      state.packageMirror = PACKAGE_MIRRORS?.aliases?.[importedMirror] || importedMirror;
+      packageMirrorSelectionExplicit = true;
     }
   }
   renderFirmwareSettings();
@@ -5450,7 +5454,7 @@ function openSubmitModal() {
     timezone: state.timezone,
     theme: $('fwThemeBox').value,
     ntp: $('ntpBox').value,
-    opkg: $('opkgBox').value,
+    packageMirror: $('packageMirrorBox').value,
   };
   Object.assign(state, firmware);
   const requestStamp = localStamp();
@@ -5468,7 +5472,7 @@ function openSubmitModal() {
     timezone: $('timezoneBox').value,
     theme: $('fwThemeBox').selectedOptions[0].textContent,
     ntp: $('ntpBox').selectedOptions[0].textContent,
-    opkg: $('opkgBox').selectedOptions[0].textContent,
+    packageMirror: $('packageMirrorBox').selectedOptions[0].textContent,
     pageVersion: state.siteVersion,
   });
   mb.appendChild(sum);

@@ -17,7 +17,6 @@ if [ -f "$WRT_DEFAULTS" ]; then source "$WRT_DEFAULTS"; fi
 : "${WRT_NTP_2:=time1.cloud.tencent.com}"
 : "${WRT_NTP_3:=cn.ntp.org.cn}"
 : "${WRT_NTP_4:=cn.pool.ntp.org}"
-: "${WRT_OPKG_MIRROR:=@default}"
 
 # name: 替换默认主题 $WRT_THEME
 sed -i "s/luci-theme-bootstrap/$WRT_THEME/" feeds/luci/collections/luci/Makefile
@@ -36,8 +35,3 @@ sed -i "s/time1.apple.com/$WRT_NTP_2/g"  package/base-files/files/bin/config_gen
 sed -i "s/time1.google.com/$WRT_NTP_1/g"  package/base-files/files/bin/config_generate
 sed -i "s/time.cloudflare.com/$WRT_NTP_3/g"  package/base-files/files/bin/config_generate
 sed -i "s/pool.ntp.org/$WRT_NTP_4/g"  package/base-files/files/bin/config_generate
-
-MIRROR_HELPER="$(dirname "${BASH_SOURCE[0]}")/apply-package-mirror.sh"
-[ -f "$MIRROR_HELPER" ] || { echo "Package mirror helper is missing" >&2; exit 1; }
-source "$MIRROR_HELPER"
-apply_package_mirror

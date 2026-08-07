@@ -33,8 +33,8 @@ OpenWrt ファームウェアの**オンラインカスタマイズ + クラウ�
    - `時刻-CONFIG`:送信/実効設定とメタデータ;
    - `時刻-BUILD-LOGS`:完全なログとエラー。14日間保持されます;
    - `時刻-OPTIONAL-PACKAGES` / `時刻-FIRMWARE-OTHER`:M パッケージと補助資料。
-5. ビルドしない場合は **クラウドビルドを送信 → .config のみダウンロード** を選びます。Actions はユーザーが **Defconfig** を明示的に有効化した場合のみ `make defconfig` を実行し、それ以外では完全な `.config` を正本として扱います。必須項目は確認後だけ適用されます。
-6. `build-request.json`、`.config`、`config.buildinfo` を読み込めます。時刻帯は OpenWrt/LuCI の完全な IANA リストを検索でき、`(UTC±HH:MM) Region/City` 形式で統一表示されます。LuCI テーマ、NTP、opkg ミラーも選択できます。
+5. ビルドしない場合は **クラウドビルドを送信 → .config のみダウンロード** を選びます。Actions は **Defconfig** を明示的に有効化した場合のみ `make defconfig` を実行し、それ以外では完全な `.config` を正本として扱います。Defconfig が無効ならページが `CONFIG_HAVE_DOT_CONFIG=y` を静かに追加し、バックエンドはこの印や独自の依存判定を理由に拒否しません。
+6. `build-request.json`、`.config`、`config.buildinfo` を読み込めます。時刻帯は OpenWrt/LuCI の完全な IANA リストを `(UTC±HH:MM) Region/City` 形式で検索できます。LuCI テーマ、NTP、**パッケージミラー（APK / OPKG）**も選択でき、中国本土のブラウザー時刻帯は USTC → PKU → ソース既定へ自動フォールバックします。他地域はソース既定で、ミラー障害はビルドを停止しません。
 
 > 💡 ファームウェア書き込み後:ブラウザで **192.168.1.1**(または送信ページでカスタマイズしたアドレス)にアクセスします。ユーザー名は **root**、**パスワードは空**です(初回ログイン時にすぐ設定してください)。Lean LEDE ソースのみ、初期パスワードは `password` です。
 >
@@ -87,7 +87,7 @@ OpenWrt ファームウェアの**オンラインカスタマイズ + クラウ�
 
 ### セキュリティ
 
-- Issue は GitHub 上の添付を1～3個受け付け、`build-request.json`、`.config`、`config.buildinfo` を自動判定します。完全設定を既定の正本とします。Defconfig を明示的に有効化した場合だけ公式の `make defconfig` を1回実行し、その出力を Target、Profile、アーキテクチャのプロジェクト独自の前後比較なしで使用します。
+- Issue は GitHub 上の添付を1～3個受け付け、`build-request.json`、`.config`、`config.buildinfo` を自動判定します。フィールド、許可リスト、サイズ、ソース契約、最小 Target/Profile 身元を検証します。完全設定が正本で、Defconfig を明示した場合のみ公式 `make defconfig` を1回実行します。バックエンドは依存関係、派生アーキテクチャ項目、テーマ状態、独自ビルド要件を再判定しません。
 - ビルド識別子(tag)は中国語・英数字とハイフンのみにサニタイズされ、artifact の命名と表示にのみ使用されます。
 - workflow の権限は `contents: read + issues: write` に絞り込まれています。
 

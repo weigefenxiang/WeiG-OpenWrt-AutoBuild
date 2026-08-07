@@ -33,8 +33,8 @@ Actuellement, le **360T7 (MT7981)** est le modèle en maintenance complète ; le
    - `horodatage-CONFIG` : configurations envoyée/effective et métadonnées ;
    - `horodatage-BUILD-LOGS` : journaux complets et erreurs, conservés 14 jours ;
    - `horodatage-OPTIONAL-PACKAGES` / `horodatage-FIRMWARE-OTHER` : paquets M et fichiers annexes.
-5. Sans compilation, choisissez **Envoyer la compilation cloud → Télécharger uniquement .config**. Actions n’exécute `make defconfig` que si l’utilisateur active explicitement **Defconfig** ; sinon, la `.config` complète reste l’entrée faisant autorité. Les options obligatoires sont affichées et appliquées uniquement après confirmation.
-6. La page charge `build-request.json`, `.config` et `config.buildinfo`. Le champ de fuseau recherche la liste IANA complète d’OpenWrt/LuCI au format uniforme `(UTC±HH:MM) Region/City` ; thème LuCI, NTP et miroir opkg sont également sélectionnables.
+5. Sans compilation, choisissez **Envoyer la compilation cloud → Télécharger uniquement .config**. Actions n’exécute `make defconfig` que si **Defconfig** est activé explicitement ; sinon, la `.config` complète reste l’entrée faisant autorité. Sans Defconfig, la page ajoute silencieusement `CONFIG_HAVE_DOT_CONFIG=y` ; le backend ne rejette pas la requête pour ce marqueur ni pour une analyse interne des dépendances.
+6. La page charge `build-request.json`, `.config` et `config.buildinfo`. Le champ de fuseau recherche la liste IANA complète d’OpenWrt/LuCI au format `(UTC±HH:MM) Region/City` ; thème LuCI, NTP et **miroir de paquets (APK / OPKG)** sont aussi disponibles. Les fuseaux de Chine continentale utilisent automatiquement USTC → PKU → source par défaut ; ailleurs la source est conservée, et une panne de miroir ne bloque jamais la compilation.
 
 > 💡 Une fois le firmware flashé : accédez dans votre navigateur à **192.168.1.1** (ou à l'adresse que vous avez personnalisée sur la page de soumission), nom d'utilisateur **root** ; **mot de passe vide** (définissez-en un immédiatement à la première connexion) — seule la source Lean LEDE a pour mot de passe initial `password`.
 >
@@ -87,7 +87,7 @@ Voir [ARCHITECTURE.md](../ARCHITECTURE.md) (bilingue chinois-anglais).
 
 ### Sécurité
 
-- Les Issues acceptent 1 à 3 pièces jointes hébergées par GitHub et détectent `build-request.json`, `.config` et `config.buildinfo` ; champs, listes autorisées, taille, signature cible et options obligatoires de la source sont validés. La configuration complète fait autorité par défaut. Si Defconfig est explicitement activé, le `make defconfig` officiel s’exécute une fois et sa sortie est utilisée sans comparaison avant/après propre au projet pour Target, Profile ou l’architecture.
+- Les Issues acceptent 1 à 3 pièces jointes GitHub et détectent `build-request.json`, `.config` et `config.buildinfo` ; champs, listes autorisées, taille, contrat de source et identité minimale Target/Profile sont vérifiés. La configuration complète fait autorité. Si Defconfig est activé, le `make defconfig` officiel s’exécute une fois ; le backend ne réévalue pas les dépendances, les champs d’architecture dérivés, l’état du thème ni des exigences de build personnalisées.
 - L'identifiant de build (tag) est assaini pour ne conserver que caractères chinois, lettres, chiffres et traits d'union, et n'est utilisé que pour le nommage et l'affichage des artifacts ;
 - Les permissions du workflow sont restreintes à `contents: read + issues: write`.
 

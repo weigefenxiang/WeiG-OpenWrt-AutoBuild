@@ -33,8 +33,8 @@ Actualmente, el **360T7 (MT7981)** es el modelo con mantenimiento completo; los 
    - `fecha-CONFIG`: configuraciones enviada/efectiva y metadatos;
    - `fecha-BUILD-LOGS`: registros completos y errores, disponibles 14 días;
    - `fecha-OPTIONAL-PACKAGES` / `fecha-FIRMWARE-OTHER`: paquetes M y archivos auxiliares.
-5. Si no quieres compilar, elige **Enviar compilación en la nube → Descargar solo .config**. Actions solo ejecuta `make defconfig` cuando el usuario activa **Defconfig**; de lo contrario, la `.config` completa sigue siendo la entrada autoritativa. Las opciones obligatorias se muestran y solo se aplican tras confirmación.
-6. La página carga `build-request.json`, `.config` y `config.buildinfo`. La zona horaria ofrece búsqueda en la lista IANA completa de OpenWrt/LuCI con formato uniforme `(UTC±HH:MM) Region/City`, además del tema LuCI, NTP y el espejo opkg.
+5. Si no quieres compilar, elige **Enviar compilación en la nube → Descargar solo .config**. Actions solo ejecuta `make defconfig` cuando el usuario activa **Defconfig**; de lo contrario, la `.config` completa sigue siendo la entrada autoritativa. Sin Defconfig, la página añade silenciosamente `CONFIG_HAVE_DOT_CONFIG=y`; el backend no rechaza la solicitud por esa marca ni por comprobaciones propias de dependencias.
+6. La página carga `build-request.json`, `.config` y `config.buildinfo`. La zona horaria ofrece búsqueda en la lista IANA completa de OpenWrt/LuCI con formato `(UTC±HH:MM) Region/City`, además del tema LuCI, NTP y el **espejo de paquetes (APK / OPKG)**. Las zonas horarias de China continental usan automáticamente USTC → PKU → origen; las demás siguen el origen y un fallo del espejo nunca bloquea la compilación.
 
 > 💡 Después de flashear el firmware: accede desde el navegador a **192.168.1.1** (o a la dirección que hayas personalizado en la página de envío), con el usuario **root** y la **contraseña vacía** (establécela inmediatamente en el primer inicio de sesión); solo la fuente Lean LEDE tiene como contraseña inicial `password`.
 >
@@ -87,7 +87,7 @@ Consulta [ARCHITECTURE.md](../ARCHITECTURE.md) (bilingüe chino-inglés).
 
 ### Seguridad
 
-- Los Issues aceptan 1–3 adjuntos alojados en GitHub y detectan `build-request.json`, `.config` y `config.buildinfo`; se validan campos, listas permitidas, tamaño, firma de destino y opciones obligatorias de la fuente. La configuración completa es la entrada autoritativa por defecto. Solo al activar Defconfig expresamente se ejecuta una vez el `make defconfig` oficial; su salida se usa sin una comparación propia del proyecto de Target, Profile o arquitectura antes y después.
+- Los Issues aceptan 1–3 adjuntos alojados en GitHub y detectan `build-request.json`, `.config` y `config.buildinfo`; se validan campos, listas permitidas, tamaño, contrato de fuente e identidad mínima Target/Profile. La configuración completa es la entrada autoritativa. Solo al activar Defconfig se ejecuta una vez el `make defconfig` oficial; el backend no vuelve a juzgar dependencias, campos derivados de arquitectura, estado del tema ni requisitos propios de compilación.
 - El identificador de compilación (tag) se sanea para admitir solo caracteres chinos, letras latinas, números y guiones, y se usa únicamente para nombrar y mostrar el artifact;
 - Los permisos del workflow se limitan a `contents: read + issues: write`.
 

@@ -13,7 +13,7 @@ const MODULE_PATH = fileURLToPath(import.meta.url);
 const PROJECT_ROOT = resolve(dirname(MODULE_PATH), '..');
 
 const LF_EXTENSIONS = new Set([
-  '.config', '.css', '.html', '.js', '.json', '.md', '.mjs', '.sh', '.yaml', '.yml',
+  '.config', '.conf', '.css', '.html', '.js', '.json', '.md', '.mjs', '.sh', '.txt', '.yaml', '.yml',
 ]);
 const CRLF_EXTENSIONS = new Set(['.bat', '.cmd', '.ps1']);
 const LF_FILENAMES = new Set(['.gitattributes', '.gitignore', 'VERSION']);
@@ -97,9 +97,11 @@ export function inspectTextBuffer(buffer, expected) {
   const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   if (normalized.length > 0 && !normalized.endsWith('\n')) {
     issues.push('must end with exactly one newline');
-  }
-  if (/\n[\t ]*\n$/.test(normalized)) {
-    issues.push('has a blank line at EOF');
+  } else if (normalized.endsWith('\n')) {
+    const beforeFinalNewline = normalized.slice(0, -1);
+    if (/(?:^|\n)[\t ]*$/.test(beforeFinalNewline)) {
+      issues.push('has a blank line at EOF');
+    }
   }
   return [...new Set(issues)];
 }

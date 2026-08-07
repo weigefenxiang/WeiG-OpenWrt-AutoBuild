@@ -68,10 +68,15 @@ const textFormatFixtureRoot = mkdtempSync(join(tmpdir(), 'weig-text-format-'));
 try {
   const fixtureFiles = {
     'good.mjs': 'export const good = true;\n',
+    'good.txt': 'plain text\n',
     'good.bat': '@echo off\r\nexit /b 0\r\n',
     'bad-crlf.mjs': 'export const bad = true;\r\n',
     'bad-lf.bat': '@echo off\n',
+    'bad-no-eof.json': '{}',
+    'bad-eof.conf': 'VALUE=1\n\n',
     'bad-eof.json': '{}\n\n',
+    'bad-eof-spaces.json': '{}\n \n',
+    'bad-eof-crlf.bat': '@echo off\r\n\r\n',
   };
   for (const [name, content] of Object.entries(fixtureFiles)) {
     writeFileSync(join(textFormatFixtureRoot, name), content);
@@ -83,13 +88,17 @@ try {
     'bad-bom.md': '',
   }));
   const byPath = new Map(fixtureFailures.map((item) => [item.path, item.issues.join(' | ')]));
-  const fixtureOk = !byPath.has('good.mjs') && !byPath.has('good.bat') &&
+  const fixtureOk = !byPath.has('good.mjs') && !byPath.has('good.txt') && !byPath.has('good.bat') &&
     byPath.get('bad-crlf.mjs')?.includes('expected LF') &&
     byPath.get('bad-lf.bat')?.includes('expected CRLF') &&
+    byPath.get('bad-no-eof.json')?.includes('exactly one newline') &&
+    byPath.get('bad-eof.conf')?.includes('blank line at EOF') &&
     byPath.get('bad-eof.json')?.includes('blank line at EOF') &&
+    byPath.get('bad-eof-spaces.json')?.includes('blank line at EOF') &&
+    byPath.get('bad-eof-crlf.bat')?.includes('blank line at EOF') &&
     byPath.get('bad-bom.md')?.includes('BOM');
   fixtureOk
-    ? ok('text format fixtures: LF, CRLF, BOM and blank-EOF failures are classified generically')
+    ? ok('text format fixtures: LF, CRLF, BOM, missing EOF and blank-EOF failures are classified generically')
     : bad('text format fixtures', JSON.stringify(Object.fromEntries(byPath)).slice(0, 500));
 } catch (error) {
   bad('text format fixtures', error.message.slice(0, 300));
@@ -173,6 +182,22 @@ catalogEngineMatrixTest.status === 0
   ? ok('Catalog engine matrix: submitted-config validation, dependency closure, reverse disable and orphan pruning')
   : bad('Catalog engine matrix tests',
     (catalogEngineMatrixTest.stderr || catalogEngineMatrixTest.stdout || '').trim().slice(0, 320));
+
+const packageMirrorProjectionTest = spawnSync(process.execPath, [
+  join(ROOT, 'tools', 'gen-package-mirrors.mjs'), '--check',
+], { encoding: 'utf8' });
+packageMirrorProjectionTest.status === 0
+  ? ok('Package mirror projection: canonical JSON and public browser data are synchronized')
+  : bad('Package mirror projection',
+    (packageMirrorProjectionTest.stderr || packageMirrorProjectionTest.stdout || '').trim().slice(0, 320));
+
+const packageMirrorMatrixTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-package-mirror.mjs')], {
+  encoding: 'utf8',
+});
+packageMirrorMatrixTest.status === 0
+  ? ok('Package mirror matrix: APK, OPKG, source families, future branches, hybrid adapters and fallback')
+  : bad('Package mirror matrix',
+    (packageMirrorMatrixTest.stderr || packageMirrorMatrixTest.stdout || '').trim().slice(0, 500));
 
 const catalogPerformanceTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-catalog-performance.mjs')], {
   encoding: 'utf8',
@@ -310,6 +335,7 @@ for (const f of ['site/wrt/data/devices.json', 'site/wrt/data/i18n.json', 'site/
   'site/wrt/data/project.json', 'site/wrt/data/minimum-boot.json',
   'site/wrt/data/package-mirrors.json', 'site/wrt/data/source-build-requirements.json',
   'config/001.presets/minimum-boot.json', 'config/001.presets/source-build-requirements.json',
+  'config/001.presets/package-mirrors.json',
   'tools/plugins-meta.json', 'tools/plugin-sizes.json', 'tools/i18n-source.json',
   'tools/i18n-translations.json', 'tools/plugins-i18n.json', 'tools/device-catalog.json',
   'tools/package-baseline-360t7.json']) {
@@ -411,6 +437,8 @@ const minimumBootSource = JSON.parse(readFileSync(
   join(ROOT, 'config', '001.presets', 'minimum-boot.json'), 'utf8'));
 const minimumBootPublic = JSON.parse(readFileSync(
   join(ROOT, 'site', 'wrt', 'data', 'minimum-boot.json'), 'utf8'));
+const packageMirrorRules = JSON.parse(readFileSync(
+  join(ROOT, 'config', '001.presets', 'package-mirrors.json'), 'utf8'));
 const packageMirrors = JSON.parse(readFileSync(
   join(ROOT, 'site', 'wrt', 'data', 'package-mirrors.json'), 'utf8'));
 const firewallCandidates = minimumBootSource.firewallBackend?.candidates || [];
@@ -428,28 +456,32 @@ JSON.stringify(minimumBootSource) === JSON.stringify(minimumBootPublic) &&
   firewallChoiceOk
   ? ok(`推荐项预设:${minimumBootSource.items.length} 个可维护项目 + opkg + ${firewallCandidates.length} 个防火墙候选`)
   : bad('minimum-boot.json', '源文件/网页副本不一致、项目 ID/符号重复、opkg 或防火墙候选缺失');
-const mirrorIds = (packageMirrors.presets || []).map((preset) => preset.id);
+const mirrorIds = (packageMirrorRules.presets || []).map((preset) => preset.id);
+const publicMirrorIds = (packageMirrors.presets || []).map((preset) => preset.id);
 const menuCatalogIndex = JSON.parse(
   readFileSync(join(ROOT, 'site', 'wrt', 'data', 'menuconfig-index.json'), 'utf8'));
 const currentSourceIds = [...new Set([
   ...dev.devices.flatMap((device) => (device.sources || []).map((source) => source.id)),
   ...(menuCatalogIndex.sources || []).map((source) => source.id),
 ])].sort();
-const mainlandMirrorIds = new Set(['ustc', 'pku', 'tuna', 'bfsu']);
-const mainlandCoverage = currentSourceIds.every((sourceId) =>
-  packageMirrors.presets.some((preset) => mainlandMirrorIds.has(preset.id) && preset.roots?.[sourceId]));
-const mirrorById = new Map((packageMirrors.presets || []).map((preset) => [preset.id, preset]));
-const hanwckfMirrorContract =
-  mirrorById.get('ustc')?.roots?.hanwckf === 'mirrors.ustc.edu.cn/immortalwrt' &&
-  mirrorById.get('pku')?.roots?.hanwckf === 'mirrors.pku.edu.cn/immortalwrt';
-const mirrorRootsOk = packageMirrors.schema === 1 &&
-  ['auto', 'ustc', 'tuna', 'bfsu', 'pku', 'official'].every((id) => mirrorIds.includes(id)) &&
-  new Set(mirrorIds).size === mirrorIds.length && mainlandCoverage && hanwckfMirrorContract &&
-  packageMirrors.presets.every((preset) => preset.id === 'auto' ||
-    Object.values(preset.roots || {}).every((root) => /^[A-Za-z0-9.-]+(?:\/[A-Za-z0-9._/-]+)?$/.test(root)));
-mirrorRootsOk
-  ? ok(`软件源镜像:${currentSourceIds.join('/')} 均有中国内地镜像，网页与 Actions 共用白名单`)
-  : bad('package-mirrors.json', '镜像 ID、根路径、安全格式或现行源码的中国内地覆盖不完整');
+const knownFamilies = new Set(Object.values(packageMirrorRules.sourceFamilies || {}));
+const mirrorRulesOk = packageMirrorRules.schema === 2 && packageMirrors.schema === 2 &&
+  ['auto', 'source-default', 'ustc', 'pku'].every((id) => mirrorIds.includes(id)) &&
+  JSON.stringify(mirrorIds) === JSON.stringify(publicMirrorIds) &&
+  new Set(mirrorIds).size === mirrorIds.length &&
+  currentSourceIds.every((sourceId) => packageMirrorRules.sourceFamilies?.[sourceId]) &&
+  [...knownFamilies].every((family) => Array.isArray(packageMirrorRules.origins?.[family]) &&
+    packageMirrorRules.origins[family].length > 0) &&
+  packageMirrorRules.adapters.some((adapter) => adapter.manager === 'apk') &&
+  packageMirrorRules.adapters.some((adapter) => adapter.manager === 'opkg') &&
+  packageMirrorRules.policies?.neverFailBuild === true &&
+  packageMirrorRules.policies?.auto?.join(',') === 'ustc,pku,source-default' &&
+  packageMirrorRules.policies?.manualFailure?.join(',') === 'source-default' &&
+  packageMirrorRules.presets.every((preset) => Object.values(preset.roots || {}).every((root) =>
+    /^https:\/\/[A-Za-z0-9.-]+(?:\/[A-Za-z0-9._/-]+)?$/.test(root)));
+mirrorRulesOk
+  ? ok(`软件包镜像:${currentSourceIds.join('/')} 使用 schema 2 规范、APK/OPKG 适配器与非阻断回退`)
+  : bad('package-mirrors.json', '规范/网页投影、源码 family、APK/OPKG 适配器或回退策略不完整');
   const html = readFileSync(join(ROOT, 'site', 'wrt', 'index.html'), 'utf8');
   const js = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
   const catalogLoaderJs = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.js'), 'utf8');
@@ -635,6 +667,7 @@ mirrorRootsOk
   const textFormatGateContract =
     textFormatSource.includes("const LF_EXTENSIONS = new Set") &&
     textFormatSource.includes("const CRLF_EXTENSIONS = new Set") &&
+    textFormatSource.includes("'.conf'") && textFormatSource.includes("'.txt'") &&
     textFormatSource.includes("UTF-8 BOM is not allowed") &&
     textFormatSource.includes("has a blank line at EOF") &&
     textFormatSource.includes("No files were changed automatically") &&
@@ -712,12 +745,16 @@ mirrorRootsOk
   catalogInteractionUiContract
     ? ok('Catalog interaction UI: global violation toast removed, conflicts use N/M/Y modal, and legacy JSON is recovered safely')
     : bad('Catalog interaction UI', 'global violation toast, conflict modal, or legacy JSON recovery is incomplete');
-  const shanghaiOpkgContract = js.includes("const MAINLAND_PACKAGE_MIRRORS = ['ustc', 'pku', 'tuna', 'bfsu']") &&
-    js.includes("if (state.timezone !== 'Asia/Shanghai') return 'auto'") &&
-    js.includes('opkgSelectionExplicit = true') && mainlandCoverage;
-  shanghaiOpkgContract
-    ? ok('上海时区默认选择当前源码可用的中国内地 opkg 镜像，用户手选后不覆盖')
-    : bad('Shanghai opkg default', '上海时区默认镜像、用户显式选择保护或现行源码镜像覆盖缺失');
+  const browserPackageMirrorContract =
+    js.includes('const MAINLAND_BROWSER_TIMEZONES = new Set') &&
+    js.includes('Intl.DateTimeFormat().resolvedOptions().timeZone') &&
+    js.includes("browserUsesMainlandPackageMirror() ? 'auto' : 'source-default'") &&
+    js.includes('packageMirrorSelectionExplicit = true') &&
+    html.includes('data-i18n="fw.packageMirror"') && html.includes('id="packageMirrorBox"') &&
+    !html.includes('id="opkgBox"');
+  browserPackageMirrorContract
+    ? ok('浏览器中国内地时区默认自动 USTC→PKU，其他地区跟随源码；用户手选后不覆盖')
+    : bad('browser package mirror default', '浏览器时区、自动回退、显式选择保护或新控件缺失');
   const submitLayoutContract = html.includes('class="submit-primary-fields"') &&
     html.indexOf('id="lanipBox"') < html.indexOf('id="rootpwBox"') &&
     html.indexOf('id="rootpwBox"') < html.indexOf('id="tagBox"') &&
@@ -783,7 +820,7 @@ mirrorRootsOk
       variant: 'qihoo_360t7', plugins: [], tag: 'boundary-fixture', config: fixtureConfig,
       use_defconfig: false,
       audit: { recommended: { enabled: false, requested: [] }, defconfig: { enabled: false } },
-      firmware: { zonename: 'Asia/Shanghai', timezone: 'CST-8', theme: 'luci-theme-argon', ntp: 'cn', opkg: 'ustc' },
+      firmware: { zonename: 'Asia/Shanghai', timezone: 'CST-8', theme: 'luci-theme-argon', ntp: 'cn', packageMirror: 'ustc' },
     };
     const requestPath = join(backendBoundaryFixtureRoot, 'request.json');
     const submittedPath = join(backendBoundaryFixtureRoot, 'submitted.config');
@@ -1073,6 +1110,8 @@ mirrorRootsOk
   const requestParser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
   const genericDiy = readFileSync(join(ROOT, 'Shell', 'diy2-generic.sh'), 'utf8');
   const mirrorDiy = readFileSync(join(ROOT, 'Shell', 'apply-package-mirror.sh'), 'utf8');
+  const mirrorEngine = readFileSync(join(ROOT, 'tools', 'package-mirror-engine.mjs'), 'utf8');
+  const mirrorGenerator = readFileSync(join(ROOT, 'tools', 'gen-package-mirrors.mjs'), 'utf8');
   const issueFieldIds = [...issueForm.matchAll(/^\s+id:\s*([A-Za-z0-9_-]+)\s*$/gm)].map((m) => m[1]);
   const issueFormIsSingleAttachment = issueFieldIds.length === 1 && issueFieldIds[0] === 'request';
   const contractOk = issueForm.includes('build-request.json') &&
@@ -1168,25 +1207,34 @@ mirrorRootsOk
     ? ok('Actions 独立 .img.gz、分类资料、桥接清理与 14/30 天保留期已接通')
     : bad('Actions artifact contract', '独立固件发布、分类、清理或旧产物链仍有问题');
   const firmwareSettingsContract = workflow.includes('ISSUE_TITLE: ${{ github.event.issue.title }}') &&
+    workflow.includes('Apply package mirror / 应用软件包镜像（APK/OPKG）') &&
     workflow.includes('Verify firmware settings / 核验固件设置') &&
-    workflow.includes('firmware-settings.txt') &&
+    workflow.includes('package-mirror-report.json') &&
+    workflow.includes('package_mirror_requested=') &&
+    workflow.includes('package_mirror_effective=') &&
+    workflow.includes('test -s "openwrt/files/etc/uci-defaults/10-weig-system" ||') &&
+    workflow.includes('10-weig-timezone') &&
     requestParser.includes('const buildRef = requestRef ? `${requestRef}-${tag}` : tag;') &&
     requestParser.includes('固件设置快照不一致') &&
+    requestParser.includes('fw.packageMirror || fw.opkg') &&
+    requestParser.includes('package_mirror_id=') &&
+    !requestParser.includes('opkg_mirror=') &&
     !requestParser.includes('CONFIG_PACKAGE_${theme}=y') &&
     !workflow.includes('所选主题未保留') &&
-    genericDiy.includes('files/etc/weig-build-info') &&
     genericDiy.includes("luci.main.mediaurlbase") &&
-    genericDiy.includes("printf '%s\\n'") &&
-    !genericDiy.includes("\\\\''") &&
-    requestParser.includes("package-mirrors.json") &&
-    genericDiy.includes('apply-package-mirror.sh') &&
-    mirrorDiy.includes('downloads\\.openwrt\\.org') &&
-    mirrorDiy.includes('downloads\\.immortalwrt\\.org') &&
-    mirrorDiy.includes('Selected package mirror applied') &&
-    mirrorDiy.includes('Selected package mirror has no feed for this source/branch');
+    !genericDiy.includes('apply-package-mirror.sh') &&
+    mirrorDiy.includes('WRT_PACKAGE_MIRROR_ID') &&
+    mirrorDiy.includes('package_mirror_requested=') &&
+    mirrorDiy.includes('return 0') &&
+    mirrorEngine.includes('CONFIG_USE_APK') &&
+    mirrorEngine.includes('FeedSourcesAppendAPK') &&
+    mirrorEngine.includes('FeedSourcesAppendOPKG') &&
+    mirrorEngine.includes('commitChanges(stage.changed)') &&
+    mirrorGenerator.includes('package mirror projection is current') &&
+    !workflow.includes('WRT_OPKG_MIRROR') && !workflow.includes('steps.req.outputs.opkg_');
   firmwareSettingsContract
-    ? ok('请求编号 Artifact 前缀与时区/主题/NTP/opkg 固件内审计链已接通')
-    : bad('firmware settings contract', '请求编号、提交快照、DIY、主题或 opkg 核验缺失');
+    ? ok('请求编号、APK/OPKG 镜像报告与时区/主题/NTP 固件内审计链已接通')
+    : bad('firmware settings contract', '请求编号、镜像框架、固件快照或旧 opkg 传递链仍有问题');
   const upstreamConfigContract =
     !workflow.includes('config-overrides.json') &&
     !workflow.includes('config-overrides.diff') &&

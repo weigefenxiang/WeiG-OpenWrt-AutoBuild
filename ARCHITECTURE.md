@@ -16,11 +16,12 @@
 ├─ ARCHITECTURE.md               # 本文档 / this document
 ├─ README.md + translations/     # 多语言说明 / multilingual READMEs
 ├─ .github/workflows/
-│  ├─ custom-build.yml           # Issue 附件权威构建 + 隐藏 smoke 兼容 / authoritative Issue attachment + hidden smoke compatibility
+│  ├─ custom-build.yml           # Issue 附件权威构建 / authoritative Issue-attachment build
 │  └─ cancel-build.yml           # Issue 作者 /cancel 取消自己的构建 / Issue-author-only build cancellation
 ├─ config/<品牌>/<机型>/          # base 配置,按品牌分层 / base configs, grouped by brand
 │  └─ 360/360t7/*.config         # 360T7 源码/分支/Profile 独立配置 / per-source, branch and profile configs
-├─ Shell/                        # diy 脚本(默认 IP/时区/驱动替换) / diy scripts (defaults, driver swaps)
+├─ Shell/                        # diy 脚本 + 通用软件包镜像框架 / diy scripts + shared package-mirror framework
+├─ config/001.presets/package-mirrors.json # APK/OPKG 镜像唯一规范数据 / canonical APK/OPKG mirror rules
 ├─ site/wrt/                     # 定制页面,整目录可搬家 / the customizer page, fully portable
 │  ├─ index.html / app.css / app.js
 │  ├─ lib/catalog-engine.js     # 浏览器/Node 共用的 Catalog 规则解释器 / shared Catalog rule engine for browser and Node
@@ -50,6 +51,8 @@
    ├─ parse-request.mjs          # 载荷、安全白名单、Target/Profile 身份与 Catalog 版本契约 / payload, safety allowlists, Target/Profile identity, and Catalog version contract
    ├─ check-text-format.mjs      # 变更文本 LF/CRLF/BOM/EOF 门禁 / changed-text LF/CRLF/BOM/EOF gate
    ├─ sync-blog.mjs              # Unicode 安全逐文件镜像+分块哈希回滚 / Unicode-safe iterative mirror + chunked-hash rollback
+   ├─ gen-package-mirrors.mjs    # 生成网页精简镜像表 / generates the public mirror projection
+   ├─ package-mirror-engine.mjs  # APK/OPKG 检测、回退与原子改写 / APK/OPKG detection, fallback and atomic rewrite
    └─ serve.mjs                  # 本地静态服务器 / local static server
 ```
 
@@ -75,9 +78,7 @@ Catalog 顶部定位框与 Advanced 搜索是两条独立索引：前者只覆�
 
 The Catalog locator and Advanced search use separate indexes. The locator covers only Source, Branch, Target System, Subtarget, and Target Profile; Advanced indexes only package/option names and localized names, never descriptions, paths, or CONFIG symbols. Every Advanced option stays on one row: the left column shows the ID without `CONFIG_PACKAGE_`, the flexible right-aligned middle shows locale text plus upstream English, and fixed N/M/Y controls remain unobstructed. Hover, focus, or tap on the ID/description shows the full `CONFIG_*` symbol, locale text, English text, and menu path without labels such as Chinese, English, Index, or Path. `Top level`, name search, Selected only, Origin, and `N/M/Y ?` remain one horizontal toolbar.
 
-选择 `Asia/Shanghai` 且用户未手动选择镜像时，前端从当前 Source 的中国内地镜像白名单中选择第一个可用项；设备清单与 Catalog 清单中的每个现行 Source 都必须至少有一个中国镜像。hanwckf 的 `openwrt-21.02` 兼容源继续复用 USTC/PKU 的 ImmortalWrt 镜像路径。Issue 标题把构建标识放在请求时间戳后，解析器生成 `请求时间戳-构建标识` 的 `build_ref`，因此 CONFIG、日志和固件 Artifact 共用该前缀。
-
-With `Asia/Shanghai`, and before an explicit mirror choice, the frontend selects the first available Mainland China mirror for the current Source; every active Source from both the device registry and Catalog index must expose at least one China mirror. The hanwckf `openwrt-21.02` compatibility source continues to reuse the USTC/PKU ImmortalWrt mirror paths. The Issue title places the build tag after the request timestamp, and the parser emits `request-stamp-build-tag` as `build_ref`, so CONFIG, log, and firmware Artifacts share that prefix.
+软件包镜像由 `config/001.presets/package-mirrors.json` 唯一维护：JSON 记录 Source family、官方根地址、APK/OPKG adapter、镜像根地址与回退策略；`gen-package-mirrors.mjs` 生成不含真实 URL 的网页投影。浏览器按实际 IANA 时区选择请求策略：中国内地时区默认 `auto`，其他地区默认 `source-default`。源码检出并完成可选 Defconfig 后，`package-mirror-engine.mjs` 读取真实 `.config`、规范 JSON 登记的 capability 文件和明确 adapter 文件，识别 APK、OPKG 或混合状态；Branch 只进入报告，不用于硬编码判断。自动策略为 USTC → PKU → 源码默认，手动镜像失败直接回源码默认；探测失败、文件缺失和内部错误均写入 `package-mirror-report.json` 并继续构建。已知官方/镜像根地址才会原子替换，陌生的用户 `CONFIG_VERSION_REPO` 保持不动。Issue 标题把构建标识放在请求时间戳后，解析器生成 `请求时间戳-构建标识` 的 `build_ref`，因此 CONFIG、日志和固件 Artifact 共用该前缀。
 
 ## Catalog 选择状态 / Catalog selection state
 
@@ -106,7 +107,7 @@ Target/Profile 是后端唯一核对的 `.config` 身份：配置必须且只能
 1. 页面在未勾选 Defconfig 时静默补入前端构建标志 `CONFIG_HAVE_DOT_CONFIG=y`，然后下载含完整 `.config` 的 `build-request.json` 并打开 Issue；后端不因该标志缺失而拒绝请求 / when Defconfig is disabled, the page silently adds the frontend build marker `CONFIG_HAVE_DOT_CONFIG=y`, then downloads a request containing the complete `.config`; the backend does not reject a request because this marker is missing
 2. 新手 Issue 只有一个必填附件框:上传网页生成的 `build-request.json` 即可;已有 `.config` / `config.buildinfo` 先由网页识别并包装。解析器仍兼容带网页元数据头的原始配置 / the beginner Issue has one required attachment field: upload the web-generated `build-request.json`; existing configs are identified and wrapped by the page first, while the parser remains compatible with raw configs carrying web metadata
 3. schema 5 请求按固定 Catalog index 中的版本契约核对源码 commit，并复制 `submitted.config`。解析器只核对安全白名单与最小 Target/Profile 身份，不判断插件依赖、人工兼容规则、架构派生字段、主题包或构建必需项。用户勾选时运行一次官方 `make defconfig`；未勾选时直接进入下载/编译。并行编译失败后使用 `make -j1 V=s BUILD_LOG=1` 生成详细诊断日志 / schema-5 requests verify the pinned source commit through the fixed Catalog index and copy `submitted.config`. The parser checks only safety allowlists and minimal Target/Profile identity; it does not judge plugin dependencies, manual compatibility rules, derived architecture fields, theme-package state, or build requirements. Optional upstream `make defconfig` runs only when requested; otherwise download/compile starts directly. Failed parallel compilation retries with `make -j1 V=s BUILD_LOG=1`.
-4. 先核验固件设置快照并上传 config + build-metadata artifact(编译失败也能拿到)→ 下载与编译按 CPU+1 动态并发,原始输出实时显示并完整写入日志；时区/主题/NTP/opkg 同时写入固件内 `/etc/weig-build-info` / verify the firmware-settings snapshot and upload config + build metadata first; downloads and compilation use CPU+1 dynamic concurrency, streaming raw output live while recording timezone/theme/NTP/opkg in `/etc/weig-build-info`
+4. 完成可选 Defconfig 后运行非阻断软件包镜像框架，生成 `package-mirror-report.json`，再核验固件设置快照并上传 config + build-metadata artifact；下载与编译按 CPU+1 动态并发，原始输出实时显示并完整写入日志。时区/主题/NTP、请求镜像、生效镜像与包管理器同时写入固件内 `/etc/weig-build-info` / after optional Defconfig, run the non-blocking package-mirror framework, emit `package-mirror-report.json`, verify the firmware snapshot, and upload config/build metadata; downloads and compilation use CPU+1 while the firmware records timezone/theme/NTP plus requested/effective mirror and package manager in `/etc/weig-build-info`
 5. Catalog 标准关系只在网页交互层由共享引擎处理；人工 `config-rules`、后端整配置 Catalog 校验和隐藏 smoke 配置生成器均已删除。后端不重复推断插件依赖，最终解析由可选的官方 Defconfig 或上游构建系统完成。并行编译失败时以 `make -j1 V=s BUILD_LOG=1` 生成诊断，仍失败才结束并上传日志 / Catalog-standard relations are handled only by the shared browser interaction engine. Manual `config-rules`, backend whole-config Catalog validation, and the hidden smoke config generator are removed. The backend does not re-infer package dependencies; optional upstream Defconfig or the upstream build system resolves the final configuration. A failed parallel build uses `make -j1 V=s BUILD_LOG=1` for diagnostics before failing and uploading logs.
 6. `site-version.yml` 在 `site/wrt/**` 或 `VERSION` push 后按内容指纹同步根 `VERSION` 与静态 `site-version.json`；旧八位请求继续兼容，actor 条件阻断机器人提交循环 / site-version automation keeps root `VERSION` and static `site-version.json` together, accepts legacy eight-digit requests, and prevents bot-commit loops
 

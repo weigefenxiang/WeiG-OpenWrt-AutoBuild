@@ -1061,17 +1061,17 @@
    "vi": "Các mục sau không có hiệu lực với nguồn hiện tại (nguồn này không có): {list}"
   },
   "submit.confirm": {
-   "zh-CN": "请确认后再提交\n品牌:{brand}\n型号:{device}\n源码:{source}\n版本:{version}\n分区:{variant}\n插件:{n} 个\n时区:{timezone}\n固件主题:{theme}\nNTP:{ntp}\nopkg:{opkg}\n构建标识:{tag}\n网页版本:{pageVersion}",
-   "zh-TW": "請確認後再送出\n品牌:{brand}\n型號:{device}\n原始碼:{source}\n版本:{version}\n分割區:{variant}\n套件:{n} 個\n時區:{timezone}\n韌體主題:{theme}\nNTP:{ntp}\nopkg:{opkg}\n建置標識:{tag}\n網頁版本:{pageVersion}",
-   "en": "Confirm before submitting\nBrand: {brand}\nModel: {device}\nSource: {source}\nVersion: {version}\nPartition: {variant}\nPlugins: {n}\nTimezone: {timezone}\nFirmware theme: {theme}\nNTP: {ntp}\nopkg: {opkg}\nBuild tag: {tag}\nPage version: {pageVersion}",
-   "ru": "Проверьте перед отправкой\nБренд: {brand}\nМодель: {device}\nИсходники: {source}\nВерсия: {version}\nРаздел: {variant}\nПлагины: {n}\nЧасовой пояс: {timezone}\nТема прошивки: {theme}\nNTP: {ntp}\nopkg: {opkg}\nМетка сборки: {tag}\nВерсия страницы: {pageVersion}",
-   "es": "Confirma antes de enviar\nMarca: {brand}\nModelo: {device}\nFuente: {source}\nVersión: {version}\nPartición: {variant}\nComplementos: {n}\nZona horaria: {timezone}\nTema del firmware: {theme}\nNTP: {ntp}\nopkg: {opkg}\nEtiqueta: {tag}\nVersión web: {pageVersion}",
-   "pt": "Confirme antes de enviar\nMarca: {brand}\nModelo: {device}\nFonte: {source}\nVersão: {version}\nPartição: {variant}\nPlugins: {n}\nFuso horário: {timezone}\nTema do firmware: {theme}\nNTP: {ntp}\nopkg: {opkg}\nIdentificador: {tag}\nVersão da página: {pageVersion}",
-   "ja": "送信前に確認してください\nブランド: {brand}\n機種: {device}\nソース: {source}\nバージョン: {version}\nパーティション: {variant}\nプラグイン: {n}\nタイムゾーン: {timezone}\nファームウェアテーマ: {theme}\nNTP: {ntp}\nopkg: {opkg}\nビルド識別子: {tag}\nページ版: {pageVersion}",
-   "ko": "제출 전에 확인하세요\n브랜드: {brand}\n모델: {device}\n소스: {source}\n버전: {version}\n파티션: {variant}\n플러그인: {n}\n시간대: {timezone}\n펌웨어 테마: {theme}\nNTP: {ntp}\nopkg: {opkg}\n빌드 식별자: {tag}\n페이지 버전: {pageVersion}",
-   "de": "Vor dem Absenden prüfen\nMarke: {brand}\nModell: {device}\nQuelle: {source}\nVersion: {version}\nPartition: {variant}\nPlugins: {n}\nZeitzone: {timezone}\nFirmware-Theme: {theme}\nNTP: {ntp}\nopkg: {opkg}\nBuild-Kennung: {tag}\nSeitenversion: {pageVersion}",
-   "fr": "Vérifiez avant l’envoi\nMarque : {brand}\nModèle : {device}\nSource : {source}\nVersion : {version}\nPartition : {variant}\nModules : {n}\nFuseau : {timezone}\nThème du firmware : {theme}\nNTP : {ntp}\nopkg : {opkg}\nIdentifiant : {tag}\nVersion de page : {pageVersion}",
-   "vi": "Xác nhận trước khi gửi\nHãng: {brand}\nMẫu: {device}\nNguồn: {source}\nPhiên bản: {version}\nPhân vùng: {variant}\nPlugin: {n}\nMúi giờ: {timezone}\nGiao diện firmware: {theme}\nNTP: {ntp}\nopkg: {opkg}\nNhãn bản dựng: {tag}\nPhiên bản trang: {pageVersion}"
+   "zh-CN": "请确认后再提交\n品牌:{brand}\n型号:{device}\n源码:{source}\n版本:{version}\n分区:{variant}\n插件:{n} 个\n时区:{timezone}\n固件主题:{theme}\nNTP:{ntp}\n软件包镜像:{packageMirror}\n构建标识:{tag}\n网页版本:{pageVersion}",
+   "zh-TW": "請確認後再送出\n品牌:{brand}\n型號:{device}\n原始碼:{source}\n版本:{version}\n分割區:{variant}\n套件:{n} 個\n時區:{timezone}\n韌體主題:{theme}\nNTP:{ntp}\n軟體套件鏡像:{packageMirror}\n建置標識:{tag}\n網頁版本:{pageVersion}",
+   "en": "Confirm before submitting\nBrand: {brand}\nModel: {device}\nSource: {source}\nVersion: {version}\nPartition: {variant}\nPlugins: {n}\nTimezone: {timezone}\nFirmware theme: {theme}\nNTP: {ntp}\nPackage mirror: {packageMirror}\nBuild tag: {tag}\nPage version: {pageVersion}",
+   "ru": "Проверьте перед отправкой\nБренд: {brand}\nМодель: {device}\nИсходники: {source}\nВерсия: {version}\nРаздел: {variant}\nПлагины: {n}\nЧасовой пояс: {timezone}\nТема прошивки: {theme}\nNTP: {ntp}\nЗеркало пакетов: {packageMirror}\nМетка сборки: {tag}\nВерсия страницы: {pageVersion}",
+   "es": "Confirma antes de enviar\nMarca: {brand}\nModelo: {device}\nFuente: {source}\nVersión: {version}\nPartición: {variant}\nComplementos: {n}\nZona horaria: {timezone}\nTema del firmware: {theme}\nNTP: {ntp}\nEspejo de paquetes: {packageMirror}\nEtiqueta: {tag}\nVersión web: {pageVersion}",
+   "pt": "Confirme antes de enviar\nMarca: {brand}\nModelo: {device}\nFonte: {source}\nVersão: {version}\nPartição: {variant}\nPlugins: {n}\nFuso horário: {timezone}\nTema do firmware: {theme}\nNTP: {ntp}\nEspelho de pacotes: {packageMirror}\nIdentificador: {tag}\nVersão da página: {pageVersion}",
+   "ja": "送信前に確認してください\nブランド: {brand}\n機種: {device}\nソース: {source}\nバージョン: {version}\nパーティション: {variant}\nプラグイン: {n}\nタイムゾーン: {timezone}\nファームウェアテーマ: {theme}\nNTP: {ntp}\nパッケージミラー: {packageMirror}\nビルド識別子: {tag}\nページ版: {pageVersion}",
+   "ko": "제출 전에 확인하세요\n브랜드: {brand}\n모델: {device}\n소스: {source}\n버전: {version}\n파티션: {variant}\n플러그인: {n}\n시간대: {timezone}\n펌웨어 테마: {theme}\nNTP: {ntp}\n패키지 미러: {packageMirror}\n빌드 식별자: {tag}\n페이지 버전: {pageVersion}",
+   "de": "Vor dem Absenden prüfen\nMarke: {brand}\nModell: {device}\nQuelle: {source}\nVersion: {version}\nPartition: {variant}\nPlugins: {n}\nZeitzone: {timezone}\nFirmware-Theme: {theme}\nNTP: {ntp}\nPaketspiegel: {packageMirror}\nBuild-Kennung: {tag}\nSeitenversion: {pageVersion}",
+   "fr": "Vérifiez avant l’envoi\nMarque : {brand}\nModèle : {device}\nSource : {source}\nVersion : {version}\nPartition : {variant}\nModules : {n}\nFuseau : {timezone}\nThème du firmware : {theme}\nNTP : {ntp}\nMiroir de paquets : {packageMirror}\nIdentifiant : {tag}\nVersion de page : {pageVersion}",
+   "vi": "Xác nhận trước khi gửi\nHãng: {brand}\nMẫu: {device}\nNguồn: {source}\nPhiên bản: {version}\nPhân vùng: {variant}\nPlugin: {n}\nMúi giờ: {timezone}\nGiao diện firmware: {theme}\nNTP: {ntp}\nMáy chủ gương gói: {packageMirror}\nNhãn bản dựng: {tag}\nPhiên bản trang: {pageVersion}"
   },
   "submit.m1.title": {
    "zh-CN": "生成请求并提交 Issue(推荐)",
@@ -2191,18 +2191,18 @@
    "fr": "Serveurs NTP",
    "vi": "Máy chủ NTP"
   },
-  "fw.opkg": {
-   "zh-CN": "opkg 镜像",
-   "zh-TW": "opkg 鏡像",
-   "en": "opkg mirror",
-   "ru": "Зеркало opkg",
-   "es": "Espejo opkg",
-   "pt": "Espelho opkg",
-   "ja": "opkg ミラー",
-   "ko": "opkg 미러",
-   "de": "opkg-Spiegel",
-   "fr": "Miroir opkg",
-   "vi": "Máy chủ gương opkg"
+  "fw.packageMirror": {
+   "zh-CN": "软件包镜像（APK / OPKG）",
+   "zh-TW": "軟體套件鏡像（APK / OPKG）",
+   "en": "Package mirror (APK / OPKG)",
+   "ru": "Зеркало пакетов (APK / OPKG)",
+   "es": "Espejo de paquetes (APK / OPKG)",
+   "pt": "Espelho de pacotes (APK / OPKG)",
+   "ja": "パッケージミラー（APK / OPKG）",
+   "ko": "패키지 미러 (APK / OPKG)",
+   "de": "Paketspiegel (APK / OPKG)",
+   "fr": "Miroir de paquets (APK / OPKG)",
+   "vi": "Máy chủ gương gói (APK / OPKG)"
   },
   "fw.ntp.cn": {
    "zh-CN": "中国大陆",
@@ -2242,19 +2242,6 @@
    "de": "Cloudflare / Google",
    "fr": "Cloudflare / Google",
    "vi": "Cloudflare / Google"
-  },
-  "fw.opkg.auto": {
-   "zh-CN": "跟随源码默认",
-   "zh-TW": "跟隨原始碼預設",
-   "en": "Use source default",
-   "ru": "По умолчанию источника",
-   "es": "Predeterminado de la fuente",
-   "pt": "Padrão da fonte",
-   "ja": "ソース既定値",
-   "ko": "소스 기본값",
-   "de": "Standard der Quelle",
-   "fr": "Valeur par défaut de la source",
-   "vi": "Mặc định của nguồn"
   },
   "import.noMatch": {
    "zh-CN": "配置目标签名与当前清单中的机型不匹配",

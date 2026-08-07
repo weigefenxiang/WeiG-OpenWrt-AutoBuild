@@ -193,7 +193,7 @@ jobs:
             echo "| POSIX 时区 / Timezone | \`${{ steps.req.outputs.timezone }}\` |"
             echo "| 固件主题 / Theme | \`${{ steps.req.outputs.theme }}\` |"
             echo "| NTP | \`${{ steps.req.outputs.ntp_id }}\` · \`${{ steps.req.outputs.ntp_1 }}\` · \`${{ steps.req.outputs.ntp_2 }}\` · \`${{ steps.req.outputs.ntp_3 }}\` · \`${{ steps.req.outputs.ntp_4 }}\` |"
-            echo "| opkg | \`${{ steps.req.outputs.opkg_id }}\` · \`${{ steps.req.outputs.opkg_mirror }}\` |"
+            echo "| 软件包镜像 / Package mirror | \`${{ steps.req.outputs.package_mirror_id }}\` |"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
           df -hT
@@ -217,34 +217,11 @@ jobs:
           WRT_NTP_3: ${{ steps.req.outputs.ntp_3 }}
           WRT_NTP_4: ${{ steps.req.outputs.ntp_4 }}
           WRT_NTP_ID: ${{ steps.req.outputs.ntp_id }}
-          WRT_OPKG_ID: ${{ steps.req.outputs.opkg_id }}
-          WRT_OPKG_MIRROR: ${{ steps.req.outputs.opkg_mirror }}
           WRT_PAGE_VERSION: ${{ steps.req.outputs.page_version }}
           WRT_BUILD_REF: ${{ steps.req.outputs.build_ref }}
         run: |
           cd openwrt
           "$GITHUB_WORKSPACE/Shell/${{ steps.req.outputs.diy2 }}"
-
-      - name: Verify firmware settings / 核验固件设置
-        if: steps.req.outputs.firmware_snapshot == '1'
-        env:
-          EXPECTED_ZONENAME: ${{ steps.req.outputs.zonename }}
-          EXPECTED_TIMEZONE: ${{ steps.req.outputs.timezone }}
-          EXPECTED_THEME: ${{ steps.req.outputs.theme }}
-          EXPECTED_NTP: ${{ steps.req.outputs.ntp_id }}
-          EXPECTED_OPKG: ${{ steps.req.outputs.opkg_id }}
-        run: |
-          set -euo pipefail
-          INFO="openwrt/files/etc/weig-build-info"
-          DEFAULTS="openwrt/files/etc/uci-defaults/10-weig-system"
-          test -s "$INFO"
-          test -s "$DEFAULTS"
-          grep -Fx "zonename=$EXPECTED_ZONENAME" "$INFO"
-          grep -Fx "timezone=$EXPECTED_TIMEZONE" "$INFO"
-          grep -Fx "theme=$EXPECTED_THEME" "$INFO"
-          grep -Fx "ntp=$EXPECTED_NTP" "$INFO"
-          grep -Fx "opkg=$EXPECTED_OPKG" "$INFO"
-          cp "$INFO" firmware-settings.txt
 
       - name: Set custom LAN IP / 自定义后台登录地址
         if: steps.req.outputs.lanip != '192.168.1.1'
@@ -286,6 +263,53 @@ jobs:
             : > defconfig.diff
             : > defconfig.log
           fi
+
+      - name: Apply package mirror / 应用软件包镜像（APK/OPKG）
+        env:
+          WRT_WORKSPACE: ${{ github.workspace }}
+          WRT_PACKAGE_MIRROR_ID: ${{ steps.req.outputs.package_mirror_id }}
+          WRT_SOURCE_ID: ${{ steps.req.outputs.source }}
+          WRT_BRANCH: ${{ steps.req.outputs.branch }}
+          WRT_ZONENAME: ${{ steps.req.outputs.zonename }}
+          WRT_TIMEZONE: ${{ steps.req.outputs.timezone }}
+          WRT_THEME: ${{ steps.req.outputs.theme }}
+          WRT_NTP_1: ${{ steps.req.outputs.ntp_1 }}
+          WRT_NTP_2: ${{ steps.req.outputs.ntp_2 }}
+          WRT_NTP_3: ${{ steps.req.outputs.ntp_3 }}
+          WRT_NTP_4: ${{ steps.req.outputs.ntp_4 }}
+          WRT_NTP_ID: ${{ steps.req.outputs.ntp_id }}
+          WRT_PAGE_VERSION: ${{ steps.req.outputs.page_version }}
+          WRT_BUILD_REF: ${{ steps.req.outputs.build_ref }}
+          WRT_PACKAGE_MIRROR_REPORT: ${{ github.workspace }}/package-mirror-report.json
+        run: |
+          cd openwrt
+          "$GITHUB_WORKSPACE/Shell/apply-package-mirror.sh"
+
+      - name: Verify firmware settings / 核验固件设置
+        if: steps.req.outputs.firmware_snapshot == '1'
+        env:
+          EXPECTED_ZONENAME: ${{ steps.req.outputs.zonename }}
+          EXPECTED_TIMEZONE: ${{ steps.req.outputs.timezone }}
+          EXPECTED_THEME: ${{ steps.req.outputs.theme }}
+          EXPECTED_NTP: ${{ steps.req.outputs.ntp_id }}
+          EXPECTED_PACKAGE_MIRROR: ${{ steps.req.outputs.package_mirror_id }}
+        run: |
+          set -euo pipefail
+          INFO="openwrt/files/etc/weig-build-info"
+          test -s "$INFO"
+          test -s "openwrt/files/etc/uci-defaults/10-weig-system" || \
+            test -s "openwrt/files/etc/uci-defaults/10-weig-timezone"
+          grep -Fx "zonename=$EXPECTED_ZONENAME" "$INFO"
+          grep -Fx "timezone=$EXPECTED_TIMEZONE" "$INFO"
+          grep -Fx "theme=$EXPECTED_THEME" "$INFO"
+          grep -Fx "ntp=$EXPECTED_NTP" "$INFO"
+          grep -Fx "package_mirror_requested=$EXPECTED_PACKAGE_MIRROR" "$INFO"
+          grep -Eq '^package_mirror_effective=.+$' "$INFO"
+          grep -Eq '^package_managers=.+$' "$INFO"
+          cp "$INFO" firmware-settings.txt
+
+      - name: Record effective configuration / 记录实际构建配置
+        run: |
           cd openwrt
           node "$GITHUB_WORKSPACE/tools/audit-recommended.mjs" \
             --requested "$GITHUB_WORKSPACE/recommended-audit.json" \
@@ -293,10 +317,9 @@ jobs:
             --report "$GITHUB_WORKSPACE/recommended-report.json"
           cp .config "$GITHUB_WORKSPACE/build.config"
           grep -c '^CONFIG_PACKAGE_luci-app' .config || true
-
-      - name: Record effective configuration / 记录实际构建配置
-        run: |
-          cd openwrt
+          PACKAGE_MIRROR_EFFECTIVE="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).effective || "source-default"' "$GITHUB_WORKSPACE/package-mirror-report.json")"
+          PACKAGE_MANAGERS="$(node -p '(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).packageManagers || ["unknown"]).join(",")' "$GITHUB_WORKSPACE/package-mirror-report.json")"
+          PACKAGE_MIRROR_FALLBACK="$(node -p 'String(Boolean(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).fallback))' "$GITHUB_WORKSPACE/package-mirror-report.json")"
           TEST_VERSION="$(tr -d '\r\n' < "$GITHUB_WORKSPACE/VERSION")"
           RECOMMENDED_REQUESTED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).counts?.requested || 0' "$GITHUB_WORKSPACE/recommended-report.json")"
           RECOMMENDED_APPLIED="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).counts?.applied || 0' "$GITHUB_WORKSPACE/recommended-report.json")"
@@ -343,8 +366,10 @@ jobs:
             echo "theme=${{ steps.req.outputs.theme }}"
             echo "ntp=${{ steps.req.outputs.ntp_id }}"
             echo "ntp_servers=${{ steps.req.outputs.ntp_1 }} ${{ steps.req.outputs.ntp_2 }} ${{ steps.req.outputs.ntp_3 }} ${{ steps.req.outputs.ntp_4 }}"
-            echo "opkg=${{ steps.req.outputs.opkg_id }}"
-            echo "opkg_mirror=${{ steps.req.outputs.opkg_mirror }}"
+            echo "package_mirror_requested=${{ steps.req.outputs.package_mirror_id }}"
+            echo "package_mirror_effective=$PACKAGE_MIRROR_EFFECTIVE"
+            echo "package_managers=$PACKAGE_MANAGERS"
+            echo "package_mirror_fallback=$PACKAGE_MIRROR_FALLBACK"
             echo "v2ray_geoip=$GEOIP_STATE"
             echo "v2ray_geosite=$GEOSITE_STATE"
             echo "proxy_selected_count=$PROXY_COUNT"
@@ -356,6 +381,16 @@ jobs:
             echo "- applied / 已应用: `$RECOMMENDED_APPLIED`"
             echo "- skipped / 跳过: `$RECOMMENDED_SKIPPED`"
             echo "- 详细报告 / details: `recommended-report.json` (CONFIG artifact)"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "#### 软件包镜像 / Package mirror"
+            echo ""
+            echo "- requested / 请求: `${{ steps.req.outputs.package_mirror_id }}`"
+            echo "- effective / 生效: `$PACKAGE_MIRROR_EFFECTIVE`"
+            echo "- package manager / 包管理器: `$PACKAGE_MANAGERS`"
+            echo "- fallback / 回退: `$PACKAGE_MIRROR_FALLBACK`"
+            echo "- report / 报告: `package-mirror-report.json` (CONFIG artifact)"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
           {
@@ -386,6 +421,7 @@ jobs:
             build-metadata.txt
             recommended-audit.json
             recommended-report.json
+            package-mirror-report.json
             firmware-settings.txt
             proxy-selected.txt
           include-hidden-files: true
@@ -504,7 +540,7 @@ jobs:
           cp build.log build-diagnostic.log download.log failure-logs/ 2>/dev/null || true
           cp build-metadata.txt failure-logs/ 2>/dev/null || true
           cp proxy-selected.txt failure-logs/ 2>/dev/null || true
-          cp submitted.config recommended-audit.json recommended-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig.log build.config failure-logs/ 2>/dev/null || true
+          cp submitted.config recommended-audit.json recommended-report.json package-mirror-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig.log build.config failure-logs/ 2>/dev/null || true
           cp openwrt/.config failure-logs/final.config 2>/dev/null || true
           # 失败重试通过 BUILD_LOG=1 请求 OpenWrt 生成分包日志 / The retry requests OpenWrt per-package logs through BUILD_LOG=1
           if [ -d openwrt/logs ]; then

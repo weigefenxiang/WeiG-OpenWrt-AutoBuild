@@ -33,8 +33,8 @@ Currently the **360T7 (MT7981)** is the fully maintained device; the 200+ other 
    - `timestamp-CONFIG`: submitted/effective configs and reproducibility metadata;
    - `timestamp-BUILD-LOGS`: complete logs and error excerpts, kept for 14 days;
    - `timestamp-OPTIONAL-PACKAGES` / `timestamp-FIRMWARE-OTHER`: M packages and supporting manifest, buildinfo, and checksum files.
-5. To skip compilation, choose **Submit cloud build → Download .config only**. Actions runs `make defconfig` only when the user explicitly enables **Defconfig**; otherwise the complete submitted `.config` remains authoritative. Before downloading a request, required source options are shown from `config/001.presets/source-build-requirements.json` and applied only after confirmation. Requests that bypass the page and omit them are rejected.
-6. The page loads `build-request.json`, `.config`, and `config.buildinfo`. Its searchable timezone field contains the complete OpenWrt/LuCI IANA list in the uniform `(UTC±HH:MM) Region/City` format. You can also select the firmware LuCI theme, NTP preset, and opkg mirror; the confirmation dialog repeats the brand, model, source, version, partition, and page version.
+5. To skip compilation, choose **Submit cloud build → Download .config only**. Actions runs `make defconfig` only when the user explicitly enables **Defconfig**; otherwise the complete submitted `.config` remains authoritative. When Defconfig is off, the page silently adds `CONFIG_HAVE_DOT_CONFIG=y`; the backend does not reject requests for that marker or for plugin-dependency judgments.
+6. The page loads `build-request.json`, `.config`, and `config.buildinfo`. Its searchable timezone field contains the complete OpenWrt/LuCI IANA list in the uniform `(UTC±HH:MM) Region/City` format. You can also select the LuCI theme, NTP preset, and **Package mirror (APK / OPKG)**. Mainland-China browser timezones default to automatic USTC → PKU → source-default fallback; other regions follow the source, and mirror failures never block the firmware build.
 
 > 💡 After flashing: point your browser at **192.168.1.1** (or the address you customized on the submit page), username **root**, **empty password** (set one immediately on first login) — only the Lean LEDE source ships with the initial password `password`.
 >
@@ -87,7 +87,7 @@ See [ARCHITECTURE.md](../ARCHITECTURE.md) (bilingual, Chinese and English).
 
 ### Security
 
-- Issues accept 1–3 GitHub-hosted attachments and auto-detect `build-request.json`, `.config`, and `config.buildinfo`; fields, whitelists, size, target signature, and source-required options are validated. The submitted full config is authoritative by default. Only an explicitly selected Defconfig runs the upstream `make defconfig` once; its output is used for the build without a project-specific before/after Target, Profile, or architecture comparison. The effective build config is retained in the artifact.
+- Issues accept 1–3 GitHub-hosted attachments and auto-detect `build-request.json`, `.config`, and `config.buildinfo`; request fields, allowlists, size, source contract, and minimal Target/Profile identity are validated. The submitted full config is authoritative by default. Only an explicitly selected Defconfig runs the upstream `make defconfig` once; the backend does not re-judge plugin dependencies, derived architecture fields, theme-package state, or custom build requirements. The effective build config is retained in the artifact.
 - The build tag is sanitized down to Chinese/English characters, digits, and hyphens, and is used only for artifact naming and display;
 - Workflow permissions are narrowed to `contents: read + issues: write`.
 

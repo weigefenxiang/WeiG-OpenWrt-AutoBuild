@@ -33,8 +33,8 @@ Derzeit ist der **360T7 (MT7981)** das vollständig gepflegte Modell; die übrig
    - `Zeitstempel-CONFIG`: eingereichte/effektive Konfigurationen und Metadaten;
    - `Zeitstempel-BUILD-LOGS`: vollständige Protokolle und Fehler, 14 Tage verfügbar;
    - `Zeitstempel-OPTIONAL-PACKAGES` / `Zeitstempel-FIRMWARE-OTHER`: M-Pakete und Begleitdateien.
-5. Ohne Kompilierung wählst du **Cloud-Build senden → Nur .config herunterladen**. Actions führt `make defconfig` nur aus, wenn **Defconfig** ausdrücklich aktiviert wurde; andernfalls bleibt die vollständige `.config` maßgeblich. Erforderliche Quelloptionen werden vor dem Download angezeigt und nur nach Bestätigung angewendet.
-6. Die Seite lädt `build-request.json`, `.config` und `config.buildinfo`. Das Zeitzonenfeld durchsucht die vollständige IANA-Liste von OpenWrt/LuCI im einheitlichen Format `(UTC±HH:MM) Region/City`; außerdem sind LuCI-Theme, NTP und opkg-Spiegel wählbar.
+5. Ohne Kompilierung wählst du **Cloud-Build senden → Nur .config herunterladen**. Actions führt `make defconfig` nur aus, wenn **Defconfig** ausdrücklich aktiviert wurde; andernfalls bleibt die vollständige `.config` maßgeblich. Ohne Defconfig fügt die Seite still `CONFIG_HAVE_DOT_CONFIG=y` hinzu; das Backend lehnt Anfragen weder wegen dieses Merkmals noch wegen eigener Paketabhängigkeitsprüfungen ab.
+6. Die Seite lädt `build-request.json`, `.config` und `config.buildinfo`. Das Zeitzonenfeld durchsucht die vollständige IANA-Liste von OpenWrt/LuCI im einheitlichen Format `(UTC±HH:MM) Region/City`; außerdem sind LuCI-Theme, NTP und **Paketspiegel (APK / OPKG)** wählbar. Browser-Zeitzonen in Festlandchina verwenden automatisch USTC → PKU → Quellstandard, andere Regionen folgen der Quelle; Spiegelprobleme blockieren den Firmware-Build nie.
 
 > 💡 Nach dem Flashen der Firmware: Rufen Sie im Browser **192.168.1.1** auf (oder die Adresse, die Sie auf der Absendeseite angepasst haben), Benutzername **root**; **das Passwort ist leer** (bitte setzen Sie beim ersten Login sofort eines) – nur bei der Quelle Lean LEDE lautet das Anfangspasswort `password`.
 >
@@ -87,7 +87,7 @@ Siehe [ARCHITECTURE.md](../ARCHITECTURE.md) (zweisprachig Chinesisch/Englisch).
 
 ### Sicherheit
 
-- Issues akzeptieren 1–3 auf GitHub gehostete Anhänge und erkennen `build-request.json`, `.config` und `config.buildinfo`; Felder, Positivlisten, Größe, Zielsignatur und erforderliche Quelloptionen werden geprüft. Die vollständige Konfiguration ist standardmäßig maßgeblich. Nur bei ausdrücklich aktiviertem Defconfig läuft das offizielle `make defconfig` einmal; dessen Ausgabe wird ohne projektspezifischen Vorher/Nachher-Vergleich von Target, Profile oder Architektur verwendet.
+- Issues akzeptieren 1–3 auf GitHub gehostete Anhänge und erkennen `build-request.json`, `.config` und `config.buildinfo`; Felder, Positivlisten, Größe, Quellvertrag und minimale Target/Profile-Identität werden geprüft. Die vollständige Konfiguration ist standardmäßig maßgeblich. Nur bei ausdrücklich aktiviertem Defconfig läuft das offizielle `make defconfig` einmal; Paketabhängigkeiten, abgeleitete Architekturfelder, Theme-Paketstatus und eigene Build-Anforderungen werden im Backend nicht erneut bewertet.
 - Die Build-Kennung (tag) wird auf chinesische und lateinische Zeichen, Ziffern und Bindestriche bereinigt und ausschließlich für die artifact-Benennung und die Anzeige verwendet;
 - Die Workflow-Berechtigungen sind auf `contents: read + issues: write` beschränkt.
 

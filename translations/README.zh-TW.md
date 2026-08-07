@@ -33,8 +33,8 @@ OpenWrt 韌體**線上客製 + 雲端編譯**。在網頁上選原始碼、選�
    - `時間戳-CONFIG`:送出/實際開編設定與中繼資料；
    - `時間戳-BUILD-LOGS`:完整日誌與錯誤摘要，保留 14 天；
    - `時間戳-OPTIONAL-PACKAGES` / `時間戳-FIRMWARE-OTHER`:M 套件與輔助資料。
-5. 若不需要編譯，可點 **送出雲端編譯 → 僅下載 .config**。只有使用者主動勾選 **Defconfig** 時，Actions 才執行 `make defconfig`；未勾選時完整 `.config` 保持權威輸入。必需設定只會在明確確認後套用。
-6. 頁面可載入 `build-request.json`、`.config`、`config.buildinfo`；時區提供 OpenWrt/LuCI 完整 IANA 清單並支援搜尋，統一顯示為 `(UTC±HH:MM) Region/City`。也可選擇韌體 LuCI 主題、NTP 與 opkg 鏡像，確認框會再次列出品牌、型號、原始碼、版本、分割區與網頁版本。
+5. 若不需要編譯，可點 **送出雲端編譯 → 僅下載 .config**。只有使用者主動勾選 **Defconfig** 時，Actions 才執行 `make defconfig`；未勾選時完整 `.config` 保持權威輸入。未勾選時頁面會靜默加入 `CONFIG_HAVE_DOT_CONFIG=y`，後端不會因該標誌或套件相依判斷而拒絕請求。
+6. 頁面可載入 `build-request.json`、`.config`、`config.buildinfo`；時區提供 OpenWrt/LuCI 完整 IANA 清單並支援搜尋，統一顯示為 `(UTC±HH:MM) Region/City`。也可選擇 LuCI 主題、NTP 與 **軟體套件鏡像（APK / OPKG）**。中國大陸瀏覽器時區預設自動依 USTC → PKU → 原始碼預設回退，其他地區跟隨原始碼；鏡像失敗不會阻斷韌體編譯。
 
 > 💡 刷好韌體後:瀏覽器連到 **192.168.1.1**(或你在提交頁自訂的位址),使用者名稱 **root**;**密碼為空**(首次登入請立即設定)——只有 Lean LEDE 來源的初始密碼是 `password`。
 >
@@ -87,7 +87,7 @@ OpenWrt 韌體**線上客製 + 雲端編譯**。在網頁上選原始碼、選�
 
 ### 安全
 
-- Issue 接受 1~3 個 GitHub 自有附件並自動辨識 `build-request.json`、`.config`、`config.buildinfo`;欄位、白名單、大小、機型目標簽章與原始碼必需項都會驗證。完整設定預設為權威輸入；只有明確勾選 Defconfig 時才執行一次官方 `make defconfig`，其輸出直接用於後續建置，不再由專案自訂腳本比較補全前後的 Target、Profile 或架構。
+- Issue 接受 1~3 個 GitHub 自有附件並自動辨識 `build-request.json`、`.config`、`config.buildinfo`；請求欄位、白名單、大小、原始碼契約與最小 Target/Profile 身分會被驗證。完整設定預設為權威輸入；只有明確勾選 Defconfig 時才執行一次官方 `make defconfig`。後端不再重新判斷套件相依、架構衍生欄位、主題套件狀態或自訂建置必需項。
 - 建置識別名稱(tag)會被清洗為中英文、數字與連字號,僅用於 artifact 命名與顯示;
 - workflow 權限收斂為 `contents: read + issues: write`。
 

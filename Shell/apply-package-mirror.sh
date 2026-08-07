@@ -1,38 +1,86 @@
 #!/bin/bash
-# Shared package-feed mirror helper. Source this from diy2 scripts after feeds install.
+# Shared non-blocking package-mirror framework for APK and OPKG builds.
+# JSON owns source families, origins, adapters, mirrors and fallback policy;
+# the Node engine performs detection, probing and atomic edits.
 
 apply_package_mirror() {
-  [ "${WRT_OPKG_MIRROR:-@default}" = '@default' ] && return 0
-  case "$WRT_OPKG_MIRROR" in
-    *[!A-Za-z0-9._/-]*|'') echo "Invalid package mirror: $WRT_OPKG_MIRROR" >&2; return 1 ;;
-  esac
+  local workspace helper_root rules engine report requested source branch
+  helper_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  workspace="${WRT_WORKSPACE:-${GITHUB_WORKSPACE:-$helper_root}}"
+  rules="$workspace/config/001.presets/package-mirrors.json"
+  engine="$workspace/tools/package-mirror-engine.mjs"
+  report="${WRT_PACKAGE_MIRROR_REPORT:-$workspace/package-mirror-report.json}"
+  requested="${WRT_PACKAGE_MIRROR_ID:-${WRT_OPKG_ID:-source-default}}"
+  source="${WRT_SOURCE_ID:-unknown}"
+  branch="${WRT_BRANCH:-unknown}"
 
-  local root="https://$WRT_OPKG_MIRROR"
-  local changed=0 file repo_url
-  local sed_args=(
-    -e "s#https\?://downloads\.openwrt\.org/#$root/#g"
-    -e "s#https\?://downloads\.immortalwrt\.org/#$root/#g"
-    -e "s#https\?://mirrors\.vsean\.net/openwrt/#$root/#g"
+  if [ ! -f "$rules" ] || [ ! -f "$engine" ]; then
+    echo "::warning::Package mirror framework is unavailable; keeping the upstream package source."
+    return 0
+  fi
+
+  local -a args=(
+    "$engine"
+    --root "$PWD"
+    --rules "$rules"
+    --source "$source"
+    --branch "$branch"
+    --requested "$requested"
+    --report "$report"
   )
-
-  for file in package/base-files/files/etc/opkg/distfeeds.conf include/version.mk; do
-    [ -f "$file" ] || continue
-    sed -i -E "${sed_args[@]}" "$file"
-    if grep -Fq "$WRT_OPKG_MIRROR" "$file"; then changed=1; fi
-  done
-  file=package/emortal/default-settings/files/99-default-settings-chinese
-  if [ -f "$file" ]; then
-    sed -i "s#mirrors.vsean.net/openwrt#$WRT_OPKG_MIRROR#g" "$file"
-    if grep -Fq "$WRT_OPKG_MIRROR" "$file"; then changed=1; fi
+  if [ -n "${WRT_PACKAGE_MIRROR_PROBE_RESULTS:-}" ]; then
+    args+=(--probe-results "$WRT_PACKAGE_MIRROR_PROBE_RESULTS")
   fi
-  [ "$changed" = 1 ] || { echo "Selected package mirror cannot be applied: no known feed origin" >&2; return 1; }
 
-  repo_url="$(grep -Eo 'https?://[^[:space:])]+' include/version.mk 2>/dev/null | grep -F "$root/" | head -1 || true)"
-  if [ -n "$repo_url" ]; then
-    curl -fsIL --connect-timeout 10 --max-time 30 "$repo_url/" >/dev/null || {
-      echo "Selected package mirror has no feed for this source/branch: $repo_url" >&2
-      return 1
-    }
+  if ! node "${args[@]}"; then
+    echo "::warning::Package mirror setup failed internally; keeping the upstream package source and continuing."
+    node - "$report" "$requested" "$source" "$branch" <<'NODE' || true
+const fs = require('fs');
+const path = require('path');
+const [report, requested, source, branch] = process.argv.slice(2);
+fs.mkdirSync(path.dirname(path.resolve(report)), { recursive: true });
+fs.writeFileSync(report, JSON.stringify({
+  schema: 1,
+  requested,
+  effective: 'source-default',
+  source,
+  branch,
+  family: 'unknown',
+  packageManagers: ['unknown'],
+  changedFiles: [],
+  attempts: [{ id: requested, result: 'internal-error', probes: [] }],
+  fallback: true,
+  status: 'internal-error-fallback',
+}, null, 2) + '\n');
+NODE
   fi
-  echo "Selected package mirror applied: $WRT_OPKG_MIRROR"
+
+  if [ -s "$report" ]; then
+    mkdir -p files/etc
+    node - "$report" files/etc/weig-build-info <<'NODE'
+const fs = require('fs');
+const [reportPath, infoPath] = process.argv.slice(2);
+const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+const value = (name, fallback = '') => String(process.env[name] || fallback).replace(/[\r\n]/g, '');
+const lines = [
+  `build_ref=${value('WRT_BUILD_REF', 'unknown')}`,
+  `page_version=${value('WRT_PAGE_VERSION', 'unknown')}`,
+  `zonename=${value('WRT_ZONENAME', 'Asia/Shanghai')}`,
+  `timezone=${value('WRT_TIMEZONE', 'CST-8')}`,
+  `theme=${value('WRT_THEME', 'luci-theme-bootstrap')}`,
+  `ntp=${value('WRT_NTP_ID', 'cn')}`,
+  `ntp_servers=${[1, 2, 3, 4].map((index) => value(`WRT_NTP_${index}`)).filter(Boolean).join(' ')}`,
+  `package_mirror_requested=${report.requested}`,
+  `package_mirror_effective=${report.effective}`,
+  `package_managers=${(report.packageManagers || ['unknown']).join(',')}`,
+];
+fs.writeFileSync(infoPath, lines.join('\n') + '\n');
+NODE
+  fi
+
+  return 0
 }
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  apply_package_mirror
+fi

@@ -8,7 +8,7 @@
 # 任何命令失败立即终止,防止静默残缺 / Fail fast on any error — no silently broken tree.
 set -e
 
-# 读取统一默认值;conf 缺失时由下方 := 兜底,本源无主题/镜像操作,只兜底用到的变量 / Load shared defaults; := fallbacks below cover a missing conf — this source has no theme/mirror edits, so only the variables actually used are covered
+# 读取统一默认值;conf 缺失时由下方 := 兜底,本源不处理软件包镜像,只兜底用到的运行时变量 / Load shared defaults; this source does not handle package mirrors and only falls back the runtime values it uses
 WRT_DEFAULTS="$(dirname "${BASH_SOURCE[0]}")/build-defaults.conf"
 if [ -f "$WRT_DEFAULTS" ]; then source "$WRT_DEFAULTS"; fi
 : "${WRT_LAN_IP:=192.168.1.1}"
@@ -19,7 +19,6 @@ if [ -f "$WRT_DEFAULTS" ]; then source "$WRT_DEFAULTS"; fi
 : "${WRT_NTP_3:=cn.ntp.org.cn}"
 : "${WRT_NTP_4:=cn.pool.ntp.org}"
 : "${WRT_THEME:=luci-theme-bootstrap}"
-: "${WRT_OPKG_MIRROR:=@default}"
 
 # 默认 LuCI 主题 / default LuCI theme
 sed -i "s/luci-theme-bootstrap/$WRT_THEME/g" feeds/luci/collections/luci/Makefile
@@ -39,10 +38,6 @@ sed -i "s/1.openwrt.pool.ntp.org/$WRT_NTP_2/g" package/base-files/files/bin/conf
 sed -i "s/2.openwrt.pool.ntp.org/$WRT_NTP_3/g" package/base-files/files/bin/config_generate
 sed -i "s/3.openwrt.pool.ntp.org/$WRT_NTP_4/g" package/base-files/files/bin/config_generate
 
-MIRROR_HELPER="$(dirname "${BASH_SOURCE[0]}")/apply-package-mirror.sh"
-[ -f "$MIRROR_HELPER" ] || { echo "Package mirror helper is missing" >&2; exit 1; }
-source "$MIRROR_HELPER"
-apply_package_mirror
 
 echo '--- official OpenWrt default settings applied ---'
 grep -n 'timezone\|ntp' package/base-files/files/bin/config_generate | head -20

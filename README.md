@@ -42,8 +42,8 @@ OpenWrt 固件**在线定制 + 云编译**。在 [网站](https://wrt.weigeshare
    - `时间戳-CONFIG`:用户提交配置、实际开编配置与构建元数据，可留档复现；
    - `时间戳-BUILD-LOGS`:完整下载/编译日志与报错摘录，成功或失败都会提供，保留 14 天；
    - `时间戳-OPTIONAL-PACKAGES` / `时间戳-FIRMWARE-OTHER`:M 软件包，以及 manifest、buildinfo、校验和等辅助资料。
-5. 也可以不编译：点 **提交云编译 → 仅下载 .config**，立即拿到按当前选择生成的配置。只有用户主动勾选 **Defconfig** 时，Actions 才执行一次 `make defconfig`；未勾选时完整 `.config` 保持权威输入。下载构建请求 JSON 前，网页会按 `config/001.presets/source-build-requirements.json` 显示当前源码必须具备的配置项，只有用户明确应用后才允许下载。绕过网页提交缺项 JSON，也会在 Issue 解析阶段被拒绝。
-6. 页面可加载 `build-request.json`、`.config`、`config.buildinfo`；时区提供 OpenWrt/LuCI 完整 IANA 列表并支持搜索，统一显示为 `(UTC±HH:MM) Region/City`。页面还可选择固件 LuCI 主题、NTP 与 opkg 镜像，提交确认框会再次列出品牌、型号、源码、版本、分区及网页版本。
+5. 也可以不编译：点 **提交云编译 → 仅下载 .config**，立即拿到按当前选择生成的配置。只有用户主动勾选 **Defconfig** 时，Actions 才执行一次 `make defconfig`；未勾选时完整 `.config` 保持权威输入。未勾选 Defconfig 时，网页会静默补入 OpenWrt 非交互构建标志 `CONFIG_HAVE_DOT_CONFIG=y`；后端不再以该标志或插件依赖为由拒绝请求。
+6. 页面可加载 `build-request.json`、`.config`、`config.buildinfo`；时区提供 OpenWrt/LuCI 完整 IANA 列表并支持搜索，统一显示为 `(UTC±HH:MM) Region/City`。页面还可选择固件 LuCI 主题、NTP 与“软件包镜像（APK / OPKG）”。中国内地浏览器时区默认使用自动策略（USTC → PKU → 源码默认），其他地区跟随源码；镜像不可用时只回退，不会阻断固件编译。提交确认框会再次列出品牌、型号、源码、版本、分区及网页版本。
 
 > 💡 刷好固件后:浏览器访问
  **192.168.1.1** 
