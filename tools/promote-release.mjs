@@ -2,8 +2,8 @@
 // Checks exact-commit branch promotion safety. It never changes refs or pushes.
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 function git(repo, args, { allowFailure = false } = {}) {
   const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8', shell: false, windowsHide: true });
@@ -146,4 +146,4 @@ function main() {
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(new URL(import.meta.url).pathname)) main();
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) main();

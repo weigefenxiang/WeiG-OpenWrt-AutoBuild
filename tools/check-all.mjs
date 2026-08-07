@@ -314,6 +314,11 @@ try {
   writeReleaseState('v2608071202', 'C'); mustGit(repo, ['add', '.']); mustGit(repo, ['commit', '-m', 'C']); const candidate = mustGit(repo, ['rev-parse', 'HEAD']);
   writeReleaseState('v2608071203', 'D'); mustGit(repo, ['add', '.']); mustGit(repo, ['commit', '-m', 'D']); mustGit(repo, ['push', '-u', 'origin', 'dev']);
   const devPromotion = checkDevToStaging(repo, candidate);
+  const promotionCli = spawnSync(process.execPath, [join(ROOT, 'tools', 'promote-release.mjs'), '--repo', repo, 'dev-staging', candidate], {
+    encoding: 'utf8',
+    shell: false,
+  });
+  const cliDidNotPush = runGit(repo, ['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/staging']).status !== 0;
   mustGit(repo, ['push', 'origin', `${candidate}:refs/heads/staging`]); mustGit(repo, ['fetch', 'origin']);
   const prodPromotion = checkStagingToMain(repo);
   writeFileSync(join(repo, 'site', 'wrt', 'app.js'), 'LOCAL-UNCOMMITTED\n');
@@ -324,6 +329,9 @@ try {
   const meta = JSON.parse(readFileSync(join(extracted, 'data', 'build-meta.json'), 'utf8'));
   const releaseFixtureOk = devPromotion.candidate === candidate && devPromotion.version === 'v2608071202' &&
     devPromotion.createsStaging === true && prodPromotion.candidate === candidate &&
+    promotionCli.status === 0 && cliDidNotPush && promotionCli.stdout.includes('SAFE TO PROMOTE') &&
+    promotionCli.stdout.includes(`git push origin ${candidate}:refs/heads/staging`) &&
+    promotionCli.stdout.includes('No Git ref was changed by this tool.') &&
     staged.commit === candidate && meta.commit === candidate && meta.version === 'v2608071202' &&
     untar.status === 0 && readFileSync(join(extracted, 'app.js'), 'utf8').trim() === 'C';
   releaseFixtureOk
@@ -834,6 +842,8 @@ mirrorRulesOk
     promoteSource.includes("merge-base', '--is-ancestor'") &&
     promoteSource.includes('git push origin ${candidate}:refs/heads/staging') &&
     promoteSource.includes('git push origin ${staging}:refs/heads/main') &&
+    promoteSource.includes("fileURLToPath(import.meta.url)") &&
+    !promoteSource.includes('new URL(import.meta.url).pathname') &&
     !promoteSource.includes("spawnSync('git', ['push'") &&
     promoteBat.includes('Check dev -^> staging') && promoteBat.includes('Check staging -^> main') &&
     openWebPageBat.includes('Staging Pair') && openWebPageBat.includes('GITHUB_PAGES_URL') &&
