@@ -5,9 +5,31 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { normalizeBuildEnvironment } from '../site/wrt/lib/build-identity.js';
 
 const MODULE_PATH = fileURLToPath(import.meta.url);
 const DEFAULT_ROOT = join(dirname(MODULE_PATH), '..');
+
+
+function resolveBranch(root, explicitBranch = '') {
+  for (const value of [
+    explicitBranch,
+    process.env.WEIG_BUILD_BRANCH,
+    process.env.CF_PAGES_BRANCH,
+    process.env.GITHUB_REF_NAME,
+    process.env.GITHUB_REF,
+  ]) {
+    const environment = normalizeBuildEnvironment(value);
+    if (environment) return environment;
+  }
+  try {
+    const value = execFileSync('git', ['-C', root, 'branch', '--show-current'], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return normalizeBuildEnvironment(value);
+  } catch (error) { /* static copies can work without Git */ }
+  return '';
+}
 
 function resolveCommit(root, explicitCommit = '') {
   for (const value of [explicitCommit, process.env.WEIG_BUILD_COMMIT, process.env.CF_PAGES_COMMIT_SHA, process.env.GITHUB_SHA]) {
@@ -30,7 +52,7 @@ export function shanghaiIsoNow(date = new Date()) {
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+08:00`;
 }
 
-export function writeBuildMeta({ root = DEFAULT_ROOT, commit = '', builtAt = '', out = '' } = {}) {
+export function writeBuildMeta({ root = DEFAULT_ROOT, commit = '', branch = '', builtAt = '', out = '' } = {}) {
   const projectRoot = resolve(root);
   const output = resolve(out || join(projectRoot, 'site', 'wrt', 'data', 'build-meta.json'));
   const version = readFileSync(join(projectRoot, 'VERSION'), 'utf8').trim();
@@ -42,6 +64,7 @@ export function writeBuildMeta({ root = DEFAULT_ROOT, commit = '', builtAt = '',
   const payload = {
     version,
     commit: resolveCommit(projectRoot, commit),
+    branch: resolveBranch(projectRoot, branch),
     builtAt: buildTime,
     timezone: 'Asia/Shanghai',
   };
@@ -51,11 +74,12 @@ export function writeBuildMeta({ root = DEFAULT_ROOT, commit = '', builtAt = '',
 }
 
 function parseCli(argv) {
-  const options = { root: DEFAULT_ROOT, commit: '', builtAt: '', out: '' };
+  const options = { root: DEFAULT_ROOT, commit: '', branch: '', builtAt: '', out: '' };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--root') options.root = argv[++i] || '';
     else if (arg === '--commit') options.commit = argv[++i] || '';
+    else if (arg === '--branch') options.branch = argv[++i] || '';
     else if (arg === '--built-at') options.builtAt = argv[++i] || '';
     else if (arg === '--out') options.out = argv[++i] || '';
     else throw new Error(`Unknown option: ${arg}`);

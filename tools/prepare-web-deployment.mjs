@@ -6,7 +6,7 @@ import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { writeBuildMeta } from './gen-build-meta.mjs';
 
-export function prepareWebDeployment({ root = process.cwd(), commit = '', builtAt = '' } = {}) {
+export function prepareWebDeployment({ root = process.cwd(), commit = '', branch = '', builtAt = '' } = {}) {
   const projectRoot = resolve(root);
   const version = readFileSync(join(projectRoot, 'VERSION'), 'utf8').trim();
   if (!/^v\d{10}$/.test(version)) throw new Error(`Invalid VERSION: ${version}`);
@@ -18,16 +18,17 @@ export function prepareWebDeployment({ root = process.cwd(), commit = '', builtA
   for (const rel of ['site/wrt/index.html', 'site/wrt/app.js', 'site/wrt/lib/catalog-engine.js']) {
     if (!existsSync(join(projectRoot, rel))) throw new Error(`Required web file is missing: ${rel}`);
   }
-  const result = writeBuildMeta({ root: projectRoot, commit, builtAt });
+  const result = writeBuildMeta({ root: projectRoot, commit, branch, builtAt });
   return { ...result, version };
 }
 
 function parseCli(argv) {
-  const options = { root: process.cwd(), commit: '', builtAt: '' };
+  const options = { root: process.cwd(), commit: '', branch: '', builtAt: '' };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--root') options.root = argv[++i] || '';
     else if (arg === '--commit') options.commit = argv[++i] || '';
+    else if (arg === '--branch') options.branch = argv[++i] || '';
     else if (arg === '--built-at') options.builtAt = argv[++i] || '';
     else throw new Error(`Unknown option: ${arg}`);
   }

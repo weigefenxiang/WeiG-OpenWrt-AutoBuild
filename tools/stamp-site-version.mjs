@@ -33,7 +33,7 @@ const contentDigest = (path) => digestText(readFileSync(path, 'utf8'));
 
 const currentApp = readFileSync(APP, 'utf8');
 let expectedApp = currentApp;
-for (const moduleName of ['catalog-engine.js', 'catalog-loader.js', 'catalog-schema6.js', 'catalog-search-worker.js']) {
+for (const moduleName of ['catalog-engine.js', 'catalog-loader.js', 'catalog-schema6.js', 'catalog-search-worker.js', 'build-identity.js']) {
   const digest = contentDigest(join(SITE, 'lib', moduleName));
   expectedApp = expectedApp.replace(
     new RegExp(`\\./lib/${moduleName.replace('.', '\\.')}\\?v=[^"']+|\\./lib/${moduleName.replace('.', '\\.')}`, 'g'),

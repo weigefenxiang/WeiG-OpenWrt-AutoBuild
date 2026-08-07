@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prepareWebDeployment } from './prepare-web-deployment.mjs';
+import { normalizeBuildEnvironment } from '../site/wrt/lib/build-identity.js';
 import { verifySiteArchive, REQUIRED_SITE_ARCHIVE_ENTRIES } from './verify-site-archive.mjs';
 
 function run(program, args, options = {}) {
@@ -37,7 +38,7 @@ export function prepareSiteDeployment({ repo = process.cwd(), ref = 'origin/stag
   try {
     run('git', ['-C', root, 'worktree', 'add', '--detach', '--force', worktree, commit]);
     added = true;
-    const prepared = prepareWebDeployment({ root: worktree, commit, builtAt });
+    const prepared = prepareWebDeployment({ root: worktree, commit, branch: normalizeBuildEnvironment(ref), builtAt });
     run('tar', ['-czf', archive, '-C', join(worktree, 'site', 'wrt'), '.']);
     const requiredEntries = [...REQUIRED_SITE_ARCHIVE_ENTRIES, 'data/build-meta.json'];
     const verified = verifySiteArchive(archive, { requiredEntries });

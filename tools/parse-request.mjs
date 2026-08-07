@@ -9,6 +9,7 @@ import { readFileSync, appendFileSync, writeFileSync, existsSync } from 'node:fs
 import { createHash } from 'node:crypto';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { artifactBuildRef, normalizeBuildEnvironment, parseBuildIssueTitleIdentity } from '../site/wrt/lib/build-identity.js';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DEVICES = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'devices.json'), 'utf8'));
 const CONFIG_MANIFEST = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'config-manifest.json'), 'utf8'));
@@ -362,11 +363,18 @@ for (const raw of req.plugins) {
 const tag = String(req.tag || '').replace(/[^\w一-龥-]/g, '').slice(0, 24) || 'anonymous';
 const cleanIdentity = (value) =>
   String(value || '').replace(/[^\w一-龥-]/g, '').slice(0, 24);
-const issueTitleRef = String(process.env.ISSUE_TITLE || '')
-  .match(/^\[build\]\s+([^/\s·]+)/)?.[1] || '';
+const titleIdentity = parseBuildIssueTitleIdentity(process.env.ISSUE_TITLE || '');
 const attachmentRef = requestAttachmentName.match(/^([A-Za-z0-9]+_[A-Za-z0-9]+)[.-]/)?.[1] || '';
-const requestRef = cleanIdentity(req.requestId || attachmentRef || issueTitleRef);
+const requestedSourceEnv = String(req.sourceEnv || '').trim();
+const normalizedSourceEnv = normalizeBuildEnvironment(requestedSourceEnv);
+if (requestedSourceEnv && !normalizedSourceEnv) fail(`非法 sourceEnv: ${requestedSourceEnv}`);
+if (titleIdentity.sourceEnv && normalizedSourceEnv && titleIdentity.sourceEnv !== normalizedSourceEnv) {
+  fail(`sourceEnv 与 Issue 标题不一致: request=${normalizedSourceEnv}, title=${titleIdentity.sourceEnv}`);
+}
+const sourceEnv = normalizedSourceEnv || titleIdentity.sourceEnv;
+const requestRef = cleanIdentity(req.requestId || attachmentRef || titleIdentity.requestId);
 const buildRef = requestRef ? `${requestRef}-${tag}` : tag;
+const artifactRef = artifactBuildRef(buildRef, sourceEnv);
 
 // 后台登录地址:仅内网 IPv4,非法即回落默认,防注入 / admin LAN IP: private IPv4 only, falls back to default — injection-safe
 const lanip = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/.test(String(req.lanip || ''))
@@ -458,6 +466,8 @@ const out = [
   `plugins=${items.join(' ')}`,
   `tag=${tag}`,
   `build_ref=${buildRef}`,
+  `artifact_ref=${artifactRef}`,
+  `source_env=${sourceEnv}`,
   `lanip=${lanip}`,
   `rootpw=${rootpw}`,
   `page_version=${pageVersion}`,

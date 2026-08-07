@@ -66,7 +66,7 @@ const LANIP_RE = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1
 let PLUGINS = null, I18N = null, TIMEZONES = null, MINIMUM_BOOT = null, BUILD_REQUIREMENTS = null;
 let PACKAGE_MIRRORS = { schema: 2, presets: [{ id: 'source-default', label: { 'zh-CN': '跟随源码默认', en: 'Follow source default' }, sources: [] }] };
 let MENU_INDEX = null, MENU_CATALOG = null, CATALOG_ENGINE = null, CATALOG_MODEL = null;
-let CATALOG_LOADER_MODULE = null, CATALOG_SCHEMA6_MODULE = null, CATALOG_LOADER = null;
+let CATALOG_LOADER_MODULE = null, CATALOG_SCHEMA6_MODULE = null, BUILD_IDENTITY_MODULE = null, CATALOG_LOADER = null;
 let catalogShardLoader = null, catalogMenuLoadingPromise = null;
 let catalogHiddenLoadingPromise = null, catalogHelpLoadingPromise = null;
 let menuCatalogKey = '', menuLoadingKey = '', menuCatalogSeq = 0, menuCatalogPromise = null;
@@ -522,7 +522,7 @@ async function loadBuildMeta() {
     if (!response.ok) return null;
     const meta = await response.json();
     if (meta.version !== state.siteVersion || meta.timezone !== 'Asia/Shanghai' || !/^[a-f0-9]{7,64}$/i.test(meta.commit || '') || formatBuildTime(meta.builtAt) === '—') return null;
-    return meta;
+    return { ...meta, branch: BUILD_IDENTITY_MODULE.normalizeBuildEnvironment(meta.branch) };
   } catch (e) { return null; }
 }
 function renderBuildInfo() {
@@ -573,10 +573,11 @@ function startCatalogAfterFirstPaint() {
 }
 async function init() {
   try {
-    [CATALOG_ENGINE, CATALOG_LOADER_MODULE, CATALOG_SCHEMA6_MODULE] = await Promise.all([
+    [CATALOG_ENGINE, CATALOG_LOADER_MODULE, CATALOG_SCHEMA6_MODULE, BUILD_IDENTITY_MODULE] = await Promise.all([
       import('./lib/catalog-engine.js?v=9f03d1396d'),
       import('./lib/catalog-loader.js?v=e1801742f9'),
       import('./lib/catalog-schema6.js?v=0a165903c2'),
+      import('./lib/build-identity.js?v=e49ff9b9b0'),
     ]);
     I18N = await loadJson('i18n.json');
     state.lang = pickLang();
@@ -5555,8 +5556,9 @@ function openSubmitModal() {
   };
   Object.assign(state, firmware);
   const requestStamp = localStamp();
+  const sourceEnv = BUILD_IDENTITY_MODULE.normalizeBuildEnvironment(state.buildMeta?.branch);
   const titleTag = safeDownloadNamePart(tag, 'anonymous');
-  const title = '[build] ' + requestStamp + '/' + titleTag + '/' + requestTargetProfilePart() + '/' + state.source.id + '/' + state.version.id + '/' + selectedTargetProfileName();
+  const title = '[build] ' + BUILD_IDENTITY_MODULE.buildIssueRequestPrefix(sourceEnv) + requestStamp + '/' + titleTag + '/' + requestTargetProfilePart() + '/' + state.source.id + '/' + state.version.id + '/' + selectedTargetProfileName();
 
   openModal(t('btn.submit'));
   const mb = $('modalBody');
@@ -5606,6 +5608,8 @@ function openSubmitModal() {
         const payload = {
           schema: 5,
           generatedAt: new Date().toISOString(),
+          requestId: requestStamp,
+          sourceEnv,
           pageVersion: state.siteVersion,
           configId: [state.device.id, state.source.id, state.version.id, state.variant.id].join('/'),
           device: state.device.id, source: state.source.id, version: state.version.id,

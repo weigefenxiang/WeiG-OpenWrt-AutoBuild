@@ -205,6 +205,7 @@ function writeDeploymentMeta(root, identity) {
   writeFileSync(target, JSON.stringify({
     version: identity.version,
     commit: identity.commit,
+    branch: 'main',
     builtAt: shanghaiIsoNow(),
     timezone: 'Asia/Shanghai',
   }, null, 2) + '\n');
@@ -216,7 +217,7 @@ function deploymentMetaMatches(root, identity) {
   if (!existsSync(target)) return false;
   try {
     const meta = JSON.parse(readFileSync(target, 'utf8'));
-    return meta.version === identity.version && meta.commit === identity.commit &&
+    return meta.version === identity.version && meta.commit === identity.commit && meta.branch === 'main' &&
       meta.timezone === 'Asia/Shanghai' &&
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/.test(meta.builtAt || '');
   } catch (error) { return false; }

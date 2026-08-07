@@ -89,6 +89,7 @@ jobs:
       firmware_matrix: ${{ steps.firmware_manifest.outputs.matrix }}
       bridge_artifact_id: ${{ steps.raw_bridge.outputs.artifact-id }}
       build_ref: ${{ steps.req.outputs.build_ref }}
+      artifact_ref: ${{ steps.req.outputs.artifact_ref }}
 
     steps:
       - name: Checkout / 检出代码
@@ -409,7 +410,7 @@ jobs:
         if: always() && steps.req.outcome == 'success'
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.req.outputs.build_ref }}-CONFIG
+          name: ${{ steps.req.outputs.artifact_ref }}-CONFIG
           path: |
             openwrt/.config
             submitted.config
@@ -598,7 +599,7 @@ jobs:
             echo '| --- | --- |'
             echo '| 1 | 打开本次构建页面 / Open this run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} |'
             echo '| 2 | 拉到页面最底部 **Artifacts** 区 / Scroll to the **Artifacts** section at the very bottom |'
-            echo '| 3 | 下载 `${{ steps.req.outputs.build_ref }}-BUILD-LOGS-` 开头的压缩包并解压 / Download and unzip the archive whose name starts with `${{ steps.req.outputs.build_ref }}-BUILD-LOGS-` |'
+            echo '| 3 | 下载 `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS-` 开头的压缩包并解压 / Download and unzip the archive whose name starts with `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS-` |'
             echo '| 4 | 先看 `00-SUMMARY.txt`,再看 `build-diagnostic.log`（如有）/ `build.log` / `errors.txt` / `package-logs.tar.gz`（如有） / Read `00-SUMMARY.txt` first, then `build-diagnostic.log` (if present) / `build.log` / `errors.txt` / `package-logs.tar.gz` (if present) |'
             echo ''
             echo '> ⏳ 完整日志 Artifact 保留 14 天,过期需重新提交构建 / Complete log artifacts are kept for 14 days.'
@@ -618,7 +619,7 @@ jobs:
           tail -n 60 build.log 2>/dev/null || echo '(没有 build.log,可能在编译前就失败了)'
           ls -lh failure-logs
           # 在步骤日志末尾指明取件入口 / Point users at the artifact and where to find retrieval steps
-          echo "📤 artifact:${{ steps.req.outputs.build_ref }}-BUILD-LOGS —— 完整日志将上传,取件方法见 issue 回评/Summary 页 / Full logs will be uploaded; see the issue comment or Summary"
+          echo "📤 artifact:${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS —— 完整日志将上传,取件方法见 issue 回评/Summary 页 / Full logs will be uploaded; see the issue comment or Summary"
 
       - name: Collect menuconfig M packages / 收集 menuconfig 的 M 软件包
         if: success()
@@ -644,16 +645,16 @@ jobs:
             [ -f "$file" ] || continue
             base="$(basename "$file")"
             if [[ "$base" == *.img.gz ]]; then
-              cp -a "$file" "$RAW/${{ steps.req.outputs.build_ref }}-$base"
+              cp -a "$file" "$RAW/${{ steps.req.outputs.artifact_ref }}-$base"
             else
-              cp -a "$file" "$FIRMWARE/${{ steps.req.outputs.build_ref }}-$base"
+              cp -a "$file" "$FIRMWARE/${{ steps.req.outputs.artifact_ref }}-$base"
             fi
           done
           if compgen -G "$RAW/*.img.gz" >/dev/null; then
-            (cd "$RAW" && sha256sum -- *.img.gz) > "$FIRMWARE/${{ steps.req.outputs.build_ref }}-sha256sums-img-gz.txt"
+            (cd "$RAW" && sha256sum -- *.img.gz) > "$FIRMWARE/${{ steps.req.outputs.artifact_ref }}-sha256sums-img-gz.txt"
           fi
           if [ -s firmware-settings.txt ]; then
-            cp firmware-settings.txt "$FIRMWARE/${{ steps.req.outputs.build_ref }}-00-BUILD-SETTINGS.txt"
+            cp firmware-settings.txt "$FIRMWARE/${{ steps.req.outputs.artifact_ref }}-00-BUILD-SETTINGS.txt"
           fi
           printf '%s\n' \
             '其他固件与构建资料 / OTHER FIRMWARE AND BUILD FILES' \
@@ -677,16 +678,16 @@ jobs:
             echo '## 📦 固件下载与安装选择 / Firmware download guide'
             echo ''
             echo '> [!IMPORTANT]'
-            echo '> 最终 `.img.gz` 固件按 `${{ steps.req.outputs.build_ref }}-原文件名.img.gz` 逐个上传，不解压、不套 ZIP；首次刷机通常用 `factory`。'
-            echo '> Final `.img.gz` images are uploaded one by one as `${{ steps.req.outputs.build_ref }}-original-name.img.gz`, without decompression or a ZIP wrapper. First flash usually uses `factory`.'
+            echo '> 最终 `.img.gz` 固件按 `${{ steps.req.outputs.artifact_ref }}-原文件名.img.gz` 逐个上传，不解压、不套 ZIP；首次刷机通常用 `factory`。'
+            echo '> Final `.img.gz` images are uploaded one by one as `${{ steps.req.outputs.artifact_ref }}-original-name.img.gz`, without decompression or a ZIP wrapper. First flash usually uses `factory`.'
             echo ''
             echo '| Artifact | 内容 / Contents |'
             echo '| --- | --- |'
-            echo '| 📦 `${{ steps.req.outputs.build_ref }}-*.img.gz` | 可直接下载的最终固件；一个文件对应一个 Artifact |'
-            echo '| 📁 `${{ steps.req.outputs.build_ref }}-FIRMWARE-OTHER` | manifest、buildinfo、校验和及其他非 `.img.gz` 文件 |'
-            echo '| ⚙️ `${{ steps.req.outputs.build_ref }}-CONFIG` | 用户提交配置、实际开编配置和构建元数据 |'
-            echo '| 🧾 `${{ steps.req.outputs.build_ref }}-BUILD-LOGS` | 完整下载/编译日志；保留 14 天 |'
-            echo '| 🧩 `${{ steps.req.outputs.build_ref }}-OPTIONAL-PACKAGES` | menuconfig 选为 M：已编译但未写入固件的软件包 |'
+            echo '| 📦 `${{ steps.req.outputs.artifact_ref }}-*.img.gz` | 可直接下载的最终固件；一个文件对应一个 Artifact |'
+            echo '| 📁 `${{ steps.req.outputs.artifact_ref }}-FIRMWARE-OTHER` | manifest、buildinfo、校验和及其他非 `.img.gz` 文件 |'
+            echo '| ⚙️ `${{ steps.req.outputs.artifact_ref }}-CONFIG` | 用户提交配置、实际开编配置和构建元数据 |'
+            echo '| 🧾 `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS` | 完整下载/编译日志；保留 14 天 |'
+            echo '| 🧩 `${{ steps.req.outputs.artifact_ref }}-OPTIONAL-PACKAGES` | menuconfig 选为 M：已编译但未写入固件的软件包 |'
             echo ''
             echo '> [!WARNING]'
             echo '> `sysupgrade` 不是通用更新包。不确定机型、当前固件或布局时不要刷。 / `sysupgrade` is not a universal updater.'
@@ -714,7 +715,7 @@ jobs:
         if: success() && steps.firmware_manifest.outputs.has_raw == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.req.outputs.build_ref }}-RAW-BRIDGE
+          name: ${{ steps.req.outputs.artifact_ref }}-RAW-BRIDGE
           path: artifact-staging/RAW-IMG-GZ/
           if-no-files-found: error
           retention-days: 1
@@ -723,7 +724,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.req.outputs.build_ref }}-FIRMWARE-OTHER
+          name: ${{ steps.req.outputs.artifact_ref }}-FIRMWARE-OTHER
           path: artifact-staging/FIRMWARE-OTHER/
           if-no-files-found: error
           compression-level: 0
@@ -733,7 +734,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.req.outputs.build_ref }}-BUILD-LOGS
+          name: ${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS
           path: artifact-staging/BUILD-LOGS/
           if-no-files-found: warn
           retention-days: 14
@@ -742,7 +743,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.req.outputs.build_ref }}-OPTIONAL-PACKAGES
+          name: ${{ steps.req.outputs.artifact_ref }}-OPTIONAL-PACKAGES
           path: optional-packages/
           if-no-files-found: warn
           compression-level: 0
@@ -762,7 +763,7 @@ jobs:
         if: matrix.file.enabled == true
         uses: actions/download-artifact@v8
         with:
-          name: ${{ needs.build.outputs.build_ref }}-RAW-BRIDGE
+          name: ${{ needs.build.outputs.artifact_ref }}-RAW-BRIDGE
           path: raw-bridge
 
       - name: Upload one raw .img.gz / 逐个上传原始 .img.gz
@@ -804,12 +805,12 @@ jobs:
         env:
           BUILD_RESULT: ${{ needs.build.result }}
           PUBLISH_RESULT: ${{ needs.publish-firmware.result }}
-          BUILD_REF: ${{ needs.build.outputs.build_ref }}
+          ARTIFACT_REF: ${{ needs.build.outputs.artifact_ref }}
         with:
           script: |
             const ok = process.env.BUILD_RESULT === 'success' && process.env.PUBLISH_RESULT === 'success';
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const ref = process.env.BUILD_REF;
+            const ref = process.env.ARTIFACT_REF;
             const body = ok
               ? `@${context.payload.issue.user.login}\n\n✅ 构建和固件发布全部完成。\n\n下载 / Download: ${url}\n\n- 每个 \`${ref}-*.img.gz\` 是可直接下载的独立 Artifact，不解压、不套 ZIP。\n- \`${ref}-CONFIG\`、\`${ref}-BUILD-LOGS\`、\`${ref}-OPTIONAL-PACKAGES\`、\`${ref}-FIRMWARE-OTHER\` 为分类资料（没有对应内容时可能不生成）。\n\n首次刷机通常选 \`factory\`；\`sysupgrade\` 只用于当前固件与闪存布局兼容的升级。`
               : `@${context.payload.issue.user.login}\n\n❌ 构建或原始固件发布失败。\n\nBuild: ${process.env.BUILD_RESULT}; raw publish: ${process.env.PUBLISH_RESULT}\n\n请打开本次 Actions 查看 \`${ref}-CONFIG\` 与 \`${ref}-BUILD-LOGS\`：${url}`;

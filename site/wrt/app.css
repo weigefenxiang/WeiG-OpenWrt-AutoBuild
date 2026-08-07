@@ -890,11 +890,13 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
   .legend { gap: 8px; }
   .lg-stats { margin-left: 0; width: 100%; white-space: normal; overflow-wrap: anywhere; }
   .actionbar-row { flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
-  .stats { width: 100%; justify-content: flex-start; gap: 6px; }
-  .stats .link-btn { margin-right: auto; }
-  .actions { margin-left: 0; width: 100%; }
+  .stats { width: auto; flex: 0 1 auto; justify-content: flex-start; gap: 6px; }
+  .stats .link-btn { margin-right: 0; }
+  .cap { width: 64px; }
+  .site-version-action { order: 0; margin-left: auto; align-self: center; }
+  .site-version { padding-left: 4px; padding-right: 4px; font-size: 13.5px; line-height: 1.2; }
+  .actions { order: 2; margin-left: 0; width: 100%; }
   .actions .btn { flex: 1; min-height: 44px; }
-  .site-version-action { order: 3; margin-left: auto; }
   .risk-row { align-items: flex-start; }
   .submit-primary-fields { grid-template-columns: 1fr; }
   .firmware-settings { grid-template-columns: 1fr; }

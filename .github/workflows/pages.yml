@@ -36,7 +36,7 @@ jobs:
         run: node tools/stamp-site-version.mjs --check
 
       - name: Prepare deployment metadata / 准备部署元数据
-        run: node tools/prepare-web-deployment.mjs --commit "$GITHUB_SHA"
+        run: node tools/prepare-web-deployment.mjs --commit "$GITHUB_SHA" --branch main
 
       - name: Configure Pages / 配置 Pages
         uses: actions/configure-pages@v5

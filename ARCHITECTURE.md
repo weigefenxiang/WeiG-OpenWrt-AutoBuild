@@ -54,12 +54,14 @@
    ├─ check-text-format.mjs      # 变更文本 LF/CRLF/BOM/EOF 门禁 / changed-text LF/CRLF/BOM/EOF gate
    ├─ sync-blog.mjs              # 当前树或 exact ref → 博客 source/wrt + WRT 源身份 / current tree or exact ref → blog mirror + source identity
    ├─ promote-release.mjs        # dev→staging→main FF-only 晋级事务 / FF-only exact promotion transaction
-   ├─ prepare-web-deployment.mjs # 生成可选 Version/Commit/Built 元数据 / prepares optional deployment metadata
+   ├─ prepare-web-deployment.mjs # 生成可选 Version/Commit/Branch/Built 元数据 / prepares optional deployment metadata
    ├─ prepare-site-deployment.mjs # 从 exact Git ref 打包 site/wrt / packages site/wrt from an exact Git ref
    ├─ gen-package-mirrors.mjs    # 生成网页精简镜像表 / generates the public mirror projection
    ├─ package-mirror-engine.mjs  # APK/OPKG 检测、回退与原子改写 / APK/OPKG detection, fallback and atomic rewrite
    └─ serve.mjs                  # 本地静态服务器 / local static server
 ```
+
+Build environment identity is deployment metadata, not application configuration. `build-meta.branch` is generated from the deployment branch; `site/wrt/lib/build-identity.js` is the single naming authority shared by the browser and request parser. Only `dev` and `staging` add prefixes to `[build]` Action titles and Artifact names; `main` remains unprefixed. No hostname or provider-specific branch detection belongs in `app.js`.
 
 ## 数据流 / Data flow
 
@@ -114,7 +116,7 @@ Target/Profile 是后端唯一核对的 `.config` 身份：配置必须且只能
 3. schema 5 请求按固定 Catalog index 中的版本契约核对源码 commit，并复制 `submitted.config`。解析器只核对安全白名单与最小 Target/Profile 身份，不判断插件依赖、人工兼容规则、架构派生字段、主题包或构建必需项。用户勾选时运行一次官方 `make defconfig`；未勾选时直接进入下载/编译。并行编译失败后使用 `make -j1 V=s BUILD_LOG=1` 生成详细诊断日志 / schema-5 requests verify the pinned source commit through the fixed Catalog index and copy `submitted.config`. The parser checks only safety allowlists and minimal Target/Profile identity; it does not judge plugin dependencies, manual compatibility rules, derived architecture fields, theme-package state, or build requirements. Optional upstream `make defconfig` runs only when requested; otherwise download/compile starts directly. Failed parallel compilation retries with `make -j1 V=s BUILD_LOG=1`.
 4. 完成可选 Defconfig 后运行非阻断软件包镜像框架，生成 `package-mirror-report.json`，再核验固件设置快照并上传 config + build-metadata artifact；下载与编译按 CPU+1 动态并发，原始输出实时显示并完整写入日志。时区/主题/NTP、请求镜像、生效镜像与包管理器同时写入固件内 `/etc/weig-build-info` / after optional Defconfig, run the non-blocking package-mirror framework, emit `package-mirror-report.json`, verify the firmware snapshot, and upload config/build metadata; downloads and compilation use CPU+1 while the firmware records timezone/theme/NTP plus requested/effective mirror and package manager in `/etc/weig-build-info`
 5. Catalog 标准关系只在网页交互层由共享引擎处理；人工 `config-rules`、后端整配置 Catalog 校验和隐藏 smoke 配置生成器均已删除。后端不重复推断插件依赖，最终解析由可选的官方 Defconfig 或上游构建系统完成。并行编译失败时以 `make -j1 V=s BUILD_LOG=1` 生成诊断，仍失败才结束并上传日志 / Catalog-standard relations are handled only by the shared browser interaction engine. Manual `config-rules`, backend whole-config Catalog validation, and the hidden smoke config generator are removed. The backend does not re-infer package dependencies; optional upstream Defconfig or the upstream build system resolves the final configuration. A failed parallel build uses `make -j1 V=s BUILD_LOG=1` for diagnostics before failing and uploading logs.
-6. `VERSION` 在本地 Prepare 阶段由 `stamp-site-version.mjs` 按 tools/Workflow/Shell/config/site 统一指纹生成；`site-version.yml` 仅以只读权限运行 `--check`，不再修改或提交仓库。`build-meta.json` 是可选部署实例元数据，记录 Version/Commit/Built 且不参与 VERSION 指纹；缺失时静态网站仍完整工作。旧八位请求继续兼容 / `VERSION` is generated locally during Prepare from the shared tools/workflow/Shell/config/site fingerprint; `site-version.yml` is read-only validation with `--check` and never writes or commits repository files. Optional `build-meta.json` carries per-deployment Version/Commit/Built, is excluded from the VERSION fingerprint, and is not required for the static site. Legacy eight-digit requests remain accepted.
+6. `VERSION` 在本地 Prepare 阶段由 `stamp-site-version.mjs` 按 tools/Workflow/Shell/config/site 统一指纹生成；`site-version.yml` 仅以只读权限运行 `--check`，不再修改或提交仓库。`build-meta.json` 是可选部署实例元数据，记录 Version/Commit/Branch/Built 且不参与 VERSION 指纹；缺失时静态网站仍完整工作。旧八位请求继续兼容 / `VERSION` is generated locally during Prepare from the shared tools/workflow/Shell/config/site fingerprint; `site-version.yml` is read-only validation with `--check` and never writes or commits repository files. Optional `build-meta.json` carries per-deployment Version/Commit/Branch/Built, is excluded from the VERSION fingerprint, and is not required for the static site. Legacy eight-digit requests remain accepted.
 
 固件时区由 `timezones.json` 同时输出 IANA `zonename` 与 OpenWrt POSIX `timezone`;三条源码通过首启脚本写入两项。/ Firmware timezone selection emits both the IANA `zonename` and OpenWrt POSIX `timezone`; all three source pipelines apply both on first boot.
 

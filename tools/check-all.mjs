@@ -126,11 +126,12 @@ try {
     "import('./lib/catalog-loader.js');",
     "import('./lib/catalog-schema6.js');",
     "new Worker('./lib/catalog-search-worker.js');",
+    "import('./lib/build-identity.js');",
     '',
   ].join('\n'));
   writeStampFixture('site/wrt/index.html', '<link rel="stylesheet" href="app.css?v=old">\n<script src="app.js?v=old"></script>\n');
   writeStampFixture('site/wrt/data/runtime.json', '{"fixture":1}\n');
-  for (const moduleName of ['catalog-engine.js', 'catalog-loader.js', 'catalog-schema6.js', 'catalog-search-worker.js']) {
+  for (const moduleName of ['catalog-engine.js', 'catalog-loader.js', 'catalog-schema6.js', 'catalog-search-worker.js', 'build-identity.js']) {
     writeStampFixture(`site/wrt/lib/${moduleName}`, `export const name = '${moduleName}';\n`);
   }
   writeStampFixture('VERSION', 'v0000000000\n');
@@ -374,7 +375,7 @@ try {
   const releaseFixtureOk = devPromotion.candidate === candidate && devPromotion.version === 'v2608071203' &&
     devPromotion.createsStaging === true && prodPromotion.candidate === candidate &&
     cancellationOk && yesPromotionOk && raceOk && mainPromotionOk &&
-    staged.commit === candidate && meta.commit === candidate && meta.version === 'v2608071203' &&
+    staged.commit === candidate && meta.commit === candidate && meta.version === 'v2608071203' && meta.branch === 'staging' &&
     untar.status === 0 && readFileSync(join(extracted, 'app.js'), 'utf8').trim() === 'D';
   releaseFixtureOk
     ? ok('release promotion/deployment: Enter/n/other cancel, y exact-pushes, ref races block, dev→staging→main verifies, dirty worktree excluded')
@@ -388,6 +389,11 @@ try {
 } finally {
   rmSync(releaseFixtureRoot, { recursive: true, force: true });
 }
+
+const buildIdentityTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-build-identity.mjs')], { encoding: 'utf8' });
+buildIdentityTest.status === 0
+  ? ok('build identity: dev/staging prefixes and main compatibility are centralized')
+  : bad('build identity tests', (buildIdentityTest.stderr || buildIdentityTest.stdout || '').trim().slice(0, 500));
 
 const catalogLoaderTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-catalog-loader.mjs')], {
   encoding: 'utf8',
@@ -461,6 +467,7 @@ try {
   const exactAfterFirst = !before.current && first.current && after.current &&
     directoriesMatch(sourceDir, blogDestination, { ignoredPaths: ['data/build-meta.json'] }) &&
     JSON.parse(readFileSync(join(blogDestination, 'data', 'build-meta.json'), 'utf8')).commit === sourceIdentity.commit &&
+    JSON.parse(readFileSync(join(blogDestination, 'data', 'build-meta.json'), 'utf8')).branch === 'main' &&
     readFileSync(join(blogDestination, 'nested', '中文 空格', 'base.config'), 'utf8') === 'CONFIG_TEST=y\n' &&
     existsSync(join(blogDestination, 'nested', '中文 空格', 'empty')) &&
     readFileSync(join(blogDestination, 'nested', '中文 空格', 'large-binary.bin')).length ===
@@ -879,11 +886,13 @@ mirrorRulesOk
     existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.js')) &&
     existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-schema6.js')) &&
     existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-search-worker.js')) &&
+    existsSync(join(ROOT, 'site', 'wrt', 'lib', 'build-identity.js')) &&
     !existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.mjs')) &&
     !existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.mjs')) &&
     js.includes("import('./lib/catalog-engine.js?v=") &&
     js.includes("import('./lib/catalog-loader.js?v=") &&
     js.includes("import('./lib/catalog-schema6.js?v=") &&
+    js.includes("import('./lib/build-identity.js?v=") &&
     js.includes("new Worker('./lib/catalog-search-worker.js?v=") &&
     !js.includes('catalog-engine.mjs') && !js.includes('catalog-loader.mjs');
   catalogBrowserModuleContract
@@ -1039,7 +1048,7 @@ mirrorRulesOk
     : bad('blog exact mirror contract', '同步工具、选项 3 编排、回滚验证或中英文文档仍保留旧过滤逻辑');
   const standalonePagesContract =
     pagesWorkflow.includes('branches:\n      - main') &&
-    pagesWorkflow.includes('node tools/prepare-web-deployment.mjs --commit "$GITHUB_SHA"') &&
+    pagesWorkflow.includes('node tools/prepare-web-deployment.mjs --commit "$GITHUB_SHA" --branch main') &&
     pagesWorkflow.includes('actions/configure-pages@v5') &&
     pagesWorkflow.includes('actions/upload-pages-artifact@v4') &&
     pagesWorkflow.includes('path: site/wrt') &&
@@ -1235,7 +1244,7 @@ mirrorRulesOk
       .replace(/\s*$/, '\n');
     fixtureConfig += 'CONFIG_PACKAGE_dnsmasq=y\nCONFIG_PACKAGE_dnsmasq-full=y\nCONFIG_DROPBEAR_ED25519=y\n';
     const fixtureRequest = {
-      schema: 4, pageVersion: 'v2608062236', configId: fixtureId,
+      schema: 4, pageVersion: 'v2608062236', requestId: '260807_2114', sourceEnv: 'dev', configId: fixtureId,
       device: '360t7', source: 'ImmortalWrt', version: 'master', branch: 'master',
       variant: 'qihoo_360t7', plugins: [], tag: 'boundary-fixture', config: fixtureConfig,
       use_defconfig: false,
@@ -1249,6 +1258,7 @@ mirrorRulesOk
     const parserEnv = {
       ...process.env, REQUEST_FILE: requestPath, REQUEST_MANIFEST: '',
       SUBMITTED_CONFIG_OUT: submittedPath, RECOMMENDED_AUDIT_OUT: auditPath,
+      ISSUE_TITLE: '[build] dev/260807_2114/boundary-fixture/fixture',
     };
     const accepted = spawnSync(process.execPath, [join(ROOT, 'tools', 'parse-request.mjs')], {
       encoding: 'utf8', env: parserEnv,
@@ -1260,8 +1270,9 @@ mirrorRulesOk
     const rejected = spawnSync(process.execPath, [join(ROOT, 'tools', 'parse-request.mjs')], {
       encoding: 'utf8', env: parserEnv,
     });
-    accepted.status === 0 && rejected.status !== 0 &&
-        String(rejected.stderr || rejected.stdout).includes('目标设备签名')
+    accepted.status === 0 && accepted.stdout.includes('build_ref=260807_2114-boundary-fixture') &&
+        accepted.stdout.includes('artifact_ref=dev-260807_2114-boundary-fixture') &&
+        rejected.status !== 0 && String(rejected.stderr || rejected.stdout).includes('目标设备签名')
       ? ok('后端边界夹具:不审判插件依赖/HAVE_DOT_CONFIG,但拒绝错误 Target/Profile')
       : bad('backend config boundary fixture',
         `accepted=${accepted.status}, rejected=${rejected.status}, ${(accepted.stderr || rejected.stderr || '').slice(0, 220)}`);
@@ -1559,6 +1570,27 @@ mirrorRulesOk
   mobileIssueContract
     ? ok('手机 GitHub App 正文压缩请求 → 权威 config 校验链已接通')
     : bad('mobile Issue request contract', '网页压缩载荷、Actions 解压或工作流入口缺失');
+  const buildIdentitySource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'build-identity.js'), 'utf8');
+  const buildEnvironmentIdentityContract =
+    buildIdentitySource.includes("PREFIXED_ENVIRONMENTS = new Set(['dev', 'staging'])") &&
+    buildIdentitySource.includes('artifactBuildRef') && buildIdentitySource.includes('buildIssueRequestPrefix') &&
+    buildMetaGenerator.includes('process.env.CF_PAGES_BRANCH') && buildMetaGenerator.includes('branch: resolveBranch') &&
+    js.includes('BUILD_IDENTITY_MODULE.buildIssueRequestPrefix(sourceEnv)') &&
+    js.includes('requestId: requestStamp') && js.includes('sourceEnv,') &&
+    requestParser.includes('parseBuildIssueTitleIdentity') && requestParser.includes('artifact_ref=${artifactRef}') &&
+    workflow.includes('artifact_ref: ${{ steps.req.outputs.artifact_ref }}') &&
+    workflow.includes('name: ${{ steps.req.outputs.artifact_ref }}-CONFIG') &&
+    workflow.includes('name: ${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS') &&
+    workflow.includes('name: ${{ steps.req.outputs.artifact_ref }}-FIRMWARE-OTHER') &&
+    workflow.includes('name: ${{ steps.req.outputs.artifact_ref }}-OPTIONAL-PACKAGES') &&
+    !workflow.includes('name: ${{ steps.req.outputs.build_ref }}-CONFIG') &&
+    html.indexOf('id="buildInfo"') > html.indexOf('id="capText"') &&
+    css.includes('.stats .link-btn { margin-right: 0; }') &&
+    css.includes('.site-version-action { order: 0; margin-left: auto; align-self: center; }') &&
+    css.includes('.site-version { padding-left: 4px; padding-right: 4px; font-size: 13.5px; line-height: 1.2; }');
+  buildEnvironmentIdentityContract
+    ? ok('D117-H2 build identity: mobile version placement and dev/staging Action/Artifact prefixes share one rule')
+    : bad('D117-H2 build identity contract', '移动底栏、部署 branch、Issue 标题或 Artifact 命名没有共用统一规则');
   const issueEventBodyContract = issueRequestReader.includes('GITHUB_EVENT_PATH') &&
     issueRequestReader.includes("event.issue?.body") &&
     workflow.includes("if: always() && steps.req.outcome == 'success'");
@@ -1939,7 +1971,8 @@ mirrorRulesOk
     js.includes('function selectedTargetProfileName') &&
     js.includes('function selectedTargetProfileLabel') &&
     js.includes('function requestTargetProfilePart') &&
-    js.includes("const title = '[build] ' + requestStamp + '/' + titleTag + '/' + requestTargetProfilePart() + '/' + state.source.id + '/' + state.version.id + '/' + selectedTargetProfileName()") &&
+    js.includes('BUILD_IDENTITY_MODULE.buildIssueRequestPrefix(sourceEnv)') &&
+    js.includes('requestId: requestStamp') && js.includes('sourceEnv,') &&
     js.includes("const filename = [requestStamp, requestTargetProfilePart(true), safeDownloadNamePart(state.source.id, 'source')");
   selfTestContract
     ? ok('网页自检使用 Catalog/上传配置与真实 .config 生成演算')

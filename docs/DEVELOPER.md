@@ -49,6 +49,7 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ lib/catalog-loader.js       浏览器 Catalog 分片下载、缓存与完整性校验
 │  ├─ lib/catalog-schema6.js      schema 6 菜单/隐藏/Help 分片合并器
 │  ├─ lib/catalog-search-worker.js Advanced 离线搜索 Worker
+│  ├─ lib/build-identity.js      浏览器/Node 共用 dev/staging/main 构建命名规则
 │  ├─ lib/package.json            仅将 lib/*.js 声明为 Node ESM，不改变仓库其他 .js
 │  ├─ packages.html             ⚙ 软件包用途说明页(gen-pkg-page 产出,11 语内嵌,离线可开)
 │  ├─ Wei.G.ico + Wei.G-favicon_little.png   站点图标
@@ -74,7 +75,7 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ parse-request.mjs            载荷解析 + 固定 Catalog/源码契约 + 共享引擎严格校验
 │  ├─ check-all.mjs                一键体检;check-drift.mjs 上游漂移哨兵
 │  ├─ stamp-site-version.mjs       本地生成 VERSION；--check 供 CI 只读验证
-│  ├─ gen-build-meta.mjs           可选生成部署实例 Version/Commit/Built 静态元数据
+│  ├─ gen-build-meta.mjs           可选生成部署实例 Version/Commit/Branch/Built 静态元数据
 │  ├─ dev-assistant.mjs            Prepare/Verify 编排；不执行 git add/commit/push
 │  ├─ sync-blog.mjs                Unicode 安全逐文件镜像(分块哈希、原子替换与失败回滚)
 │  └─ serve.mjs                    本地静态服务器(监听 0.0.0.0:8642)
@@ -146,10 +147,10 @@ WeiG-OpenWrt-AutoBuild/
 
 - Catalog 选择状态保持基础、推荐、用户覆盖、自动依赖与导入来源层。`catalogDependencySymbols` 只记录引擎自动带入项；关闭插件后，引擎可清理其中不再被任何启用项需要的条目，但 `catalogBaselineValues`、`catalogRecommendedValues`、`catalogImportedSymbols` 和非 `n` 的 `catalogUserOverrides` 均为保护层。Profile 包覆盖另以稀疏 `profilePackageOverrides` 保存，仅记录用户改成 Include/Exclude 的少量条目。
 
-- `.github/workflows/custom-build.yml` 只接受网页生成的 Issue 附件，不再提供 `repository_dispatch` 或隐藏 smoke 配置生成入口。Issue 标题使用 `[build] 请求时间戳/构建标识/Target/Source/Branch/Profile`；解析器把 `build_ref` 规范化为 `请求时间戳-构建标识`。每个上游 `.img.gz` 以该前缀加原文件名作为独立、无 ZIP 外壳的 Artifact，辅助资料相应命名为 `请求时间戳-构建标识-CONFIG`、`BUILD-LOGS`、`OPTIONAL-PACKAGES`、`FIRMWARE-OTHER`。时区、主题、NTP、请求/生效软件包镜像与 APK/OPKG 检测结果在提交配置、Summary、`package-mirror-report.json`、`firmware-settings.txt` 与固件内 `/etc/weig-build-info` 交叉核验；固件/config 保留 30 天，完整日志保留 14 天。
+- `.github/workflows/custom-build.yml` 只接受网页生成的 Issue 附件，不再提供 `repository_dispatch` 或隐藏 smoke 配置生成入口。部署实例的 `build-meta.branch` 只作为网页来源身份：`dev`/`staging` 请求的 Actions 标题分别使用 `[build] dev/请求时间戳/...`、`[build] staging/请求时间戳/...`，全部用户可见 Artifact 同步使用 `dev-`/`staging-` 前缀；`main` 保持原来的 `[build] 请求时间戳/...` 与无环境前缀 Artifact。该规则唯一实现位于 `site/wrt/lib/build-identity.js`，`app.js` 与 `parse-request.mjs` 共用，不按域名判断。解析器仍把 `build_ref` 规范化为 `请求时间戳-构建标识`，另生成仅用于产物命名的 `artifact_ref`；旧无环境前缀 Issue/JSON 继续兼容。时区、主题、NTP、请求/生效软件包镜像与 APK/OPKG 检测结果在提交配置、Summary、`package-mirror-report.json`、`firmware-settings.txt` 与固件内 `/etc/weig-build-info` 交叉核验；固件/config 保留 30 天，完整日志保留 14 天。
 - 软件包镜像唯一规范为 `config/001.presets/package-mirrors.json`。修改 Source family、官方 origin、adapter、镜像或回退顺序后运行 `node tools/gen-package-mirrors.mjs`，不得直接维护网页投影。`Shell/apply-package-mirror.sh` 只做非阻断流程包装，`tools/package-mirror-engine.mjs` 根据实际 `.config`、规范 JSON 登记的 capability 文件与 adapter 文件识别 APK/OPKG，不按 Branch 名猜测；只替换已登记根地址，保留陌生自定义 `CONFIG_VERSION_REPO`。自动策略 USTC→PKU→源码默认，手动失败→源码默认，任何镜像问题都不能终止构建。运行 `node tools/test-package-mirror.mjs` 覆盖 OpenWrt/ImmortalWrt/LEDE、未来分支、混合 adapter 与回退矩阵。
 - 构建准入默认限制每位提交者同时最多 2 个排队中或运行中的任务；第 3 个 Issue 会自动回评并关闭。仓库所有者按 GitHub 登录名识别，不受此上限限制，并为每次构建使用独立并发组，不会在本项目队列中互相等待。Fork 可在仓库 Variables 设置正整数 `MAX_BUILDS_PER_USER` 覆盖默认值。`cancel-build.yml` 只接受原 Issue 提交者的 `/cancel` 或 `/cancel-build`，先普通取消，15 秒未结束才强制取消；管理员仍可在 Actions 页面管理任意任务。
-- 根目录 `VERSION` 是仓库与网页共用的分钟级 `vYYMMDDHHmm` 代码版本；`site-version.json` 保存同一版本与统一输入指纹。正式改动在提交前本地运行 `node tools/stamp-site-version.mjs`；CI 仅用 `--check` 验证，不再自动修改或提交版本文件。`dev → staging → main` 的环境晋级本身不重新生成 VERSION。网页常驻显示 `MMDDHHmm` 短版本；可选 `build-meta.json` 提供部署实例的 Commit/Built，缺失时不影响定制器功能。Actions Summary 仍记录 VERSION、请求网页版本、定制器 commit、上游 commit 和完整输入参数。
+- 根目录 `VERSION` 是仓库与网页共用的分钟级 `vYYMMDDHHmm` 代码版本；`site-version.json` 保存同一版本与统一输入指纹。正式改动在提交前本地运行 `node tools/stamp-site-version.mjs`；CI 仅用 `--check` 验证，不再自动修改或提交版本文件。`dev → staging → main` 的环境晋级本身不重新生成 VERSION。网页常驻显示 `MMDDHHmm` 短版本；手机操作栏按“已选 → 容量 → 短版本”排列。可选 `build-meta.json` 提供部署实例的 Commit/Branch/Built，缺失时不影响定制器功能。Actions Summary 仍记录 VERSION、请求网页版本、定制器 commit、上游 commit 和完整输入参数。
 - 下载与并行编译使用动态并发并保留完整日志；并行失败后执行 `make -j1 V=s BUILD_LOG=1`，无需修改 `.config` 即请求上游分包日志。Catalog 引擎只在网页交互中执行强依赖、`select`、choice、反向失效关闭和孤立自动依赖清理；后端不再对整份 `.config` 判断插件依赖或冲突，也不保留人工 `config-rules`。用户勾选时仅由官方 `make defconfig` 解析配置；未勾选时直接使用提交配置。
 - `config/001.presets/source-build-requirements.json` 目前只承载前端未勾选 Defconfig 时静默加入的 `CONFIG_HAVE_DOT_CONFIG=y`，`site/wrt/data/source-build-requirements.json` 是静态网页副本。后端不读取该规则，也不因缺失而拒绝请求；若以后所有构建都固定运行 Defconfig，可删除这层前端兼容。
 - schema 5 解析器只读取固定 Catalog index，核对 revision/legacy 元数据与 `sourceCommit`，不再下载 Catalog 单体或扫描整份 `.config`。后端只保留安全白名单和最小 Target/Profile 身份核对，不检查 ARCH/ARCH_PACKAGES、插件关系、人工兼容规则、主题包状态或构建必需项。Workflow 获取精确上游 commit；可选官方 Defconfig 是唯一后端配置解析步骤。
