@@ -178,7 +178,7 @@ WeiG-OpenWrt-AutoBuild/
 
 ### 2.7 部署与迁移
 
-- 发布分支采用 `dev → staging → main`。`Promote_Release.bat` 只检查 fast-forward 和 exact SHA，并输出人工执行的 push 命令；正常晋级不会重新生成 VERSION。VPS staging 必须由 `origin/staging` 的 exact commit 打包，不能直接复制当前工作区。
+- 发布分支采用 `dev → staging → main`。`Promote_Release.bat` 会先 fetch 并检查 fast-forward、exact SHA 与 VERSION/site-version；只有用户明确输入 `y` 才执行 exact push，push 后再次 fetch 并验证 source/target 都等于候选 SHA。Enter、`n` 或其他输入均取消且不修改 refs；禁止 force push。正常晋级不会重新生成 VERSION。VPS staging 必须由 `origin/staging` 的 exact commit 打包，不能直接复制当前工作区。
 - `OpenWebPage_打开网页.bat` 可打开 Local、Standalone Dev Preview、Standalone Staging Preview、VPS Staging、Standalone Cloudflare Production、Standalone GitHub Pages、Blog Production，或同时打开 Staging Preview + VPS。环境 URL 只存在本机覆盖文件，公开代码没有具体主机/IP。
 
 - 页面整个 `site/wrt/` 目录拷走即可用；Catalog 使用精确缓存 → GitHub Raw 最新 index → jsDelivr/GitHub Raw 固定提交分片 → 完整 GitHub Release，VPS 不保存 Catalog；其他静态数据使用相对路径和本地优先降级。`OpenWebPage_打开网页.bat` 只保留一个可见的 `wrt-server` 窗口，关闭该窗口即停止本地预览。

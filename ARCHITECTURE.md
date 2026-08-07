@@ -14,7 +14,7 @@
 ```
 ├─ OpenWebPage_打开网页.bat      # Local/Preview/Staging/Production 网页入口 / web environment launcher
 ├─ OpenWebPage.local.example.cmd # 本机 URL 配置空模板 / local-only URL template
-├─ Promote_Release.bat           # exact SHA 晋级检查,不自动 push / exact-SHA promotion checks, never pushes
+├─ Promote_Release.bat           # exact SHA 晋级:确认后 push + 远端复验 / confirmed exact-SHA promotion + remote verification
 ├─ ARCHITECTURE.md               # 本文档 / this document
 ├─ README.md + translations/     # 多语言说明 / multilingual READMEs
 ├─ .github/workflows/
@@ -53,7 +53,7 @@
    ├─ parse-request.mjs          # 载荷、安全白名单、Target/Profile 身份与 Catalog 版本契约 / payload, safety allowlists, Target/Profile identity, and Catalog version contract
    ├─ check-text-format.mjs      # 变更文本 LF/CRLF/BOM/EOF 门禁 / changed-text LF/CRLF/BOM/EOF gate
    ├─ sync-blog.mjs              # 当前树或 exact ref → 博客 source/wrt + WRT 源身份 / current tree or exact ref → blog mirror + source identity
-   ├─ promote-release.mjs        # dev→staging→main FF-only 安全检查 / FF-only promotion safety checks
+   ├─ promote-release.mjs        # dev→staging→main FF-only 晋级事务 / FF-only exact promotion transaction
    ├─ prepare-web-deployment.mjs # 生成可选 Version/Commit/Built 元数据 / prepares optional deployment metadata
    ├─ prepare-site-deployment.mjs # 从 exact Git ref 打包 site/wrt / packages site/wrt from an exact Git ref
    ├─ gen-package-mirrors.mjs    # 生成网页精简镜像表 / generates the public mirror projection
@@ -121,13 +121,13 @@ Target/Profile 是后端唯一核对的 `.config` 身份：配置必须且只能
 ## 部署 / Deployment
 
 - `site/wrt/` 是唯一 WRT 网页源码和可独立搬迁的纯静态部署单元；核心功能不依赖 VPS、数据库或自建 API / `site/wrt/` is the single WRT web source and portable static deployment unit; core functionality requires no VPS, database, or custom API.
-- 发布链 / release chain: `dev → staging → main`。`Promote_Release.bat`/`promote-release.mjs` 只验证 exact commit 与 fast-forward 关系并打印人工 `git push` 命令，不修改 Git refs / exact-commit promotion is FF-only and remains manual.
+- 发布链 / release chain: `dev → staging → main`。`Promote_Release.bat`/`promote-release.mjs` 先 fetch 并验证 exact commit、VERSION 与 fast-forward；仅在用户明确输入 `y` 后 push exact SHA，随后再次 fetch 并要求 source/target 都等于该 SHA。Enter/`n`/其他输入均取消且不改 refs；不使用 force push / promotion requires explicit confirmation, exact push, and post-push remote verification.
 - Staging: `prepare-site-deployment.mjs` 从 `origin/staging` 的 detached worktree 打包，不包含当前工作区或后续 dev 修改；VPS 与 Standalone Preview 以相同 AutoBuild Commit 身份核对 / staging packages are created from the exact `origin/staging` commit, excluding local/dev changes.
 - Standalone web: `site/wrt/` 可直接部署为独立站点。Cloudflare Pages 以 `main` 为 Production、`dev/staging` 为 Preview；GitHub Pages Workflow 只从 `main` 发布同一静态目录。两种平台都不拥有第二套业务代码 / `site/wrt/` is a first-class standalone app: Cloudflare uses `main` for Production and `dev/staging` for previews, while GitHub Pages publishes the same directory from `main`.
 - Blog publication: 正式版只在 AutoBuild `main` 晋级后用 `sync-blog.mjs --ref origin/main` 精确镜像到 Hexo `source/wrt/`，并写 `.wrt-source.json` 记录 AutoBuild Version/Commit。Blog 是 Production 镜像，不承担 dev/staging Preview / the blog mirrors only the exact AutoBuild `main` release and is not a second preview lifecycle.
 - `build-meta.json` 仅在具体部署产物中生成；网页缺少它时仍完整运行。Standalone Cloudflare/GitHub Pages/VPS 可分别拥有不同 Built 时间，但同一代码身份的 Version+Commit 必须一致 / deployment metadata is optional; Built may differ per host, while Version+Commit identify the same source identity.
 - 浏览器模块 / browser modules: Catalog 共享模块统一使用 `.js` 和普通 JavaScript MIME；部署包拒绝旧 `.mjs` 并执行真实 HTTP 冒烟/回滚 / shared Catalog modules use `.js`, deployments reject legacy `.mjs`, and live MIME/body smoke checks protect rollback.
-- 提交前 Prepare / pre-commit Prepare: `tools/dev-assistant.mjs prepare` 运行 VERSION stamp、文本格式、`check-all` 与 `git diff --check`；Git add/commit/push 始终人工 / local Prepare validates; Git staging/commit/push remain manual.
+- 提交前 Prepare / pre-commit Prepare: `tools/dev-assistant.mjs prepare` 运行 VERSION stamp、文本格式、`check-all` 与 `git diff --check`；它不执行 Git add/commit/push。分支晋级仅由独立 Promote 工具在用户明确确认后执行 exact push / local Prepare never stages, commits, or pushes; branch promotion is the separate confirmed exact-push transaction.
 - Catalog 运行时数据链 / Catalog runtime data chain: 精确缓存 exact cache → GitHub Raw 最新 index latest index → jsDelivr/GitHub Raw 固定提交分片 pinned-commit shard → 完整 GitHub Release complete Release；VPS 不保存 Catalog，其他静态数据仍使用同目录优先的降级链 / other static data still prefers same-directory fallbacks
 
 ## Catalog schema 6 与 Advanced 性能 / Catalog schema 6 and Advanced performance

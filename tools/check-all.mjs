@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { directoriesMatch, syncBlogMirror } from './sync-blog.mjs';
-import { checkDevToStaging, checkStagingToMain } from './promote-release.mjs';
+import { checkDevToStaging, checkStagingToMain, promoteExact } from './promote-release.mjs';
 import { prepareSiteDeployment } from './prepare-site-deployment.mjs';
 import { checkTextFiles } from './check-text-format.mjs';
 import {
@@ -290,6 +290,15 @@ try {
     if (result.status !== 0) throw new Error((result.stderr || result.stdout || `git ${args.join(' ')}`).trim());
     return result.stdout.trim();
   };
+  const remoteCommit = (ref) => {
+    mustGit(repo, ['fetch', '--prune', 'origin']);
+    return mustGit(repo, ['rev-parse', ref]);
+  };
+  const promotionCli = (kind, input) => spawnSync(process.execPath, [
+    join(ROOT, 'tools', 'promote-release.mjs'), '--repo', repo, 'promote', kind,
+  ], {
+    encoding: 'utf8', shell: false, input,
+  });
   mustGit(repo, ['init']);
   mustGit(repo, ['config', 'user.email', 'fixture@example.invalid']);
   mustGit(repo, ['config', 'user.name', 'Fixture']);
@@ -311,34 +320,71 @@ try {
   mustGit(repo, ['remote', 'add', 'origin', origin]); mustGit(repo, ['push', '-u', 'origin', 'main']);
   mustGit(repo, ['switch', '-c', 'dev']);
   writeReleaseState('v2608071201', 'B'); mustGit(repo, ['add', '.']); mustGit(repo, ['commit', '-m', 'B']);
-  writeReleaseState('v2608071202', 'C'); mustGit(repo, ['add', '.']); mustGit(repo, ['commit', '-m', 'C']); const candidate = mustGit(repo, ['rev-parse', 'HEAD']);
-  writeReleaseState('v2608071203', 'D'); mustGit(repo, ['add', '.']); mustGit(repo, ['commit', '-m', 'D']); mustGit(repo, ['push', '-u', 'origin', 'dev']);
-  const devPromotion = checkDevToStaging(repo, candidate);
-  const promotionCli = spawnSync(process.execPath, [join(ROOT, 'tools', 'promote-release.mjs'), '--repo', repo, 'dev-staging', candidate], {
-    encoding: 'utf8',
-    shell: false,
-  });
-  const cliDidNotPush = runGit(repo, ['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/staging']).status !== 0;
-  mustGit(repo, ['push', 'origin', `${candidate}:refs/heads/staging`]); mustGit(repo, ['fetch', 'origin']);
+  writeReleaseState('v2608071202', 'C'); mustGit(repo, ['add', '.']); mustGit(repo, ['commit', '-m', 'C']);
+  writeReleaseState('v2608071203', 'D'); mustGit(repo, ['add', '.']); mustGit(repo, ['commit', '-m', 'D']);
+  const candidate = mustGit(repo, ['rev-parse', 'HEAD']);
+  mustGit(repo, ['push', '-u', 'origin', 'dev']);
+
+  const devPromotion = checkDevToStaging(repo);
+  const enterCancel = promotionCli('dev-staging', '\n');
+  const stagingAfterEnter = runGit(repo, ['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/staging']).status !== 0;
+  const nCancel = promotionCli('dev-staging', 'n\n');
+  const stagingAfterN = runGit(repo, ['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/staging']).status !== 0;
+  const otherCancel = promotionCli('dev-staging', 'later\n');
+  const stagingAfterOther = runGit(repo, ['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/staging']).status !== 0;
+  const yesPromotion = promotionCli('dev-staging', 'y\n');
+  const stagingAfterYes = remoteCommit('origin/staging');
   const prodPromotion = checkStagingToMain(repo);
+
+  writeReleaseState('v2608071204', 'E'); mustGit(repo, ['add', '.']); mustGit(repo, ['commit', '-m', 'E']);
+  const raceCandidate = mustGit(repo, ['rev-parse', 'HEAD']); mustGit(repo, ['push', 'origin', 'dev']);
+  let raceBlocked = false;
+  try {
+    await promoteExact(repo, 'dev-staging', {
+      confirm: async () => {
+        writeReleaseState('v2608071205', 'F'); mustGit(repo, ['add', '.']); mustGit(repo, ['commit', '-m', 'F']);
+        mustGit(repo, ['push', 'origin', 'dev']);
+        return true;
+      },
+      writeLine: () => {},
+    });
+  } catch (error) {
+    raceBlocked = String(error.message).includes('origin/dev changed while awaiting confirmation');
+  }
+  const stagingAfterRace = remoteCommit('origin/staging');
+
+  const mainPromotion = promotionCli('staging-main', 'y\n');
+  const mainAfterYes = remoteCommit('origin/main');
   writeFileSync(join(repo, 'site', 'wrt', 'app.js'), 'LOCAL-UNCOMMITTED\n');
   const archive = join(releaseFixtureRoot, 'staging.tar.gz');
   const staged = prepareSiteDeployment({ repo, ref: 'origin/staging', output: archive, builtAt: '2026-08-07T14:30:00+08:00' });
   const extracted = join(releaseFixtureRoot, 'extract'); mkdirSync(extracted);
   const untar = spawnSync('tar', ['-xzf', archive, '-C', extracted], { encoding: 'utf8', shell: false });
   const meta = JSON.parse(readFileSync(join(extracted, 'data', 'build-meta.json'), 'utf8'));
-  const releaseFixtureOk = devPromotion.candidate === candidate && devPromotion.version === 'v2608071202' &&
+
+  const cancellationOk = [enterCancel, nCancel, otherCancel].every((result) =>
+    result.status === 0 && result.stdout.includes('CANCELLED: no Git ref was changed.')) &&
+    stagingAfterEnter && stagingAfterN && stagingAfterOther;
+  const yesPromotionOk = yesPromotion.status === 0 && yesPromotion.stdout.includes('SAFE TO PROMOTE') &&
+    yesPromotion.stdout.includes('Revalidating remote refs before push...') &&
+    yesPromotion.stdout.includes('PROMOTION VERIFIED') && stagingAfterYes === candidate;
+  const raceOk = raceCandidate !== candidate && raceBlocked && stagingAfterRace === candidate;
+  const mainPromotionOk = mainPromotion.status === 0 && mainPromotion.stdout.includes('PROMOTION VERIFIED') &&
+    mainAfterYes === candidate;
+  const releaseFixtureOk = devPromotion.candidate === candidate && devPromotion.version === 'v2608071203' &&
     devPromotion.createsStaging === true && prodPromotion.candidate === candidate &&
-    promotionCli.status === 0 && cliDidNotPush && promotionCli.stdout.includes('SAFE TO PROMOTE') &&
-    promotionCli.stdout.includes(`git push origin ${candidate}:refs/heads/staging`) &&
-    promotionCli.stdout.includes('No Git ref was changed by this tool.') &&
-    staged.commit === candidate && meta.commit === candidate && meta.version === 'v2608071202' &&
-    untar.status === 0 && readFileSync(join(extracted, 'app.js'), 'utf8').trim() === 'C';
+    cancellationOk && yesPromotionOk && raceOk && mainPromotionOk &&
+    staged.commit === candidate && meta.commit === candidate && meta.version === 'v2608071203' &&
+    untar.status === 0 && readFileSync(join(extracted, 'app.js'), 'utf8').trim() === 'D';
   releaseFixtureOk
-    ? ok('release promotion/deployment: exact dev candidate, FF-only staging/main, dirty worktree exclusion and build-meta identity')
-    : bad('release promotion/deployment fixture', JSON.stringify({ devPromotion, prodPromotion, staged, meta }).slice(0, 700));
+    ? ok('release promotion/deployment: Enter/n/other cancel, y exact-pushes, ref races block, dev→staging→main verifies, dirty worktree excluded')
+    : bad('release promotion/deployment fixture', JSON.stringify({
+      devPromotion, prodPromotion, cancellationOk, yesPromotionOk, raceOk, mainPromotionOk,
+      enter: enterCancel.status, n: nCancel.status, other: otherCancel.status, yes: yesPromotion.status,
+      raceCandidate, stagingAfterRace, mainAfterYes, staged, meta,
+    }).slice(0, 900));
 } catch (error) {
-  bad('release promotion/deployment fixture', error.message.slice(0, 500));
+  bad('release promotion/deployment fixture', error.message.slice(0, 700));
 } finally {
   rmSync(releaseFixtureRoot, { recursive: true, force: true });
 }
@@ -902,18 +948,28 @@ mirrorRulesOk
     : bad('VPS deploy diagnostics', 'remote execution label, stage/error markers, validation details, backup diagnostics or privacy guard is incomplete');
   const releaseToolContract =
     promoteSource.includes("merge-base', '--is-ancestor'") &&
-    promoteSource.includes('git push origin ${candidate}:refs/heads/staging') &&
-    promoteSource.includes('git push origin ${staging}:refs/heads/main') &&
+    promoteSource.includes("git(repo, ['push', 'origin', `${initial.candidate}:refs/heads/${initial.targetBranch}`])") &&
+    promoteSource.includes('Push this exact commit to ${initial.targetRef} now? [y/N]: ') &&
+    promoteSource.includes('Revalidating remote refs before push...') &&
+    promoteSource.includes('CANCELLED: no Git ref was changed.') &&
+    promoteSource.includes('PROMOTION VERIFIED') &&
+    promoteSource.includes('changed while awaiting confirmation; rerun promotion.') &&
     promoteSource.includes("fileURLToPath(import.meta.url)") &&
     !promoteSource.includes('new URL(import.meta.url).pathname') &&
-    !promoteSource.includes("spawnSync('git', ['push'") &&
-    promoteBat.includes('Check dev -^> staging') && promoteBat.includes('Check staging -^> main') &&
+    !promoteSource.includes('Review and run manually:') &&
+    !promoteSource.includes('--force') &&
+    promoteBat.includes('Promote dev -^> staging') && promoteBat.includes('Promote staging -^> main') &&
+    !promoteBat.includes('Check dev -^> staging') && !promoteBat.includes('Check staging -^> main') &&
+    promoteBat.includes('tools\\promote-release.mjs promote dev-staging') &&
+    promoteBat.includes('tools\\promote-release.mjs promote staging-main') &&
+    stagingDeployScript.includes('call "%MAIN_REPO%\\OpenWebPage_打开网页.bat" vps') &&
+    !stagingDeployScript.includes('start "" "%MAIN_REPO%\\OpenWebPage_打开网页.bat" vps') &&
     openWebPageBat.includes('Staging Pair') && openWebPageBat.includes('GITHUB_PAGES_URL') &&
     openWebPageBat.includes('STANDALONE_PRODUCTION_URL') && openWebPageBat.includes('BLOG_PRODUCTION_URL') &&
     openWebPageBat.includes('OpenWebPage.local.cmd');
   releaseToolContract
-    ? ok('release helpers: FF-only exact SHA checks, manual push, multi-environment web launcher')
-    : bad('release helper contract', 'promotion safety or portable web launcher contract is incomplete');
+    ? ok('release helpers: confirm→exact push→post-fetch verify, FF-only safety, no force push, launcher reuse without extra CMD')
+    : bad('release helper contract', 'promotion transaction safety, cancellation, post-push verification or portable launcher contract is incomplete');
   const privateRetentionContract =
     privateMaintenanceSource.includes('const KEEP_BACKUPS = 3') &&
     privateMaintenanceSource.includes('14 * 24 * 60 * 60 * 1000') &&
