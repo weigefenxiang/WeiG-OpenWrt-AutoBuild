@@ -18,7 +18,8 @@
 ├─ ARCHITECTURE.md               # 本文档 / this document
 ├─ README.md + translations/     # 多语言说明 / multilingual READMEs
 ├─ .github/workflows/
-│  ├─ custom-build.yml           # Issue 附件权威构建 / authoritative Issue-attachment build
+│  ├─ custom-build.yml           # 稳定 Issue 构建 + Phase A exact-ref Worker / stable Issue build + Phase-A exact-ref Worker
+│  ├─ build-dispatcher.yml       # Phase A 手动 exact-ref 路由验证 / Phase-A manual exact-ref routing validation
 │  └─ cancel-build.yml           # Issue 作者 /cancel 取消自己的构建 / Issue-author-only build cancellation
 ├─ config/<品牌>/<机型>/          # base 配置,按品牌分层 / base configs, grouped by brand
 │  └─ 360/360t7/*.config         # 360T7 源码/分支/Profile 独立配置 / per-source, branch and profile configs
@@ -50,6 +51,7 @@
    ├─ gen-i18n.mjs               # 词条校验合并 → i18n.json / validate & merge strings
    ├─ gen-seed-configs.mjs       # 机型目录 → 版本化 Profile config / catalog → versioned profile configs
    ├─ fetch-build-request.mjs    # 下载并限制 GitHub Issue 附件 / fetch allowlisted GitHub Issue attachment
+   ├─ parse-build-request-identity.mjs # 仅解析 schema 5 branch/commit/requestId 路由信封 / routing envelope only
    ├─ parse-request.mjs          # 载荷、安全白名单、Target/Profile 身份与 Catalog 版本契约 / payload, safety allowlists, Target/Profile identity, and Catalog version contract
    ├─ check-text-format.mjs      # 变更文本 LF/CRLF/BOM/EOF 门禁 / changed-text LF/CRLF/BOM/EOF gate
    ├─ sync-blog.mjs              # 当前树或 exact ref → 博客 source/wrt + WRT 源身份 / current tree or exact ref → blog mirror + source identity
@@ -61,7 +63,7 @@
    └─ serve.mjs                  # 本地静态服务器 / local static server
 ```
 
-Build environment identity is deployment metadata, not application configuration. `build-meta.branch` is generated from the deployment branch; `site/wrt/lib/build-identity.js` is the single naming authority shared by the browser and request parser. Only `dev` and `staging` add prefixes to `[build]` Action titles and Artifact names; `main` remains unprefixed. No hostname or provider-specific branch detection belongs in `app.js`.
+Build environment identity is deployment metadata, not application configuration. `build-meta.branch` is generated from the deployment branch; `site/wrt/lib/build-identity.js` is the single naming authority shared by the browser and request parser. Every non-`main` branch adds one sanitized prefix to `[build]` Action titles and Artifact names; `main` remains unprefixed. No hostname or provider-specific branch detection belongs in `app.js`.
 
 ## 数据流 / Data flow
 
@@ -121,6 +123,13 @@ Target/Profile 是后端唯一核对的 `.config` 身份：配置必须且只能
 6. `VERSION` 在本地 Prepare 阶段由 `stamp-site-version.mjs` 按 tools/Workflow/Shell/config/site 统一指纹生成；`site-version.yml` 仅以只读权限运行 `--check`，不再修改或提交仓库。`build-meta.json` 是可选部署实例元数据，记录 Version/Commit/Branch/Built 且不参与 VERSION 指纹；缺失时静态网站仍完整工作。旧八位请求继续兼容 / `VERSION` is generated locally during Prepare from the shared tools/workflow/Shell/config/site fingerprint; `site-version.yml` is read-only validation with `--check` and never writes or commits repository files. Optional `build-meta.json` carries per-deployment Version/Commit/Branch/Built, is excluded from the VERSION fingerprint, and is not required for the static site. Legacy eight-digit requests remain accepted.
 
 固件时区由 `timezones.json` 同时输出 IANA `zonename` 与 OpenWrt POSIX `timezone`;三条源码通过首启脚本写入两项。/ Firmware timezone selection emits both the IANA `zonename` and OpenWrt POSIX `timezone`; all three source pipelines apply both on first boot.
+
+
+### E v2 Phase A: exact-ref validation without production cutover
+
+Phase A intentionally keeps the existing `issues: opened` path in `custom-build.yml` unchanged for normal users. A new manual-only `build-dispatcher.yml` accepts an existing Issue number, downloads exactly one schema-5 `build-request.json`, reads only `sourceEnv` / full 40-character `requestCommit` / `requestId`, verifies the requested branch currently points to that commit, and dispatches `custom-build.yml` at that branch. The dispatched Worker then checks `github.ref_name`, `github.sha`, the exact checkout HEAD, and the JSON identity again. The Dispatcher does not interpret Catalog/Kconfig/plugin/build semantics. Phase B may replace the direct Issue entry only after real Phase-A Runs validate dev/fix/stale-ref behavior.
+
+Phase A does **not** add any user-editable route marker to Issue text and does not change the current web submission URL. The eventual E v2 cutover will keep `build-request.json` as the single branch+commit source of truth.
 
 ## 部署 / Deployment
 

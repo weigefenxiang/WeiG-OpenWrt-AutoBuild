@@ -1,0 +1,143 @@
+name: Build Dispatcher / 构建路由
+run-name: Route test / 路由测试 · #${{ inputs.issue_number }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Existing Issue number containing one build-request.json
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: write
+  issues: write
+
+jobs:
+  dispatch:
+    name: Route exact build / 路由精确构建
+    runs-on: ubuntu-22.04
+    timeout-minutes: 4
+    steps:
+      - name: Checkout stable dispatcher / 检出稳定路由器
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Resolve Issue snapshot / 固定 Issue 快照
+        id: issue
+        uses: actions/github-script@v8
+        env:
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+        with:
+          script: |
+            const fs = require('fs');
+            const issueNumber = Number(process.env.ISSUE_NUMBER);
+            if (!Number.isSafeInteger(issueNumber) || issueNumber <= 0) {
+              core.setFailed('Invalid Issue number / Issue 编号非法');
+              return;
+            }
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: issueNumber,
+            });
+            if (issue.pull_request) {
+              core.setFailed('Pull requests are not build requests / PR 不能作为构建请求');
+              return;
+            }
+            if (issue.state !== 'open') {
+              core.setFailed(`Issue #${issueNumber} is not open / Issue 不是打开状态`);
+              return;
+            }
+            const snapshot = {
+              issue: {
+                number: issue.number,
+                title: issue.title,
+                body: String(issue.body || ''),
+                created_at: issue.created_at,
+                user: { login: issue.user.login },
+              },
+            };
+            fs.writeFileSync('dispatcher-event.json', `${JSON.stringify(snapshot)}\n`);
+            core.setOutput('number', String(issue.number));
+            core.setOutput('title', issue.title);
+            core.setOutput('requester', issue.user.login);
+            core.setOutput('created_at', issue.created_at);
+
+      - name: Read authoritative Build Request / 读取权威 Build Request
+        env:
+          GITHUB_EVENT_PATH: ${{ github.workspace }}/dispatcher-event.json
+          REQUEST_MANIFEST_OUT: request-attachments.json
+          REQUEST_DIR: request-attachments
+        run: node tools/fetch-build-request.mjs
+
+      - name: Read branch and commit from Build Request / 从 Build Request 读取分支与提交
+        id: route
+        env:
+          REQUEST_MANIFEST: request-attachments.json
+          ISSUE_TITLE: ${{ steps.issue.outputs.title }}
+        run: node tools/parse-build-request-identity.mjs
+
+      - name: Validate exact ref and dispatch Worker / 核对精确版本并派发 Worker
+        uses: actions/github-script@v8
+        env:
+          REQUEST_BRANCH: ${{ steps.route.outputs.request_branch }}
+          REQUEST_COMMIT: ${{ steps.route.outputs.request_commit }}
+          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+          ISSUE_TITLE: ${{ steps.issue.outputs.title }}
+          REQUESTER: ${{ steps.issue.outputs.requester }}
+          ISSUE_CREATED_AT: ${{ steps.issue.outputs.created_at }}
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.REQUEST_BRANCH;
+            const commit = process.env.REQUEST_COMMIT.toLowerCase();
+            const issueNumber = Number(process.env.ISSUE_NUMBER);
+            const requester = process.env.REQUESTER;
+            const snapshot = JSON.parse(fs.readFileSync('dispatcher-event.json', 'utf8'));
+            const issueBody = String(snapshot.issue?.body || '');
+
+            let branchData;
+            try {
+              ({ data: branchData } = await github.rest.repos.getBranch({ owner, repo, branch }));
+            } catch (error) {
+              if (error.status === 404) {
+                core.setFailed(`Requested branch does not exist: ${branch} / 请求分支不存在`);
+                return;
+              }
+              throw error;
+            }
+            const head = String(branchData.commit?.sha || '').toLowerCase();
+            if (head !== commit) {
+              core.setFailed(`Stale request: ${branch}@${commit.slice(0, 12)} != HEAD ${head.slice(0, 12)} / 请求提交与当前分支 HEAD 不一致`);
+              return;
+            }
+
+            const workerInputs = {
+              issue_number: String(issueNumber),
+              issue_title: process.env.ISSUE_TITLE,
+              issue_body: issueBody,
+              requester,
+              issue_created_at: process.env.ISSUE_CREATED_AT,
+              request_branch: branch,
+              request_commit: commit,
+            };
+            const bytes = Buffer.byteLength(JSON.stringify({ ref: branch, inputs: workerInputs }), 'utf8');
+            if (bytes > 60000) {
+              core.setFailed(`Dispatch payload is too large: ${bytes} bytes / 派发请求过大`);
+              return;
+            }
+
+            const { data: currentIssue } = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
+            if (currentIssue.state !== 'open' || currentIssue.user.login.toLowerCase() !== requester.toLowerCase() ||
+                currentIssue.created_at !== process.env.ISSUE_CREATED_AT || currentIssue.title !== process.env.ISSUE_TITLE) {
+              core.setFailed('Issue identity changed before dispatch / 派发前 Issue 身份已变化');
+              return;
+            }
+
+            await github.rest.actions.createWorkflowDispatch({
+              owner, repo, workflow_id: 'custom-build.yml', ref: branch, inputs: workerInputs,
+            });
+            core.notice(`Dispatched custom-build.yml at ${branch}@${commit}.`);

@@ -409,6 +409,11 @@ buildIdentityTest.status === 0
   ? ok('build identity: every non-main request is prefixed with one sanitized branch identity')
   : bad('build identity tests', (buildIdentityTest.stderr || buildIdentityTest.stdout || '').trim().slice(0, 500));
 
+const buildRequestIdentityTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-build-request-identity.mjs')], { encoding: 'utf8' });
+buildRequestIdentityTest.status === 0
+  ? ok('build request identity: schema 5 JSON is the exact branch+commit routing envelope')
+  : bad('build request identity tests', (buildRequestIdentityTest.stderr || buildRequestIdentityTest.stdout || '').trim().slice(0, 500));
+
 const buildDiagnosticsTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-build-diagnostics.mjs')], { encoding: 'utf8' });
 buildDiagnosticsTest.status === 0
   ? ok('build diagnostics: parallel evidence is frozen before isolated 180m single-thread retry')
@@ -1373,7 +1378,8 @@ mirrorRulesOk
       .replace(/\s*$/, '\n');
     fixtureConfig += 'CONFIG_PACKAGE_dnsmasq=y\nCONFIG_PACKAGE_dnsmasq-full=y\nCONFIG_DROPBEAR_ED25519=y\n';
     const fixtureRequest = {
-      schema: 4, pageVersion: 'v2608062236', requestId: '260807_2114', sourceEnv: 'dev', configId: fixtureId,
+      schema: 4, pageVersion: 'v2608062236', requestId: '260807_2114', sourceEnv: 'dev',
+      requestCommit: '005e435f91b2c2891cf46468e2cb46e36519df8b', configId: fixtureId,
       device: '360t7', source: 'ImmortalWrt', version: 'master', branch: 'master',
       variant: 'qihoo_360t7', plugins: [], tag: 'boundary-fixture', config: fixtureConfig,
       use_defconfig: false,
@@ -1388,9 +1394,14 @@ mirrorRulesOk
       ...process.env, REQUEST_FILE: requestPath, REQUEST_MANIFEST: '',
       SUBMITTED_CONFIG_OUT: submittedPath, RECOMMENDED_AUDIT_OUT: auditPath,
       ISSUE_TITLE: '[build] dev/260807_2114/boundary-fixture/fixture',
+      EXPECTED_REQUEST_BRANCH: 'dev',
+      EXPECTED_REQUEST_COMMIT: '005e435f91b2c2891cf46468e2cb46e36519df8b',
     };
     const accepted = spawnSync(process.execPath, [join(ROOT, 'tools', 'parse-request.mjs')], {
       encoding: 'utf8', env: parserEnv,
+    });
+    const identityRejected = spawnSync(process.execPath, [join(ROOT, 'tools', 'parse-request.mjs')], {
+      encoding: 'utf8', env: { ...parserEnv, EXPECTED_REQUEST_COMMIT: 'ffffffffffffffffffffffffffffffffffffffff' },
     });
     fixtureRequest.config = fixtureConfig.replace(
       'CONFIG_TARGET_mediatek_filogic_DEVICE_qihoo_360t7=y',
@@ -1401,27 +1412,33 @@ mirrorRulesOk
     });
     accepted.status === 0 && accepted.stdout.includes('build_ref=260807_2114-boundary-fixture') &&
         accepted.stdout.includes('artifact_ref=dev-260807_2114-boundary-fixture') &&
+        identityRejected.status !== 0 && String(identityRejected.stderr || identityRejected.stdout).includes('requestCommit 与实际 Worker 提交不一致') &&
         rejected.status !== 0 && String(rejected.stderr || rejected.stdout).includes('目标设备签名')
-      ? ok('后端边界夹具:不审判插件依赖/HAVE_DOT_CONFIG,但拒绝错误 Target/Profile')
+      ? ok('后端边界夹具:精确 Worker 身份生效，不审判插件依赖/HAVE_DOT_CONFIG，但拒绝错误 Target/Profile')
       : bad('backend config boundary fixture',
-        `accepted=${accepted.status}, rejected=${rejected.status}, ${(accepted.stderr || rejected.stderr || '').slice(0, 220)}`);
+        `accepted=${accepted.status}, identity=${identityRejected.status}, rejected=${rejected.status}, ${(accepted.stderr || identityRejected.stderr || rejected.stderr || '').slice(0, 220)}`);
   } catch (error) {
     bad('backend config boundary fixture', error.message.slice(0, 300));
   } finally {
     rmSync(backendBoundaryFixtureRoot, { recursive: true, force: true });
   }
-  const issueOnlyBuildContract = !buildWorkflow.includes('workflow_dispatch:') &&
-    !buildWorkflow.includes('repository_dispatch:') &&
-    !buildWorkflow.includes('client_payload') &&
+  const dispatcherWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'build-dispatcher.yml'), 'utf8');
+  const branchAwarePhaseAContract = buildWorkflow.includes('issues:') && buildWorkflow.includes('workflow_dispatch:') &&
+    dispatcherWorkflow.includes('workflow_dispatch:') && !dispatcherWorkflow.includes('types: [opened]') &&
+    dispatcherWorkflow.includes('tools/fetch-build-request.mjs') &&
+    dispatcherWorkflow.includes('tools/parse-build-request-identity.mjs') &&
+    dispatcherWorkflow.includes("workflow_id: 'custom-build.yml'") &&
+    dispatcherWorkflow.includes('ref: branch') &&
+    buildWorkflow.includes('EXPECTED_REQUEST_BRANCH:') && buildWorkflow.includes('EXPECTED_REQUEST_COMMIT:') &&
+    buildWorkflow.includes('Verify checked-out commit / 核对检出提交') &&
+    !buildWorkflow.includes('repository_dispatch:') && !buildWorkflow.includes('client_payload') &&
     !existsSync(join(ROOT, '.github', 'workflows', 'smoke-all.yml')) &&
     !existsSync(join(ROOT, 'tools', 'build-config.mjs')) &&
     parser.includes('仅支持网页生成的 build-request.json') &&
-    !parser.includes('smoke-internal') &&
-    !parser.includes('IN_DEVICE') &&
-    !buildWorkflow.includes('authoritative_config');
-  issueOnlyBuildContract
-    ? ok('构建入口:仅接受网页生成的 Issue 权威附件，旧 smoke 生成链已删除')
-    : bad('build entrypoint', '仍残留 repository_dispatch、smoke workflow 或旧配置生成器');
+    !parser.includes('smoke-internal') && !parser.includes('IN_DEVICE') && !buildWorkflow.includes('authoritative_config');
+  branchAwarePhaseAContract
+    ? ok('E v2 Phase A: stable Issue entry remains while manual exact-ref Dispatcher→Worker validation is enabled')
+    : bad('build entrypoint', 'Phase A must preserve the Issue entry, add manual exact-ref dispatch, and keep legacy smoke generators retired');
   const driftSentinelContract = driftSentinel.includes("const forbidden = ['lede-17.01', 'pcs-standalone-back', 'master'];") &&
     driftSentinel.includes("names.has('main')") && !driftSentinel.includes('360T7') &&
     !driftSentinel.includes('qihoo_360t7') && !syncWorkflow.includes('360T7');
@@ -1818,7 +1835,7 @@ mirrorRulesOk
       obsoleteArtifactContract.every((token) => !requestParser.includes(token))
     ? ok('Actions 独立 .img.gz、分类资料、桥接清理与 14/30 天保留期已接通')
     : bad('Actions artifact contract', '独立固件发布、分类、清理或旧产物链仍有问题');
-  const firmwareSettingsContract = workflow.includes('ISSUE_TITLE: ${{ github.event.issue.title }}') &&
+  const firmwareSettingsContract = workflow.includes('ISSUE_TITLE: ${{') && workflow.includes('inputs.issue_title') &&
     workflow.includes('Apply package mirror / 应用软件包镜像（APK/OPKG）') &&
     workflow.includes('Verify firmware settings / 核验固件设置') &&
     workflow.includes('package-mirror-report.json') &&
@@ -1873,7 +1890,8 @@ mirrorRulesOk
     : bad('Actions live log contract', '动态并发、逐行 tee、单次下载、失败诊断或旧过滤清理不完整');
   const buildLimitContract = workflow.includes('MAX_BUILDS_PER_USER') &&
     workflow.includes('Build admission refused') &&
-    workflow.includes('const requester = context.payload.issue.user.login;') &&
+    workflow.includes('const requester = process.env.REQUESTER;') &&
+    workflow.includes("run.event === 'workflow_dispatch'") && workflow.includes("run.event === 'issues'") &&
     workflow.includes('const isRepositoryOwner = requester.toLowerCase() === context.repo.owner.toLowerCase();') &&
     workflow.includes('`owner-${context.runId}`') &&
     workflow.includes('Repository owner build admitted without queue') &&

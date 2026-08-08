@@ -13,6 +13,12 @@ export function normalizeBuildEnvironment(value) {
   return environment;
 }
 
+
+export function normalizeBuildCommit(value) {
+  const commit = String(value || '').trim().toLowerCase();
+  return /^[a-f0-9]{40}$/.test(commit) ? commit : '';
+}
+
 export function buildEnvironmentIdentity(value) {
   const environment = normalizeBuildEnvironment(value);
   if (!environment || environment === 'main') return '';

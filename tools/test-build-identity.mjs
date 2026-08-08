@@ -7,6 +7,7 @@ import {
   buildEnvironmentPrefix,
   buildIssueRequestPrefix,
   normalizeBuildEnvironment,
+  normalizeBuildCommit,
   parseBuildIssueTitleIdentity,
 } from '../site/wrt/lib/build-identity.js';
 
@@ -17,6 +18,12 @@ assert.equal(normalizeBuildEnvironment('fix/kconfig-serializer-hardening'), 'fix
 assert.equal(normalizeBuildEnvironment('feat/rootfs-capacity-guidance'), 'feat/rootfs-capacity-guidance');
 assert.equal(normalizeBuildEnvironment('bad branch'), '');
 assert.equal(normalizeBuildEnvironment('../main'), '');
+
+assert.equal(normalizeBuildCommit('005e435f91b2c2891cf46468e2cb46e36519df8b'), '005e435f91b2c2891cf46468e2cb46e36519df8b');
+assert.equal(normalizeBuildCommit('005E435F91B2C2891CF46468E2CB46E36519DF8B'), '005e435f91b2c2891cf46468e2cb46e36519df8b');
+assert.equal(normalizeBuildCommit('005e435'), '');
+assert.equal(normalizeBuildCommit('g05e435f91b2c2891cf46468e2cb46e36519df8b'), '');
+
 
 assert.equal(buildEnvironmentIdentity('dev'), 'dev');
 assert.equal(buildEnvironmentIdentity('staging'), 'staging');

@@ -9,7 +9,7 @@ import { readFileSync, appendFileSync, writeFileSync, existsSync } from 'node:fs
 import { createHash } from 'node:crypto';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { artifactBuildRef, buildEnvironmentIdentity, normalizeBuildEnvironment, parseBuildIssueTitleIdentity } from '../site/wrt/lib/build-identity.js';
+import { artifactBuildRef, buildEnvironmentIdentity, normalizeBuildCommit, normalizeBuildEnvironment, parseBuildIssueTitleIdentity } from '../site/wrt/lib/build-identity.js';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DEVICES = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'devices.json'), 'utf8'));
 const CONFIG_MANIFEST = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'config-manifest.json'), 'utf8'));
@@ -377,8 +377,20 @@ if (titleIdentity.sourceEnv && !normalizedSourceEnv) {
 }
 const sourceEnv = normalizedSourceEnv;
 const requestCommitInput = String(req.requestCommit || '').trim();
-const requestCommit = /^[a-f0-9]{7,64}$/i.test(requestCommitInput) ? requestCommitInput : '';
+const requestCommit = /^[a-f0-9]{7,64}$/i.test(requestCommitInput) ? requestCommitInput.toLowerCase() : '';
 if (requestCommitInput && !requestCommit) fail(`非法 requestCommit: ${requestCommitInput}`);
+const expectedSourceEnvInput = String(process.env.EXPECTED_REQUEST_BRANCH || '').trim();
+const expectedSourceEnv = normalizeBuildEnvironment(expectedSourceEnvInput);
+if (expectedSourceEnvInput && !expectedSourceEnv) fail(`非法 EXPECTED_REQUEST_BRANCH: ${expectedSourceEnvInput}`);
+const expectedRequestCommitInput = String(process.env.EXPECTED_REQUEST_COMMIT || '').trim();
+const expectedRequestCommit = normalizeBuildCommit(expectedRequestCommitInput);
+if (expectedRequestCommitInput && !expectedRequestCommit) fail(`非法 EXPECTED_REQUEST_COMMIT: ${expectedRequestCommitInput}`);
+if (expectedSourceEnv && sourceEnv !== expectedSourceEnv) {
+  fail(`sourceEnv 与实际 Worker 分支不一致: request=${sourceEnv || '(missing)'}, worker=${expectedSourceEnv}`);
+}
+if (expectedRequestCommit && requestCommit !== expectedRequestCommit) {
+  fail(`requestCommit 与实际 Worker 提交不一致: request=${requestCommit || '(missing)'}, worker=${expectedRequestCommit}`);
+}
 const requestRef = cleanIdentity(req.requestId || attachmentRef || titleIdentity.requestId);
 const buildRef = requestRef ? `${requestRef}-${tag}` : tag;
 const artifactRef = artifactBuildRef(buildRef, sourceEnv);
