@@ -578,7 +578,7 @@ async function init() {
       import('./lib/catalog-engine.js?v=9f03d1396d'),
       import('./lib/catalog-loader.js?v=e1801742f9'),
       import('./lib/catalog-schema6.js?v=0a165903c2'),
-      import('./lib/build-identity.js?v=e49ff9b9b0'),
+      import('./lib/build-identity.js?v=3509184d42'),
     ]);
     I18N = await loadJson('i18n.json');
     state.lang = pickLang();
@@ -5826,6 +5826,7 @@ function openSubmitModal() {
           generatedAt: new Date().toISOString(),
           requestId: requestStamp,
           sourceEnv,
+          requestCommit: String(state.buildMeta?.commit || ''),
           pageVersion: state.siteVersion,
           configId: [state.device.id, state.source.id, state.version.id, state.variant.id].join('/'),
           device: state.device.id, source: state.source.id, version: state.version.id,

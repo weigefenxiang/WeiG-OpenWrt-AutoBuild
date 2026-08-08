@@ -392,7 +392,7 @@ try {
 
 const buildIdentityTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-build-identity.mjs')], { encoding: 'utf8' });
 buildIdentityTest.status === 0
-  ? ok('build identity: dev/staging prefixes and main compatibility are centralized')
+  ? ok('build identity: every non-main request is prefixed with one sanitized branch identity')
   : bad('build identity tests', (buildIdentityTest.stderr || buildIdentityTest.stdout || '').trim().slice(0, 500));
 
 const catalogLoaderTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-catalog-loader.mjs')], {
@@ -1610,12 +1610,14 @@ mirrorRulesOk
     : bad('mobile Issue request contract', '网页压缩载荷、Actions 解压或工作流入口缺失');
   const buildIdentitySource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'build-identity.js'), 'utf8');
   const buildEnvironmentIdentityContract =
-    buildIdentitySource.includes("PREFIXED_ENVIRONMENTS = new Set(['dev', 'staging'])") &&
+    buildIdentitySource.includes("environment === 'main'") &&
+    buildIdentitySource.includes("environment.replaceAll('/', '_')") &&
     buildIdentitySource.includes('artifactBuildRef') && buildIdentitySource.includes('buildIssueRequestPrefix') &&
     buildMetaGenerator.includes('process.env.CF_PAGES_BRANCH') && buildMetaGenerator.includes('branch: resolveBranch') &&
     js.includes('BUILD_IDENTITY_MODULE.buildIssueRequestPrefix(sourceEnv)') &&
-    js.includes('requestId: requestStamp') && js.includes('sourceEnv,') &&
-    requestParser.includes('parseBuildIssueTitleIdentity') && requestParser.includes('artifact_ref=${artifactRef}') &&
+    js.includes('requestId: requestStamp') && js.includes('sourceEnv,') && js.includes('requestCommit: String(state.buildMeta?.commit') &&
+    requestParser.includes('parseBuildIssueTitleIdentity') && requestParser.includes('buildEnvironmentIdentity') &&
+    requestParser.includes('artifact_ref=${artifactRef}') && requestParser.includes('request_commit=${requestCommit}') &&
     workflow.includes('artifact_ref: ${{ steps.req.outputs.artifact_ref }}') &&
     workflow.includes('name: ${{ steps.req.outputs.artifact_ref }}-CONFIG') &&
     workflow.includes('name: ${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS') &&
@@ -1627,8 +1629,8 @@ mirrorRulesOk
     css.includes('.site-version-action { order: 0; margin-left: auto; align-self: center; }') &&
     css.includes('.site-version { padding-left: 4px; padding-right: 4px; font-size: 13.5px; line-height: 1.2; }');
   buildEnvironmentIdentityContract
-    ? ok('D117-H2 build identity: mobile version placement and dev/staging Action/Artifact prefixes share one rule')
-    : bad('D117-H2 build identity contract', '移动底栏、部署 branch、Issue 标题或 Artifact 命名没有共用统一规则');
+    ? ok('build identity: main stays unprefixed; every non-main branch shares one Issue/Action/Artifact identity rule')
+    : bad('build identity contract', 'main/non-main 分支身份、请求 commit、Issue 标题或 Artifact 命名没有共用统一规则');
   const issueEventBodyContract = issueRequestReader.includes('GITHUB_EVENT_PATH') &&
     issueRequestReader.includes("event.issue?.body") &&
     workflow.includes("if: always() && steps.req.outcome == 'success'");
@@ -2039,7 +2041,7 @@ mirrorRulesOk
     js.includes('function selectedTargetProfileLabel') &&
     js.includes('function requestTargetProfilePart') &&
     js.includes('BUILD_IDENTITY_MODULE.buildIssueRequestPrefix(sourceEnv)') &&
-    js.includes('requestId: requestStamp') && js.includes('sourceEnv,') &&
+    js.includes('requestId: requestStamp') && js.includes('sourceEnv,') && js.includes('requestCommit: String(state.buildMeta?.commit') &&
     js.includes("const filename = [requestStamp, requestTargetProfilePart(true), safeDownloadNamePart(state.source.id, 'source')");
   selfTestContract
     ? ok('网页自检使用 Catalog/上传配置与真实 .config 生成演算')

@@ -156,6 +156,9 @@ jobs:
           echo "Runner process timezone / Runner 进程时区: $TZ"
 
       - name: Clone source code / 拉取源码
+        env:
+          REQUEST_BRANCH: ${{ steps.req.outputs.source_env }}
+          REQUEST_COMMIT: ${{ steps.req.outputs.request_commit }}
         run: |
           if [ -n "${{ steps.req.outputs.source_commit }}" ]; then
             git init openwrt
@@ -176,6 +179,10 @@ jobs:
             echo ""
             echo "- 测试版本 / test version: \`$TEST_VERSION\`"
             echo "- 定制器 / customizer: \`${GITHUB_SHA::7}\`"
+            echo "- 请求分支 / request branch: \`${REQUEST_BRANCH:-main}\`"
+            echo "- 请求提交 / request commit: \`${REQUEST_COMMIT:-unknown}\`"
+            echo "- Workflow 分支 / workflow branch: \`${GITHUB_REF_NAME:-unknown}\`"
+            echo "- Workflow 提交 / workflow commit: \`${GITHUB_SHA}\`"
             echo "- 上游源码 / upstream: \`$(git log -1 --format='%h %ad' --date=short)\` (${{ steps.req.outputs.repo }} @ ${{ steps.req.outputs.branch }})"
             echo "- Catalog: \`${{ steps.req.outputs.catalog_revision }}\` · \`${{ steps.req.outputs.catalog_asset }}\`"
             echo "- 参数 / inputs: \`${{ steps.req.outputs.device }} · ${{ steps.req.outputs.source }} · ${{ steps.req.outputs.version }} · ${{ steps.req.outputs.variant }}\`"
@@ -310,6 +317,9 @@ jobs:
           cp "$INFO" firmware-settings.txt
 
       - name: Record effective configuration / 记录实际构建配置
+        env:
+          REQUEST_BRANCH: ${{ steps.req.outputs.source_env }}
+          REQUEST_COMMIT: ${{ steps.req.outputs.request_commit }}
         run: |
           cd openwrt
           node "$GITHUB_WORKSPACE/tools/audit-recommended.mjs" \
@@ -336,6 +346,10 @@ jobs:
           {
             echo "test_version=$TEST_VERSION"
             echo "customizer=${GITHUB_SHA::7}"
+            echo "request_branch=${REQUEST_BRANCH:-main}"
+            echo "request_commit=${REQUEST_COMMIT:-unknown}"
+            echo "workflow_branch=${GITHUB_REF_NAME:-unknown}"
+            echo "workflow_commit=${GITHUB_SHA}"
             echo "upstream=$(git rev-parse --short HEAD)"
             echo "device=${{ steps.req.outputs.device }}"
             echo "source=${{ steps.req.outputs.source }}"

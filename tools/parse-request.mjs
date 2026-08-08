@@ -9,7 +9,7 @@ import { readFileSync, appendFileSync, writeFileSync, existsSync } from 'node:fs
 import { createHash } from 'node:crypto';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { artifactBuildRef, normalizeBuildEnvironment, parseBuildIssueTitleIdentity } from '../site/wrt/lib/build-identity.js';
+import { artifactBuildRef, buildEnvironmentIdentity, normalizeBuildEnvironment, parseBuildIssueTitleIdentity } from '../site/wrt/lib/build-identity.js';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DEVICES = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'devices.json'), 'utf8'));
 const CONFIG_MANIFEST = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'config-manifest.json'), 'utf8'));
@@ -368,10 +368,17 @@ const attachmentRef = requestAttachmentName.match(/^([A-Za-z0-9]+_[A-Za-z0-9]+)[
 const requestedSourceEnv = String(req.sourceEnv || '').trim();
 const normalizedSourceEnv = normalizeBuildEnvironment(requestedSourceEnv);
 if (requestedSourceEnv && !normalizedSourceEnv) fail(`非法 sourceEnv: ${requestedSourceEnv}`);
-if (titleIdentity.sourceEnv && normalizedSourceEnv && titleIdentity.sourceEnv !== normalizedSourceEnv) {
-  fail(`sourceEnv 与 Issue 标题不一致: request=${normalizedSourceEnv}, title=${titleIdentity.sourceEnv}`);
+const sourceEnvIdentity = buildEnvironmentIdentity(normalizedSourceEnv);
+if (titleIdentity.sourceEnv && sourceEnvIdentity && titleIdentity.sourceEnv !== sourceEnvIdentity) {
+  fail(`sourceEnv 与 Issue 标题不一致: request=${sourceEnvIdentity}, title=${titleIdentity.sourceEnv}`);
 }
-const sourceEnv = normalizedSourceEnv || titleIdentity.sourceEnv;
+if (titleIdentity.sourceEnv && !normalizedSourceEnv) {
+  fail('非 main Issue 标题必须由 build-request.json 提供 sourceEnv');
+}
+const sourceEnv = normalizedSourceEnv;
+const requestCommitInput = String(req.requestCommit || '').trim();
+const requestCommit = /^[a-f0-9]{7,64}$/i.test(requestCommitInput) ? requestCommitInput : '';
+if (requestCommitInput && !requestCommit) fail(`非法 requestCommit: ${requestCommitInput}`);
 const requestRef = cleanIdentity(req.requestId || attachmentRef || titleIdentity.requestId);
 const buildRef = requestRef ? `${requestRef}-${tag}` : tag;
 const artifactRef = artifactBuildRef(buildRef, sourceEnv);
@@ -468,6 +475,7 @@ const out = [
   `build_ref=${buildRef}`,
   `artifact_ref=${artifactRef}`,
   `source_env=${sourceEnv}`,
+  `request_commit=${requestCommit}`,
   `lanip=${lanip}`,
   `rootpw=${rootpw}`,
   `page_version=${pageVersion}`,
