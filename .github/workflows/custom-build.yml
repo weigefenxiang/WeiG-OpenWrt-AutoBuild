@@ -26,7 +26,7 @@ jobs:
     steps:
       - name: Limit active builds per user / 限制每用户活跃构建数
         id: limit
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           MAX_BUILDS_PER_USER: ${{ vars.MAX_BUILDS_PER_USER || '2' }}
         with:
@@ -93,7 +93,7 @@ jobs:
 
     steps:
       - name: Checkout / 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Read Issue attachment or mobile request / 读取附件或手机请求
         env:
@@ -111,7 +111,7 @@ jobs:
         run: node tools/parse-request.mjs
 
       - name: "Comment on issue: build started / 回评 issue:构建开始"
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
@@ -123,7 +123,7 @@ jobs:
 
       - name: Comment & close issue on invalid request / 校验失败时回评并关闭 issue
         if: failure()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
@@ -859,7 +859,7 @@ jobs:
     steps:
       - name: Delete this run's bridge artifact / 删除本次桥接 Artifact
         continue-on-error: true
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           BRIDGE_ARTIFACT_ID: ${{ needs.build.outputs.bridge_artifact_id }}
         with:
@@ -877,7 +877,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Comment final result / 回评最终结果
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           BUILD_RESULT: ${{ needs.build.result }}
           PUBLISH_RESULT: ${{ needs.publish-firmware.result }}

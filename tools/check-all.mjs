@@ -787,10 +787,14 @@ mirrorRulesOk
     ? ok('legacy WeiG JSON import: malformed embedded config quotes are recovered without eval')
     : bad('legacy WeiG JSON import', 'malformed embedded config quotes were not recovered safely');
   const css = readFileSync(join(ROOT, 'site', 'wrt', 'app.css'), 'utf8');
-  const buildWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8');
-  const syncWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'sync-upstream.yml'), 'utf8');
-  const pagesWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'pages.yml'), 'utf8');
-  const ciWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'ci.yml'), 'utf8');
+  const workflowDir = join(ROOT, '.github', 'workflows');
+  const workflowSources = readdirSync(workflowDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && /\.ya?ml$/i.test(entry.name))
+    .map((entry) => ({ name: entry.name, source: readFileSync(join(workflowDir, entry.name), 'utf8') }));
+  const buildWorkflow = readFileSync(join(workflowDir, 'custom-build.yml'), 'utf8');
+  const syncWorkflow = readFileSync(join(workflowDir, 'sync-upstream.yml'), 'utf8');
+  const pagesWorkflow = readFileSync(join(workflowDir, 'pages.yml'), 'utf8');
+  const ciWorkflow = readFileSync(join(workflowDir, 'ci.yml'), 'utf8');
   const driftSentinel = readFileSync(join(ROOT, 'tools', 'check-drift.mjs'), 'utf8');
   const parser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
   const requirementsSource = JSON.parse(readFileSync(
@@ -1104,13 +1108,40 @@ mirrorRulesOk
   exactBlogMirrorContract
     ? ok('blog sync: dev assistant mirrors/verifies files only; Git remains manual and legacy .config filtering is removed')
     : bad('blog exact mirror contract', '同步工具、选项 3 编排、回滚验证或中英文文档仍保留旧过滤逻辑');
+  const node24ActionFloors = new Map([
+    ['checkout', 5],
+    ['github-script', 8],
+    ['configure-pages', 6],
+    ['upload-pages-artifact', 5],
+    ['deploy-pages', 5],
+  ]);
+  const node24ActionIssues = [];
+  for (const workflow of workflowSources) {
+    for (const match of workflow.source.matchAll(/actions\/([a-z0-9-]+)@v(\d+)/gi)) {
+      const action = match[1].toLowerCase();
+      const floor = node24ActionFloors.get(action);
+      if (floor && Number(match[2]) < floor) {
+        node24ActionIssues.push(`${workflow.name}: actions/${action}@v${match[2]} < v${floor}`);
+      }
+    }
+  }
+  const node24ActionContract = node24ActionIssues.length === 0 &&
+    workflowSources.some((workflow) => workflow.source.includes('actions/checkout@v6')) &&
+    workflowSources.some((workflow) => workflow.source.includes('actions/github-script@v8')) &&
+    pagesWorkflow.includes('actions/configure-pages@v6') &&
+    pagesWorkflow.includes('actions/upload-pages-artifact@v5') &&
+    pagesWorkflow.includes('actions/deploy-pages@v5');
+  node24ActionContract
+    ? ok('GitHub Actions runtime: checkout/github-script/Pages actions use Node 24-capable majors')
+    : bad('GitHub Actions Node 24 contract', node24ActionIssues.join('; ') || 'expected standardized action majors are missing');
+
   const standalonePagesContract =
     pagesWorkflow.includes('branches:\n      - main') &&
     pagesWorkflow.includes('node tools/prepare-web-deployment.mjs --commit "$GITHUB_SHA" --branch main') &&
-    pagesWorkflow.includes('actions/configure-pages@v5') &&
-    pagesWorkflow.includes('actions/upload-pages-artifact@v4') &&
+    pagesWorkflow.includes('actions/configure-pages@v6') &&
+    pagesWorkflow.includes('actions/upload-pages-artifact@v5') &&
     pagesWorkflow.includes('path: site/wrt') &&
-    pagesWorkflow.includes('actions/deploy-pages@v4') &&
+    pagesWorkflow.includes('actions/deploy-pages@v5') &&
     pagesWorkflow.includes('pages: write') && pagesWorkflow.includes('id-token: write') &&
     !pagesWorkflow.includes('git push') && !pagesWorkflow.includes('git commit') &&
     developerGuideZh.includes('Production branch=`main`') && developerGuideZh.includes('Preview branches=`dev/staging`') &&

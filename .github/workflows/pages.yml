@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout / 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Validate source identity / 验证源码身份
         run: node tools/stamp-site-version.mjs --check
@@ -39,10 +39,10 @@ jobs:
         run: node tools/prepare-web-deployment.mjs --commit "$GITHUB_SHA" --branch main
 
       - name: Configure Pages / 配置 Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Upload static artifact / 上传静态产物
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site/wrt
 
@@ -58,4 +58,4 @@ jobs:
     steps:
       - name: Deploy / 部署
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
