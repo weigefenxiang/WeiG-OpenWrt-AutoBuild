@@ -147,11 +147,11 @@ WeiG-OpenWrt-AutoBuild/
 
 - Catalog 选择状态保持基础、推荐、用户覆盖、自动依赖与导入来源层。`catalogDependencySymbols` 只记录引擎自动带入项；关闭插件后，引擎可清理其中不再被任何启用项需要的条目，但 `catalogBaselineValues`、`catalogRecommendedValues`、`catalogImportedSymbols` 和非 `n` 的 `catalogUserOverrides` 均为保护层。Profile 包覆盖另以稀疏 `profilePackageOverrides` 保存，仅记录用户改成 Include/Exclude 的少量条目。
 
-- `.github/workflows/custom-build.yml` 只接受网页生成的 Issue 附件，不再提供 `repository_dispatch` 或隐藏 smoke 配置生成入口。部署实例的 `build-meta.branch` 只作为网页来源身份：`dev`/`staging` 请求的 Actions 标题分别使用 `[build] dev/请求时间戳/...`、`[build] staging/请求时间戳/...`，全部用户可见 Artifact 同步使用 `dev-`/`staging-` 前缀；`main` 保持原来的 `[build] 请求时间戳/...` 与无环境前缀 Artifact。该规则唯一实现位于 `site/wrt/lib/build-identity.js`，`app.js` 与 `parse-request.mjs` 共用，不按域名判断。解析器仍把 `build_ref` 规范化为 `请求时间戳-构建标识`，另生成仅用于产物命名的 `artifact_ref`；旧无环境前缀 Issue/JSON 继续兼容。时区、主题、NTP、请求/生效软件包镜像与 APK/OPKG 检测结果在提交配置、Summary、`package-mirror-report.json`、`firmware-settings.txt` 与固件内 `/etc/weig-build-info` 交叉核验；固件/config 保留 30 天，完整日志保留 14 天。
+- `.github/workflows/custom-build.yml` 只接受网页生成的 Issue 附件，不再提供 `repository_dispatch` 或隐藏 smoke 配置生成入口。部署实例的 `build-meta.branch` 只作为网页来源身份：`main` 保持原来的无前缀 Issue/Actions/Artifact；任何非 `main` 请求都使用实际 branch 作为前缀，branch 内部 `/` 统一替换为 `_`，例如 `fix/foo` → `[build] fix_foo/请求时间戳/...` 与 `fix_foo-...` Artifact。该规则唯一实现位于 `site/wrt/lib/build-identity.js`，`app.js` 与 `parse-request.mjs` 共用，不按域名判断，也不为 dev/staging/fix/feat 写特判。`build_ref` 仍为稳定的 `请求时间戳-构建标识`，`artifact_ref` 只负责环境感知命名；请求 branch/commit 与实际 Workflow branch/commit 分开写入 Summary/`build-metadata.txt`，旧无前缀 Issue/JSON 继续兼容。时区、主题、NTP、请求/生效软件包镜像与 APK/OPKG 检测结果在提交配置、Summary、`package-mirror-report.json`、`firmware-settings.txt` 与固件内 `/etc/weig-build-info` 交叉核验；固件/config 保留 30 天，完整日志保留 14 天。
 - 软件包镜像唯一规范为 `config/001.presets/package-mirrors.json`。修改 Source family、官方 origin、adapter、镜像或回退顺序后运行 `node tools/gen-package-mirrors.mjs`，不得直接维护网页投影。`Shell/apply-package-mirror.sh` 只做非阻断流程包装，`tools/package-mirror-engine.mjs` 根据实际 `.config`、规范 JSON 登记的 capability 文件与 adapter 文件识别 APK/OPKG，不按 Branch 名猜测；只替换已登记根地址，保留陌生自定义 `CONFIG_VERSION_REPO`。自动策略 USTC→PKU→源码默认，手动失败→源码默认，任何镜像问题都不能终止构建。运行 `node tools/test-package-mirror.mjs` 覆盖 OpenWrt/ImmortalWrt/LEDE、未来分支、混合 adapter 与回退矩阵。
 - 构建准入默认限制每位提交者同时最多 2 个排队中或运行中的任务；第 3 个 Issue 会自动回评并关闭。仓库所有者按 GitHub 登录名识别，不受此上限限制，并为每次构建使用独立并发组，不会在本项目队列中互相等待。Fork 可在仓库 Variables 设置正整数 `MAX_BUILDS_PER_USER` 覆盖默认值。`cancel-build.yml` 只接受原 Issue 提交者的 `/cancel` 或 `/cancel-build`，先普通取消，15 秒未结束才强制取消；管理员仍可在 Actions 页面管理任意任务。
 - 根目录 `VERSION` 是仓库与网页共用的分钟级 `vYYMMDDHHmm` 代码版本；`site-version.json` 保存同一版本与统一输入指纹。正式改动在提交前本地运行 `node tools/stamp-site-version.mjs`；CI 仅用 `--check` 验证，不再自动修改或提交版本文件。`dev → staging → main` 的环境晋级本身不重新生成 VERSION。网页常驻显示 `MMDDHHmm` 短版本。Catalog Target 的操作栏显示当前 `TARGET_ROOTFS_PARTSIZE`，点击可查看“项目/当前值/路径”并直接定位 Advanced 修改；它不再用历史 `p.size/capacity` 生成 RootFS 百分比。非 Catalog 旧设备仍保留原容量估算。可选 `build-meta.json` 提供部署实例的 Commit/Branch/Built。
-- 下载与并行编译使用动态并发并保留完整日志；并行失败后执行 `make -j1 V=s BUILD_LOG=1`，无需修改 `.config` 即请求上游分包日志。Catalog 引擎只在网页交互中执行强依赖、`select`、choice、反向失效关闭和孤立自动依赖清理；后端不再对整份 `.config` 判断插件依赖或冲突，也不保留人工 `config-rules`。用户勾选时仅由官方 `make defconfig` 解析配置；未勾选时直接使用提交配置。
+- 下载与并行编译使用动态并发；并行编译本身开启 `BUILD_LOG=1`。并行失败后先用 `Shell/collect-build-evidence.sh` 冻结 `BUILD-LOGS/parallel/`，再清空 `openwrt/logs` 并执行最长 180 分钟的 `make -j1 V=s BUILD_LOG=1`，诊断证据独立写入 `BUILD-LOGS/diagnostic/`。即使单线程恢复成功也上传 BUILD-LOGS，`00-SUMMARY.txt` 明确区分 FAILED / RECOVERED / TIMEOUT。Catalog 引擎只在网页交互中执行强依赖、`select`、choice、反向失效关闭和孤立自动依赖清理；后端不再对整份 `.config` 判断插件依赖或冲突，也不保留人工 `config-rules`。用户勾选时仅由官方 `make defconfig` 解析配置；未勾选时直接使用提交配置。
 - `config/001.presets/source-build-requirements.json` 目前只承载前端未勾选 Defconfig 时静默加入的 `CONFIG_HAVE_DOT_CONFIG=y`，`site/wrt/data/source-build-requirements.json` 是静态网页副本。后端不读取该规则，也不因缺失而拒绝请求；若以后所有构建都固定运行 Defconfig，可删除这层前端兼容。
 - schema 5 解析器只读取固定 Catalog index，核对 revision/legacy 元数据与 `sourceCommit`，不再下载 Catalog 单体或扫描整份 `.config`。后端只保留安全白名单和最小 Target/Profile 身份核对，不检查 ARCH/ARCH_PACKAGES、插件关系、人工兼容规则、主题包状态或构建必需项。Workflow 获取精确上游 commit；可选官方 Defconfig 是唯一后端配置解析步骤。
 - `custom-target` 不要求 Profile 预先存在于仓库清单；上传配置中的通用 Target 选择直接作为构建输入，不含 360T7 专用限制，其可用性由所选上游源码负责。
@@ -218,14 +218,14 @@ WeiG-OpenWrt-AutoBuild/
 
 - **秒失败(几秒钟就红)**= 参数校验没过,看 run 日志里 `parse-request` 步骤的中文报错(会列合法选项);校验前没有编译日志是正常的;
 - **下载或编译过程** = Actions 控制台实时显示原始输出，同时写入 `download.log` / `build.log`；若页面日志过长被 GitHub 截断，以 `BUILD-LOGS-…` artifact 内的完整文件为准;
-- **编译阶段失败** = 下载 `BUILD-LOGS-…` artifact,按顺序看:
-  1. `00-SUMMARY.txt`(**先看这个**):构建参数 + 报错关键字聚合计数 + 最后出错的 make 目标;
-  2. `build-metadata.txt`:VERSION、两级 commit、参数与 v2ray 最终状态;
-  3. `build-diagnostic.log`(**如存在**):失败后单线程 `V=s` 的优先诊断依据;
-  4. `download.log` / `build.log`:完整原始输出;
-  5. `errors.txt` / `tail-200.txt`:报错行摘录与结尾上下文;
-  6. `package-logs.tar.gz`(**如存在**):某个包编译失败时看 `logs/<路径>/` 下对应日志;
-  7. `final.config`:本次真实使用的完整配置,可拿去本地复现。
+- **编译阶段失败或并行失败后被单线程恢复** = 下载 `BUILD-LOGS-…` artifact,按顺序看:
+  1. `00-SUMMARY.txt`(**先看这个**):请求/Workflow 两级身份 + Parallel/Diagnostic 结果 + 最后错误目标;
+  2. `build-metadata.txt`:VERSION、request branch/commit、workflow branch/commit、上游 commit 与参数;
+  3. `parallel/errors.txt` → `parallel/last-targets.txt` → `parallel/tail.txt` → `parallel/build.log`:第一次并行失败的冻结现场;
+  4. `parallel/package-logs.tar.gz`(**如存在**):第一次失败时 OpenWrt 生成的分包日志;
+  5. `diagnostic/errors.txt` → `diagnostic/last-targets.txt` → `diagnostic/tail.txt` → `diagnostic/build.log`:最长 180 分钟的 `make -j1 V=s BUILD_LOG=1` 现场;
+  6. `diagnostic/package-logs.tar.gz`(**如存在**):仅属于单线程诊断阶段，不覆盖 parallel;
+  7. `download.log` / `final.config`:下载原始输出与本次真实配置，可拿去本地复现。
 - 常见病因对照:`Package xxx is missing` = 该源 feed 没这个包(lede/官方源勾了社区插件、或高级模式强制勾选);`ext4_allocate ... out of space` = RootFS 镜像容量不足，失败摘要会读取最终 `CONFIG_TARGET_ROOTFS_PARTSIZE` 并提示 `Target Images → TARGET_ROOTFS_PARTSIZE`;上游当日损坏 = 同参数隔天重跑或临时换版本分支。
 
 #### 不等云编译的本地快速验证(秒级)

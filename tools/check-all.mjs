@@ -395,6 +395,11 @@ buildIdentityTest.status === 0
   ? ok('build identity: every non-main request is prefixed with one sanitized branch identity')
   : bad('build identity tests', (buildIdentityTest.stderr || buildIdentityTest.stdout || '').trim().slice(0, 500));
 
+const buildDiagnosticsTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-build-diagnostics.mjs')], { encoding: 'utf8' });
+buildDiagnosticsTest.status === 0
+  ? ok('build diagnostics: parallel evidence is frozen before isolated 180m single-thread retry')
+  : bad('build diagnostics tests', (buildDiagnosticsTest.stderr || buildDiagnosticsTest.stdout || '').trim().slice(0, 500));
+
 const catalogLoaderTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-catalog-loader.mjs')], {
   encoding: 'utf8',
 });
@@ -1264,12 +1269,17 @@ mirrorRulesOk
     buildWorkflow.includes('defconfig.log') &&
     buildWorkflow.includes('build.config') &&
     buildWorkflow.includes('make -j1 V=s BUILD_LOG=1') &&
+    buildWorkflow.includes('make -j"$JOBS" BUILD_LOG=1') &&
+    buildWorkflow.includes('collect-build-evidence.sh" snapshot parallel') &&
+    buildWorkflow.includes('collect-build-evidence.sh" snapshot diagnostic') &&
+    buildWorkflow.includes('timeout 180m stdbuf -oL -eL make -j1 V=s BUILD_LOG=1') &&
+    buildWorkflow.includes('timeout-minutes: 185') &&
     buildWorkflow.includes('Compile was not started because an earlier step failed') &&
     js.includes('function applyBuildRequirements(text)') &&
     !js.includes('matchingConfigRules(config)') &&
     !js.includes('openConfigRuleResolver') &&
     !js.includes("window.open('about:blank'") && js.includes('window.location.assign(issueUrl)') &&
-    buildWorkflow.includes('实际列出的文件');
+    buildWorkflow.includes('parallel/ 保存原始并行现场') && buildWorkflow.includes('diagnostic/ 保存单线程诊断现场');
   failureDiagnosticsContract
     ? ok('配置边界:后端仅保留 Target/Profile 身份与官方 Defconfig，诊断链完整')
     : bad('configuration boundary', '仍有 Catalog/兼容/架构/主题阻断或诊断链缺失');
@@ -1747,7 +1757,7 @@ mirrorRulesOk
     : bad('upstream config metadata', '仍有系统覆盖字段或缺少官方配置策略标记');
   const liveLogContract = workflow.includes('JOBS=$(( $(nproc) + 1 ))') &&
     workflow.includes('stdbuf -oL -eL make download -j"$JOBS" 2>&1 |') &&
-    workflow.includes('stdbuf -oL -eL make -j"$JOBS" 2>&1 |') &&
+    workflow.includes('stdbuf -oL -eL make -j"$JOBS" BUILD_LOG=1 2>&1 |') &&
     workflow.includes('tee "$GITHUB_WORKSPACE/download.log"') &&
     workflow.includes('tee "$GITHUB_WORKSPACE/build.log"') &&
     (workflow.match(/make download/g) || []).length === 1 &&

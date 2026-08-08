@@ -476,52 +476,69 @@ jobs:
           echo "编译并发 / compile jobs: $JOBS"
           set +e
           set -o pipefail
-          stdbuf -oL -eL make -j"$JOBS" 2>&1 |
+          stdbuf -oL -eL make -j"$JOBS" BUILD_LOG=1 2>&1 |
             tee "$GITHUB_WORKSPACE/build.log"
           RC=${PIPESTATUS[0]}
+          echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
           set -e
           {
             echo "### 🛠️ 编译 / Compile"
             echo ""
             echo "- jobs: \`$JOBS\`"
+            echo "- command: \`make -j$JOBS BUILD_LOG=1\`"
             echo "- exit code: \`$RC\`"
             echo "- Actions 实时显示原始输出,并保存到 \`build.log\`。"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$RC" -ne 0 ]; then
-            echo "::error::编译失败;完整信息已写入 build.log。"
+            echo "::error::并行编译失败;先冻结原始现场，再进入单线程诊断。"
           fi
           exit "$RC"
+
+      - name: Snapshot parallel failure / 冻结并行失败现场
+        if: steps.compile.outcome == 'failure'
+        run: |
+          "$GITHUB_WORKSPACE/Shell/collect-build-evidence.sh" snapshot parallel \
+            "$GITHUB_WORKSPACE/build.log" "$GITHUB_WORKSPACE/openwrt" "$GITHUB_WORKSPACE/failure-logs"
+          rm -rf "$GITHUB_WORKSPACE/openwrt/logs"
 
       - name: Diagnose failed compile / 单线程定位失败原因
         id: diagnose
         if: steps.compile.outcome == 'failure'
         continue-on-error: true
-        timeout-minutes: 60
+        timeout-minutes: 185
         run: |
           cd openwrt
-          echo "单线程重试 / single-thread retry: make -j1 V=s BUILD_LOG=1 (60 minute limit)"
+          echo "单线程重试 / single-thread retry: make -j1 V=s BUILD_LOG=1 (180 minute limit)"
           set +e
           set -o pipefail
-          timeout 60m stdbuf -oL -eL make -j1 V=s BUILD_LOG=1 2>&1 |
+          timeout 180m stdbuf -oL -eL make -j1 V=s BUILD_LOG=1 2>&1 |
             tee "$GITHUB_WORKSPACE/build-diagnostic.log"
           RC=${PIPESTATUS[0]}
+          echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
           set -e
           {
             echo "### 🔎 单线程重试 / Single-thread retry"
             echo ""
             echo "- command: \`make -j1 V=s BUILD_LOG=1\`"
+            echo "- limit: \`180 minutes\`"
             echo "- exit code: \`$RC\`"
             echo "- log: \`build-diagnostic.log\`"
-            echo "- result: exit 0 resumes the build; a non-zero exit keeps it failed."
+            echo "- result: exit 0 resumes the build; 124 means timeout; other non-zero exits remain failed."
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$RC" -eq 124 ]; then
-            echo "::warning::单线程重试超过 60 分钟，已停止；请查看 build-diagnostic.log。"
+            echo "::warning::单线程重试超过 180 分钟，已停止；请查看 diagnostic/。"
           elif [ "$RC" -ne 0 ]; then
-            echo "::error::单线程重试仍失败；请查看 build-diagnostic.log。"
+            echo "::error::单线程重试仍失败；请查看 diagnostic/。"
           fi
           exit "$RC"
+
+      - name: Snapshot diagnostic retry / 冻结单线程诊断现场
+        if: always() && steps.compile.outcome == 'failure' && steps.diagnose.outcome != 'skipped'
+        run: |
+          "$GITHUB_WORKSPACE/Shell/collect-build-evidence.sh" snapshot diagnostic \
+            "$GITHUB_WORKSPACE/build-diagnostic.log" "$GITHUB_WORKSPACE/openwrt" "$GITHUB_WORKSPACE/failure-logs"
 
       - name: Finalize compile result / 确认编译结果
         if: always()
@@ -549,36 +566,76 @@ jobs:
           exit 1
 
       - name: Collect failure logs / 收集失败日志
-        if: failure()
+        if: failure() || steps.compile.outcome == 'failure'
         run: |
           mkdir -p failure-logs
-          cp build.log build-diagnostic.log download.log failure-logs/ 2>/dev/null || true
+          cp download.log failure-logs/ 2>/dev/null || true
           cp build-metadata.txt failure-logs/ 2>/dev/null || true
           cp proxy-selected.txt failure-logs/ 2>/dev/null || true
           cp submitted.config recommended-audit.json recommended-report.json package-mirror-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig.log build.config failure-logs/ 2>/dev/null || true
           cp openwrt/.config failure-logs/final.config 2>/dev/null || true
-          # 失败重试通过 BUILD_LOG=1 请求 OpenWrt 生成分包日志 / The retry requests OpenWrt per-package logs through BUILD_LOG=1
-          if [ -d openwrt/logs ]; then
-            tar czf failure-logs/package-logs.tar.gz -C openwrt logs || true
+
+          PARALLEL_OUTCOME="${{ steps.compile.outcome }}"
+          PARALLEL_EXIT="${{ steps.compile.outputs.exit_code }}"
+          DIAGNOSTIC_OUTCOME="${{ steps.diagnose.outcome }}"
+          DIAGNOSTIC_EXIT="${{ steps.diagnose.outputs.exit_code }}"
+          PARALLEL_RESULT="NOT STARTED"
+          DIAGNOSTIC_RESULT="NOT RUN"
+          FINAL_RESULT="BUILD FAILED"
+          if [ "$PARALLEL_OUTCOME" = "success" ]; then
+            PARALLEL_RESULT="SUCCEEDED"
+            FINAL_RESULT="FAILED AFTER COMPILE"
+          elif [ "$PARALLEL_OUTCOME" = "failure" ]; then
+            PARALLEL_RESULT="FAILED"
+            if [ "$DIAGNOSTIC_EXIT" = "0" ]; then
+              DIAGNOSTIC_RESULT="SUCCEEDED"
+              FINAL_RESULT="RECOVERED"
+            elif [ "$DIAGNOSTIC_EXIT" = "124" ]; then
+              DIAGNOSTIC_RESULT="TIMEOUT"
+            elif [ -n "$DIAGNOSTIC_EXIT" ]; then
+              DIAGNOSTIC_RESULT="FAILED"
+            elif [ "$DIAGNOSTIC_OUTCOME" = "failure" ]; then
+              DIAGNOSTIC_RESULT="FAILED"
+            elif [ "$DIAGNOSTIC_OUTCOME" = "cancelled" ]; then
+              DIAGNOSTIC_RESULT="CANCELLED"
+            fi
           fi
+
           ROOTFS_PARTSIZE="$(sed -n 's/^CONFIG_TARGET_ROOTFS_PARTSIZE=//p' failure-logs/final.config 2>/dev/null | tail -n 1 | tr -d '\r')"
           ROOTFS_TOO_SMALL=false
-          if grep -Eqi 'ext4_allocate[^:]*:.*out of space|failed to allocate [0-9]+ blocks, out of space' build-diagnostic.log build.log 2>/dev/null; then
+          if grep -Eqi 'ext4_allocate[^:]*:.*out of space|failed to allocate [0-9]+ blocks, out of space' \
+            failure-logs/parallel/build.log failure-logs/diagnostic/build.log 2>/dev/null; then
             ROOTFS_TOO_SMALL=true
           fi
-          # 00-SUMMARY 排在最前:构建参数 + 报错关键字,方便一眼定位 / 00-SUMMARY sorts first: build params + error keywords for quick triage
+
           {
-            echo "===================== 失败总结 / FAILURE SUMMARY ====================="
+            echo "===================== 构建诊断 / BUILD DIAGNOSTICS ====================="
             echo "测试版本/test version: $(tr -d '\r\n' < VERSION)"
             echo "机型/device : ${{ steps.req.outputs.device }}"
             echo "源码/source : ${{ steps.req.outputs.source }} @ ${{ steps.req.outputs.branch }}"
             echo "版本/version: ${{ steps.req.outputs.version }}   变体/variant: ${{ steps.req.outputs.variant }}"
-            echo "定制器/customizer: ${GITHUB_SHA::7}"
+            echo "请求分支/request branch: ${{ steps.req.outputs.source_env || 'main' }}"
+            echo "请求提交/request commit: ${{ steps.req.outputs.request_commit || 'unknown' }}"
+            echo "Workflow 分支/workflow branch: ${GITHUB_REF_NAME:-unknown}"
+            echo "Workflow 提交/workflow commit: ${GITHUB_SHA}"
             echo "网页版本/page version: ${{ steps.req.outputs.page_version }}"
             echo "插件/plugins: ${{ steps.req.outputs.plugins }}"
             echo "标识/tag    : ${{ steps.req.outputs.tag }}   run: ${{ github.run_id }}"
-            # 离线看此文件时可凭下面的直链回到本次 run / Keep the run URL here so this file can be traced back offline
             echo "本次构建 / this run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo ""
+            echo "-------- 阶段结果 / STAGE RESULTS --------"
+            echo "Parallel compile"
+            echo "  result : $PARALLEL_RESULT"
+            echo "  exit   : ${PARALLEL_EXIT:-n/a}"
+            echo "  logs   : $([ -d failure-logs/parallel ] && echo 'parallel/' || echo 'n/a')"
+            echo "Diagnostic retry"
+            echo "  command: make -j1 V=s BUILD_LOG=1"
+            echo "  limit  : 180 minutes"
+            echo "  result : $DIAGNOSTIC_RESULT"
+            echo "  exit   : ${DIAGNOSTIC_EXIT:-n/a}"
+            echo "  logs   : $([ -d failure-logs/diagnostic ] && echo 'diagnostic/' || echo 'n/a')"
+            echo "Final result"
+            echo "  $FINAL_RESULT"
             if [ "$ROOTFS_TOO_SMALL" = "true" ]; then
               echo ""
               echo "-------- RootFS 容量 / ROOTFS CAPACITY --------"
@@ -594,35 +651,33 @@ jobs:
             fi
             echo ""
             echo "-------- 已收集日志 / COLLECTED LOGS --------"
-            for log in build.log build-diagnostic.log package-logs.tar.gz; do
-              [ -f "failure-logs/$log" ] && echo "- $log"
+            for stage in parallel diagnostic; do
+              if [ -d "failure-logs/$stage" ]; then
+                echo "[$stage/]"
+                for name in build.log errors.txt last-targets.txt tail.txt package-logs.tar.gz evidence.txt; do
+                  [ -f "failure-logs/$stage/$name" ] && echo "- $stage/$name"
+                done
+              fi
             done
             echo ""
             echo "-------- 定位关键字 / SEARCH KEYWORDS --------"
-            for log in build-diagnostic.log build.log; do
-              [ -s "$log" ] || continue
-              echo "[$log]"
-              grep -oE 'Package [A-Za-z0-9._-]+ is missing|No rule to make target[^,]*|undefined reference to [^ ]+|error: [^;]{0,80}|Error [0-9]+' "$log" 2>/dev/null | sort | uniq -c | sort -rn | head -n 20 || true
+            for stage in parallel diagnostic; do
+              [ -s "failure-logs/$stage/errors.txt" ] || continue
+              echo "[$stage/errors.txt]"
+              tail -n 40 "failure-logs/$stage/errors.txt"
             done
             echo ""
             echo "-------- 最后出错的目标 / LAST FAILING TARGETS --------"
-            for log in build-diagnostic.log build.log; do
-              [ -s "$log" ] || continue
-              echo "[$log]"
-              grep -E 'make\[[0-9]+\].*(Error|failed)' "$log" 2>/dev/null | tail -n 10 || true
+            for stage in parallel diagnostic; do
+              [ -s "failure-logs/$stage/last-targets.txt" ] || continue
+              echo "[$stage/last-targets.txt]"
+              tail -n 20 "failure-logs/$stage/last-targets.txt"
             done
             echo ""
-            echo "-------- 报错行摘录(最后 40 条)/ ERROR LINES (last 40) --------"
-            for log in build-diagnostic.log build.log; do
-              [ -s "$log" ] || continue
-              echo "[$log]"
-              grep -nE 'Error [0-9]+|error:|No rule to make target|failed|missing' "$log" 2>/dev/null | tail -n 40 || true
-            done
-            echo ""
-            echo "完整日志见本 artifact 内实际列出的文件。"
+            echo "完整日志见 parallel/ 与 diagnostic/；两阶段证据互不覆盖。"
           } > failure-logs/00-SUMMARY.txt
           cat failure-logs/00-SUMMARY.txt >> "$GITHUB_STEP_SUMMARY" || true
-          # 取件指引追加到 Summary 页(Markdown)/ Append the log-retrieval guide to the step summary page (Markdown)
+
           {
             echo ''
             echo '## 📥 完整日志取件 / How to get full logs'
@@ -631,27 +686,14 @@ jobs:
             echo '| --- | --- |'
             echo '| 1 | 打开本次构建页面 / Open this run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} |'
             echo '| 2 | 拉到页面最底部 **Artifacts** 区 / Scroll to the **Artifacts** section at the very bottom |'
-            echo '| 3 | 下载 `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS-` 开头的压缩包并解压 / Download and unzip the archive whose name starts with `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS-` |'
-            echo '| 4 | 先看 `00-SUMMARY.txt`,再看 `build-diagnostic.log`（如有）/ `build.log` / `errors.txt` / `package-logs.tar.gz`（如有） / Read `00-SUMMARY.txt` first, then `build-diagnostic.log` (if present) / `build.log` / `errors.txt` / `package-logs.tar.gz` (if present) |'
+            echo '| 3 | 下载 `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS` 并解压 / Download and unzip `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS` |'
+            echo '| 4 | 先看 `00-SUMMARY.txt`；并行现场看 `parallel/`，单线程诊断看 `diagnostic/` / Read `00-SUMMARY.txt` first; use `parallel/` for the original parallel failure and `diagnostic/` for the single-thread retry |'
+            echo '| 5 | 每阶段依次看 `errors.txt` → `last-targets.txt` → `tail.txt` → `build.log` → `package-logs.tar.gz`（如有） / Per stage, read `errors.txt` → `last-targets.txt` → `tail.txt` → `build.log` → `package-logs.tar.gz` (if present) |'
             echo ''
             echo '> ⏳ 完整日志 Artifact 保留 14 天,过期需重新提交构建 / Complete log artifacts are kept for 14 days.'
           } >> "$GITHUB_STEP_SUMMARY" || true
-          # 摘出最后 200 行与含 Error 的行,方便快速定位 / Extract the last 200 lines and the error lines for quick triage
-          LOG_FOR_TAIL=build.log
-          [ -s build-diagnostic.log ] && LOG_FOR_TAIL=build-diagnostic.log
-          tail -n 200 "$LOG_FOR_TAIL" > failure-logs/tail-200.txt 2>/dev/null || true
-          {
-            for log in build-diagnostic.log build.log; do
-              [ -s "$log" ] || continue
-              echo "===== $log ====="
-              grep -nE 'Error [0-9]+|error:|No rule to make target|failed|missing' "$log" | tail -n 60 || true
-            done
-          } > failure-logs/errors.txt
-          echo '===== 最后 60 行 ====='
-          tail -n 60 build.log 2>/dev/null || echo '(没有 build.log,可能在编译前就失败了)'
           ls -lh failure-logs
-          # 在步骤日志末尾指明取件入口 / Point users at the artifact and where to find retrieval steps
-          echo "📤 artifact:${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS —— 完整日志将上传,取件方法见 issue 回评/Summary 页 / Full logs will be uploaded; see the issue comment or Summary"
+          echo "📤 artifact:${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS —— parallel/ 保存原始并行现场，diagnostic/ 保存单线程诊断现场。"
 
       - name: Collect menuconfig M packages / 收集 menuconfig 的 M 软件包
         if: success()
@@ -695,14 +737,16 @@ jobs:
             'initramfs 用于临时启动/救援；manifest、buildinfo、sha256sums 仅用于核对。' \
             'Always verify the exact model and partition layout before flashing.' > "$FIRMWARE/00-请先读我-README.txt"
 
-          cp build.log download.log build-metadata.txt firmware-settings.txt proxy-selected.txt "$LOGS/" 2>/dev/null || true
-          if [ -d failure-logs ]; then cp -a failure-logs/. "$LOGS/"; fi
-          if [ -d openwrt/logs ]; then
-            tar czf "$LOGS/package-logs.tar.gz" -C openwrt logs || true
+          cp download.log build-metadata.txt firmware-settings.txt proxy-selected.txt "$LOGS/" 2>/dev/null || true
+          if [ -d failure-logs ]; then
+            cp -a failure-logs/. "$LOGS/"
+          else
+            cp build.log "$LOGS/" 2>/dev/null || true
           fi
           printf '%s\n' \
             '完整构建日志 / BUILD LOGS' \
-            '先看 00-SUMMARY.txt（若存在），再看 build.log、download.log 与 errors.txt。' \
+            '若存在 00-SUMMARY.txt，先看它；parallel/ 是原始并行失败现场，diagnostic/ 是单线程诊断现场。' \
+            '成功且未进入诊断时仅保留常规 build.log / download.log。' \
             '日志 Artifact 保留 14 天。' > "$LOGS/00-请先读我-README.txt"
 
           {
