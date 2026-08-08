@@ -1388,7 +1388,9 @@ mirrorRulesOk
   const previewServer = readFileSync(join(ROOT, 'tools', 'serve.mjs'), 'utf8');
   const previewBatOk = !previewBatBytes.some((byte) => byte > 0x7f) &&
     !/(?<!\r)\n/.test(previewBat) &&
-    previewBat.includes('node tools\\serve.mjs site\\wrt 8642') &&
+    previewBat.includes('node tools\\serve.mjs site\\wrt 8642 --interactive') &&
+    previewBat.includes('if "%SERVER_EXIT%"=="0" goto local_return') &&
+    previewBat.includes(':local_return') && previewBat.includes('goto menu') &&
     previewBat.includes('title wrt-server - local preview 8642') &&
     previewBat.includes('http://localhost:8642/index.html') &&
     previewBat.includes('http://localhost:8642/lib/catalog-engine.js') &&
@@ -1400,12 +1402,31 @@ mirrorRulesOk
     !previewBat.includes('start "wrt-server" /min') &&
     !previewBat.includes('pause\r\nexit /b 0') &&
     previewBat.includes('menuconfigBox') &&
+    !previewBat.toLowerCase().includes('taskkill /im node.exe') &&
     previewServer.includes("'.js': 'text/javascript; charset=utf-8'") &&
     previewServer.includes("'.mjs': 'text/javascript; charset=utf-8'") &&
-    previewServer.includes("'cache-control': 'no-store'");
-  previewBatOk
-    ? ok('本地预览单窗口启动，ES modules MIME/无缓存检查与 ASCII+CRLF 均已接通')
-    : bad('local preview', '单窗口启动、模块健康检查、MIME、无缓存或 bat 编码不正确');
+    previewServer.includes("'cache-control': 'no-store'") &&
+    previewServer.includes("process.argv.includes('--interactive')") &&
+    previewServer.includes("console.log('0. Stop local preview and return')") &&
+    previewServer.includes('server.close(() => process.exit(exitCode))');
+  const previewServerFixtureRoot = mkdtempSync(join(tmpdir(), 'weig-preview-server-'));
+  let previewServerInteractiveOk = false;
+  try {
+    writeFileSync(join(previewServerFixtureRoot, 'index.html'), '<!doctype html><title>fixture</title>\n');
+    const previewServerRun = spawnSync(process.execPath, [
+      join(ROOT, 'tools', 'serve.mjs'), previewServerFixtureRoot, '0', '--interactive',
+    ], { input: '0\n', encoding: 'utf8', timeout: 5000 });
+    previewServerInteractiveOk = previewServerRun.status === 0 &&
+      previewServerRun.stdout.includes('0. Stop local preview and return') &&
+      previewServerRun.stdout.includes('Select:');
+  } catch (error) {
+    previewServerInteractiveOk = false;
+  } finally {
+    rmSync(previewServerFixtureRoot, { recursive: true, force: true });
+  }
+  previewBatOk && previewServerInteractiveOk
+    ? ok('本地预览:输入 0 精确停止当前 server 并返回菜单，模块 MIME/无缓存与 ASCII+CRLF 均已接通')
+    : bad('local preview', `launcher=${previewBatOk}, interactive=${previewServerInteractiveOk}`);
   const portableSubpathContract =
     !/(?:src|href)="\/(?!\/)/i.test(html) &&
     !/fetch\(\s*['"]\/(?!\/)/.test(js) &&

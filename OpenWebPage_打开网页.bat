@@ -106,7 +106,7 @@ if errorlevel 1 (
 powershell -NoProfile -Command "try { $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/index.html'; $e=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-engine.js'; $l=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-loader.js'; $s=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-schema6.js'; $w=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-search-worker.js'; if ($r.StatusCode -eq 200 -and $r.Content -match 'menuconfigBox' -and $e.Headers['Content-Type'] -match 'javascript' -and $l.Headers['Content-Type'] -match 'javascript' -and $s.Headers['Content-Type'] -match 'javascript' -and $w.Headers['Content-Type'] -match 'javascript') { exit 0 } } catch {}; exit 1"
 if not errorlevel 1 (
   start "" "http://localhost:8642"
-  exit /b 0
+  goto local_return
 )
 
 powershell -NoProfile -Command "$p=Get-NetTCPConnection -State Listen -LocalPort 8642 -ErrorAction SilentlyContinue | Select-Object -First 1; if($p){ Write-Host ('Port 8642 is already occupied by PID ' + $p.OwningProcess); exit 2 }; exit 0"
@@ -119,16 +119,21 @@ echo   PC:    http://localhost:8642
 for /f %%i in ('powershell -NoProfile -Command "(Get-NetIPAddress -AddressFamily IPv4 -PrefixOrigin Dhcp,Manual | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254*' } | Select-Object -First 1).IPAddress"') do set LANIP=%%i
 if defined LANIP echo   Phone: http://%LANIP%:8642
 echo.
-echo Close this wrt-server window to stop the server.
+echo Enter 0 below to stop the server and return to this menu.
 
 start "" /b powershell -NoProfile -WindowStyle Hidden -Command "$ok=$false; for($i=0;$i -lt 40;$i++){ try { $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/index.html'; $e=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-engine.js'; $l=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-loader.js'; $s=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-schema6.js'; $w=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-search-worker.js'; if($r.StatusCode -eq 200 -and $r.Content -match 'menuconfigBox' -and $e.Headers['Content-Type'] -match 'javascript' -and $l.Headers['Content-Type'] -match 'javascript' -and $s.Headers['Content-Type'] -match 'javascript' -and $w.Headers['Content-Type'] -match 'javascript'){ $ok=$true; break } } catch {}; Start-Sleep -Milliseconds 250 }; if($ok){ Start-Process 'http://localhost:8642' }"
-node tools\serve.mjs site\wrt 8642
+node tools\serve.mjs site\wrt 8642 --interactive
 set "SERVER_EXIT=%ERRORLEVEL%"
-if "%SERVER_EXIT%"=="0" exit /b 0
+if "%SERVER_EXIT%"=="0" goto local_return
 echo.
 echo [ERROR] Local preview server exited with code %SERVER_EXIT%.
+if not "%~1"=="" exit /b %SERVER_EXIT%
 pause
-exit /b %SERVER_EXIT%
+goto menu
+
+:local_return
+if not "%~1"=="" exit /b 0
+goto menu
 
 :port_occupied
 echo.

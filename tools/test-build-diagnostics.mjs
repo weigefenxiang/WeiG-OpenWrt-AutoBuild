@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
+import { join, resolve, relative } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const ROOT = resolve(import.meta.dirname, '..');
@@ -23,10 +22,42 @@ function run(command, args, options = {}) {
   }
   return result;
 }
+function toBashPath(filePath) {
+  const rel = relative(ROOT, filePath);
+  expect(rel && !rel.startsWith('..'), `test path must stay under repository root: ${filePath}`);
+  return rel.replaceAll('\\', '/');
+}
+function runBash(args, options = {}) {
+  return run('bash', args, { cwd: ROOT, ...options });
+}
+function snapshot(stage, logFile, openwrtRoot, outRoot) {
+  return runBash([
+    toBashPath(helper),
+    'snapshot',
+    stage,
+    toBashPath(logFile),
+    toBashPath(openwrtRoot),
+    toBashPath(outRoot),
+  ]);
+}
+function tarList(archive) {
+  return runBash(['-c', 'tar -tzf "$1"', 'bash', toBashPath(archive)]).stdout;
+}
+function expectPackageArchive(stageDir, stage, snapshotResult) {
+  const archive = join(stageDir, 'package-logs.tar.gz');
+  if (existsSync(archive)) return archive;
+  const evidencePath = join(stageDir, 'evidence.txt');
+  const evidence = existsSync(evidencePath) ? readFileSync(evidencePath, 'utf8').trim() : '(no evidence.txt)';
+  const stderr = (snapshotResult.stderr || '').trim() || '(no helper stderr)';
+  fail(`${stage} package logs were not frozen; helper stderr: ${stderr}; evidence: ${evidence}`);
+}
 
-run('bash', ['-n', helper]);
+runBash(['-n', toBashPath(helper)]);
 
-const fixture = mkdtempSync(join(tmpdir(), 'weig-build-diagnostics-'));
+// Keep Bash-facing fixture paths relative to the repository. This avoids passing
+// Windows drive-letter paths (for example D:\\...) across the Node -> Git Bash
+// boundary while still exercising Unicode and spaces in path arguments.
+const fixture = mkdtempSync(join(ROOT, '.tmp-build-diagnostics-路径 空格-'));
 try {
   const openwrt = join(fixture, 'openwrt');
   const out = join(fixture, 'failure-logs');
@@ -40,15 +71,15 @@ try {
     'ERROR: package/example failed to build.',
     '',
   ].join('\n'));
-  run('bash', [helper, 'snapshot', 'parallel', parallelLog, openwrt, out]);
+  const parallelSnapshot = snapshot('parallel', parallelLog, openwrt, out);
 
   const pDir = join(out, 'parallel');
   expect(readFileSync(join(pDir, 'build.log'), 'utf8').includes('parallel compile marker'), 'parallel build.log missing original failure');
   expect(readFileSync(join(pDir, 'errors.txt'), 'utf8').includes('parallel compile marker'), 'parallel errors.txt missing generic error');
   expect(readFileSync(join(pDir, 'last-targets.txt'), 'utf8').includes('Error 2'), 'parallel last-targets.txt missing failing make target');
   expect(readFileSync(join(pDir, 'tail.txt'), 'utf8').includes('parallel compile marker'), 'parallel tail.txt missing original tail');
-  expect(existsSync(join(pDir, 'package-logs.tar.gz')), 'parallel package logs were not frozen');
-  const parallelTar = run('tar', ['-tzf', join(pDir, 'package-logs.tar.gz')]).stdout;
+  const parallelArchive = expectPackageArchive(pDir, 'parallel', parallelSnapshot);
+  const parallelTar = tarList(parallelArchive);
   expect(parallelTar.includes('parallel-package.log'), 'parallel package-log archive missing marker file');
   const frozenParallel = readFileSync(join(pDir, 'build.log'), 'utf8');
 
@@ -62,14 +93,14 @@ try {
     "make[4]: *** [Makefile:30: package/bar/compile] Error 1",
     '',
   ].join('\n'));
-  run('bash', [helper, 'snapshot', 'diagnostic', diagnosticLog, openwrt, out]);
+  const diagnosticSnapshot = snapshot('diagnostic', diagnosticLog, openwrt, out);
 
   const dDir = join(out, 'diagnostic');
   expect(readFileSync(join(pDir, 'build.log'), 'utf8') === frozenParallel, 'diagnostic snapshot overwrote parallel evidence');
   expect(readFileSync(join(dDir, 'build.log'), 'utf8').includes('diagnostic_symbol'), 'diagnostic build.log missing retry failure');
   expect(readFileSync(join(dDir, 'errors.txt'), 'utf8').includes('undefined reference'), 'diagnostic errors.txt missing generic linker error');
-  expect(existsSync(join(dDir, 'package-logs.tar.gz')), 'diagnostic package logs were not frozen');
-  const diagnosticTar = run('tar', ['-tzf', join(dDir, 'package-logs.tar.gz')]).stdout;
+  const diagnosticArchive = expectPackageArchive(dDir, 'diagnostic', diagnosticSnapshot);
+  const diagnosticTar = tarList(diagnosticArchive);
   expect(diagnosticTar.includes('diagnostic-package.log'), 'diagnostic archive missing diagnostic marker');
   expect(!diagnosticTar.includes('parallel-package.log'), 'diagnostic archive leaked the frozen parallel package logs');
 } finally {
