@@ -32,6 +32,20 @@ const walkFiles = (dir, suffix, out = []) => {
   }
   return out;
 };
+const numberedMenuExitOptions = (source) => [...source.matchAll(
+  /^\s*echo\s+(\d+)\.\s+(?:Exit|退出)\s*$/gmi,
+)].map((match) => Number(match[1]));
+const activeBatchHelpers = () => {
+  const roots = [ROOT, join(ROOT, 'docs-private')].filter((dir) => existsSync(dir));
+  const files = [];
+  for (const dir of roots) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isFile() || !/\.(?:bat|cmd)$/i.test(entry.name)) continue;
+      files.push(join(dir, entry.name));
+    }
+  }
+  return files;
+};
 const PROXY_PACKAGE_RE = /^CONFIG_PACKAGE_.*(?:passwall|ssr|vssr|tinyproxy|shadowsocks|v2ray|xray|trojan|brook|gost|haproxy|pdnsd-alt|kcptun|simple-obfs|chinadns|dns2socks|dns2tcp|ipt2socks|microsocks|naiveproxy|redsocks|openclash|homeproxy|sing-box|tuic|hysteria|polipo|squid|ssocks|speederv2|udp2raw|tor).*=[ym]$/i;
 function formatSizeContract(mb) {
   const value = Math.max(0, Number(mb) || 0);
@@ -814,6 +828,29 @@ mirrorRulesOk
   const cleanupPrivateBat = readPrivate('Cleanup_Private.bat');
   const packProjectBat = readPrivate('Pack_Project.bat');
   const remoteDeploySource = readPrivate('deploy-vps-site.sh');
+  const activeMenuExitIssues = [];
+  for (const path of activeBatchHelpers()) {
+    const source = readFileSync(path, 'utf8');
+    const exitOptions = numberedMenuExitOptions(source);
+    if (exitOptions.some((option) => option !== 0)) {
+      activeMenuExitIssues.push(`${path.replace(ROOT, '.')} => ${exitOptions.join(',')}`);
+    }
+  }
+  const menuExitFixtureOk =
+    JSON.stringify(numberedMenuExitOptions('echo   0. Exit\n')) === '[0]' &&
+    JSON.stringify(numberedMenuExitOptions('echo   4. Exit\n')) === '[4]' &&
+    numberedMenuExitOptions('set /p "ANSWER=Continue? [y/N]: "\n').length === 0;
+  const promoteExitContract = promoteBat.includes('echo   0. Exit') &&
+    promoteBat.includes('if "%ACTION%"=="0" exit /b 0') &&
+    !promoteBat.includes('echo   4. Exit') &&
+    !promoteBat.includes('if "%ACTION%"=="4" exit /b 0');
+  activeMenuExitIssues.length === 0 && menuExitFixtureOk && promoteExitContract
+    ? ok('interactive helper menus: numbered Exit option is standardized to 0')
+    : bad('interactive helper menu exit contract', JSON.stringify({
+      issues: activeMenuExitIssues,
+      fixture: menuExitFixtureOk,
+      promote: promoteExitContract,
+    }).slice(0, 700));
   if (!privateChecksAvailable) {
     ok('private VPS fixtures skipped in public checkout (docs-private is intentionally unshipped)');
   } else {

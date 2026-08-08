@@ -11,11 +11,11 @@ echo ============================================================
 echo   1. Promote dev -^> staging
 echo   2. Promote staging -^> main
 echo   3. Show release status
-echo   4. Exit
+echo   0. Exit
 echo ============================================================
 set "ACTION="
 set /p "ACTION=Select: "
-if "%ACTION%"=="4" exit /b 0
+if "%ACTION%"=="0" exit /b 0
 if "%ACTION%"=="1" goto dev_staging
 if "%ACTION%"=="2" goto staging_main
 if "%ACTION%"=="3" goto status
