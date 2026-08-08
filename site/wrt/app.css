@@ -389,16 +389,18 @@ input:focus-visible { border-color: var(--accent); }
 .import-unknown-actions button,.menuconfig-restore{padding:5px 8px;border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--text2);cursor:pointer}
 .import-unknown-actions button:hover,.menuconfig-restore:hover{border-color:var(--accent);color:var(--accent)}
 @media(max-width:640px){
-  .catalog-overview-row{grid-template-columns:1fr;grid-template-rows:auto;padding:10px}
+  .catalog-overview-row{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;width:100%;max-width:100%;padding:10px}
   .catalog-locator{grid-column:1;grid-row:1}
-  .build-contract-head{grid-column:1;grid-row:2;align-items:stretch}
-  .build-contract-controls{grid-column:1;grid-row:3;justify-content:flex-start;margin-left:0;overflow-x:auto;scrollbar-width:thin}
+  .catalog-locator{width:100%;min-width:0;max-width:100%}
+  .build-contract-head{grid-column:1;grid-row:2;align-items:stretch;width:100%;min-width:0;max-width:100%}
+  .build-contract-controls{grid-column:1;grid-row:3;display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));align-items:stretch;justify-content:stretch;gap:7px;width:100%;min-width:0;max-width:100%;margin-left:0;overflow:visible}
   .build-contract-body{grid-column:1;grid-row:4}
+  .build-contract-body{width:100%;min-width:0;max-width:100%}
   .build-contract-grid{grid-template-columns:1fr;column-gap:0}
-  .build-contract-toggle{flex:1 1 100%}
-  .build-contract-controls .minimum-boot-switch,.build-contract-controls .defconfig-switch,.build-contract-controls .recommended-config-btn{min-height:36px}
-  .build-contract-controls .menuconfig-origin-filter-label{flex:1 1 auto;min-width:0}
-  .build-contract-controls .menuconfig-origin-filter-label select{max-width:min(150px,52vw)}
+  .build-contract-toggle{flex:1 1 100%;width:100%;min-width:0}
+  .build-contract-controls .minimum-boot-switch,.build-contract-controls .defconfig-switch,.build-contract-controls .recommended-config-btn,.build-contract-controls .build-contract-selected-filter,.build-contract-controls .menuconfig-origin-filter-label{width:100%;min-width:0;max-width:100%;min-height:36px;justify-content:center}
+  .build-contract-controls .menuconfig-origin-filter-label{padding:0 8px}
+  .build-contract-controls .menuconfig-origin-filter-label select{flex:1 1 auto;min-width:0;max-width:100%}
   .catalog-feature-row{align-items:stretch;flex-wrap:wrap}
   .menuconfig-toggle{flex:1 1 100%}
   .menuconfig-toggle{gap:7px}.menuconfig-toggle strong{font-size:var(--menuconfig-title-size)}.menuconfig-toggle .hint{font-size:12px}
@@ -895,15 +897,15 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
   .menuconfig-toggle strong{flex:1 1 calc(100% - 38px);min-width:0;overflow:hidden;text-overflow:ellipsis}
   .menuconfig-toggle .hint{order:3;flex:1 1 100%;margin-left:0;white-space:nowrap}
   .plugin-grid { grid-template-columns: 1fr; }
-  .legend,.toolbar,.group{margin-right:52px}
-  .legend{align-items:flex-start;padding-right:10px}
-  .legend .lg-item{min-width:0;white-space:nowrap}
-  .legend .lg-stats{flex:1 0 100%;width:auto;overflow-wrap:anywhere}
+  .legend,.toolbar,.group{width:100%;max-width:100%;margin-right:0}
+  .legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));align-items:stretch;gap:8px 10px;padding:10px 12px}
+  .legend .lg-item,.legend .adv-toggle,.legend .adv-grey-toggle{width:100%;min-width:0;white-space:normal}
+  .legend .lg-stats{grid-column:1 / -1;min-width:0;margin-left:0;width:100%;white-space:normal;overflow-wrap:anywhere}
   .plugin { border-right: none; padding: 12px 14px; }
   .plugin input { width: 18px; height: 18px; }
-  .toolbar { flex-wrap: wrap; }
-  .legend { gap: 8px; }
-  .lg-stats { margin-left: 0; width: 100%; white-space: normal; overflow-wrap: anywhere; }
+  .toolbar{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+  .toolbar input[type="search"]{width:100%;min-width:0}
+  .toolbar .hot-only{justify-self:start;min-height:36px}
   .actionbar-row { flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
   .stats { width: auto; flex: 0 1 auto; justify-content: flex-start; gap: 6px; }
   .stats .link-btn { margin-right: 0; }

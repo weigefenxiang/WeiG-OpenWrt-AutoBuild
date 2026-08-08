@@ -69,14 +69,23 @@ try {
     'foo.c:20: error: parallel compile marker',
     "make[3]: *** [Makefile:20: package/foo/compile] Error 2",
     'ERROR: package/example failed to build.',
+    "else echo \"ERROR: module '$mod' is missing.\"; fi",
+    'make -r world: build failed. Please re-run make with -j1 V=s or V=sc for a higher verbosity level to see what is going on',
+    'make: *** [/work/include/toplevel.mk:233: world] Error 1',
     '',
   ].join('\n'));
   const parallelSnapshot = snapshot('parallel', parallelLog, openwrt, out);
 
   const pDir = join(out, 'parallel');
   expect(readFileSync(join(pDir, 'build.log'), 'utf8').includes('parallel compile marker'), 'parallel build.log missing original failure');
-  expect(readFileSync(join(pDir, 'errors.txt'), 'utf8').includes('parallel compile marker'), 'parallel errors.txt missing generic error');
-  expect(readFileSync(join(pDir, 'last-targets.txt'), 'utf8').includes('Error 2'), 'parallel last-targets.txt missing failing make target');
+  const parallelErrors = readFileSync(join(pDir, 'errors.txt'), 'utf8');
+  const parallelTargets = readFileSync(join(pDir, 'last-targets.txt'), 'utf8');
+  expect(parallelErrors.includes('parallel compile marker'), 'parallel errors.txt missing generic compiler error');
+  expect(parallelErrors.includes('build failed'), 'parallel errors.txt missing bare make build-failed line');
+  expect(parallelErrors.includes('make: ***') && parallelErrors.includes('Error 1'), 'parallel errors.txt missing bare make Error line');
+  expect(!parallelErrors.includes("module '$mod' is missing"), 'parallel errors.txt included rendered echo command noise');
+  expect(parallelTargets.includes('Error 2'), 'parallel last-targets.txt missing bracketed make target');
+  expect(parallelTargets.includes('build failed') && parallelTargets.includes('make: ***'), 'parallel last-targets.txt missing bare make failure targets');
   expect(readFileSync(join(pDir, 'tail.txt'), 'utf8').includes('parallel compile marker'), 'parallel tail.txt missing original tail');
   const parallelArchive = expectPackageArchive(pDir, 'parallel', parallelSnapshot);
   const parallelTar = tarList(parallelArchive);
@@ -90,6 +99,9 @@ try {
   writeFileSync(diagnosticLog, [
     'single-thread retry',
     'ld: undefined reference to diagnostic_symbol',
+    'ERROR: package/example:',
+    'trying to overwrite etc/config/example',
+    "printf 'ERROR: synthetic command text\\n'",
     "make[4]: *** [Makefile:30: package/bar/compile] Error 1",
     '',
   ].join('\n'));
@@ -98,7 +110,10 @@ try {
   const dDir = join(out, 'diagnostic');
   expect(readFileSync(join(pDir, 'build.log'), 'utf8') === frozenParallel, 'diagnostic snapshot overwrote parallel evidence');
   expect(readFileSync(join(dDir, 'build.log'), 'utf8').includes('diagnostic_symbol'), 'diagnostic build.log missing retry failure');
-  expect(readFileSync(join(dDir, 'errors.txt'), 'utf8').includes('undefined reference'), 'diagnostic errors.txt missing generic linker error');
+  const diagnosticErrors = readFileSync(join(dDir, 'errors.txt'), 'utf8');
+  expect(diagnosticErrors.includes('undefined reference'), 'diagnostic errors.txt missing generic linker error');
+  expect(diagnosticErrors.includes('trying to overwrite etc/config/example'), 'diagnostic errors.txt missing generic package ownership collision');
+  expect(!diagnosticErrors.includes('synthetic command text'), 'diagnostic errors.txt included rendered printf command noise');
   const diagnosticArchive = expectPackageArchive(dDir, 'diagnostic', diagnosticSnapshot);
   const diagnosticTar = tarList(diagnosticArchive);
   expect(diagnosticTar.includes('diagnostic-package.log'), 'diagnostic archive missing diagnostic marker');

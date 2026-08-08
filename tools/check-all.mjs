@@ -1271,6 +1271,20 @@ mirrorRulesOk
   catalogLayoutContract
     ? ok('Catalog UI:单一名称/symbol 搜索、完整路径、构建契约、Advanced/推荐项顺序与安全悬浮已接通')
     : bad('Catalog UI layout', '搜索、完整面包屑、控件顺序、Advanced ID/描述、悬浮信息或 N/M/Y 隔离不符合约定');
+  const mobileResponsiveLayoutContract =
+    css.includes('.catalog-overview-row{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;width:100%;max-width:100%;padding:10px}') &&
+    css.includes('.build-contract-controls{grid-column:1;grid-row:3;display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));align-items:stretch;justify-content:stretch;gap:7px;width:100%;min-width:0;max-width:100%;margin-left:0;overflow:visible}') &&
+    css.includes('.build-contract-controls .minimum-boot-switch,.build-contract-controls .defconfig-switch,.build-contract-controls .recommended-config-btn,.build-contract-controls .build-contract-selected-filter,.build-contract-controls .menuconfig-origin-filter-label{width:100%;min-width:0;max-width:100%;min-height:36px;justify-content:center}') &&
+    css.includes('.legend,.toolbar,.group{width:100%;max-width:100%;margin-right:0}') &&
+    css.includes('.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));align-items:stretch;gap:8px 10px;padding:10px 12px}') &&
+    css.includes('.legend .lg-stats{grid-column:1 / -1;min-width:0;margin-left:0;width:100%;white-space:normal;overflow-wrap:anywhere}') &&
+    css.includes('.toolbar{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}') &&
+    css.includes('.toolbar input[type="search"]{width:100%;min-width:0}') &&
+    css.includes('.plugin-grid { grid-template-columns: 1fr; }') &&
+    !css.includes('.build-contract-controls{overflow-x:auto');
+  mobileResponsiveLayoutContract
+    ? ok('mobile layout: build contract controls, plugin filters and search fit viewport with responsive wrapping')
+    : bad('mobile layout', '构建契约控件、插件筛选卡或搜索框的手机端响应式宽度/换行契约缺失');
   const catalogInteractionUiContract =
     !js.includes('showToast(CATALOG_ENGINE.formatViolations(result.violations))') &&
     js.includes('function openCatalogConflictModal(option, value, violations') &&
