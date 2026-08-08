@@ -16,8 +16,15 @@ body:
   - type: textarea
     id: request
     attributes:
-      label: Build request / 构建请求
-      description: Keep the pre-filled route marker and upload exactly one web-generated file. Do not paste config text / 保留预填路由标记并只上传一个网页生成文件,不要粘贴配置正文
-      placeholder: build-request-*.json
+      label: Build route / 构建路由
+      description: Keep the pre-filled route marker unchanged / 保留网页预填的路由标记，不要修改
     validations:
       required: true
+  - type: upload
+    id: request_file
+    attributes:
+      label: Build request / 构建请求
+      description: Upload the web-generated build-request.json / 上传网页生成的 build-request.json
+    validations:
+      required: false
+      accept: ".json"

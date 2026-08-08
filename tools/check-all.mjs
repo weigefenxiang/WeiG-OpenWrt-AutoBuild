@@ -1735,17 +1735,18 @@ mirrorRulesOk
   const mirrorEngine = readFileSync(join(ROOT, 'tools', 'package-mirror-engine.mjs'), 'utf8');
   const mirrorGenerator = readFileSync(join(ROOT, 'tools', 'gen-package-mirrors.mjs'), 'utf8');
   const issueFieldIds = [...issueForm.matchAll(/^\s+id:\s*([A-Za-z0-9_-]+)\s*$/gm)].map((m) => m[1]);
-  const issueFormIsSingleAttachment = issueFieldIds.length === 1 && issueFieldIds[0] === 'request';
+  const issueFormHasDedicatedUpload = issueFieldIds.length === 2 && issueFieldIds[0] === 'request' && issueFieldIds[1] === 'request_file' &&
+    issueForm.includes('- type: upload') && issueForm.includes('accept: ".json"');
   const contractOk = issueForm.includes('build-request.json') &&
     issueForm.includes('config.buildinfo') &&
-    issueFormIsSingleAttachment &&
+    issueFormHasDedicatedUpload &&
     workflow.includes('tools/fetch-build-request.mjs') &&
     workflow.includes('cp submitted.config openwrt/.config') &&
     !workflow.includes('authoritative_config') &&
     !workflow.includes('build-config.mjs');
   contractOk
     ? ok('Issue attachment → submitted.config → openwrt/.config 权威链路已接通')
-    : bad('Issue attachment contract', `Issue 表单或 workflow 关键链路缺失；字段=${issueFieldIds.join(',') || '(无)'}`);
+    : bad('Issue attachment contract', `Issue 表单必须拆分 route textarea + JSON upload；字段=${issueFieldIds.join(',') || '(无)'}`);
   const mobileIssueContract = js.includes('function mobileIssuePayload') &&
     js.includes("params.set('request', request)") &&
     js.includes('buildIssueRequestPrefill') &&
