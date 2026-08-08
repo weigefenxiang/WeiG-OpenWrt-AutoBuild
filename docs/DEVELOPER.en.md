@@ -8,9 +8,9 @@
 ## 1. Overview
 
 - Structure & architecture (overview): see [ARCHITECTURE.md](../ARCHITECTURE.md) (bilingual); **full annotated tree below in §1.1**
-- One-click health check: double-click `Check_检查.bat` (script syntax + JSON validity + consistency checks)
+- Standard post-change entrypoint: `node tools/dev-assistant.mjs prepare`, which runs version stamping, text-format checks, `check-all`, `git diff --check`, and status output; use `node tools/dev-assistant.mjs verify` for a full read-only recheck without restamping
 - Web launcher: double-click `OpenWebPage_打开网页.bat`; Local Preview works without configuration, while remote environment URLs come from local `OpenWebPage.local.cmd` and are never stored in source
-- After any change, run: `node tools/gen-plugins.mjs` → open the page and hit **Self-test** → `node tools/sync-blog.mjs`
+- Run business generators only when the changed area requires them, and use Local Preview for page self-tests. The production Blog mirror is synchronized from exact `origin/main` only after main promotion; it is not a routine development check
 - All generators need only Node.js ≥18, zero npm dependencies
 
 ### 1.1 Full directory tree
@@ -20,12 +20,11 @@
 ```text
 WeiG-OpenWrt-AutoBuild/
 ├─ OpenWebPage_打开网页.bat        local preview: starts server + browser, prints a LAN URL for phones
-├─ Check_检查.bat                  one-click health check (runs tools/check-all.mjs)
 ├─ README.md                    ✍ user docs, Chinese source (plugin count auto-refreshed by gen-plugins)
 ├─ ARCHITECTURE.md              ✍ structure & architecture overview (public, bilingual)
 ├─ translations/                ⚙ 10 README translations (zh-TW/en/ru/es/pt/ja/ko/de/fr/vi)
 ├─ .github/workflows/              GitHub Actions (production + manual routing probes)
-│  ├─ custom-build.yml             ★ core production Issue build + existing exact-ref Worker; E v2 B1 does not modify this file
+│  ├─ custom-build.yml             ★ workflow_dispatch-only exact-ref Build Worker
 │  ├─ cancel-build.yml             lets an Issue author cancel their own build with /cancel
 │  ├─ build-dispatcher.yml         E v2 production `[build]` Issue router + manual exact-ref Probe/Worker canary
 │  ├─ build-routing-probe.yml      E v2 manual read-only probe worker (no OpenWrt compile)
@@ -133,7 +132,7 @@ Type scale: 17px body (15.5px compact via the Aa toggle); 15px pills/plugin cell
 
 ### 2.5 Build pipeline
 
-- **E v2 Phase B2 (production exact-ref cutover):** Phase A passed real dev, slash-branch, stale-commit, and missing-branch Probe routing. Phase B1 then proved with Issue #138 / Run `31280106097` that the real `custom-build.yml` Worker receives `REQUEST_BRANCH=WORKFLOW_BRANCH=dev` and the same full request/workflow commit `63aafb274720345df1d5d659dbdebb2307865dd7`. B2 therefore makes default-branch `build-dispatcher.yml` the single production entrypoint for normal `[build]` Issues, while `custom-build.yml` becomes a workflow_dispatch-only Worker. For opened Issues the Dispatcher freezes the event snapshot, reads the single schema-5 JSON through `REQUEST_EVENT_PATH`, parses only `sourceEnv` + full `requestCommit` + `requestId`, requires branch HEAD to equal that commit, and rechecks state/author/created_at/title/body before dispatching `ref=sourceEnv`. The Worker independently rechecks Workflow branch/SHA, frozen Issue identity/body, exact checkout HEAD, and the full parser identity. Manual `probe` and owner-only `build-canary` remain available. Admission keeps pre-cutover direct-Issue runs in temporary accounting, and `cancel-build.yml` can identify both new workflow_dispatch Workers and those legacy active runs. Deployment identity now loads `site-version.json` and `build-meta.json` fresh in one no-store round; a missing/mismatched identity disables cloud submission instead of combining stale localStorage site-version with fresh build-meta. Full-site SHA-256 caching remains a separate F task.
+- **E v2 Phase B2 (production exact-ref cutover):** Phase A passed real dev, slash-branch, stale-commit, and missing-branch Probe routing. Phase B1 then proved with Issue #138 / Run `31280106097` that the real `custom-build.yml` Worker receives `REQUEST_BRANCH=WORKFLOW_BRANCH=dev` and the same full request/workflow commit `63aafb274720345df1d5d659dbdebb2307865dd7`, and that real OpenWrt build finished green. B2 therefore makes default-branch `build-dispatcher.yml` the single production entrypoint for normal `[build]` Issues, while `custom-build.yml` becomes a workflow_dispatch-only Worker. For opened Issues the Dispatcher freezes the event snapshot, reads the single schema-5 JSON through `REQUEST_EVENT_PATH`, parses only `sourceEnv` + full `requestCommit` + `requestId`, requires branch HEAD to equal that commit, and rechecks state/author/created_at/title/body before dispatching `ref=sourceEnv`. The Worker independently rechecks Workflow branch/SHA, frozen Issue identity/body, exact checkout HEAD, and the full parser identity. Manual `probe` and owner-only `build-canary` remain available. Admission keeps pre-cutover direct-Issue runs in temporary accounting, and `cancel-build.yml` can identify both new workflow_dispatch Workers and those legacy active runs. Deployment identity now loads `site-version.json` and `build-meta.json` fresh in one no-store round; a missing/mismatched identity disables cloud submission instead of combining stale localStorage site-version with fresh build-meta. B2.1 additionally requires quoted Workflow `run-name` values whenever YAML `#` is present, with a generic `check-all` matrix that rejects plain-scalar `#` truncation of GitHub expressions. Full-site SHA-256 caching remains a separate F task.
 
 - For a Catalog Target, `arch`, `archPackages`, Target, and Profile identity remain one atomic build contract. Profile-declared packages move to a compact manager: Follow upstream writes nothing, while explicit Include or Exclude writes `y` or `n`. The submitted config is generically checked only before optional Defconfig. A successful upstream `make defconfig` is not subject to project-specific post-validation. `tools/apply-config-overrides.mjs`, `tools/config-overrides.mjs`, and `system-overrides.json` are removed, so the workflow no longer forces `CONFIG_DEVEL` or `CONFIG_BUILD_LOG`.
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 一键体检:语法检查所有脚本 + 校验所有数据 JSON + 前端三件套基本一致性
 // One-click health check: syntax-check every script, validate every data JSON, basic frontend consistency.
-// 用法 / Usage: node tools/check-all.mjs   (或双击 Check_检查.bat / or double-click the bat)
+// 用法 / Usage: node tools/check-all.mjs   (完整 Prepare/Verify 由 tools/dev-assistant.mjs 编排)
 
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -45,6 +45,29 @@ const activeBatchHelpers = () => {
     }
   }
   return files;
+};
+const workflowRunNameIssues = (source) => {
+  const issues = [];
+  for (const [index, line] of source.split(/\r?\n/).entries()) {
+    const match = line.match(/^run-name:\s*(.*)$/);
+    if (!match) continue;
+    const value = match[1].trim();
+    if (!value) continue;
+    const quoted = value.startsWith('"') || value.startsWith("'");
+    let effective = value;
+    if (!quoted) {
+      const comment = /(^|\s)#/.exec(value);
+      if (comment) {
+        const hashAt = comment.index + comment[1].length;
+        issues.push(`line ${index + 1}: unquoted run-name contains YAML comment marker #`);
+        effective = value.slice(0, hashAt).trimEnd();
+      }
+    }
+    const opens = (effective.match(/\$\{\{/g) || []).length;
+    const closes = (effective.match(/\}\}/g) || []).length;
+    if (opens !== closes) issues.push(`line ${index + 1}: GitHub expression delimiters are unbalanced after YAML parsing`);
+  }
+  return issues;
 };
 const PROXY_PACKAGE_RE = /^CONFIG_PACKAGE_.*(?:passwall|ssr|vssr|tinyproxy|shadowsocks|v2ray|xray|trojan|brook|gost|haproxy|pdnsd-alt|kcptun|simple-obfs|chinadns|dns2socks|dns2tcp|ipt2socks|microsocks|naiveproxy|redsocks|openclash|homeproxy|sing-box|tuic|hysteria|polipo|squid|ssocks|speederv2|udp2raw|tor).*=[ym]$/i;
 function formatSizeContract(mb) {
@@ -796,6 +819,22 @@ mirrorRulesOk
   const workflowSources = readdirSync(workflowDir, { withFileTypes: true })
     .filter((entry) => entry.isFile() && /\.ya?ml$/i.test(entry.name))
     .map((entry) => ({ name: entry.name, source: readFileSync(join(workflowDir, entry.name), 'utf8') }));
+  const workflowRunNameProblems = workflowSources.flatMap((workflow) =>
+    workflowRunNameIssues(workflow.source).map((issue) => `${workflow.name}: ${issue}`));
+  const runNameFixtures = [
+    ['plain literal hash', 'run-name: Foo #123\n', true],
+    ['plain expression after hash', 'run-name: Foo #${{ github.run_number }}\n', true],
+    ['plain format hash', "run-name: ${{ format('Foo #{0}', github.run_number) }}\n", true],
+    ['quoted literal hash', 'run-name: "Foo #${{ github.run_number }}"\n', false],
+    ['quoted format hash', 'run-name: "${{ format(\'Foo #{0}\', github.run_number) }}"\n', false],
+    ['plain adjacent hash', "run-name: ${{ format('Build {0}#{1}', 'u', 1) }}\n", false],
+  ];
+  const runNameFixtureOk = runNameFixtures.every(([, source, shouldFail]) =>
+    (workflowRunNameIssues(source).length > 0) === shouldFail);
+  workflowRunNameProblems.length === 0 && runNameFixtureOk
+    ? ok('Workflow run-name YAML semantics: plain-scalar # hazards are rejected and quoted # expressions remain intact')
+    : bad('Workflow run-name YAML semantics',
+      workflowRunNameProblems.length ? workflowRunNameProblems.join('; ').slice(0, 500) : 'run-name fixture matrix regressed');
   const buildWorkflow = readFileSync(join(workflowDir, 'custom-build.yml'), 'utf8');
   const syncWorkflow = readFileSync(join(workflowDir, 'sync-upstream.yml'), 'utf8');
   const pagesWorkflow = readFileSync(join(workflowDir, 'pages.yml'), 'utf8');

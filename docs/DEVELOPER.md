@@ -10,8 +10,8 @@
 
 - 架构与目录(简版):见根目录 [ARCHITECTURE.md](../ARCHITECTURE.md)(中英双语);**全景详版见下方 1.1**
 - 网页入口:双击 `OpenWebPage_打开网页.bat`；Local Preview 无配置即可用，其他环境从本机 `OpenWebPage.local.cmd` 读取 URL，源码不保存服务器地址
-- 一键体检:双击 `Check_检查.bat`(全脚本语法 + 全数据 JSON + 一致性抽查)
-- 改动后三板斧:`node tools/gen-plugins.mjs` → 本地预览页面点右上角"自检" → `node tools/sync-blog.mjs`
+- 修改后的标准入口:`node tools/dev-assistant.mjs prepare`，统一执行版本 stamp、文本格式、`check-all`、`git diff --check` 与状态输出；只复检不更新时间时运行 `node tools/dev-assistant.mjs verify`
+- 业务生成器按实际修改范围运行；本地预览可做页面自检。Blog 正式镜像只在 `main` 晋级后从 `origin/main` 精确同步，不作为普通开发检查步骤
 - 所有生成器只依赖 Node.js ≥18 标准库,无 npm 依赖
 
 ### 1.1 全景目录架构
@@ -21,12 +21,11 @@
 ```text
 WeiG-OpenWrt-AutoBuild/
 ├─ OpenWebPage_打开网页.bat        本地预览:自动起服务+开浏览器,打印手机可访问的局域网地址
-├─ Check_检查.bat                  一键体检(调用 tools/check-all.mjs)
 ├─ README.md                    ✍ 用户文档中文源(插件计数标记由 gen-plugins 自动刷新)
 ├─ ARCHITECTURE.md              ✍ 目录与架构总览(公开,中英双语)
 ├─ translations/                ⚙ README 十语译文(zh-TW/en/ru/es/pt/ja/ko/de/fr/vi,工作流翻译)
 ├─ .github/workflows/              GitHub Actions（生产 + 手动路由探针）
-│  ├─ custom-build.yml             ★核心:生产 Issue 构建 + 既有 exact-ref Worker；E v2 B1 不修改此文件
+│  ├─ custom-build.yml             ★核心:workflow_dispatch-only exact-ref Build Worker
 │  ├─ cancel-build.yml             Issue 提交者用 /cancel 取消自己的构建
 │  ├─ build-dispatcher.yml         E v2 生产 `[build]` Issue 路由 + 手动 exact-ref Probe/Worker canary
 │  ├─ build-routing-probe.yml      E v2 手动只读 Probe Worker（不编译 OpenWrt）
@@ -146,7 +145,7 @@ WeiG-OpenWrt-AutoBuild/
 
 ### 2.5 构建链路
 
-- **E v2 Phase B2（生产 exact-ref 切流）**：Phase A 已通过 dev、含 `/` 分支、stale commit、branch 不存在的真实 Probe 矩阵；Phase B1 又在 Issue #138 / Run `31280106097` 证明真实 `custom-build.yml` Worker 的 Request/Workflow branch 都是 `dev`，Request/Workflow commit 都是 `63aafb274720345df1d5d659dbdebb2307865dd7`。B2 因此把普通 `[build]` Issue 的唯一生产入口切到默认分支 `build-dispatcher.yml`，而 `custom-build.yml` 只保留 `workflow_dispatch` Worker。Dispatcher 对 opened 事件使用原始 Issue 快照，经 `REQUEST_EVENT_PATH` 读取唯一 schema 5 JSON，仅解析 `sourceEnv`、完整 `requestCommit`、`requestId`，要求 branch HEAD 精确等于提交，并在派发前重新确认 state/author/created_at/title/body；通过后以 `ref=sourceEnv` 派发 Worker。Worker 再核对 Workflow branch/SHA、Issue 快照/body、精确 checkout HEAD 与完整 parser identity。`probe` 与 Owner-only `build-canary` 继续保留手动诊断。切流期间每用户准入仍统计尚未结束的旧 direct-Issue Run；`cancel-build.yml` 同时识别新 workflow_dispatch Worker 与旧 Run。网页部署身份改为同轮 fresh `site-version.json` + `build-meta.json`；缺失或不一致时 `identity` 门禁阻止云提交，不再把 stale localStorage site-version 与 fresh build-meta 混用。全站 SHA-256 缓存留给独立 F。
+- **E v2 Phase B2（生产 exact-ref 切流）**：Phase A 已通过 dev、含 `/` 分支、stale commit、branch 不存在的真实 Probe 矩阵；Phase B1 又在 Issue #138 / Run `31280106097` 证明真实 `custom-build.yml` Worker 的 Request/Workflow branch 都是 `dev`，Request/Workflow commit 都是 `63aafb274720345df1d5d659dbdebb2307865dd7`，且该真实 OpenWrt 构建最终全绿。B2 因此把普通 `[build]` Issue 的唯一生产入口切到默认分支 `build-dispatcher.yml`，而 `custom-build.yml` 只保留 `workflow_dispatch` Worker。Dispatcher 对 opened 事件使用原始 Issue 快照，经 `REQUEST_EVENT_PATH` 读取唯一 schema 5 JSON，仅解析 `sourceEnv`、完整 `requestCommit`、`requestId`，要求 branch HEAD 精确等于提交，并在派发前重新确认 state/author/created_at/title/body；通过后以 `ref=sourceEnv` 派发 Worker。Worker 再核对 Workflow branch/SHA、Issue 快照/body、精确 checkout HEAD 与完整 parser identity。`probe` 与 Owner-only `build-canary` 继续保留手动诊断。切流期间每用户准入仍统计尚未结束的旧 direct-Issue Run；`cancel-build.yml` 同时识别新 workflow_dispatch Worker 与旧 Run。网页部署身份改为同轮 fresh `site-version.json` + `build-meta.json`；缺失或不一致时 `identity` 门禁阻止云提交，不再把 stale localStorage site-version 与 fresh build-meta 混用。B2.1 额外要求含 YAML `#` 的 Workflow `run-name` 使用引号，并由 `check-all` 的通用矩阵阻止 plain-scalar `#` 截断 GitHub 表达式。全站 SHA-256 缓存留给独立 F。
 
 - Catalog Target 的 `arch`、`archPackages` 与 Target/Profile 身份仍是原子构建契约。Profile 声明包改为紧凑管理列表，默认“跟随上游”不写显式值；只有用户逐项选择“加入”或“排除”时才写 `y`/`n`。提交配置仅在 Defconfig 前进行通用 Catalog 检查；用户勾选后运行一次官方 `make defconfig`，成功输出不再接受项目自定义 post-defconfig 验证。`tools/apply-config-overrides.mjs`、`tools/config-overrides.mjs` 与 `system-overrides.json` 已删除，不再强制 `CONFIG_DEVEL`/`CONFIG_BUILD_LOG`。
 

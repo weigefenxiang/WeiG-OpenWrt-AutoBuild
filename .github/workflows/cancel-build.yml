@@ -1,5 +1,5 @@
 name: Cancel Custom Build / 取消定制构建
-run-name: Cancel build / 取消构建 · #${{ github.event.issue.number }}
+run-name: "Cancel build / 取消构建 · #${{ github.event.issue.number }}"
 
 on:
   issue_comment:
