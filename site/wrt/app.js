@@ -2347,24 +2347,41 @@ function applyCatalogIntent(option, value, force = false, source = 'user') {
   if (result.changes.length) markCatalogStateChanged();
   return result;
 }
+function normalizeKconfigValueByType(rawValue, type = 'bool', symbol = 'Kconfig option') {
+  const raw = String(rawValue ?? '');
+  const normalizedType = String(type || 'bool').toLowerCase();
+  if (normalizedType === 'bool') {
+    if (!['y', 'n'].includes(raw)) throw new Error(`${symbol} requires a bool value: y or n.`);
+    return raw;
+  }
+  if (normalizedType === 'tristate') {
+    if (!['y', 'm', 'n'].includes(raw)) {
+      throw new Error(`${symbol} requires a tristate value: y, m, or n.`);
+    }
+    return raw;
+  }
+  if (normalizedType === 'string') return raw;
+  const value = raw.trim();
+  if (normalizedType === 'int') {
+    if (!/^-?\d+$/.test(value)) throw new Error(`${symbol} requires an integer value.`);
+    return value;
+  }
+  if (normalizedType === 'hex') {
+    if (!/^0[xX][0-9a-fA-F]+$/.test(value)) {
+      throw new Error(`${symbol} requires a hexadecimal value such as 0x20.`);
+    }
+    return value;
+  }
+  throw new Error(`${symbol} has an unsupported Kconfig type: ${normalizedType || '(empty)'}.`);
+}
 function scalarKconfigOption(option) {
   return ['string', 'int', 'hex'].includes(option?.type);
 }
 function normalizeScalarKconfigValue(option, rawValue) {
-  const raw = String(rawValue ?? '');
-  if (option?.type === 'string') return raw;
-  const value = raw.trim();
-  if (option?.type === 'int') {
-    if (!/^-?\d+$/.test(value)) throw new Error(`${option.symbol} requires an integer value.`);
-    return value;
+  if (!scalarKconfigOption(option)) {
+    throw new Error(`${option?.symbol || 'Kconfig option'} is not a scalar option.`);
   }
-  if (option?.type === 'hex') {
-    if (!/^0[xX][0-9a-fA-F]+$/.test(value)) {
-      throw new Error(`${option.symbol} requires a hexadecimal value such as 0x20.`);
-    }
-    return value;
-  }
-  throw new Error(`${option?.symbol || 'Kconfig option'} is not a scalar option.`);
+  return normalizeKconfigValueByType(rawValue, option.type, option.symbol);
 }
 function applyScalarMenuValue(option, rawValue, source = 'user') {
   const value = normalizeScalarKconfigValue(option, rawValue);
@@ -3495,15 +3512,34 @@ function renderMenuconfig() {
   $('menuconfigScroll').dataset.hasMore = String(ordinaryCount > menuVisibleLimit);
   renderImportedWorkspace();
 }
-function parseConfigValues(text) {
-  const values = new Map();
+function parseConfigEntries(text) {
+  const entries = new Map();
   for (const line of text.replace(/\r\n/g, '\n').split('\n')) {
     const enabled = line.match(/^CONFIG_([A-Za-z0-9_.+@-]+)=(.*)$/);
     const disabled = line.match(/^# CONFIG_([A-Za-z0-9_.+@-]+) is not set$/);
-    if (enabled) values.set(enabled[1], enabled[2]);
-    else if (disabled) values.set(disabled[1], 'n');
+    if (enabled) entries.set(enabled[1], { value: enabled[2], disabled: false, raw: line });
+    else if (disabled) entries.set(disabled[1], { value: 'n', disabled: true, raw: line });
   }
-  return values;
+  return entries;
+}
+function parseConfigValues(text) {
+  return new Map([...parseConfigEntries(text)].map(([symbol, entry]) => [symbol, entry.value]));
+}
+function normalizeImportedKconfigValue(entry, type = 'bool', fallbackValue = '') {
+  const normalizedType = String(type || 'bool').toLowerCase();
+  if (entry?.disabled) {
+    if (normalizedType === 'bool' || normalizedType === 'tristate') return 'n';
+    try {
+      return normalizeKconfigValueByType(fallbackValue, normalizedType);
+    } catch (error) {
+      return undefined;
+    }
+  }
+  let value = String(entry?.value ?? '');
+  if (normalizedType === 'string' && /^"(?:[^"\\]|\\.)*"$/.test(value)) {
+    try { value = JSON.parse(value); } catch (error) { /* keep the raw literal */ }
+  }
+  return normalizeKconfigValueByType(value, normalizedType);
 }
 function importedValue(symbol) {
   const edit = importedUnknownEdits.get(symbol);
@@ -4749,11 +4785,30 @@ function openSelectedDrawer() {
 $('selCount').addEventListener('click', openSelectedDrawer);
 
 /* ============ 生成 .config / Generate the .config ============ */
-function setConfigSymbol(text, symbol, value, type = 'bool') {
+function serializeKconfigValue(value, type = 'unknown', symbol = 'Kconfig option') {
+  const raw = String(value ?? '');
+  const normalizedType = String(type || 'unknown').toLowerCase();
+  if (normalizedType === 'unknown') return raw === 'n' ? null : raw;
+  let normalized = raw;
+  if (normalizedType === 'string' && /^"(?:[^"\\]|\\.)*"$/.test(raw)) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === 'string') normalized = parsed;
+    } catch (error) { /* quote the literal input below */ }
+  }
+  normalized = normalizeKconfigValueByType(normalized, normalizedType, symbol);
+  if (normalizedType === 'bool' || normalizedType === 'tristate') {
+    return normalized === 'n' ? null : normalized;
+  }
+  if (normalizedType === 'string') return JSON.stringify(normalized);
+  return normalized;
+}
+function setConfigSymbol(text, symbol, value, type = 'unknown') {
   const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const line = value === 'n' || value === ''
+  const serialized = serializeKconfigValue(value, type, symbol);
+  const line = serialized === null
     ? `# CONFIG_${symbol} is not set`
-    : `CONFIG_${symbol}=${type === 'string' && !/^".*"$/.test(value) ? JSON.stringify(value) : value}`;
+    : `CONFIG_${symbol}=${serialized}`;
   const pattern = new RegExp(`^(?:CONFIG_${escaped}=.*|# CONFIG_${escaped} is not set)$`, 'm');
   if (pattern.test(text)) return text.replace(pattern, line);
   return text.replace(/\s*$/, '\n') + line + '\n';
@@ -5383,7 +5438,8 @@ function restoreSelections(config, payload) {
   menuImportedNonDefault.clear();
   menuTouched.clear();
   markCatalogStateChanged();
-  for (const [symbol, value] of parseConfigValues(config)) importedConfigValues.set(symbol, value);
+  const importedConfigEntries = parseConfigEntries(config);
+  for (const [symbol, entry] of importedConfigEntries) importedConfigValues.set(symbol, entry.value);
   const explicit = payload && Array.isArray(payload.plugins) ? payload.plugins : null;
   let skipped = 0;
   for (const p of PLUGINS.plugins) {
@@ -5403,10 +5459,10 @@ function restoreSelections(config, payload) {
   if (menuSearchOptions.length) {
     for (const option of menuSearchOptions) {
       if (importedConfigValues.has(option.symbol)) {
-        let value = importedConfigValues.get(option.symbol);
-        if (option.type === 'string') {
-          try { value = JSON.parse(value); } catch (e) { value = value.replace(/^"|"$/g, ''); }
-        }
+        const entry = importedConfigEntries.get(option.symbol);
+        const fallbackValue = menuValues.get(option.symbol) ?? simpleKconfigDefault(option) ?? '';
+        const value = normalizeImportedKconfigValue(entry, option.type, fallbackValue);
+        if (value === undefined) continue;
         menuValues.set(option.symbol, value);
         catalogImportedSymbols.add(option.symbol);
         menuImportedOriginal.set(option.symbol, value);

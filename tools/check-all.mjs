@@ -442,6 +442,14 @@ menuconfigScalarTest.status === 0
   : bad('Advanced scalar editor tests',
     (menuconfigScalarTest.stderr || menuconfigScalarTest.stdout || '').trim().slice(0, 400));
 
+const kconfigSerializerTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-kconfig-serializer.mjs')], {
+  encoding: 'utf8',
+});
+kconfigSerializerTest.status === 0
+  ? ok('Kconfig serializer: Catalog types, import not-set state, invalid value rejection and unknown raw preservation')
+  : bad('Kconfig serializer tests',
+    (kconfigSerializerTest.stderr || kconfigSerializerTest.stdout || '').trim().slice(0, 500));
+
 const blogMirrorTestRoot = mkdtempSync(join(tmpdir(), '威格 blog mirror with spaces-'));
 try {
   const sourceDir = join(blogMirrorTestRoot, '主仓库 with spaces', 'site', 'wrt');

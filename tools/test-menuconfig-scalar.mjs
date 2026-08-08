@@ -33,7 +33,7 @@ const context = {
   },
 };
 vm.createContext(context);
-vm.runInContext(sourceRange('scalarKconfigOption', 'catalogConflictRecordForPackage'), context,
+vm.runInContext(sourceRange('normalizeKconfigValueByType', 'catalogConflictRecordForPackage'), context,
   { filename: 'menuconfig-scalar-fixture.js' });
 
 assert.equal(context.scalarKconfigOption({ type: 'string' }), true);
@@ -74,7 +74,10 @@ assert.equal(context.menuTouched.has(rootfs.symbol), false);
 assert.equal(engineCalls, 1, 'restoring a scalar value must also bypass the N/M/Y engine');
 
 
-const setConfigSource = sourceRange('setConfigSymbol', 'requirementScopeMatches');
+const setConfigSource = [
+  sourceRange('normalizeKconfigValueByType', 'scalarKconfigOption'),
+  sourceRange('serializeKconfigValue', 'requirementScopeMatches'),
+].join('\n');
 const configContext = {};
 vm.createContext(configContext);
 vm.runInContext(setConfigSource, configContext, { filename: 'menuconfig-scalar-config-fixture.js' });
