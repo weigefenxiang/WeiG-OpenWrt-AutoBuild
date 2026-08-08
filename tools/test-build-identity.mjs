@@ -6,11 +6,8 @@ import {
   buildEnvironmentIdentity,
   buildEnvironmentPrefix,
   buildIssueRequestPrefix,
-  buildRequestRouteMarker,
-  normalizeBuildCommit,
   normalizeBuildEnvironment,
   parseBuildIssueTitleIdentity,
-  parseBuildRequestRouteMarker,
 } from '../site/wrt/lib/build-identity.js';
 
 assert.equal(normalizeBuildEnvironment('refs/heads/dev'), 'dev');
@@ -20,22 +17,6 @@ assert.equal(normalizeBuildEnvironment('fix/kconfig-serializer-hardening'), 'fix
 assert.equal(normalizeBuildEnvironment('feat/rootfs-capacity-guidance'), 'feat/rootfs-capacity-guidance');
 assert.equal(normalizeBuildEnvironment('bad branch'), '');
 assert.equal(normalizeBuildEnvironment('../main'), '');
-
-
-assert.equal(normalizeBuildCommit('0123456789abcdef0123456789abcdef01234567'), '0123456789abcdef0123456789abcdef01234567');
-assert.equal(normalizeBuildCommit('0123456'), '');
-
-const routeMarker = buildRequestRouteMarker('fix/kconfig-serializer-hardening', '0123456789abcdef0123456789abcdef01234567');
-assert.equal(routeMarker, '<!-- WEIG_BUILD_ROUTE_V1\nbranch=fix/kconfig-serializer-hardening\ncommit=0123456789abcdef0123456789abcdef01234567\n-->');
-assert.deepEqual(parseBuildRequestRouteMarker(routeMarker), {
-  sourceEnv: 'fix/kconfig-serializer-hardening',
-  requestCommit: '0123456789abcdef0123456789abcdef01234567',
-  error: '',
-});
-assert.equal(parseBuildRequestRouteMarker('').error, 'missing route marker');
-assert.equal(parseBuildRequestRouteMarker(routeMarker + '\n' + routeMarker).error, 'duplicate route marker');
-assert.equal(parseBuildRequestRouteMarker('<!-- WEIG_BUILD_ROUTE_V1\nbranch=../main\ncommit=0123456789abcdef0123456789abcdef01234567\n-->').error, 'invalid route branch');
-assert.equal(parseBuildRequestRouteMarker('<!-- WEIG_BUILD_ROUTE_V1\nbranch=dev\ncommit=0123456\n-->').error, 'invalid route commit');
 
 assert.equal(buildEnvironmentIdentity('dev'), 'dev');
 assert.equal(buildEnvironmentIdentity('staging'), 'staging');

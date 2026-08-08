@@ -1,37 +1,9 @@
 name: Custom Build / 定制构建
-run-name: Build ${{ inputs.requester }}#${{ inputs.issue_number }} · ${{ inputs.issue_title }}
+run-name: ${{ github.event.issue.title }}
 
 on:
-  workflow_dispatch:
-    inputs:
-      issue_number:
-        description: Original build Issue number
-        required: true
-        type: string
-      issue_title:
-        description: Original build Issue title snapshot
-        required: true
-        type: string
-      issue_body:
-        description: Original build Issue body snapshot
-        required: true
-        type: string
-      requester:
-        description: Original build Issue author
-        required: true
-        type: string
-      issue_created_at:
-        description: Original build Issue creation time
-        required: true
-        type: string
-      request_branch:
-        description: Exact AutoBuild branch requested by the page
-        required: true
-        type: string
-      request_commit:
-        description: Exact AutoBuild commit requested by the page
-        required: true
-        type: string
+  issues:
+    types: [opened]
 
 env:
   TZ: Asia/Shanghai
@@ -42,72 +14,9 @@ permissions:
   issues: write
 
 jobs:
-  identity:
-    name: Exact identity / 精确身份
-    runs-on: ubuntu-22.04
-    timeout-minutes: 2
-    outputs:
-      valid: ${{ steps.guard.outputs.valid }}
-    steps:
-      - name: Verify dispatch ref and original Issue / 核对派发版本与原始 Issue
-        id: guard
-        uses: actions/github-script@v8
-        env:
-          ISSUE_NUMBER: ${{ inputs.issue_number }}
-          ISSUE_TITLE: ${{ inputs.issue_title }}
-          REQUESTER: ${{ inputs.requester }}
-          ISSUE_CREATED_AT: ${{ inputs.issue_created_at }}
-          REQUEST_BRANCH: ${{ inputs.request_branch }}
-          REQUEST_COMMIT: ${{ inputs.request_commit }}
-          WORKFLOW_BRANCH: ${{ github.ref_name }}
-          WORKFLOW_COMMIT: ${{ github.sha }}
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const issueNumber = Number(process.env.ISSUE_NUMBER);
-            const requester = process.env.REQUESTER;
-            const requestBranch = process.env.REQUEST_BRANCH;
-            const requestCommit = process.env.REQUEST_COMMIT.toLowerCase();
-            const workflowBranch = process.env.WORKFLOW_BRANCH;
-            const workflowCommit = process.env.WORKFLOW_COMMIT.toLowerCase();
-            core.setOutput('valid', 'false');
-
-            const reject = async (message) => {
-              await github.rest.issues.createComment({
-                owner, repo, issue_number: issueNumber,
-                body: `@${requester}\n\n❌ ${message}\n\n构建已阻止 / Build blocked.`,
-              });
-              await github.rest.issues.update({
-                owner, repo, issue_number: issueNumber, state: 'closed', state_reason: 'not_planned',
-              });
-              core.setFailed(message);
-            };
-
-            if (!Number.isSafeInteger(issueNumber) || issueNumber <= 0 || !/^[A-Za-z0-9-]{1,39}$/.test(requester)) {
-              await reject('派发身份字段非法 / Invalid dispatch identity fields.');
-              return;
-            }
-            if (workflowBranch !== requestBranch || workflowCommit !== requestCommit) {
-              await reject(`Worker 身份不匹配：request=${requestBranch}@${requestCommit.slice(0, 12)}, workflow=${workflowBranch}@${workflowCommit.slice(0, 12)} / Worker ref does not match the exact request.`);
-              return;
-            }
-            const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
-            if (issue.state !== 'open') {
-              core.notice(`Issue #${issueNumber} is closed; worker will not start.`);
-              return;
-            }
-            if (issue.user.login.toLowerCase() !== requester.toLowerCase() ||
-                issue.created_at !== process.env.ISSUE_CREATED_AT || issue.title !== process.env.ISSUE_TITLE) {
-              await reject('原始 Issue 身份已变化 / Original Issue identity no longer matches the dispatch snapshot.');
-              return;
-            }
-            core.setOutput('valid', 'true');
-
   admission:
     name: Admission / 构建准入
-    needs: identity
-    if: needs.identity.outputs.valid == 'true' && startsWith(inputs.issue_title, '[build]')
+    if: startsWith(github.event.issue.title, '[build]')
     runs-on: ubuntu-22.04
     timeout-minutes: 3
     outputs:
@@ -120,12 +29,9 @@ jobs:
         uses: actions/github-script@v8
         env:
           MAX_BUILDS_PER_USER: ${{ vars.MAX_BUILDS_PER_USER || '2' }}
-          REQUESTER: ${{ inputs.requester }}
-          ISSUE_NUMBER: ${{ inputs.issue_number }}
-          ISSUE_CREATED_AT: ${{ inputs.issue_created_at }}
         with:
           script: |
-            const requester = process.env.REQUESTER;
+            const requester = context.payload.issue.user.login;
             const isRepositoryOwner = requester.toLowerCase() === context.repo.owner.toLowerCase();
             if (isRepositoryOwner) {
               core.setOutput('allowed', 'true');
@@ -138,16 +44,13 @@ jobs:
             const limit = Number.isInteger(configured) && configured > 0 ? configured : 2;
             const list = async (status) => (await github.rest.actions.listWorkflowRuns({
               owner: context.repo.owner, repo: context.repo.repo,
-              workflow_id: 'custom-build.yml', status, per_page: 100,
+              workflow_id: 'custom-build.yml', actor: requester, status, per_page: 100,
             })).data.workflow_runs;
-            const userPrefix = `Build ${requester}#`.toLowerCase();
             const active = [...await list('queued'), ...await list('in_progress')]
-              .filter((run) => run.event === 'workflow_dispatch' &&
-                String(run.display_title || '').toLowerCase().startsWith(userPrefix) &&
-                String(run.id) !== String(context.runId));
+              .filter((run) => String(run.id) !== String(context.runId));
             active.push({
               id: context.runId,
-              created_at: process.env.ISSUE_CREATED_AT,
+              created_at: context.payload.issue.created_at,
             });
             const unique = [...new Map(active.map((run) => [String(run.id), run])).values()]
               .sort((a, b) => a.created_at.localeCompare(b.created_at) || Number(a.id) - Number(b.id));
@@ -164,12 +67,12 @@ jobs:
             {
               await github.rest.issues.createComment({
                 owner: context.repo.owner, repo: context.repo.repo,
-                issue_number: Number(process.env.ISSUE_NUMBER),
+                issue_number: context.issue.number,
                 body: `@${requester}\n\n⏳ 当前你已有 ${limit} 个排队中或运行中的构建，本次未开始。请等待其中一个完成，或在自己的构建 Issue 回复 \`/cancel\` 后再提交。`,
               });
               await github.rest.issues.update({
                 owner: context.repo.owner, repo: context.repo.repo,
-                issue_number: Number(process.env.ISSUE_NUMBER), state: 'closed', state_reason: 'not_planned',
+                issue_number: context.issue.number, state: 'closed', state_reason: 'not_planned',
               });
             }
 
@@ -189,19 +92,11 @@ jobs:
       artifact_ref: ${{ steps.req.outputs.artifact_ref }}
 
     steps:
-      - name: Checkout exact request commit / 检出精确请求提交
+      - name: Checkout / 检出代码
         uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.request_commit }}
-
-      - name: Verify checked-out commit / 核对检出提交
-        env:
-          REQUEST_COMMIT: ${{ inputs.request_commit }}
-        run: test "$(git rev-parse HEAD)" = "$REQUEST_COMMIT"
 
       - name: Read Issue attachment or mobile request / 读取附件或手机请求
         env:
-          ISSUE_BODY: ${{ inputs.issue_body }}
           REQUEST_MANIFEST_OUT: request-attachments.json
           REQUEST_DIR: request-attachments
         run: node tools/fetch-build-request.mjs
@@ -212,42 +107,34 @@ jobs:
           REQUEST_MANIFEST: request-attachments.json
           SUBMITTED_CONFIG_OUT: submitted.config
           RECOMMENDED_AUDIT_OUT: recommended-audit.json
-          ISSUE_TITLE: ${{ inputs.issue_title }}
-          EXPECTED_REQUEST_BRANCH: ${{ inputs.request_branch }}
-          EXPECTED_REQUEST_COMMIT: ${{ inputs.request_commit }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
         run: node tools/parse-request.mjs
 
       - name: "Comment on issue: build started / 回评 issue:构建开始"
         uses: actions/github-script@v8
-        env:
-          ISSUE_NUMBER: ${{ inputs.issue_number }}
-          REQUESTER: ${{ inputs.requester }}
         with:
           script: |
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: Number(process.env.ISSUE_NUMBER),
-              body: `@${process.env.REQUESTER}\n\n🚀 构建已开始:${{ steps.req.outputs.summary }}\n\n进度与产物:${url}\n\n如需取消，请在本 Issue 回复 \`/cancel\`（仅提交者本人可取消）。\n\n完成后固件在该页面底部 Artifacts(需登录 GitHub 才能下载),整机编译预计 2~3 小时,请耐心等待。失败时也会上传错误日志供自查。`,
+              issue_number: context.issue.number,
+              body: `@${context.payload.issue.user.login}\n\n🚀 构建已开始:${{ steps.req.outputs.summary }}\n\n进度与产物:${url}\n\n如需取消，请在本 Issue 回复 \`/cancel\`（仅提交者本人可取消）。\n\n完成后固件在该页面底部 Artifacts(需登录 GitHub 才能下载),整机编译预计 2~3 小时,请耐心等待。失败时也会上传错误日志供自查。`,
             });
 
       - name: Comment & close issue on invalid request / 校验失败时回评并关闭 issue
         if: failure()
         uses: actions/github-script@v8
-        env:
-          ISSUE_NUMBER: ${{ inputs.issue_number }}
-          REQUESTER: ${{ inputs.requester }}
         with:
           script: |
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: Number(process.env.ISSUE_NUMBER),
-              body: `@${process.env.REQUESTER}\n\n❌ 请求校验未通过,构建未开始。日志:${url}\n\n请核对附件格式与机型字段后重新提交。`,
+              issue_number: context.issue.number,
+              body: `@${context.payload.issue.user.login}\n\n❌ 请求校验未通过,构建未开始。日志:${url}\n\n请核对附件格式与机型字段后重新提交。`,
             });
             await github.rest.issues.update({
               owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: Number(process.env.ISSUE_NUMBER), state: 'closed', state_reason: 'not_planned',
+              issue_number: context.issue.number, state: 'closed', state_reason: 'not_planned',
             });
 
       - name: Free disk space / 释放磁盘空间
@@ -986,7 +873,7 @@ jobs:
   notify:
     name: Final result / 最终结果
     needs: [admission, build, publish-firmware, cleanup-raw-bridge]
-    if: always() && needs.build.outputs.build_ref != ''
+    if: always() && github.event_name == 'issues' && needs.build.outputs.build_ref != ''
     runs-on: ubuntu-22.04
     steps:
       - name: Comment final result / 回评最终结果
@@ -995,26 +882,24 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           PUBLISH_RESULT: ${{ needs.publish-firmware.result }}
           ARTIFACT_REF: ${{ needs.build.outputs.artifact_ref }}
-          ISSUE_NUMBER: ${{ inputs.issue_number }}
-          REQUESTER: ${{ inputs.requester }}
         with:
           script: |
             const ok = process.env.BUILD_RESULT === 'success' && process.env.PUBLISH_RESULT === 'success';
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const ref = process.env.ARTIFACT_REF;
             const body = ok
-              ? `@${process.env.REQUESTER}\n\n✅ 构建和固件发布全部完成。\n\n下载 / Download: ${url}\n\n- 每个 \`${ref}-*.img.gz\` 是可直接下载的独立 Artifact，不解压、不套 ZIP。\n- \`${ref}-CONFIG\`、\`${ref}-BUILD-LOGS\`、\`${ref}-OPTIONAL-PACKAGES\`、\`${ref}-FIRMWARE-OTHER\` 为分类资料（没有对应内容时可能不生成）。\n\n首次刷机通常选 \`factory\`；\`sysupgrade\` 只用于当前固件与闪存布局兼容的升级。`
-              : `@${process.env.REQUESTER}\n\n❌ 构建或原始固件发布失败。\n\nBuild: ${process.env.BUILD_RESULT}; raw publish: ${process.env.PUBLISH_RESULT}\n\n请打开本次 Actions 查看 \`${ref}-CONFIG\` 与 \`${ref}-BUILD-LOGS\`：${url}`;
+              ? `@${context.payload.issue.user.login}\n\n✅ 构建和固件发布全部完成。\n\n下载 / Download: ${url}\n\n- 每个 \`${ref}-*.img.gz\` 是可直接下载的独立 Artifact，不解压、不套 ZIP。\n- \`${ref}-CONFIG\`、\`${ref}-BUILD-LOGS\`、\`${ref}-OPTIONAL-PACKAGES\`、\`${ref}-FIRMWARE-OTHER\` 为分类资料（没有对应内容时可能不生成）。\n\n首次刷机通常选 \`factory\`；\`sysupgrade\` 只用于当前固件与闪存布局兼容的升级。`
+              : `@${context.payload.issue.user.login}\n\n❌ 构建或原始固件发布失败。\n\nBuild: ${process.env.BUILD_RESULT}; raw publish: ${process.env.PUBLISH_RESULT}\n\n请打开本次 Actions 查看 \`${ref}-CONFIG\` 与 \`${ref}-BUILD-LOGS\`：${url}`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: Number(process.env.ISSUE_NUMBER),
+              issue_number: context.issue.number,
               body,
             });
             await github.rest.issues.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: Number(process.env.ISSUE_NUMBER),
+              issue_number: context.issue.number,
               state: 'closed',
               state_reason: ok ? 'completed' : 'not_planned',
             });
