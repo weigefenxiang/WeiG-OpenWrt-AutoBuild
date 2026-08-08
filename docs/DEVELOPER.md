@@ -162,7 +162,7 @@ WeiG-OpenWrt-AutoBuild/
 - Actions 的全局 `TZ` 只控制 Runner 进程日志时间；不要在 GitHub 托管 Runner 调用 `timedatectl set-timezone`，该操作可能因 systemd 权限被拒绝并让依赖安装步骤失败。固件时区始终由请求字段和 diy2 首启脚本写入，与 Runner 系统时区无关。
 - diy 脚本按源区分:官方源用 `diy2-openwrt.sh`,lede 用 `diy2-lede.sh`(都不能复用 ImmortalWrt 系的)
 - `sync-upstream.yml` 每周六 18:37 UTC 自动同步上游，只 checkout/commit/push `dev`；自动提交不得使用 `[skip ci]`，因此所有同步结果都必须进入同一个 Required CI。`check-drift.mjs` 只检查通用 OpenWrt 分支策略并在漂移时开 issue；`mirror-upstream.yml` 每月镜像（需 `secrets.MIRROR_TOKEN`）。构建回归测试通过网页生成的真实 Issue 请求执行，不再使用 smoke 派发器。
-- `.github/workflows/ci.yml` 是唯一 Required CI，固定 Job 名 `Required CI / 必需检查`。它对 `dev`/`staging`/`main` 的 push 和指向三者的 PR 运行，且故意不使用 `paths:` 过滤；依次验证 VERSION、全仓文本格式、`check-all` 与提交差异空白。CI 只有 `contents: read`，不得改 VERSION、commit 或 push。公开仓库不包含本地私有维护文件时，`check-all` 会明确跳过仅依赖这些私有部署文件的夹具，其余公开契约照常全量执行；本地完整项目仍执行私有夹具。
+- `.github/workflows/ci.yml` 是唯一 Required CI，固定 Job 名 `Required CI / 必需检查`。它对所有分支的 push 运行，并对指向 `dev`/`staging`/`main` 的 PR 运行，且故意不使用 `paths:` 过滤；依次验证 VERSION、全仓文本格式、`check-all` 与提交差异空白。CI 只有 `contents: read`，不得改 VERSION、commit 或 push。公开仓库不包含本地私有维护文件时，`check-all` 会明确跳过仅依赖这些私有部署文件的夹具，其余公开契约照常全量执行；本地完整项目仍执行私有夹具。
 
 #### 取消内置项与直接配置构建
 

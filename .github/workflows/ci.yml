@@ -3,10 +3,6 @@ run-name: Required CI 必需检查 · ${{ github.ref_name }}
 
 on:
   push:
-    branches:
-      - dev
-      - staging
-      - main
   pull_request:
     branches:
       - dev

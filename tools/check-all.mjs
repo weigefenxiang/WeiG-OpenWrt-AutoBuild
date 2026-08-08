@@ -1087,8 +1087,7 @@ mirrorRulesOk
     : bad('A+ standalone deployment contract', 'Pages workflow, standalone deployment docs, or blog-preview removal is incomplete');
   const requiredCiContract =
     (ciWorkflow.match(/name: Required CI \/ 必需检查/g) || []).length >= 2 &&
-    ciWorkflow.includes('push:') && ciWorkflow.includes('pull_request:') &&
-    ciWorkflow.includes('- dev') && ciWorkflow.includes('- staging') && ciWorkflow.includes('- main') &&
+    ciWorkflow.includes('on:\n  push:\n  pull_request:\n    branches:\n      - dev\n      - staging\n      - main') &&
     !/^\s+paths:/m.test(ciWorkflow) &&
     ciWorkflow.includes('contents: read') && !ciWorkflow.includes('contents: write') &&
     ciWorkflow.includes('fetch-depth: 0') &&
@@ -1103,7 +1102,7 @@ mirrorRulesOk
     developerGuideEn.includes('Required CI / 必需检查') &&
     (!privateChecksAvailable || (deployGuide.includes('Require linear history') && deployGuide.includes('Require status checks')));
   requiredCiContract
-    ? ok('D116 Required CI: stable job, full text/version/contracts/diff gates, no path skip or write-back')
+    ? ok('Required CI: every push branch runs checks; PR targets stay dev/staging/main; no path skip or write-back')
     : bad('D116 Required CI contract', 'ci.yml, retired site-version workflow, Ruleset docs, or required gate command is incomplete');
   const upstreamSyncBranchContract =
     syncWorkflow.includes('ref: dev') && syncWorkflow.includes('fetch-depth: 0') &&
