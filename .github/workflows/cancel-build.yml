@@ -40,15 +40,8 @@ jobs:
             })).data.workflow_runs;
             const dispatchPrefix = `Build ${requester}#${issue.number} · `.toLowerCase();
             const active = [...await list('queued'), ...await list('in_progress')]
-              .filter((run) => {
-                if (run.event === 'workflow_dispatch') {
-                  return String(run.display_title || '').toLowerCase().startsWith(dispatchPrefix);
-                }
-                // Migration compatibility for direct Issue workers that started before the B2 cutover.
-                return run.event === 'issues' &&
-                  String(run.actor?.login || '').toLowerCase() === requester.toLowerCase() &&
-                  run.display_title === issue.title;
-              });
+              .filter((run) => run.event === 'workflow_dispatch' &&
+                String(run.display_title || '').toLowerCase().startsWith(dispatchPrefix));
             if (!active.length) {
               await github.rest.issues.createComment({
                 owner, repo, issue_number: issue.number,

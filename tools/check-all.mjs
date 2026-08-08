@@ -1993,8 +1993,8 @@ mirrorRulesOk
     workflow.includes('Build admission refused') &&
     workflow.includes('const requester = process.env.REQUESTER;') &&
     workflow.includes('REQUESTER: ${{ inputs.requester }}') &&
-    workflow.includes("run.event === 'workflow_dispatch'") && workflow.includes("run.event === 'issues'") &&
-    workflow.includes('pre-cutover direct Issue runs in admission accounting') &&
+    workflow.includes("run.event === 'workflow_dispatch'") && !workflow.includes("run.event === 'issues'") &&
+    !workflow.includes('pre-cutover direct Issue runs in admission accounting') &&
     workflow.includes('const isRepositoryOwner = requester.toLowerCase() === context.repo.owner.toLowerCase();') &&
     workflow.includes('`owner-${context.runId}`') &&
     workflow.includes('Repository owner build admitted without queue') &&
@@ -2006,8 +2006,8 @@ mirrorRulesOk
     cancelWorkflow.includes("['/cancel', '/cancel-build']") &&
     cancelWorkflow.includes('commenter.toLowerCase() !== requester.toLowerCase()') &&
     cancelWorkflow.includes('const dispatchPrefix = `Build ${requester}#${issue.number} · `.toLowerCase();') &&
-    cancelWorkflow.includes("run.event === 'workflow_dispatch'") && cancelWorkflow.includes("run.event === 'issues'") &&
-    cancelWorkflow.includes('Migration compatibility for direct Issue workers') &&
+    cancelWorkflow.includes("run.event === 'workflow_dispatch'") && !cancelWorkflow.includes("run.event === 'issues'") &&
+    !cancelWorkflow.includes('Migration compatibility for direct Issue workers') &&
     cancelWorkflow.includes('cancelWorkflowRun') &&
     cancelWorkflow.includes('force-cancel');
   buildLimitContract

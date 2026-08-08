@@ -146,12 +146,8 @@ jobs:
             const active = [...await list('queued'), ...await list('in_progress')]
               .filter((run) => {
                 if (String(run.id) === String(context.runId)) return false;
-                if (run.event === 'workflow_dispatch') {
-                  return String(run.display_title || '').toLowerCase().startsWith(userPrefix);
-                }
-                // Keep pre-cutover direct Issue runs in admission accounting until they finish.
-                return run.event === 'issues' &&
-                  String(run.actor?.login || '').toLowerCase() === requester.toLowerCase();
+                return run.event === 'workflow_dispatch' &&
+                  String(run.display_title || '').toLowerCase().startsWith(userPrefix);
               });
             active.push({
               id: context.runId,
