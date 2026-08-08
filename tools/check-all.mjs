@@ -1434,17 +1434,29 @@ mirrorRulesOk
     ? ok('build entrypoint: stable Issue build path remains and legacy smoke generators stay retired')
     : bad('build entrypoint', 'stable Issue entry or retired legacy build paths regressed');
 
-  const routingProbeContract =
+  const routingCanaryContract =
     dispatcherWorkflow.includes('workflow_dispatch:') &&
     !dispatcherWorkflow.includes('\n  issues:\n') &&
+    dispatcherWorkflow.includes('default: probe') &&
+    dispatcherWorkflow.includes('          - probe') &&
+    dispatcherWorkflow.includes('          - build-canary') &&
     dispatcherWorkflow.includes('Run this dispatcher from ${expected}, not ${actual}.') &&
-    dispatcherWorkflow.includes("startsWith('[route-test]')") &&
+    dispatcherWorkflow.includes("mode === 'build-canary' && context.actor.toLowerCase() !== context.repo.owner.toLowerCase()") &&
+    dispatcherWorkflow.includes("const requiredPrefix = mode === 'probe' ? '[route-test]' : '[build]'") &&
     dispatcherWorkflow.includes('tools/fetch-build-request.mjs') &&
-    dispatcherWorkflow.includes('REQUEST_EVENT_PATH: ${{ github.workspace }}/route-probe-event.json') &&
-    !dispatcherWorkflow.includes('GITHUB_EVENT_PATH: ${{ github.workspace }}/route-probe-event.json') &&
+    dispatcherWorkflow.includes('REQUEST_EVENT_PATH: ${{ github.workspace }}/dispatcher-event.json') &&
+    !dispatcherWorkflow.includes('GITHUB_EVENT_PATH: ${{ github.workspace }}/dispatcher-event.json') &&
     dispatcherWorkflow.includes('tools/parse-build-request-identity.mjs') &&
+    dispatcherWorkflow.includes('ISSUE_TITLE: ${{ steps.issue.outputs.title }}') &&
+    dispatcherWorkflow.includes('currentIssue.title !== process.env.ISSUE_TITLE') &&
+    dispatcherWorkflow.includes("String(currentIssue.body || '') !== issueBody") &&
     dispatcherWorkflow.includes("workflow_id: 'build-routing-probe.yml'") &&
-    !dispatcherWorkflow.includes("workflow_id: 'custom-build.yml'") &&
+    dispatcherWorkflow.includes("workflow_id: 'custom-build.yml'") &&
+    dispatcherWorkflow.includes('issue_body: issueBody') &&
+    dispatcherWorkflow.includes('issue_created_at: process.env.ISSUE_CREATED_AT') &&
+    dispatcherWorkflow.includes('request_branch: branch') &&
+    dispatcherWorkflow.includes('request_commit: commit') &&
+    dispatcherWorkflow.includes('if (bytes > 60000)') &&
     dispatcherWorkflow.includes('ref: branch') &&
     routingProbeWorkflow.includes('workflow_dispatch:') &&
     !routingProbeWorkflow.includes('\n  issues:\n') &&
@@ -1453,11 +1465,17 @@ mirrorRulesOk
     routingProbeWorkflow.includes('ref: ${{ inputs.request_commit }}') &&
     routingProbeWorkflow.includes('git rev-parse HEAD') &&
     !routingProbeWorkflow.includes('make -j') &&
-    !routingProbeWorkflow.includes('Shell/');
-  routingProbeContract
-    ? ok('E v2 Phase A routing probe: manual-only Dispatcher→Probe validates exact branch/SHA/checkout without taking over production builds')
-    : bad('E v2 Phase A routing probe',
-      'Dispatcher/Probe must stay manual-only, validate exact branch/SHA/checkout, and must not dispatch custom-build');
+    !routingProbeWorkflow.includes('Shell/') &&
+    buildWorkflow.includes('workflow_dispatch:') &&
+    buildWorkflow.includes('request_branch:') &&
+    buildWorkflow.includes('request_commit:') &&
+    buildWorkflow.includes('EXPECTED_REQUEST_BRANCH:') &&
+    buildWorkflow.includes('EXPECTED_REQUEST_COMMIT:') &&
+    buildWorkflow.includes('Verify checked-out commit / 核对检出提交');
+  routingCanaryContract
+    ? ok('E v2 Phase B1 routing canary: manual-only Dispatcher preserves Probe and can dispatch the existing exact-ref custom-build Worker')
+    : bad('E v2 Phase B1 routing canary',
+      'Dispatcher must stay manual-only, preserve exact-ref Probe validation, and gate owner-only real custom-build canaries without taking over Issue traffic');
   const driftSentinelContract = driftSentinel.includes("const forbidden = ['lede-17.01', 'pcs-standalone-back', 'master'];") &&
     driftSentinel.includes("names.has('main')") && !driftSentinel.includes('360T7') &&
     !driftSentinel.includes('qihoo_360t7') && !syncWorkflow.includes('360T7');

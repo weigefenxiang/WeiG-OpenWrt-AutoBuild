@@ -25,10 +25,10 @@ WeiG-OpenWrt-AutoBuild/
 ├─ ARCHITECTURE.md              ✍ structure & architecture overview (public, bilingual)
 ├─ translations/                ⚙ 10 README translations (zh-TW/en/ru/es/pt/ja/ko/de/fr/vi)
 ├─ .github/workflows/              GitHub Actions (production + manual routing probes)
-│  ├─ custom-build.yml             ★ core production Issue build; E v2 Phase A does not modify this user path
+│  ├─ custom-build.yml             ★ core production Issue build + existing exact-ref Worker; E v2 B1 does not modify this file
 │  ├─ cancel-build.yml             lets an Issue author cancel their own build with /cancel
-│  ├─ build-dispatcher.yml         E v2 Phase A manual exact-ref routing-probe dispatcher (no issues trigger)
-│  ├─ build-routing-probe.yml      E v2 Phase A manual read-only probe worker (no OpenWrt compile)
+│  ├─ build-dispatcher.yml         E v2 Phase B1 manual exact-ref Probe/real-Worker canary dispatcher (no issues trigger)
+│  ├─ build-routing-probe.yml      E v2 manual read-only probe worker (no OpenWrt compile)
 │  ├─ sync-upstream.yml            weekly upstream sync: catalog/seeds/plugin tables/package page, auto-commit on diff
 │  ├─ mirror-upstream.yml          monthly upstream mirrors (anti-takedown, needs secrets.MIRROR_TOKEN)
 │  ├─ pages.yml                    publishes standalone GitHub Pages from main
@@ -133,7 +133,7 @@ Type scale: 17px body (15.5px compact via the Aa toggle); 15px pills/plugin cell
 
 ### 2.5 Build pipeline
 
-- **E v2 Phase A (zero production traffic cutover):** normal `[build]` Issues continue through the existing `custom-build.yml` production entry. The manual `build-dispatcher.yml` and `build-routing-probe.yml` do not listen for Issue events, and the dispatcher dispatches only the probe, never `custom-build.yml`. A `[route-test]` Issue contains exactly one generated `build-request.json`. The dispatcher snapshots the Issue through the GitHub API and passes that snapshot to `fetch-build-request.mjs` through custom `REQUEST_EVENT_PATH`; body-source precedence is explicit `ISSUE_BODY` → `REQUEST_EVENT_PATH` → GitHub's native `GITHUB_EVENT_PATH`, so workflows never try to overwrite reserved `GITHUB_*` defaults. It then reads only `sourceEnv`, the full 40-character `requestCommit`, and `requestId`, verifies that the remote branch HEAD exactly equals the requested commit, and dispatches a read-only probe on that ref. The probe requires `github.ref_name == sourceEnv`, `github.sha == requestCommit`, and `git rev-parse HEAD == requestCommit`. Phase A never compiles OpenWrt; Phase B must not take over production Issue traffic until these real routing runs pass.
+- **E v2 Phase B1 (real Worker canary, still zero production traffic cutover):** Phase A has passed real dev, slash-branch, stale-commit, and missing-branch routing runs. Normal `[build]` Issues still enter the existing `custom-build.yml` directly, while the dispatcher remains `workflow_dispatch` only. Its default `probe` mode preserves the read-only Worker probe; owner-only `build-canary` dispatches the existing `custom-build.yml` Worker on the exact `sourceEnv` + full `requestCommit` from the same schema-5 `build-request.json`. Both modes snapshot the Issue through `REQUEST_EVENT_PATH`, verify remote branch HEAD, and re-read state/author/created_at/title/body immediately before dispatch. To avoid the current `custom-build.yml` `issues: opened` entry auto-starting the canary, create the full request first under a `[route-test]` title, then edit only the title to the matching `[build] ...` identity and manually run `mode=build-canary` from main; a title edit is not an `opened` event. B1 does not modify `custom-build.yml` or normal Blog/user builds. Production Phase B2 stays blocked until the real Worker canary passes. Body-source precedence remains `ISSUE_BODY` → `REQUEST_EVENT_PATH` → GitHub's native `GITHUB_EVENT_PATH`; reserved `GITHUB_*` defaults are never overridden.
 
 - For a Catalog Target, `arch`, `archPackages`, Target, and Profile identity remain one atomic build contract. Profile-declared packages move to a compact manager: Follow upstream writes nothing, while explicit Include or Exclude writes `y` or `n`. The submitted config is generically checked only before optional Defconfig. A successful upstream `make defconfig` is not subject to project-specific post-validation. `tools/apply-config-overrides.mjs`, `tools/config-overrides.mjs`, and `system-overrides.json` are removed, so the workflow no longer forces `CONFIG_DEVEL` or `CONFIG_BUILD_LOG`.
 

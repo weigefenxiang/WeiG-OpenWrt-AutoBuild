@@ -26,10 +26,10 @@ WeiG-OpenWrt-AutoBuild/
 ├─ ARCHITECTURE.md              ✍ 目录与架构总览(公开,中英双语)
 ├─ translations/                ⚙ README 十语译文(zh-TW/en/ru/es/pt/ja/ko/de/fr/vi,工作流翻译)
 ├─ .github/workflows/              GitHub Actions（生产 + 手动路由探针）
-│  ├─ custom-build.yml             ★核心:生产 Issue 构建；E v2 Phase A 不修改这条用户链路
+│  ├─ custom-build.yml             ★核心:生产 Issue 构建 + 既有 exact-ref Worker；E v2 B1 不修改此文件
 │  ├─ cancel-build.yml             Issue 提交者用 /cancel 取消自己的构建
-│  ├─ build-dispatcher.yml         E v2 Phase A 手动 exact-ref 路由探针派发器（不监听 issues）
-│  ├─ build-routing-probe.yml      E v2 Phase A 手动只读 Probe Worker（不编译 OpenWrt）
+│  ├─ build-dispatcher.yml         E v2 Phase B1 手动 exact-ref Probe/真实 Worker canary 派发器（不监听 issues）
+│  ├─ build-routing-probe.yml      E v2 手动只读 Probe Worker（不编译 OpenWrt）
 │  ├─ sync-upstream.yml            每周同步上游:机型目录/种子/插件表/说明页,有 diff 才自动提交
 │  ├─ mirror-upstream.yml          每月镜像上游仓库防删库(需 secrets.MIRROR_TOKEN)
 │  ├─ pages.yml                    main 发布 standalone GitHub Pages
@@ -146,7 +146,7 @@ WeiG-OpenWrt-AutoBuild/
 
 ### 2.5 构建链路
 
-- **E v2 Phase A（零生产流量切换）**：普通 `[build]` Issue 的生产入口继续走现有 `custom-build.yml`；手动 `build-dispatcher.yml` 与 `build-routing-probe.yml` 不监听 Issue，且 Dispatcher 只派发 Probe、不调用 `custom-build.yml`。`[route-test]` Issue 只携带一个 `build-request.json`。Dispatcher 通过 GitHub API 固定 Issue 快照，并用自定义 `REQUEST_EVENT_PATH` 交给 `fetch-build-request.mjs`；正文来源优先级固定为显式 `ISSUE_BODY` → `REQUEST_EVENT_PATH` → GitHub 原生 `GITHUB_EVENT_PATH`，不能用 workflow `env:` 覆盖 `GITHUB_*` 默认变量。随后只解析 `sourceEnv`、完整 40 位 `requestCommit`、`requestId`，确认远端 branch HEAD 精确等于 request commit，再派发对应 ref 的只读 Probe。Probe 必须满足 `github.ref_name == sourceEnv`、`github.sha == requestCommit`、`git rev-parse HEAD == requestCommit`。Phase A 不执行 OpenWrt Build；这些真实 Run 全部通过后才能进入会修改生产 Worker/Issue 流量的 Phase B。
+- **E v2 Phase B1（真实 Worker canary，仍不切生产流量）**：Phase A 已真实通过 dev 正向、含 `/` 分支、stale commit 与 branch 不存在矩阵。普通 `[build]` Issue 仍直接走现有 `custom-build.yml`，Dispatcher 仍只有 `workflow_dispatch`。其 `mode` 默认 `probe`，保留只读 Probe；新增 `build-canary` 仅允许仓库 Owner 手动运行，并把同一份 schema 5 `build-request.json` 的 `sourceEnv` + 完整 `requestCommit` 路由到既有 `custom-build.yml` Worker。两种模式都通过 `REQUEST_EVENT_PATH` 固定 Issue 快照、核对远端 branch HEAD、并在派发前重新确认 Issue state/author/created_at/title/body。为避免 canary 在创建时被当前 `custom-build.yml` 的 `issues: opened` 入口直接启动，先以 `[route-test]` 创建并上传完整网页请求，随后仅编辑标题为与请求身份匹配的 `[build] ...`，再从 main 手动运行 `mode=build-canary`；Issue title edit 不属于 `opened`。B1 不修改 `custom-build.yml`、不改变普通用户/Blog Build；真实 Worker canary 通过后才进入 Phase B2 生产切流。正文来源仍为 `ISSUE_BODY` → `REQUEST_EVENT_PATH` → GitHub 原生 `GITHUB_EVENT_PATH`，不得覆盖保留的 `GITHUB_*` 默认变量。
 
 - Catalog Target 的 `arch`、`archPackages` 与 Target/Profile 身份仍是原子构建契约。Profile 声明包改为紧凑管理列表，默认“跟随上游”不写显式值；只有用户逐项选择“加入”或“排除”时才写 `y`/`n`。提交配置仅在 Defconfig 前进行通用 Catalog 检查；用户勾选后运行一次官方 `make defconfig`，成功输出不再接受项目自定义 post-defconfig 验证。`tools/apply-config-overrides.mjs`、`tools/config-overrides.mjs` 与 `system-overrides.json` 已删除，不再强制 `CONFIG_DEVEL`/`CONFIG_BUILD_LOG`。
 

@@ -1,13 +1,21 @@
-name: Build Routing Probe Dispatcher / 构建路由探针派发器
-run-name: Route probe / 路由探针 · #${{ inputs.issue_number }}
+name: Build Routing Validation Dispatcher / 构建路由验证派发器
+run-name: Route ${{ inputs.mode }} / 路由验证 · #${{ inputs.issue_number }}
 
 on:
   workflow_dispatch:
     inputs:
       issue_number:
-        description: Existing [route-test] Issue containing exactly one build-request.json
+        description: Existing Issue containing exactly one build-request.json
         required: true
         type: string
+      mode:
+        description: Read-only routing probe or real custom-build canary
+        required: true
+        default: probe
+        type: choice
+        options:
+          - probe
+          - build-canary
 
 permissions:
   contents: read
@@ -16,7 +24,7 @@ permissions:
 
 jobs:
   dispatch:
-    name: Validate request and dispatch probe / 校验请求并派发探针
+    name: Validate request and dispatch canary / 校验请求并派发验证
     runs-on: ubuntu-22.04
     timeout-minutes: 4
     steps:
@@ -35,17 +43,27 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
 
-      - name: Snapshot route-test Issue / 固定路由测试 Issue
+      - name: Snapshot canary Issue / 固定验证 Issue
         id: issue
         uses: actions/github-script@v8
         env:
           ISSUE_NUMBER: ${{ inputs.issue_number }}
+          DISPATCH_MODE: ${{ inputs.mode }}
         with:
           script: |
             const fs = require('fs');
             const issueNumber = Number(process.env.ISSUE_NUMBER);
+            const mode = String(process.env.DISPATCH_MODE || '');
             if (!Number.isSafeInteger(issueNumber) || issueNumber <= 0) {
               core.setFailed('Invalid Issue number / Issue 编号非法');
+              return;
+            }
+            if (!['probe', 'build-canary'].includes(mode)) {
+              core.setFailed(`Unsupported dispatch mode: ${mode} / 不支持的派发模式`);
+              return;
+            }
+            if (mode === 'build-canary' && context.actor.toLowerCase() !== context.repo.owner.toLowerCase()) {
+              core.setFailed('build-canary is restricted to the repository owner / build-canary 仅允许仓库 Owner 手动运行');
               return;
             }
             const { data: issue } = await github.rest.issues.get({
@@ -54,55 +72,72 @@ jobs:
               issue_number: issueNumber,
             });
             if (issue.pull_request) {
-              core.setFailed('Pull requests are not route probes / PR 不能作为路由探针');
+              core.setFailed('Pull requests are not routing canaries / PR 不能作为路由验证');
               return;
             }
             if (issue.state !== 'open') {
               core.setFailed(`Issue #${issueNumber} is not open / Issue 不是打开状态`);
               return;
             }
-            if (!String(issue.title || '').startsWith('[route-test]')) {
-              core.setFailed('Probe Issue title must start with [route-test] / 路由探针 Issue 标题必须以 [route-test] 开头');
+            const title = String(issue.title || '');
+            const requiredPrefix = mode === 'probe' ? '[route-test]' : '[build]';
+            if (!title.startsWith(requiredPrefix)) {
+              core.setFailed(`${mode} Issue title must start with ${requiredPrefix} / ${mode} Issue 标题必须以 ${requiredPrefix} 开头`);
               return;
             }
             const snapshot = {
               issue: {
                 number: issue.number,
-                title: issue.title,
+                title,
                 body: String(issue.body || ''),
                 created_at: issue.created_at,
                 user: { login: issue.user.login },
               },
             };
-            fs.writeFileSync('route-probe-event.json', `${JSON.stringify(snapshot)}\n`);
+            fs.writeFileSync('dispatcher-event.json', `${JSON.stringify(snapshot)}\n`);
             core.setOutput('number', String(issue.number));
+            core.setOutput('title', title);
+            core.setOutput('requester', issue.user.login);
+            core.setOutput('created_at', issue.created_at);
 
       - name: Read authoritative Build Request / 读取权威 Build Request
         env:
-          REQUEST_EVENT_PATH: ${{ github.workspace }}/route-probe-event.json
-          REQUEST_MANIFEST_OUT: route-probe-request.json
-          REQUEST_DIR: route-probe-request
+          REQUEST_EVENT_PATH: ${{ github.workspace }}/dispatcher-event.json
+          REQUEST_MANIFEST_OUT: dispatcher-request.json
+          REQUEST_DIR: dispatcher-request
         run: node tools/fetch-build-request.mjs
 
       - name: Read routing identity from Build Request / 从 Build Request 读取路由身份
         id: route
         env:
-          REQUEST_MANIFEST: route-probe-request.json
+          REQUEST_MANIFEST: dispatcher-request.json
+          ISSUE_TITLE: ${{ steps.issue.outputs.title }}
         run: node tools/parse-build-request-identity.mjs
 
-      - name: Validate exact branch head and dispatch probe / 核对精确分支并派发探针
+      - name: Validate exact branch head and dispatch canary / 核对精确分支并派发验证
         uses: actions/github-script@v8
         env:
+          DISPATCH_MODE: ${{ inputs.mode }}
           REQUEST_BRANCH: ${{ steps.route.outputs.request_branch }}
           REQUEST_COMMIT: ${{ steps.route.outputs.request_commit }}
           REQUEST_ID: ${{ steps.route.outputs.request_id }}
           ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+          ISSUE_TITLE: ${{ steps.issue.outputs.title }}
+          REQUESTER: ${{ steps.issue.outputs.requester }}
+          ISSUE_CREATED_AT: ${{ steps.issue.outputs.created_at }}
         with:
           script: |
+            const fs = require('fs');
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const mode = process.env.DISPATCH_MODE;
             const branch = process.env.REQUEST_BRANCH;
-            const commit = process.env.REQUEST_COMMIT;
+            const commit = process.env.REQUEST_COMMIT.toLowerCase();
+            const issueNumber = Number(process.env.ISSUE_NUMBER);
+            const requester = process.env.REQUESTER;
+            const snapshot = JSON.parse(fs.readFileSync('dispatcher-event.json', 'utf8'));
+            const issueBody = String(snapshot.issue?.body || '');
+
             let branchData;
             try {
               ({ data: branchData } = await github.rest.repos.getBranch({ owner, repo, branch }));
@@ -120,17 +155,59 @@ jobs:
               );
               return;
             }
-            await github.rest.actions.createWorkflowDispatch({
-              owner,
-              repo,
-              workflow_id: 'build-routing-probe.yml',
-              ref: branch,
-              inputs: {
+
+            const { data: currentIssue } = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
+            if (currentIssue.state !== 'open' ||
+                currentIssue.user.login.toLowerCase() !== requester.toLowerCase() ||
+                currentIssue.created_at !== process.env.ISSUE_CREATED_AT ||
+                currentIssue.title !== process.env.ISSUE_TITLE ||
+                String(currentIssue.body || '') !== issueBody) {
+              core.setFailed('Issue identity changed before dispatch / 派发前 Issue 快照已变化');
+              return;
+            }
+
+            if (mode === 'probe') {
+              await github.rest.actions.createWorkflowDispatch({
+                owner,
+                repo,
+                workflow_id: 'build-routing-probe.yml',
+                ref: branch,
+                inputs: {
+                  request_branch: branch,
+                  request_commit: commit,
+                  request_id: process.env.REQUEST_ID,
+                  issue_number: String(issueNumber),
+                  dispatcher_run_id: String(context.runId),
+                },
+              });
+              core.notice(`Dispatched routing probe at ${branch}@${commit}.`);
+              return;
+            }
+
+            if (mode === 'build-canary') {
+              const workerInputs = {
+                issue_number: String(issueNumber),
+                issue_title: process.env.ISSUE_TITLE,
+                issue_body: issueBody,
+                requester,
+                issue_created_at: process.env.ISSUE_CREATED_AT,
                 request_branch: branch,
                 request_commit: commit,
-                request_id: process.env.REQUEST_ID,
-                issue_number: process.env.ISSUE_NUMBER,
-                dispatcher_run_id: String(context.runId),
-              },
-            });
-            core.notice(`Dispatched routing probe at ${branch}@${commit}.`);
+              };
+              const bytes = Buffer.byteLength(JSON.stringify({ ref: branch, inputs: workerInputs }), 'utf8');
+              if (bytes > 60000) {
+                core.setFailed(`Dispatch payload is too large: ${bytes} bytes / 派发请求过大`);
+                return;
+              }
+              await github.rest.actions.createWorkflowDispatch({
+                owner,
+                repo,
+                workflow_id: 'custom-build.yml',
+                ref: branch,
+                inputs: workerInputs,
+              });
+              core.notice(`Dispatched custom-build canary at ${branch}@${commit}.`);
+              return;
+            }
+
+            core.setFailed(`Unsupported dispatch mode: ${mode} / 不支持的派发模式`);
