@@ -24,9 +24,11 @@ WeiG-OpenWrt-AutoBuild/
 ├─ README.md                    ✍ user docs, Chinese source (plugin count auto-refreshed by gen-plugins)
 ├─ ARCHITECTURE.md              ✍ structure & architecture overview (public, bilingual)
 ├─ translations/                ⚙ 10 README translations (zh-TW/en/ru/es/pt/ja/ko/de/fr/vi)
-├─ .github/workflows/              six GitHub Actions
-│  ├─ custom-build.yml             ★ core: Issue builds + hidden smoke trigger; independent firmware + four support groups
+├─ .github/workflows/              GitHub Actions (production + manual routing probes)
+│  ├─ custom-build.yml             ★ core production Issue build; E v2 Phase A does not modify this user path
 │  ├─ cancel-build.yml             lets an Issue author cancel their own build with /cancel
+│  ├─ build-dispatcher.yml         E v2 Phase A manual exact-ref routing-probe dispatcher (no issues trigger)
+│  ├─ build-routing-probe.yml      E v2 Phase A manual read-only probe worker (no OpenWrt compile)
 │  ├─ sync-upstream.yml            weekly upstream sync: catalog/seeds/plugin tables/package page, auto-commit on diff
 │  ├─ mirror-upstream.yml          monthly upstream mirrors (anti-takedown, needs secrets.MIRROR_TOKEN)
 │  ├─ pages.yml                    publishes standalone GitHub Pages from main
@@ -71,6 +73,7 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ gen-i18n.mjs                 validate & merge strings → i18n.json + translation table
 │  ├─ gen-pkg-page.mjs             generates site/wrt/packages.html
 │  ├─ fetch-build-request.mjs      fetches one allowlisted GitHub Issue attachment
+│  ├─ parse-build-request-identity.mjs E v2 probe parser for sourceEnv/requestCommit/requestId only
 │  ├─ parse-request.mjs            payload + pinned Catalog/source contract + strict shared-engine validation
 │  ├─ check-all.mjs                health check; check-drift.mjs upstream drift sentinel
 │  ├─ stamp-site-version.mjs       shared version-input fingerprint, Shanghai stamp, and asset query hashes
@@ -130,6 +133,8 @@ Type scale: 17px body (15.5px compact via the Aa toggle); 15px pills/plugin cell
 
 ### 2.5 Build pipeline
 
+- **E v2 Phase A (zero production impact):** production `.github/workflows/custom-build.yml` remains `issues: opened` only, so normal `[build]` Issues and Blog builds are unchanged. The new `build-dispatcher.yml` and `build-routing-probe.yml` are manual `workflow_dispatch` workflows only. A `[route-test]` Issue contains exactly one generated `build-request.json`; the dispatcher reads only `sourceEnv`, the full 40-character `requestCommit`, and `requestId`, verifies that the remote branch HEAD exactly equals the requested commit, then dispatches a read-only probe on that ref. The probe requires `github.ref_name == sourceEnv`, `github.sha == requestCommit`, and `git rev-parse HEAD == requestCommit`. Phase A never compiles OpenWrt; Phase B must not take over production Issue traffic until these real routing runs pass.
+
 - For a Catalog Target, `arch`, `archPackages`, Target, and Profile identity remain one atomic build contract. Profile-declared packages move to a compact manager: Follow upstream writes nothing, while explicit Include or Exclude writes `y` or `n`. The submitted config is generically checked only before optional Defconfig. A successful upstream `make defconfig` is not subject to project-specific post-validation. `tools/apply-config-overrides.mjs`, `tools/config-overrides.mjs`, and `system-overrides.json` are removed, so the workflow no longer forces `CONFIG_DEVEL` or `CONFIG_BUILD_LOG`.
 
 - Catalog state keeps baseline, recommended, explicit user, automatic dependency, and imported origin layers. `catalogDependencySymbols` tracks only engine-added values. After disabling a plugin, the engine may prune entries no longer required by any enabled item, while baseline, recommended, imported, and non-`n` explicit user state protect dependencies. Profile package decisions use a sparse `profilePackageOverrides` map that stores only explicit Include/Exclude changes.
@@ -142,7 +147,6 @@ Type scale: 17px body (15.5px compact via the Aa toggle); 15px pills/plugin cell
 - `config/001.presets/source-build-requirements.json` now carries only the frontend compatibility marker `CONFIG_HAVE_DOT_CONFIG=y`, silently added when Defconfig is disabled; `site/wrt/data/source-build-requirements.json` is the static web copy. The backend does not load this rule and does not reject a request when it is absent. If every build later runs Defconfig unconditionally, this frontend compatibility layer can be removed.
 - For schema 5, the parser reads only the fixed Catalog index and verifies the requested revision/legacy metadata plus `sourceCommit`; it no longer downloads the Catalog monolith or scans the complete `.config`. The backend keeps request-safety allowlists and minimal Target/Profile identity only, with no ARCH/ARCH_PACKAGES, package-relation, manual compatibility, theme-package, or build-requirement rejection.
 - All versioned base configs disable PassWall/SSR Plus/VSSR/TinyProxy and their proxy engines/sub-options by default. `check-all.mjs` fails if any default config contains a proxy `CONFIG_PACKAGE_*=y/m`. Config preflight writes proxy-related symbols selected in the actual pre-build config to `proxy-selected.txt` and the Summary; an explicit user selection may still add its normal dependencies.
-- E v2 Phase A keeps the current `issues: opened` user path in `custom-build.yml` while adding a `workflow_dispatch` Worker entry. `build-dispatcher.yml` is manual-only in this phase: a maintainer supplies an existing Issue number, the Dispatcher downloads exactly one schema-5 `build-request.json`, reads only `sourceEnv`, the full 40-character `requestCommit`, and `requestId`, verifies branch HEAD equality, then dispatches the Worker at that ref. The Worker rechecks `github.ref_name`, `github.sha`, exact checkout HEAD, and the JSON identity. The Dispatcher never interprets Catalog/Kconfig/plugin build semantics, and Phase B must not take over normal Issue traffic until real Phase-A Runs pass.
 - `tools/parse-request.mjs`: full whitelist validation, including device/source/version/variant, packages, login settings, timezone, theme, NTP and opkg. The beginner Issue exposes one required attachment field and recommends the web JSON. The parser still accepts 1–3 GitHub-hosted JSON/`.config`/`config.buildinfo` attachments, but a raw config without web metadata must be loaded on the page first.
 - Issue attachments are the only build entry: frontend `applyToConfig()` → complete `build-request.json` → `submitted.config` → `openwrt/.config`. The old `build-config.mjs`, `repository_dispatch`, and smoke compatibility entry are removed.
 - `site/wrt/data/timezones.json` carries the 445-entry OpenWrt LuCI timezone table. With an empty search, the combobox shows about 70 common cities ordered by the current offset from `UTC-12` to `UTC+14`; typing searches all 445 entries. `Beijing` and its Chinese aliases are search-only aliases for `Asia/Shanghai`. On a first visit with no saved choice or imported configuration, the browser-reported IANA timezone is selected; a manual choice is stored locally. The page submits an IANA `zonename`; the parser maps it to the POSIX `timezone`, and all three diy2 scripts write both through `files/etc/uci-defaults/10-weig-timezone`. The control remains 44px high and legacy POSIX values remain accepted.

@@ -18,9 +18,10 @@
 ├─ ARCHITECTURE.md               # 本文档 / this document
 ├─ README.md + translations/     # 多语言说明 / multilingual READMEs
 ├─ .github/workflows/
-│  ├─ custom-build.yml           # 稳定 Issue 构建 + Phase A exact-ref Worker / stable Issue build + Phase-A exact-ref Worker
-│  ├─ build-dispatcher.yml       # Phase A 手动 exact-ref 路由验证 / Phase-A manual exact-ref routing validation
-│  └─ cancel-build.yml           # Issue 作者 /cancel 取消自己的构建 / Issue-author-only build cancellation
+│  ├─ custom-build.yml           # 生产 Issue 附件权威构建 / production authoritative Issue-attachment build
+│  ├─ cancel-build.yml           # Issue 作者 /cancel 取消自己的构建 / Issue-author-only build cancellation
+│  ├─ build-dispatcher.yml       # E v2 Phase A 手动 exact-ref 路由探针派发器 / manual exact-ref routing probe dispatcher
+│  └─ build-routing-probe.yml    # E v2 Phase A 手动只读 Worker 探针 / manual read-only routing probe worker
 ├─ config/<品牌>/<机型>/          # base 配置,按品牌分层 / base configs, grouped by brand
 │  └─ 360/360t7/*.config         # 360T7 源码/分支/Profile 独立配置 / per-source, branch and profile configs
 ├─ Shell/                        # diy 脚本 + 通用软件包镜像框架 / diy scripts + shared package-mirror framework
@@ -51,7 +52,7 @@
    ├─ gen-i18n.mjs               # 词条校验合并 → i18n.json / validate & merge strings
    ├─ gen-seed-configs.mjs       # 机型目录 → 版本化 Profile config / catalog → versioned profile configs
    ├─ fetch-build-request.mjs    # 下载并限制 GitHub Issue 附件 / fetch allowlisted GitHub Issue attachment
-   ├─ parse-build-request-identity.mjs # 仅解析 schema 5 branch/commit/requestId 路由信封 / routing envelope only
+   ├─ parse-build-request-identity.mjs # E v2 探针只读 sourceEnv/requestCommit/requestId / routing-envelope-only parser
    ├─ parse-request.mjs          # 载荷、安全白名单、Target/Profile 身份与 Catalog 版本契约 / payload, safety allowlists, Target/Profile identity, and Catalog version contract
    ├─ check-text-format.mjs      # 变更文本 LF/CRLF/BOM/EOF 门禁 / changed-text LF/CRLF/BOM/EOF gate
    ├─ sync-blog.mjs              # 当前树或 exact ref → 博客 source/wrt + WRT 源身份 / current tree or exact ref → blog mirror + source identity
@@ -63,7 +64,7 @@
    └─ serve.mjs                  # 本地静态服务器 / local static server
 ```
 
-Build environment identity is deployment metadata, not application configuration. `build-meta.branch` is generated from the deployment branch; `site/wrt/lib/build-identity.js` is the single naming authority shared by the browser and request parser. Every non-`main` branch adds one sanitized prefix to `[build]` Action titles and Artifact names; `main` remains unprefixed. No hostname or provider-specific branch detection belongs in `app.js`.
+Build environment identity is deployment metadata, not application configuration. `build-meta.branch` is generated from the deployment branch; `site/wrt/lib/build-identity.js` is the single naming authority shared by the browser and request parser. Only `dev` and `staging` add prefixes to `[build]` Action titles and Artifact names; `main` remains unprefixed. No hostname or provider-specific branch detection belongs in `app.js`.
 
 ## 数据流 / Data flow
 
@@ -88,6 +89,8 @@ Catalog 顶部定位框与 Advanced 搜索是两条独立索引：前者只覆�
 The Catalog locator and Advanced search use separate indexes. The locator covers only Source, Branch, Target System, Subtarget, and Target Profile; Advanced uses one name/symbol index containing the full Kconfig symbol, its `CONFIG_` form, package name, prompt/localized names, and separator-normalized symbol words, while long Help/description and menu paths stay out of search. Every Advanced option stays on one row: the left column shows the ID without `CONFIG_PACKAGE_`, the flexible right-aligned middle shows locale text plus upstream English, and fixed N/M/Y controls remain unobstructed. IDs, `Search results`, and origin badges use the same primary size as `Advanced menuconfig`; descriptions are secondary. bool/tristate values use the Catalog Intent Engine, while string/int/hex values use the validated scalar editor. The Advanced header now keeps only the complete wrapping breadcrumb plus search and `N/M/Y` without a question mark. `Selected only` and `Origin` moved into the independent build-control group outside the contract frame above, and the breadcrumb is never truncated.
 
 构建来源身份使用同一条通用规则：`main` 保持无前缀；任何非 `main` 的实际请求分支都加入构建身份，分支名内部 `/` 统一显示为 `_`。因此 `fix/foo` 的 Issue/Actions 为 `[build] fix_foo/<request>/...`，Artifact 为 `fix_foo-<build-ref>-...`。请求 branch/commit 与实际 Workflow branch/commit 分别写入构建元数据和失败摘要，避免 Issue 由非 main 页面提交但 Workflow 来自默认分支时混淆。 / Build-origin identity follows one generic rule: `main` stays unprefixed, while every non-main request branch is prefixed after replacing internal `/` with `_`. Request branch/commit and the executing Workflow branch/commit are recorded separately in metadata and failure summaries.
+
+E v2 Phase A 只验证 GitHub Actions 的 branch/ref/commit 机制，不接管生产构建：`custom-build.yml` 继续保持 Issue-only；`build-dispatcher.yml` 与 `build-routing-probe.yml` 都只允许手动 `workflow_dispatch`。测试 Issue 必须以 `[route-test]` 开头并只携带一个网页生成的 `build-request.json`；Dispatcher 只读取 `sourceEnv`、完整 40 位 `requestCommit` 与 `requestId`，确认分支当前 HEAD 精确等于请求提交后，才在该 branch/ref 派发只读 Probe Worker。Probe 再核对 `github.ref_name`、`github.sha` 与精确 checkout HEAD。Phase A 不运行 OpenWrt 编译，也不改变 Blog/普通 `[build]` Issue 的生产后端。 / E v2 Phase A validates GitHub Actions branch/ref/commit behavior without taking over production builds. `custom-build.yml` stays Issue-only; the dispatcher and probe worker are manual-only. The probe consumes exactly one generated `build-request.json`, validates branch HEAD against the full request commit, dispatches on that ref, and rechecks workflow ref/SHA plus checkout HEAD without compiling OpenWrt.
 
 软件包镜像由 `config/001.presets/package-mirrors.json` 唯一维护：JSON 记录 Source family、官方根地址、APK/OPKG adapter、镜像根地址与回退策略；`gen-package-mirrors.mjs` 生成不含真实 URL 的网页投影。浏览器按实际 IANA 时区选择请求策略：中国内地时区默认 `auto`，其他地区默认 `source-default`。源码检出并完成可选 Defconfig 后，`package-mirror-engine.mjs` 读取真实 `.config`、规范 JSON 登记的 capability 文件和明确 adapter 文件，识别 APK、OPKG 或混合状态；Branch 只进入报告，不用于硬编码判断。自动策略为 USTC → PKU → 源码默认，手动镜像失败直接回源码默认；探测失败、文件缺失和内部错误均写入 `package-mirror-report.json` 并继续构建。已知官方/镜像根地址才会原子替换，陌生的用户 `CONFIG_VERSION_REPO` 保持不动。Issue 标题把构建标识放在请求时间戳后，解析器生成 `请求时间戳-构建标识` 的 `build_ref`，因此 CONFIG、日志和固件 Artifact 共用该前缀。
 
@@ -123,13 +126,6 @@ Target/Profile 是后端唯一核对的 `.config` 身份：配置必须且只能
 6. `VERSION` 在本地 Prepare 阶段由 `stamp-site-version.mjs` 按 tools/Workflow/Shell/config/site 统一指纹生成；`site-version.yml` 仅以只读权限运行 `--check`，不再修改或提交仓库。`build-meta.json` 是可选部署实例元数据，记录 Version/Commit/Branch/Built 且不参与 VERSION 指纹；缺失时静态网站仍完整工作。旧八位请求继续兼容 / `VERSION` is generated locally during Prepare from the shared tools/workflow/Shell/config/site fingerprint; `site-version.yml` is read-only validation with `--check` and never writes or commits repository files. Optional `build-meta.json` carries per-deployment Version/Commit/Branch/Built, is excluded from the VERSION fingerprint, and is not required for the static site. Legacy eight-digit requests remain accepted.
 
 固件时区由 `timezones.json` 同时输出 IANA `zonename` 与 OpenWrt POSIX `timezone`;三条源码通过首启脚本写入两项。/ Firmware timezone selection emits both the IANA `zonename` and OpenWrt POSIX `timezone`; all three source pipelines apply both on first boot.
-
-
-### E v2 Phase A: exact-ref validation without production cutover
-
-Phase A intentionally keeps the existing `issues: opened` path in `custom-build.yml` unchanged for normal users. A new manual-only `build-dispatcher.yml` accepts an existing Issue number, downloads exactly one schema-5 `build-request.json`, reads only `sourceEnv` / full 40-character `requestCommit` / `requestId`, verifies the requested branch currently points to that commit, and dispatches `custom-build.yml` at that branch. The dispatched Worker then checks `github.ref_name`, `github.sha`, the exact checkout HEAD, and the JSON identity again. The Dispatcher does not interpret Catalog/Kconfig/plugin/build semantics. Phase B may replace the direct Issue entry only after real Phase-A Runs validate dev/fix/stale-ref behavior.
-
-Phase A does **not** add any user-editable route marker to Issue text and does not change the current web submission URL. The eventual E v2 cutover will keep `build-request.json` as the single branch+commit source of truth.
 
 ## 部署 / Deployment
 

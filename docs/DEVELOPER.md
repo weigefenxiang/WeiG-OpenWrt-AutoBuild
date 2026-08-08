@@ -25,10 +25,11 @@ WeiG-OpenWrt-AutoBuild/
 ├─ README.md                    ✍ 用户文档中文源(插件计数标记由 gen-plugins 自动刷新)
 ├─ ARCHITECTURE.md              ✍ 目录与架构总览(公开,中英双语)
 ├─ translations/                ⚙ README 十语译文(zh-TW/en/ru/es/pt/ja/ko/de/fr/vi,工作流翻译)
-├─ .github/workflows/              GitHub Actions 六条
-│  ├─ custom-build.yml             ★核心:稳定 Issue 构建 + Phase A exact-ref Worker;独立固件 + 四类辅助产物
-│  ├─ build-dispatcher.yml         Phase A 手动 exact-ref 路由验证(不接管普通 Issue)
+├─ .github/workflows/              GitHub Actions（生产 + 手动路由探针）
+│  ├─ custom-build.yml             ★核心:生产 Issue 构建；E v2 Phase A 不修改这条用户链路
 │  ├─ cancel-build.yml             Issue 提交者用 /cancel 取消自己的构建
+│  ├─ build-dispatcher.yml         E v2 Phase A 手动 exact-ref 路由探针派发器（不监听 issues）
+│  ├─ build-routing-probe.yml      E v2 Phase A 手动只读 Probe Worker（不编译 OpenWrt）
 │  ├─ sync-upstream.yml            每周同步上游:机型目录/种子/插件表/说明页,有 diff 才自动提交
 │  ├─ mirror-upstream.yml          每月镜像上游仓库防删库(需 secrets.MIRROR_TOKEN)
 │  ├─ pages.yml                    main 发布 standalone GitHub Pages
@@ -73,6 +74,7 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ gen-i18n.mjs                 校验合并词条 → i18n.json + 翻译对照表
 │  ├─ gen-pkg-page.mjs             生成 site/wrt/packages.html
 │  ├─ fetch-build-request.mjs      下载 GitHub Issue 附件(严格域名/数量/大小)
+│  ├─ parse-build-request-identity.mjs E v2 探针只读 sourceEnv/requestCommit/requestId
 │  ├─ parse-request.mjs            载荷解析 + 固定 Catalog/源码契约 + 共享引擎严格校验
 │  ├─ check-all.mjs                一键体检;check-drift.mjs 上游漂移哨兵
 │  ├─ stamp-site-version.mjs       本地生成 VERSION；--check 供 CI 只读验证
@@ -144,12 +146,13 @@ WeiG-OpenWrt-AutoBuild/
 
 ### 2.5 构建链路
 
+- **E v2 Phase A（零生产影响）**：生产 `.github/workflows/custom-build.yml` 仍然只有 `issues: opened`，普通 `[build]` Issue 与 Blog 构建行为不变。新增的 `build-dispatcher.yml`、`build-routing-probe.yml` 都只允许手动 `workflow_dispatch`：使用 `[route-test]` Issue 中唯一的 `build-request.json`，只解析 `sourceEnv`、完整 40 位 `requestCommit`、`requestId`，先确认远端 branch HEAD 精确等于 request commit，再派发对应 ref 的只读 Probe。Probe 必须满足 `github.ref_name == sourceEnv`、`github.sha == requestCommit`、`git rev-parse HEAD == requestCommit`。Phase A 不执行 OpenWrt Build；这些真实 Run 全部通过后才能进入会修改生产 Worker/Issue 流量的 Phase B。
+
 - Catalog Target 的 `arch`、`archPackages` 与 Target/Profile 身份仍是原子构建契约。Profile 声明包改为紧凑管理列表，默认“跟随上游”不写显式值；只有用户逐项选择“加入”或“排除”时才写 `y`/`n`。提交配置仅在 Defconfig 前进行通用 Catalog 检查；用户勾选后运行一次官方 `make defconfig`，成功输出不再接受项目自定义 post-defconfig 验证。`tools/apply-config-overrides.mjs`、`tools/config-overrides.mjs` 与 `system-overrides.json` 已删除，不再强制 `CONFIG_DEVEL`/`CONFIG_BUILD_LOG`。
 
 - Catalog 选择状态保持基础、推荐、用户覆盖、自动依赖与导入来源层。`catalogDependencySymbols` 只记录引擎自动带入项；关闭插件后，引擎可清理其中不再被任何启用项需要的条目，但 `catalogBaselineValues`、`catalogRecommendedValues`、`catalogImportedSymbols` 和非 `n` 的 `catalogUserOverrides` 均为保护层。Profile 包覆盖另以稀疏 `profilePackageOverrides` 保存，仅记录用户改成 Include/Exclude 的少量条目。
 
-- E v2 Phase A 暂时保留 `.github/workflows/custom-build.yml` 的现有 `issues: opened` 用户入口，同时新增 `workflow_dispatch` Worker 入口；`.github/workflows/build-dispatcher.yml` 此阶段仅允许维护者手动输入现有 Issue 编号做 exact-ref 路由验证，不接管普通 Issue。Dispatcher 只下载一个 schema 5 `build-request.json` 并读取 `sourceEnv`、完整 40 位 `requestCommit`、`requestId`，不解析 Catalog/Kconfig/插件业务；Worker 再核对 `github.ref_name`/`github.sha`、精确 checkout HEAD 与 JSON 身份。Phase A 真实 Run 通过前不得切换生产 Issue 流量。
-- `.github/workflows/custom-build.yml` 不再提供 `repository_dispatch` 或隐藏 smoke 配置生成入口。部署实例的 `build-meta.branch` 只作为网页来源身份：`main` 保持原来的无前缀 Issue/Actions/Artifact；任何非 `main` 请求都使用实际 branch 作为前缀，branch 内部 `/` 统一替换为 `_`，例如 `fix/foo` → `[build] fix_foo/请求时间戳/...` 与 `fix_foo-...` Artifact。该规则唯一实现位于 `site/wrt/lib/build-identity.js`，`app.js` 与 `parse-request.mjs` 共用，不按域名判断，也不为 dev/staging/fix/feat 写特判。`build_ref` 仍为稳定的 `请求时间戳-构建标识`，`artifact_ref` 只负责环境感知命名；请求 branch/commit 与实际 Workflow branch/commit 分开写入 Summary/`build-metadata.txt`，旧无前缀 Issue/JSON 继续兼容。时区、主题、NTP、请求/生效软件包镜像与 APK/OPKG 检测结果在提交配置、Summary、`package-mirror-report.json`、`firmware-settings.txt` 与固件内 `/etc/weig-build-info` 交叉核验；固件/config 保留 30 天，完整日志保留 14 天。
+- `.github/workflows/custom-build.yml` 只接受网页生成的 Issue 附件，不再提供 `repository_dispatch` 或隐藏 smoke 配置生成入口。部署实例的 `build-meta.branch` 只作为网页来源身份：`main` 保持原来的无前缀 Issue/Actions/Artifact；任何非 `main` 请求都使用实际 branch 作为前缀，branch 内部 `/` 统一替换为 `_`，例如 `fix/foo` → `[build] fix_foo/请求时间戳/...` 与 `fix_foo-...` Artifact。该规则唯一实现位于 `site/wrt/lib/build-identity.js`，`app.js` 与 `parse-request.mjs` 共用，不按域名判断，也不为 dev/staging/fix/feat 写特判。`build_ref` 仍为稳定的 `请求时间戳-构建标识`，`artifact_ref` 只负责环境感知命名；请求 branch/commit 与实际 Workflow branch/commit 分开写入 Summary/`build-metadata.txt`，旧无前缀 Issue/JSON 继续兼容。时区、主题、NTP、请求/生效软件包镜像与 APK/OPKG 检测结果在提交配置、Summary、`package-mirror-report.json`、`firmware-settings.txt` 与固件内 `/etc/weig-build-info` 交叉核验；固件/config 保留 30 天，完整日志保留 14 天。
 - 软件包镜像唯一规范为 `config/001.presets/package-mirrors.json`。修改 Source family、官方 origin、adapter、镜像或回退顺序后运行 `node tools/gen-package-mirrors.mjs`，不得直接维护网页投影。`Shell/apply-package-mirror.sh` 只做非阻断流程包装，`tools/package-mirror-engine.mjs` 根据实际 `.config`、规范 JSON 登记的 capability 文件与 adapter 文件识别 APK/OPKG，不按 Branch 名猜测；只替换已登记根地址，保留陌生自定义 `CONFIG_VERSION_REPO`。自动策略 USTC→PKU→源码默认，手动失败→源码默认，任何镜像问题都不能终止构建。运行 `node tools/test-package-mirror.mjs` 覆盖 OpenWrt/ImmortalWrt/LEDE、未来分支、混合 adapter 与回退矩阵。
 - 构建准入默认限制每位提交者同时最多 2 个排队中或运行中的任务；第 3 个 Issue 会自动回评并关闭。仓库所有者按 GitHub 登录名识别，不受此上限限制，并为每次构建使用独立并发组，不会在本项目队列中互相等待。Fork 可在仓库 Variables 设置正整数 `MAX_BUILDS_PER_USER` 覆盖默认值。`cancel-build.yml` 只接受原 Issue 提交者的 `/cancel` 或 `/cancel-build`，先普通取消，15 秒未结束才强制取消；管理员仍可在 Actions 页面管理任意任务。
 - 根目录 `VERSION` 是仓库与网页共用的分钟级 `vYYMMDDHHmm` 代码版本；`site-version.json` 保存同一版本与统一输入指纹。正式改动在提交前本地运行 `node tools/stamp-site-version.mjs`；CI 仅用 `--check` 验证，不再自动修改或提交版本文件。`dev → staging → main` 的环境晋级本身不重新生成 VERSION。网页常驻显示 `MMDDHHmm` 短版本。Catalog Target 的操作栏显示当前 `TARGET_ROOTFS_PARTSIZE`，点击可查看“项目/当前值/路径”并直接定位 Advanced 修改；它不再用历史 `p.size/capacity` 生成 RootFS 百分比。非 Catalog 旧设备仍保留原容量估算。可选 `build-meta.json` 提供部署实例的 Commit/Branch/Built。
@@ -159,7 +162,7 @@ WeiG-OpenWrt-AutoBuild/
 - `custom-target` 不要求 Profile 预先存在于仓库清单；上传配置中的通用 Target 选择直接作为构建输入，不含 360T7 专用限制，其可用性由所选上游源码负责。
 - 全部版本化 base config 默认关闭 PassWall/SSR Plus/VSSR/TinyProxy 及其代理内核/子选项;`check-all.mjs` 会在任一默认 config 出现代理 `CONFIG_PACKAGE_*=y/m` 时直接失败。config 预检把实际开编配置中已选中的代理相关符号写入 `proxy-selected.txt` 和 Summary,用户主动选择时仍可按正常依赖加入
 - `tools/parse-request.mjs`:全字段白名单(机型/源/版本/变体/插件±前缀/原始软件包/登录地址/初始密码/时区/主题/NTP/软件包镜像 ID)。新请求写 `firmware.packageMirror`；仅为旧 JSON 兼容读取 `firmware.opkg`，不得把任意镜像 URL 放进请求。新手 Issue 只显示一个必填附件框并推荐网页 JSON;解析器仍接受 1~3 个 GitHub 自有附件并识别 JSON、`.config`、`config.buildinfo`,但无网页元数据头的原始配置必须先回网页加载识别。
-- 普通用户当前仍以 Issue 为构建入口；Phase A 的手动 Dispatcher 只是维护验证入口，不改变网页行为。前端 `applyToConfig()` 生成完整 config → 附件 → `submitted.config` → `openwrt/.config`。旧 `build-config.mjs`、`repository_dispatch` 和 smoke 兼容入口已删除。
+- Issue 是唯一构建入口：前端 `applyToConfig()` 生成完整 config → 附件 → `submitted.config` → `openwrt/.config`。旧 `build-config.mjs`、`repository_dispatch` 和 smoke 兼容入口已删除。
 - 时区表在 `site/wrt/data/timezones.json`,来源为 OpenWrt LuCI 的 445 项映射。组合框默认只列约 70 个常用城市并按当前 UTC 偏移从 `UTC-12` 到 `UTC+14` 排序；输入搜索时仍查询完整 445 项，`北京`/`北京时间` 只作为 `Asia/Shanghai` 搜索词，不写入显示值。首次访问且没有用户保存值或导入配置时，优先采用浏览器报告的 IANA 时区；手动选择会保存到本机。前端提交 IANA `zonename`,解析器映射并输出 POSIX `timezone`;三个 diy2 脚本用 `files/etc/uci-defaults/10-weig-timezone` 同时写入两项。控件统一为 44px 高，旧 POSIX 请求继续兼容。
 - Actions 的全局 `TZ` 只控制 Runner 进程日志时间；不要在 GitHub 托管 Runner 调用 `timedatectl set-timezone`，该操作可能因 systemd 权限被拒绝并让依赖安装步骤失败。固件时区始终由请求字段和 diy2 首启脚本写入，与 Runner 系统时区无关。
 - diy 脚本按源区分:官方源用 `diy2-openwrt.sh`,lede 用 `diy2-lede.sh`(都不能复用 ImmortalWrt 系的)

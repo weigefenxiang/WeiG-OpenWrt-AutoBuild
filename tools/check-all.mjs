@@ -1423,22 +1423,39 @@ mirrorRulesOk
     rmSync(backendBoundaryFixtureRoot, { recursive: true, force: true });
   }
   const dispatcherWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'build-dispatcher.yml'), 'utf8');
-  const branchAwarePhaseAContract = buildWorkflow.includes('issues:') && buildWorkflow.includes('workflow_dispatch:') &&
-    dispatcherWorkflow.includes('workflow_dispatch:') && !dispatcherWorkflow.includes('types: [opened]') &&
-    dispatcherWorkflow.includes('tools/fetch-build-request.mjs') &&
-    dispatcherWorkflow.includes('tools/parse-build-request-identity.mjs') &&
-    dispatcherWorkflow.includes("workflow_id: 'custom-build.yml'") &&
-    dispatcherWorkflow.includes('ref: branch') &&
-    buildWorkflow.includes('EXPECTED_REQUEST_BRANCH:') && buildWorkflow.includes('EXPECTED_REQUEST_COMMIT:') &&
-    buildWorkflow.includes('Verify checked-out commit / 核对检出提交') &&
+  const routingProbeWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'build-routing-probe.yml'), 'utf8');
+  const buildEntrypointContract = buildWorkflow.includes('issues:') && buildWorkflow.includes('workflow_dispatch:') &&
     !buildWorkflow.includes('repository_dispatch:') && !buildWorkflow.includes('client_payload') &&
     !existsSync(join(ROOT, '.github', 'workflows', 'smoke-all.yml')) &&
     !existsSync(join(ROOT, 'tools', 'build-config.mjs')) &&
     parser.includes('仅支持网页生成的 build-request.json') &&
     !parser.includes('smoke-internal') && !parser.includes('IN_DEVICE') && !buildWorkflow.includes('authoritative_config');
-  branchAwarePhaseAContract
-    ? ok('E v2 Phase A: stable Issue entry remains while manual exact-ref Dispatcher→Worker validation is enabled')
-    : bad('build entrypoint', 'Phase A must preserve the Issue entry, add manual exact-ref dispatch, and keep legacy smoke generators retired');
+  buildEntrypointContract
+    ? ok('build entrypoint: stable Issue build path remains and legacy smoke generators stay retired')
+    : bad('build entrypoint', 'stable Issue entry or retired legacy build paths regressed');
+
+  const routingProbeContract =
+    dispatcherWorkflow.includes('workflow_dispatch:') &&
+    !dispatcherWorkflow.includes('\n  issues:\n') &&
+    dispatcherWorkflow.includes('Run this dispatcher from ${expected}, not ${actual}.') &&
+    dispatcherWorkflow.includes("startsWith('[route-test]')") &&
+    dispatcherWorkflow.includes('tools/fetch-build-request.mjs') &&
+    dispatcherWorkflow.includes('tools/parse-build-request-identity.mjs') &&
+    dispatcherWorkflow.includes("workflow_id: 'build-routing-probe.yml'") &&
+    !dispatcherWorkflow.includes("workflow_id: 'custom-build.yml'") &&
+    dispatcherWorkflow.includes('ref: branch') &&
+    routingProbeWorkflow.includes('workflow_dispatch:') &&
+    !routingProbeWorkflow.includes('\n  issues:\n') &&
+    routingProbeWorkflow.includes('WORKFLOW_BRANCH: ${{ github.ref_name }}') &&
+    routingProbeWorkflow.includes('WORKFLOW_COMMIT: ${{ github.sha }}') &&
+    routingProbeWorkflow.includes('ref: ${{ inputs.request_commit }}') &&
+    routingProbeWorkflow.includes('git rev-parse HEAD') &&
+    !routingProbeWorkflow.includes('make -j') &&
+    !routingProbeWorkflow.includes('Shell/');
+  routingProbeContract
+    ? ok('E v2 Phase A routing probe: manual-only Dispatcher→Probe validates exact branch/SHA/checkout without taking over production builds')
+    : bad('E v2 Phase A routing probe',
+      'Dispatcher/Probe must stay manual-only, validate exact branch/SHA/checkout, and must not dispatch custom-build');
   const driftSentinelContract = driftSentinel.includes("const forbidden = ['lede-17.01', 'pcs-standalone-back', 'master'];") &&
     driftSentinel.includes("names.has('main')") && !driftSentinel.includes('360T7') &&
     !driftSentinel.includes('qihoo_360t7') && !syncWorkflow.includes('360T7');

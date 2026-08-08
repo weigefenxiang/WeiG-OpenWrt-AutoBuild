@@ -1,0 +1,87 @@
+name: Build Routing Probe Worker / 构建路由探针 Worker
+run-name: Probe / 探针 · ${{ inputs.request_branch }}@${{ inputs.request_commit }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      request_branch:
+        description: Canonical request branch
+        required: true
+        type: string
+      request_commit:
+        description: Exact 40-character request commit
+        required: true
+        type: string
+      request_id:
+        description: Build request id
+        required: true
+        type: string
+      issue_number:
+        description: Route-test Issue number
+        required: true
+        type: string
+      dispatcher_run_id:
+        description: Dispatcher run id
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Verify exact workflow ref and checkout / 验证精确 Workflow 与检出
+    runs-on: ubuntu-22.04
+    timeout-minutes: 3
+    steps:
+      - name: Verify Workflow ref and SHA / 验证 Workflow 分支与提交
+        shell: bash
+        env:
+          REQUEST_BRANCH: ${{ inputs.request_branch }}
+          REQUEST_COMMIT: ${{ inputs.request_commit }}
+          WORKFLOW_BRANCH: ${{ github.ref_name }}
+          WORKFLOW_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$WORKFLOW_BRANCH" = "$REQUEST_BRANCH" || {
+            echo "Workflow branch mismatch: request=$REQUEST_BRANCH workflow=$WORKFLOW_BRANCH" >&2
+            exit 1
+          }
+          test "$WORKFLOW_COMMIT" = "$REQUEST_COMMIT" || {
+            echo "Workflow commit mismatch: request=$REQUEST_COMMIT workflow=$WORKFLOW_COMMIT" >&2
+            exit 1
+          }
+
+      - name: Checkout exact request commit / 检出精确请求提交
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.request_commit }}
+          fetch-depth: 1
+
+      - name: Verify checkout HEAD / 验证检出 HEAD
+        shell: bash
+        env:
+          REQUEST_BRANCH: ${{ inputs.request_branch }}
+          REQUEST_COMMIT: ${{ inputs.request_commit }}
+          REQUEST_ID: ${{ inputs.request_id }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          DISPATCHER_RUN_ID: ${{ inputs.dispatcher_run_id }}
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$REQUEST_COMMIT" || {
+            echo "Checkout mismatch: request=$REQUEST_COMMIT actual=$actual" >&2
+            exit 1
+          }
+          {
+            echo "## Build routing probe / 构建路由探针"
+            echo
+            echo "- Request branch: \`$REQUEST_BRANCH\`"
+            echo "- Request commit: \`$REQUEST_COMMIT\`"
+            echo "- Workflow branch: \`${GITHUB_REF_NAME}\`"
+            echo "- Workflow commit: \`${GITHUB_SHA}\`"
+            echo "- Checkout HEAD: \`$actual\`"
+            echo "- Request id: \`$REQUEST_ID\`"
+            echo "- Issue: #$ISSUE_NUMBER"
+            echo "- Dispatcher run id: \`$DISPATCHER_RUN_ID\`"
+          } >> "$GITHUB_STEP_SUMMARY"
