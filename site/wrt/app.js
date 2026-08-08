@@ -68,7 +68,7 @@ let PACKAGE_MIRRORS = { schema: 2, presets: [{ id: 'source-default', label: { 'z
 let MENU_INDEX = null, MENU_CATALOG = null, CATALOG_ENGINE = null, CATALOG_MODEL = null;
 let CATALOG_LOADER_MODULE = null, CATALOG_SCHEMA6_MODULE = null, BUILD_IDENTITY_MODULE = null, CATALOG_LOADER = null;
 let catalogShardLoader = null, catalogMenuLoadingPromise = null;
-let catalogHiddenLoadingPromise = null, catalogHelpLoadingPromise = null;
+let catalogHiddenLoadingPromise = null;
 let menuCatalogKey = '', menuLoadingKey = '', menuCatalogSeq = 0, menuCatalogPromise = null;
 let menuCatalogAbortController = null, menuIndexAbortController = null;
 let menuIndexProvider = '', menuAssetProvider = '';
@@ -101,6 +101,7 @@ let menuOptionBySymbol = new Map(), menuTargetSymbols = new Set();
 let menuExactPaths = new Map(), menuChildPaths = new Map(), menuDescendants = new Map();
 let menuChoiceOptions = new Map(), menuChildrenByParent = new Map(), menuNestedCounts = new Map();
 let menuSearchText = new Map(), menuSearchOptions = [];
+const ROOTFS_PARTSIZE_SYMBOL = 'TARGET_ROOTFS_PARTSIZE';
 let catalogSearchWorker = null, catalogSearchGeneration = 0, catalogSearchRequestId = 0;
 let catalogSearchWorkerReady = false, catalogSearchPending = new Set(), catalogSearchResults = new Map();
 let catalogLocatorEntryCache = null;
@@ -1202,6 +1203,23 @@ function markCatalogStateChanged() {
 function indexSearchText(option, text) {
   menuSearchText.set(option.symbol, String(text || '').toLowerCase());
 }
+function catalogSearchText(option) {
+  const symbol = String(option?.symbol || '');
+  const packageName = symbol.startsWith('PACKAGE_') ? symbol.slice(8) : '';
+  const splitName = (value) => String(value || '').replace(/[_-]+/g, ' ');
+  const names = [
+    symbol, splitName(symbol),
+    symbol ? `CONFIG_${symbol}` : '', symbol ? splitName(`CONFIG_${symbol}`) : '',
+    packageName, splitName(packageName),
+    option?.prompt || '', option?.promptEn || '', option?.promptZh || '',
+    ...Object.values(option?.promptI18n || {}),
+  ];
+  return [...new Set(names.map((value) => String(value || '').trim()).filter(Boolean))].join(' ').toLowerCase();
+}
+function rebuildMenuSearchIndex() {
+  menuSearchText = new Map();
+  for (const option of menuSearchOptions) indexSearchText(option, catalogSearchText(option));
+}
 function stopCatalogSearchWorker() {
   catalogSearchWorker?.terminate?.();
   catalogSearchWorker = null;
@@ -1322,25 +1340,6 @@ async function ensureCatalogHiddenLoaded() {
   }
   return catalogHiddenLoadingPromise;
 }
-async function ensureCatalogHelpLoaded() {
-  if (!MENU_CATALOG?.splitAssets || MENU_CATALOG.menu?.helpLoaded) return true;
-  if (!catalogHelpLoadingPromise) {
-    const catalog = MENU_CATALOG;
-    const loader = catalogShardLoader;
-    const catalogKey = menuCatalogKey;
-    const task = (async () => {
-      const shard = await loader?.('help');
-      if (!shard || MENU_CATALOG !== catalog || menuCatalogKey !== catalogKey) return false;
-      CATALOG_SCHEMA6_MODULE.applyHelpShard(catalog, shard);
-      return true;
-    })();
-    catalogHelpLoadingPromise = task;
-    task.finally(() => {
-      if (catalogHelpLoadingPromise === task) catalogHelpLoadingPromise = null;
-    }).catch(() => {});
-  }
-  return catalogHelpLoadingPromise;
-}
 async function ensureCatalogMenuLanguage(language) {
   if (!MENU_CATALOG?.splitAssets || language === 'en' || MENU_CATALOG.menu?.loadedLanguages?.includes(language)) return true;
   const catalog = MENU_CATALOG;
@@ -1454,10 +1453,6 @@ function buildMenuIndexes(catalog) {
   catalogLocatorEntryCache = null;
   for (const option of menuSearchOptions) {
     menuOptionBySymbol.set(option.symbol, option);
-    const packageName = option.symbol.startsWith('PACKAGE_') ? option.symbol.slice(8) : '';
-    indexSearchText(option,
-      `${packageName} ${option.prompt || ''} ${option.promptEn || ''} ${option.promptZh || ''} ` +
-      `${Object.values(option.promptI18n || {}).join(' ')}`);
     if (option.hidden) continue;
     const path = option.path || [];
     addMenuIndex(menuExactPaths, menuPathKey(path), option);
@@ -1488,6 +1483,7 @@ function buildMenuIndexes(catalog) {
       parent = menuOptionBySymbol.get(parent)?.parent || '';
     }
   }
+  rebuildMenuSearchIndex();
   if (catalog.menu?.displayLoaded || menuExpanded) startCatalogSearchWorker();
   else stopCatalogSearchWorker();
 }
@@ -1922,10 +1918,12 @@ function initBuildContractControls() {
 }
 function renderBuildContract() {
   const box = $('buildContract');
-  if (!box) return;
+  const controls = $('buildContractControls');
+  if (!box || !controls) return;
   const target = state.device?.id === 'catalog-target' ? state.device.target : null;
   if (!target || !MENU_CATALOG) {
     box.hidden = true;
+    controls.hidden = true;
     return;
   }
   const source = selectedCatalogSource();
@@ -1970,6 +1968,7 @@ function renderBuildContract() {
     contractText('尚未选择插件', 'No plugins selected'));
   setBuildContractExpanded(buildContractExpanded);
   box.hidden = false;
+  controls.hidden = false;
 }
 
 function resetCatalogSelectionLayers() {
@@ -2129,7 +2128,7 @@ function restoreCatalogDefault(option) {
     state.removed.delete(plugin.id);
   }
   const value = catalogInheritedValue(option.symbol);
-  const result = applyCatalogIntent(option, value, true, 'restore');
+  applyMenuValue(option, value, true, 'restore');
   renderMenuconfig();
   renderMinimumBoot();
   renderFirmwareSettings();
@@ -2348,6 +2347,51 @@ function applyCatalogIntent(option, value, force = false, source = 'user') {
   if (result.changes.length) markCatalogStateChanged();
   return result;
 }
+function scalarKconfigOption(option) {
+  return ['string', 'int', 'hex'].includes(option?.type);
+}
+function normalizeScalarKconfigValue(option, rawValue) {
+  const raw = String(rawValue ?? '');
+  if (option?.type === 'string') return raw;
+  const value = raw.trim();
+  if (option?.type === 'int') {
+    if (!/^-?\d+$/.test(value)) throw new Error(`${option.symbol} requires an integer value.`);
+    return value;
+  }
+  if (option?.type === 'hex') {
+    if (!/^0[xX][0-9a-fA-F]+$/.test(value)) {
+      throw new Error(`${option.symbol} requires a hexadecimal value such as 0x20.`);
+    }
+    return value;
+  }
+  throw new Error(`${option?.symbol || 'Kconfig option'} is not a scalar option.`);
+}
+function applyScalarMenuValue(option, rawValue, source = 'user') {
+  const value = normalizeScalarKconfigValue(option, rawValue);
+  const previous = menuValues.get(option.symbol) ?? simpleKconfigDefault(option);
+  menuValues.set(option.symbol, value);
+  if (source === 'restore') {
+    if (!catalogRecommendedValues.has(option.symbol) && !catalogImportedSymbols.has(option.symbol)) {
+      menuTouched.delete(option.symbol);
+    }
+  } else {
+    menuTouched.add(option.symbol);
+  }
+  if (source === 'user') catalogUserOverrides.set(option.symbol, value);
+  else if (source === 'recommended') catalogRecommendedValues.set(option.symbol, value);
+  else if (source === 'imported') catalogImportedSymbols.add(option.symbol);
+  catalogDependencySymbols.delete(option.symbol);
+  if (previous !== value) markCatalogStateChanged();
+  return {
+    changes: previous === value ? [] : [{ symbol: option.symbol, from: previous, to: value, reason: 'scalar' }],
+    violations: [],
+  };
+}
+function applyMenuValue(option, value, force = false, source = 'user') {
+  return scalarKconfigOption(option)
+    ? applyScalarMenuValue(option, value, source)
+    : applyCatalogIntent(option, value, force, source);
+}
 function catalogConflictRecordForPackage(name) {
   return CATALOG_MODEL?.byPackage?.get(String(name || '')) || null;
 }
@@ -2431,7 +2475,7 @@ function openCatalogConflictModal(option, value, violations, openChildren = fals
   openModal(uiText('软件包冲突', '套件衝突', 'Package conflict'));
   const modal = $('modal').querySelector('.modal');
   modal.classList.remove('modal-wide', 'modal-import-source', 'recommended-config',
-    'profile-package-config', 'generation-error', 'catalog-conflict');
+    'profile-package-config', 'generation-error', 'catalog-conflict', 'rootfs-guidance');
   modal.classList.add('catalog-conflict');
   const body = $('modalBody');
   body.textContent = '';
@@ -2523,14 +2567,14 @@ function openCatalogConflictModal(option, value, violations, openChildren = fals
 function setMenuValue(option, value, openChildren = false) {
   let result;
   try {
-    result = applyCatalogIntent(option, value, false);
+    result = applyMenuValue(option, value, false);
   } catch (error) {
     const violations = Array.isArray(error?.violations) ? error.violations : [];
     if (violations.some((item) => item.code === 'package-conflict' || item.code === 'choice-conflict') &&
-        openCatalogConflictModal(option, value, violations, openChildren)) return;
+        openCatalogConflictModal(option, value, violations, openChildren)) return false;
     const first = String(error?.message || error).split(';')[0];
     showToast(first.length > 240 ? `${first.slice(0, 237)}…` : first);
-    return;
+    return false;
   }
   const curatedChanged = result.changes.some((change) =>
     menuOptionBySymbol.get(change.symbol)?.symbol?.startsWith('PACKAGE_'));
@@ -2538,10 +2582,9 @@ function setMenuValue(option, value, openChildren = false) {
   renderMenuconfig();
   renderMinimumBoot();
   renderFirmwareSettings();
-  if (curatedChanged) {
-    renderGroups();
-    updateStats();
-  }
+  if (curatedChanged) renderGroups();
+  if (curatedChanged || option.symbol === ROOTFS_PARTSIZE_SYMBOL) updateStats();
+  return true;
 }
 function minimumBootRows() {
   if (!MINIMUM_BOOT) return [];
@@ -2586,7 +2629,7 @@ function minimumFirewallItems() {
 }
 function setMenuValueQuiet(option, value, source = 'recommended') {
   if (!option) return { changes: [], violations: [] };
-  return applyCatalogIntent(option, value, true, source);
+  return applyMenuValue(option, value, true, source);
 }
 function trySetMenuValueQuiet(option, value, context = 'preset', source = 'recommended') {
   try {
@@ -2982,6 +3025,9 @@ function initMenuconfigControls() {
     event.stopPropagation();
     showMenuHelp($('menuconfigStateHelp'));
   };
+  $('capText').onclick = () => {
+    if (rootfsPartitionInfo()) openRootfsCapacityGuidance();
+  };
   $('catalogLoadState').onclick = retryCatalogLoad;
   $('catalogCopyDiagnostics').onclick = copyCatalogDiagnostics;
   $('menuconfigScroll').onscroll = () => {
@@ -3144,8 +3190,14 @@ function renderMenuOption(option) {
   } else {
     const input = document.createElement('input');
     input.type = 'text';
-    input.value = value === 'n' ? '' : value;
-    input.onchange = () => setMenuValue(option, input.value);
+    input.inputMode = option.type === 'int' ? 'numeric' : 'text';
+    input.value = option.type === 'string' ? String(value ?? '') : (value === 'n' ? '' : value);
+    input.onchange = () => {
+      const previous = menuValues.get(option.symbol) ?? simpleKconfigDefault(option);
+      if (!setMenuValue(option, input.value)) {
+        input.value = option.type === 'string' ? String(previous ?? '') : (previous === 'n' ? '' : previous);
+      }
+    };
     actions.appendChild(input);
   }
   if (catalogUserOverrides.has(option.symbol)) {
@@ -3721,8 +3773,10 @@ function renderCatalogLocatorResults() {
     button.className = 'catalog-locator-item';
     const label = document.createElement('span');
     label.textContent = entry.label;
+    label.title = entry.label;
     const detail = document.createElement('small');
     detail.textContent = `${entry.type} · ${entry.detail}`;
+    detail.title = detail.textContent;
     button.append(label, detail);
     button.onclick = async () => {
       results.hidden = true;
@@ -4513,17 +4567,123 @@ function updateGroupBadges() {
   });
 }
 
+function rootfsPartitionInfo() {
+  if (state.device?.id !== 'catalog-target' || !MENU_CATALOG) return null;
+  const option = menuOptionBySymbol.get(ROOTFS_PARTSIZE_SYMBOL);
+  if (!option) return null;
+  const raw = String(menuValues.get(ROOTFS_PARTSIZE_SYMBOL) ?? simpleKconfigDefault(option) ?? '').trim();
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const path = (option.path || []).map(menuPathLabel).filter(Boolean);
+  return { option, value, project: option.promptEn || option.prompt || 'Root filesystem partition size (in MiB)', path };
+}
+function focusMenuconfigSymbol(symbol) {
+  return (async () => {
+    menuExpanded = true;
+    $('menuconfigToggle').setAttribute('aria-expanded', 'true');
+    $('menuconfigBody').hidden = false;
+    await ensureCatalogMenuLoaded(false);
+    const option = menuOptionBySymbol.get(symbol);
+    if (!option) throw new Error(`Catalog option ${symbol} is unavailable`);
+    rebuildMenuSearchIndex();
+    if (menuExpanded) startCatalogSearchWorker();
+    $('menuconfigSelectedOnly').checked = false;
+    $('menuconfigOriginFilter').value = 'all';
+    menuOriginFilter = 'all';
+    resetMenuNavigation();
+    $('menuconfigSearch').value = symbol;
+    const query = symbol.toLowerCase();
+    catalogSearchResults.set(query, [symbol]);
+    menuVisibleLimit = MENU_PAGE_SIZE;
+    resetMenuScroll();
+    renderMenuconfig();
+    requestAnimationFrame(() => {
+      const row = [...document.querySelectorAll('.menuconfig-option')].find((element) => element.dataset.symbol === symbol);
+      if (!row) return;
+      row.classList.add('menuconfig-focus');
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const input = row.querySelector('input[type=text],input[type=number],select,button');
+      input?.focus({ preventScroll: true });
+      setTimeout(() => row.classList.remove('menuconfig-focus'), 1800);
+    });
+  })();
+}
+function openRootfsCapacityGuidance() {
+  const info = rootfsPartitionInfo();
+  if (!info) return;
+  modalCancelHandler = null;
+  openModal(uiText('RootFS 容量', 'RootFS 容量', 'RootFS capacity'));
+  $('modal').querySelector('.modal').classList.add('rootfs-guidance');
+  const body = $('modalBody');
+  body.textContent = '';
+
+  const row = document.createElement('div');
+  row.className = 'rootfs-guidance-row';
+  const project = document.createElement('span');
+  project.textContent = `${uiText('项目', '項目', 'Item')}：${info.project}`;
+  const current = document.createElement('strong');
+  current.textContent = `${uiText('当前值', '目前值', 'Current')}：${info.value} MiB`;
+  row.append(project, current);
+
+  const path = document.createElement('div');
+  path.className = 'rootfs-guidance-path';
+  path.textContent = `${uiText('路径', '路徑', 'Path')}：${[...(info.path.length ? info.path : ['Target Images']), ROOTFS_PARTSIZE_SYMBOL].join(' → ')}`;
+
+  const note = document.createElement('p');
+  note.className = 'rootfs-guidance-note';
+  note.textContent = uiText(
+    '这个值决定 RootFS 分区上限。基础系统、依赖与所选软件包都会占用空间；如果构建日志出现 ext4 out of space，请增大此值后重建。',
+    '這個值決定 RootFS 分區上限。基礎系統、相依套件與所選軟體包都會佔用空間；如果建置日誌出現 ext4 out of space，請增大此值後重建。',
+    'This value limits the RootFS partition. The base system, dependencies, and selected packages all consume space. Increase it and rebuild if the build log reports ext4 out of space.');
+
+  const actions = document.createElement('div');
+  actions.className = 'modal-actions';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'btn';
+  close.textContent = uiText('关闭', '關閉', 'Close');
+  close.onclick = closeModal;
+  const edit = document.createElement('button');
+  edit.type = 'button';
+  edit.className = 'btn btn-primary';
+  edit.textContent = uiText('去修改', '去修改', 'Modify');
+  edit.onclick = async () => {
+    closeModal();
+    try {
+      await focusMenuconfigSymbol(ROOTFS_PARTSIZE_SYMBOL);
+    } catch (error) {
+      showToast(error.message);
+    }
+  };
+  actions.append(close, edit);
+  body.append(row, path, note, actions);
+}
+
 function updateStats() {
   const sel = effectiveSelection();
   const n = sel.all.length + sel.removed.length;
   $('selCount').textContent = t('bar.selected', { n });
-  const sizeSum = sel.all.reduce((s, p) => s + (p.size || 1), 0);
-  const budget = (state.variant && state.variant.capacity) || 60;
-  const pct = Math.min(100, Math.round((sizeSum / budget) * 100));
-  const fill = $('capFill');
-  fill.style.width = pct + '%';
-  fill.className = 'cap-fill' + (pct >= 100 ? ' over' : pct >= 75 ? ' warn' : '');
-  $('capText').textContent = t('bar.capacity', { pct }) + (pct >= 100 ? ' ' + t('bar.capacity.over') : '');
+  const rootfs = rootfsPartitionInfo();
+  const capText = $('capText');
+  if (rootfs) {
+    $('capBox').hidden = true;
+    capText.disabled = false;
+    capText.classList.add('rootfs-capacity');
+    capText.textContent = `RootFS ${rootfs.value} MiB`;
+    capText.title = uiText('查看 RootFS 容量与修改位置', '查看 RootFS 容量與修改位置', 'View RootFS capacity and where to modify it');
+  } else {
+    $('capBox').hidden = false;
+    capText.disabled = true;
+    capText.classList.remove('rootfs-capacity');
+    const sizeSum = sel.all.reduce((s, p) => s + (p.size || 1), 0);
+    const budget = (state.variant && state.variant.capacity) || 60;
+    const pct = Math.min(100, Math.round((sizeSum / budget) * 100));
+    const fill = $('capFill');
+    fill.style.width = pct + '%';
+    fill.className = 'cap-fill' + (pct >= 100 ? ' over' : pct >= 75 ? ' warn' : '');
+    capText.textContent = t('bar.capacity', { pct }) + (pct >= 100 ? ' ' + t('bar.capacity.over') : '');
+    capText.title = t('bar.capacity.title');
+  }
   updateGroupBadges();
   renderBuildContract();
 }
@@ -5511,7 +5671,7 @@ function closeModal() {
   const cancel = modalCancelHandler;
   modalCancelHandler = null;
   $('modal').hidden = true;
-  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'profile-package-config', 'generation-error', 'catalog-conflict');
+  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'profile-package-config', 'generation-error', 'catalog-conflict', 'rootfs-guidance');
   document.body.classList.remove('modal-open');
   if (lastFocus && lastFocus.focus) lastFocus.focus();
   if (cancel) cancel();

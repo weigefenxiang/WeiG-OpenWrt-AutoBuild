@@ -6,7 +6,7 @@
 <meta name="description" data-i18n="app.desc" content="OpenWrt 固件在线定制:选源码、勾插件,GitHub Actions 云编译,免费自取">
 <title>Wei.G · OpenWrt 固件在线定制</title>
 <link rel="icon" href="Wei.G.ico">
-<link rel="stylesheet" href="app.css?v=5a23960cb8">
+<link rel="stylesheet" href="app.css?v=c43641ac03">
 </head>
 <body>
 <header class="site-header">
@@ -95,8 +95,9 @@
         <div class="catalog-overview-row">
           <div class="catalog-locator">
             <input type="search" id="catalogLocator" autocomplete="off"
-              placeholder="Search Source, Branch, Target System, Subtarget or Target Profile"
-              aria-label="Search Source, Branch, Target System, Subtarget or Target Profile">
+              placeholder="… Subtarget / Target Profile"
+              aria-label="Search Source, Branch, Target System, Subtarget or Target Profile"
+              title="Search Source, Branch, Target System, Subtarget or Target Profile">
             <div class="catalog-locator-results" id="catalogLocatorResults" hidden></div>
           </div>
           <section class="build-contract" id="buildContract" hidden aria-live="polite">
@@ -114,14 +115,7 @@
               <div class="build-contract-list" id="buildContractSelection"></div>
             </div>
           </section>
-        </div>
-        <div class="menuconfig-box" id="menuconfigBox" hidden>
-          <div class="catalog-feature-row">
-            <button class="menuconfig-toggle" id="menuconfigToggle" type="button" aria-expanded="false" aria-controls="menuconfigBody">
-              <strong>Advanced menuconfig</strong>
-              <span class="hint" id="menuconfigStatus"></span>
-              <span class="menuconfig-chevron" aria-hidden="true">⌄</span>
-            </button>
+          <div class="build-contract-controls" id="buildContractControls" hidden>
             <label class="minimum-boot-switch">
               <input type="checkbox" id="minimumBootToggle" checked>
               <span id="minimumBootLabel">Recommended</span>
@@ -131,6 +125,31 @@
               <input type="checkbox" id="defconfigToggle" checked>
               <span id="defconfigLabel">Defconfig</span>
             </label>
+            <label class="build-contract-selected-filter" title="Selected only">
+              <input type="checkbox" id="menuconfigSelectedOnly">
+              <span>Selected only</span>
+            </label>
+            <label class="menuconfig-origin-filter-label" title="Filter by configuration origin">
+              <span>Origin</span>
+              <select id="menuconfigOriginFilter">
+                <option value="all">All origins</option>
+                <option value="user">User selected</option>
+                <option value="excluded">Explicitly excluded</option>
+                <option value="default">Upstream defaults</option>
+                <option value="recommended">Recommended</option>
+                <option value="dependency">Dependencies</option>
+                <option value="imported">Imported</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="menuconfig-box" id="menuconfigBox" hidden>
+          <div class="catalog-feature-row">
+            <button class="menuconfig-toggle" id="menuconfigToggle" type="button" aria-expanded="false" aria-controls="menuconfigBody">
+              <strong>Advanced menuconfig</strong>
+              <span class="hint" id="menuconfigStatus"></span>
+              <span class="menuconfig-chevron" aria-hidden="true">⌄</span>
+            </button>
           </div>
           <div id="menuconfigBody" hidden>
             <div class="import-workspace" id="importWorkspace" hidden>
@@ -143,23 +162,14 @@
             <div class="menuconfig-workspace">
               <div class="menuconfig-workspace-head">
                 <div class="menuconfig-toolbar">
-                  <button class="menuconfig-back" id="menuconfigBack" type="button" hidden>←</button>
-                  <nav class="menuconfig-breadcrumb" id="menuconfigPanelTitle" aria-label="Menu path"></nav>
-                  <input type="search" id="menuconfigSearch" placeholder="Search option name">
-                  <label title="Selected only"><input type="checkbox" id="menuconfigSelectedOnly"> Selected only</label>
-                  <label class="menuconfig-origin-filter-label" title="Filter by configuration origin">
-                    <span>Origin</span>
-                    <select id="menuconfigOriginFilter">
-                      <option value="all">All origins</option>
-                      <option value="user">User selected</option>
-                      <option value="excluded">Explicitly excluded</option>
-                      <option value="default">Upstream defaults</option>
-                      <option value="recommended">Recommended</option>
-                      <option value="dependency">Dependencies</option>
-                      <option value="imported">Imported</option>
-                    </select>
-                  </label>
-                  <button class="menuconfig-state-help" id="menuconfigStateHelp" type="button">N/M/Y ?</button>
+                  <div class="menuconfig-path-row">
+                    <button class="menuconfig-back" id="menuconfigBack" type="button" hidden>←</button>
+                    <nav class="menuconfig-breadcrumb" id="menuconfigPanelTitle" aria-label="Menu path"></nav>
+                    <div class="menuconfig-search-group">
+                      <input type="search" id="menuconfigSearch" placeholder="Search option name / CONFIG symbol">
+                      <button class="menuconfig-state-help" id="menuconfigStateHelp" type="button">N/M/Y</button>
+                    </div>
+                  </div>
                 </div>
                 <button class="menuconfig-selected-toggle" id="menuconfigSelectedToggle" type="button"
                   aria-expanded="false" aria-controls="menuconfigContent" hidden>
@@ -272,7 +282,7 @@
     <div class="stats">
       <button type="button" class="link-btn" id="selCount" data-i18n-title="bar.selected.title"></button>
       <div class="cap" id="capBox" data-i18n-title="bar.capacity.title"><div class="cap-fill" id="capFill"></div></div>
-      <span class="cap-text" id="capText"></span>
+      <button type="button" class="cap-text cap-info" id="capText" disabled></button>
     </div>
     <div class="actions">
       <input id="configImport" type="file" accept=".json,.config,.buildinfo,text/plain,application/json" hidden>
@@ -328,6 +338,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <noscript><p class="wrap" style="padding:2rem 0">本页面需要启用 JavaScript 才能使用。/ JavaScript is required.</p></noscript>
-<script src="app.js?v=f56685a436"></script>
+<script src="app.js?v=76955bf3f6"></script>
 </body>
 </html>

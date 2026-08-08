@@ -547,6 +547,11 @@ jobs:
           if [ -d openwrt/logs ]; then
             tar czf failure-logs/package-logs.tar.gz -C openwrt logs || true
           fi
+          ROOTFS_PARTSIZE="$(sed -n 's/^CONFIG_TARGET_ROOTFS_PARTSIZE=//p' failure-logs/final.config 2>/dev/null | tail -n 1 | tr -d '\r')"
+          ROOTFS_TOO_SMALL=false
+          if grep -Eqi 'ext4_allocate[^:]*:.*out of space|failed to allocate [0-9]+ blocks, out of space' build-diagnostic.log build.log 2>/dev/null; then
+            ROOTFS_TOO_SMALL=true
+          fi
           # 00-SUMMARY 排在最前:构建参数 + 报错关键字,方便一眼定位 / 00-SUMMARY sorts first: build params + error keywords for quick triage
           {
             echo "===================== 失败总结 / FAILURE SUMMARY ====================="
@@ -560,6 +565,19 @@ jobs:
             echo "标识/tag    : ${{ steps.req.outputs.tag }}   run: ${{ github.run_id }}"
             # 离线看此文件时可凭下面的直链回到本次 run / Keep the run URL here so this file can be traced back offline
             echo "本次构建 / this run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            if [ "$ROOTFS_TOO_SMALL" = "true" ]; then
+              echo ""
+              echo "-------- RootFS 容量 / ROOTFS CAPACITY --------"
+              echo "RootFS image is too small."
+              echo "项目：Root filesystem partition size (in MiB)"
+              if [ -n "$ROOTFS_PARTSIZE" ]; then
+                echo "当前值：$ROOTFS_PARTSIZE MiB"
+              else
+                echo "当前值：unknown"
+              fi
+              echo "路径：Target Images → TARGET_ROOTFS_PARTSIZE"
+              echo "Please increase TARGET_ROOTFS_PARTSIZE and rebuild."
+            fi
             echo ""
             echo "-------- 已收集日志 / COLLECTED LOGS --------"
             for log in build.log build-diagnostic.log package-logs.tar.gz; do

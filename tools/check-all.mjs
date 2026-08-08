@@ -434,6 +434,14 @@ catalogPerformanceTest.status === 0
   : bad('Catalog performance tests',
     (catalogPerformanceTest.stderr || catalogPerformanceTest.stdout || '').trim().slice(0, 400));
 
+const menuconfigScalarTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-menuconfig-scalar.mjs')], {
+  encoding: 'utf8',
+});
+menuconfigScalarTest.status === 0
+  ? ok('Advanced scalar editor: string/int/hex bypass N/M/Y intent, validate values, persist overrides and restore defaults')
+  : bad('Advanced scalar editor tests',
+    (menuconfigScalarTest.stderr || menuconfigScalarTest.stdout || '').trim().slice(0, 400));
+
 const blogMirrorTestRoot = mkdtempSync(join(tmpdir(), '威格 blog mirror with spaces-'));
 try {
   const sourceDir = join(blogMirrorTestRoot, '主仓库 with spaces', 'site', 'wrt');
@@ -1131,12 +1139,24 @@ mirrorRulesOk
     : bad('recommended UI', '推荐项命名、弹窗或 Catalog N/M/Y/锁定状态复用缺失');
   const catalogLayoutContract = html.includes('class="catalog-overview-row"') &&
     html.indexOf('id="catalogLocator"') < html.indexOf('id="buildContract"') &&
-    html.indexOf('id="menuconfigToggle"') < html.indexOf('id="minimumBootToggle"') &&
+    html.indexOf('id="minimumBootToggle"') < html.indexOf('id="menuconfigToggle"') &&
     !js.includes("type: 'Menu'") && !js.includes("type: 'Option'") && !js.includes("type: 'Application'") &&
-    js.includes("`${packageName} ${option.prompt || ''} ${option.promptEn || ''} ${option.promptZh || ''} `") &&
-    !js.includes("`${option.usageEn || ''} ${option.usageZh || ''} `") &&
-    html.includes('id="menuconfigSearch"') && html.includes('placeholder="Search option name"') &&
-    css.includes('.menuconfig-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:nowrap') &&
+    js.includes('function catalogSearchText(option)') &&
+    js.includes("symbol ? `CONFIG_${symbol}` : ''") &&
+    !js.includes('includeEnglishDescription') && !js.includes('ensureCatalogHelpLoaded') &&
+    html.includes('id="catalogLocator"') && html.includes('placeholder="… Subtarget / Target Profile"') &&
+    html.includes('id="menuconfigSearch"') && html.includes('placeholder="Search option name / CONFIG symbol"') &&
+    !html.includes('id="menuconfigSearchScope"') && !html.includes('value="name-help"') &&
+    html.includes('</section>\n          <div class="build-contract-controls" id="buildContractControls" hidden>') && html.includes('class="build-contract-selected-filter"') &&
+    html.indexOf('id="menuconfigSelectedOnly"') < html.indexOf('id="menuconfigToggle"') &&
+    html.indexOf('id="menuconfigOriginFilter"') < html.indexOf('id="menuconfigToggle"') &&
+    html.includes('class="menuconfig-path-row"') && html.includes('class="menuconfig-search-group"') &&
+    !html.includes('class="menuconfig-path-filters"') && !html.includes('class="menuconfig-controls-row"') &&
+    html.includes('id="menuconfigStateHelp" type="button">N/M/Y</button>') && !html.includes('N/M/Y ?') &&
+    css.includes('.menuconfig-toolbar{display:block') &&
+    css.includes('.menuconfig-breadcrumb{display:flex;flex:1 1 520px;min-width:240px') &&
+    css.includes('.menuconfig-search-group{display:flex;flex:0 1 360px') &&
+    css.includes('font-size:var(--menuconfig-title-size)') && css.includes('flex-wrap:wrap') &&
     js.includes("id.className = 'menuconfig-option-label menuconfig-option-id'") &&
     js.includes('id.textContent = packageName || option.symbol') &&
     js.includes("description.className = 'menuconfig-option-label menuconfig-option-description'") &&
@@ -1149,18 +1169,28 @@ mirrorRulesOk
     js.includes('id.dataset.symbol = option.symbol') && js.includes('id.tabIndex = 0') &&
     !js.includes("id.textContent = `CONFIG_${option.symbol}`") &&
     !js.includes('menuconfig-package-desc') && !css.includes('.menuconfig-package-desc') &&
-    css.includes('.menuconfig-option-summary{display:grid;grid-template-columns:minmax(120px,220px) auto minmax(0,1fr)') &&
+    css.includes('.menuconfig-option-summary{display:grid;grid-template-columns:minmax(180px,300px) auto minmax(0,1fr)') &&
+    css.includes('.menuconfig-option-id{font:650 var(--menuconfig-title-size)') &&
+    css.includes('.catalog-origin{display:inline-flex') && css.includes('font-size:var(--menuconfig-title-size)') &&
     css.includes('.menuconfig-option-description{text-align:right') &&
     css.includes('.menuconfig-option-actions{position:relative;z-index:2;display:flex;flex:none') &&
-    css.includes('.catalog-overview-row{display:grid;grid-template-columns:') &&
-    css.includes('.build-contract{display:contents}') &&
-    css.includes('.build-contract-body{grid-column:1 / -1') &&
+    css.includes('.catalog-overview-row{display:grid;grid-template-columns:clamp(180px,16vw,210px) minmax(210px,1fr) max-content;grid-template-rows:auto auto') &&
+    css.includes('.catalog-locator{position:relative;grid-column:1;grid-row:1') &&
+    css.includes('.catalog-locator-results{position:absolute') && css.includes('width:max-content;min-width:min(620px,calc(100vw - 48px));max-width:min(920px,calc(100vw - 48px))') &&
+    css.includes('.catalog-locator-item{display:grid;grid-template-columns:max-content max-content') && css.includes('white-space:nowrap') &&
+    js.includes('label.title = entry.label') && js.includes('detail.title = detail.textContent') &&
+    css.includes('.build-contract{display:contents}') && css.includes('.build-contract-head{display:flex;grid-column:2;grid-row:1') &&
+    css.includes('.build-contract-controls{display:flex;grid-column:3;grid-row:1') && css.includes('flex-wrap:nowrap') &&
+    js.includes("const controls = $('buildContractControls')") && js.includes('controls.hidden = true') && js.includes('controls.hidden = false') &&
+    css.includes('.build-contract-body{grid-column:1 / -1;grid-row:2') &&
+    css.includes('@media(max-width:640px){') && css.includes('.catalog-locator{grid-column:1;grid-row:1}') &&
+    css.includes('.build-contract-head{grid-column:1;grid-row:2') && css.includes('.build-contract-controls{grid-column:1;grid-row:3') && css.includes('.build-contract-body{grid-column:1;grid-row:4}') &&
     js.includes("contractText('源码', 'Source')") &&
     js.includes("contractText('分支', 'Branch')") &&
     js.includes("contractText('软件包', 'Packages')");
   catalogLayoutContract
-    ? ok('Catalog UI:范围搜索、构建契约、Advanced/推荐项顺序、ID/描述单行与安全悬浮已接通')
-    : bad('Catalog UI layout', '搜索范围、控件顺序、Advanced ID/描述、悬浮信息或 N/M/Y 隔离不符合约定');
+    ? ok('Catalog UI:单一名称/symbol 搜索、完整路径、构建契约、Advanced/推荐项顺序与安全悬浮已接通')
+    : bad('Catalog UI layout', '搜索、完整面包屑、控件顺序、Advanced ID/描述、悬浮信息或 N/M/Y 隔离不符合约定');
   const catalogInteractionUiContract =
     !js.includes('showToast(CATALOG_ENGINE.formatViolations(result.violations))') &&
     js.includes('function openCatalogConflictModal(option, value, violations') &&
@@ -1791,10 +1821,14 @@ mirrorRulesOk
     css.includes('.menu-fit-s3') &&
     css.includes('.menu-fit-two-line') &&
     css.includes('.menuconfig-grid{grid-template-columns:minmax(0,1fr)}') &&
-    css.includes('.menuconfig-option-summary{display:grid;grid-template-columns:minmax(120px,220px) auto minmax(0,1fr)') &&
-    css.includes('.menuconfig-option-id{font:650 13px ui-monospace') &&
+    css.includes('.menuconfig-option-summary{display:grid;grid-template-columns:minmax(180px,300px) auto minmax(0,1fr)') &&
+    css.includes('.menuconfig-option-id{font:650 var(--menuconfig-title-size)') &&
     css.includes('.menuconfig-option-description{text-align:right') &&
-    css.includes('.menuconfig-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:nowrap') &&
+    css.includes('.menuconfig-toolbar{display:block') &&
+    css.includes('.menuconfig-path-row{display:flex;align-items:flex-start') &&
+    css.includes('.menuconfig-search-group{display:flex;flex:0 1 360px') &&
+    !css.includes('.menuconfig-controls-row{') && !css.includes('.menuconfig-path-filters{') &&
+    css.includes('.menuconfig-breadcrumb-current{min-width:0;color:var(--text);font-weight:700;white-space:normal;overflow-wrap:anywhere}') &&
     !css.includes('.menuconfig-package-desc') &&
     !css.includes('.menuconfig-prompt') && !css.includes('.menuconfig-option-name') &&
     css.includes('.menuconfig-choice') &&
@@ -1802,6 +1836,13 @@ mirrorRulesOk
     css.includes('.catalog-load-spinner') &&
     css.includes('@keyframes catalog-spin') &&
     css.includes('.menuconfig-child') &&
+    html.includes('id="menuconfigSearch"') &&
+    html.includes('placeholder="Search option name / CONFIG symbol"') &&
+    !html.includes('id="menuconfigSearchScope"') &&
+    js.includes('function catalogSearchText(option)') &&
+    js.includes('CONFIG_${symbol}') &&
+    !js.includes('includeEnglishDescription') &&
+    !js.includes('ensureCatalogHelpLoaded') &&
     js.includes('function fmtSize(mb)') &&
     js.includes('Math.floor(Math.log10(Math.abs(number)))') &&
     formatSizeContract(0.00048828125) === '512 B' &&
@@ -1812,8 +1853,26 @@ mirrorRulesOk
     formatSizeContract(1023) === '0.999 GB' &&
     existsSync(join(ROOT, 'site', 'wrt', 'data', 'menuconfig-index.json'));
   menuconfigContract
-    ? ok('多源码 Catalog → 名称搜索、单行 ID/描述、完整 CONFIG/译文/路径悬浮与面包屑已接通')
-    : bad('menuconfig catalog contract', '动态 Target、名称搜索、ID/描述单行、悬浮详情、面包屑或 choice 缺失');
+    ? ok('多源码 Catalog → 单一名称/symbol 搜索、完整面包屑、单行 ID/描述与 CONFIG/译文/路径悬浮已接通')
+    : bad('menuconfig catalog contract', '动态 Target、名称/symbol 搜索、完整面包屑、ID/描述单行、悬浮详情或 choice 缺失');
+  const rootfsGuidanceContract =
+    js.includes("const ROOTFS_PARTSIZE_SYMBOL = 'TARGET_ROOTFS_PARTSIZE'") &&
+    js.includes('function scalarKconfigOption(option)') &&
+    js.includes('function normalizeScalarKconfigValue(option, rawValue)') &&
+    js.includes('function applyScalarMenuValue(option, rawValue') &&
+    js.includes('function applyMenuValue(option, value') &&
+    js.includes("return scalarKconfigOption(option)") &&
+    js.includes('function rootfsPartitionInfo()') &&
+    js.includes('function openRootfsCapacityGuidance()') &&
+    js.includes('function focusMenuconfigSymbol(symbol)') &&
+    js.includes('capText.textContent = `RootFS ${rootfs.value} MiB`') &&
+    buildWorkflow.includes('RootFS image is too small.') &&
+    buildWorkflow.includes('CONFIG_TARGET_ROOTFS_PARTSIZE=') &&
+    buildWorkflow.includes('路径：Target Images → TARGET_ROOTFS_PARTSIZE') &&
+    buildWorkflow.includes("ext4_allocate[^:]*:.*out of space");
+  rootfsGuidanceContract
+    ? ok('RootFS guidance: Catalog current value, direct Advanced locator and build-log out-of-space diagnosis are connected')
+    : bad('RootFS guidance contract', 'RootFS current value, locator, or out-of-space build diagnosis is incomplete');
     const catalogSchema6PerformanceContract =
       catalogLoaderJs.includes('branch.assets?.core && branch.assets?.graph') &&
       catalogLoaderJs.includes('const [core, graph] = await Promise.all') &&
@@ -1826,7 +1885,7 @@ mirrorRulesOk
       js.includes('async function ensureCatalogMenuLoaded(includeHidden = false)') &&
       js.includes("loader?.('menu')") &&
       js.includes("loader?.('hidden')") &&
-      js.includes("loader?.('help')") &&
+      !js.includes("loader?.('help')") &&
       js.includes('catalogStateRevision++') &&
       js.includes('catalogContextCache') &&
       js.includes('menuVisibilityCache') &&
@@ -1982,6 +2041,8 @@ mirrorRulesOk
     js.includes("import('./lib/catalog-engine.js?v=") &&
     js.includes('menuSearchOptions = [...options, ...hiddenOptions]') &&
     js.includes('CATALOG_ENGINE.applyUserIntent') &&
+    js.includes('function applyMenuValue(option, value') &&
+    js.includes('function applyScalarMenuValue(option, rawValue') &&
     !js.includes('CATALOG_ENGINE.proposeRepairs') &&
     !js.includes('repairCatalogConfiguration') &&
     js.includes('catalogProtectedSymbols') &&
@@ -2000,8 +2061,8 @@ mirrorRulesOk
     !requestParser.includes('matchingConfigRules(') &&
     buildWorkflow.includes('steps.req.outputs.source_commit');
   catalogEngineUiContract
-    ? ok('Advanced 与普通插件共用 Catalog 依赖引擎；Profile 包和完整悬浮信息已接通')
-    : bad('Catalog engine UI/CI contract', '依赖引擎、Profile 包、悬浮信息或 post-defconfig 清理不完整');
+    ? ok('Advanced bool/tristate 与普通插件共用 Catalog 依赖引擎；scalar 值独立编辑，Profile 包和完整悬浮信息已接通')
+    : bad('Catalog engine UI/CI contract', '依赖引擎、scalar 分流、Profile 包、悬浮信息或 post-defconfig 清理不完整');
   const catalogEngineSource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.js'), 'utf8');
   const catalogMatrixSource = readFileSync(join(ROOT, 'tools', 'test-catalog-engine.mjs'), 'utf8');
   const enginePackageLiteral = /[\"'`]PACKAGE_[A-Za-z0-9_.+@-]+[\"'`]/.test(catalogEngineSource);

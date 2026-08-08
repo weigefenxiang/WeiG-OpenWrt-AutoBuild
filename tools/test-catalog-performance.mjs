@@ -77,6 +77,25 @@ assert.equal(catalog.menu.hiddenLoaded, true);
 assert.equal(catalog.menu.displayOptions.find((row) => row.symbol === 'PACKAGE_fixture-00001').promptEn, 'Hidden fixture');
 
 const appSource = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
+const searchTextSource = appFunctionSource(appSource, 'catalogSearchText', 'rebuildMenuSearchIndex');
+const searchTextContext = { Set, String, Object };
+vm.runInNewContext(searchTextSource, searchTextContext, { filename: 'app-search-text-fixture.js' });
+const rootfsSearchOption = {
+  symbol: 'TARGET_ROOTFS_PARTSIZE',
+  prompt: 'Root filesystem partition size (in MiB)',
+  promptEn: 'Root filesystem partition size (in MiB)',
+  promptZh: '',
+  promptI18n: {},
+  usageEn: 'Sets the root filesystem partition size.',
+  help: 'Increase this when the ext4 image is too small.',
+};
+const nameSearchText = searchTextContext.catalogSearchText(rootfsSearchOption);
+assert.ok(nameSearchText.includes('target_rootfs_partsize'));
+assert.ok(nameSearchText.includes('config_target_rootfs_partsize'));
+assert.ok(nameSearchText.includes('target rootfs partsize'));
+assert.ok(nameSearchText.includes('root filesystem partition size'));
+assert.ok(!nameSearchText.includes('sets the root filesystem partition size'));
+assert.ok(!nameSearchText.includes('ext4 image is too small'));
 const startupSource = appFunctionSource(appSource, 'buildMenuStartupIndexes', 'buildMenuIndexes');
 assert.ok(!startupSource.includes('indexSearchText(') && !startupSource.includes('addMenuIndex(menuExactPaths') &&
   !startupSource.includes('startCatalogSearchWorker('),
