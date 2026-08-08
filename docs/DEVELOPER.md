@@ -73,7 +73,7 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ gen-plugins.mjs              config × meta → plugins/packages.json + README 计数刷新
 │  ├─ gen-i18n.mjs                 校验合并词条 → i18n.json + 翻译对照表
 │  ├─ gen-pkg-page.mjs             生成 site/wrt/packages.html
-│  ├─ fetch-build-request.mjs      下载 GitHub Issue 附件(严格域名/数量/大小)
+│  ├─ fetch-build-request.mjs      下载 GitHub Issue 附件；支持 REQUEST_EVENT_PATH 固定快照并回退 GITHUB_EVENT_PATH
 │  ├─ parse-build-request-identity.mjs E v2 探针只读 sourceEnv/requestCommit/requestId
 │  ├─ parse-request.mjs            载荷解析 + 固定 Catalog/源码契约 + 共享引擎严格校验
 │  ├─ check-all.mjs                一键体检;check-drift.mjs 上游漂移哨兵
@@ -146,7 +146,7 @@ WeiG-OpenWrt-AutoBuild/
 
 ### 2.5 构建链路
 
-- **E v2 Phase A（零生产影响）**：生产 `.github/workflows/custom-build.yml` 仍然只有 `issues: opened`，普通 `[build]` Issue 与 Blog 构建行为不变。新增的 `build-dispatcher.yml`、`build-routing-probe.yml` 都只允许手动 `workflow_dispatch`：使用 `[route-test]` Issue 中唯一的 `build-request.json`，只解析 `sourceEnv`、完整 40 位 `requestCommit`、`requestId`，先确认远端 branch HEAD 精确等于 request commit，再派发对应 ref 的只读 Probe。Probe 必须满足 `github.ref_name == sourceEnv`、`github.sha == requestCommit`、`git rev-parse HEAD == requestCommit`。Phase A 不执行 OpenWrt Build；这些真实 Run 全部通过后才能进入会修改生产 Worker/Issue 流量的 Phase B。
+- **E v2 Phase A（零生产流量切换）**：普通 `[build]` Issue 的生产入口继续走现有 `custom-build.yml`；手动 `build-dispatcher.yml` 与 `build-routing-probe.yml` 不监听 Issue，且 Dispatcher 只派发 Probe、不调用 `custom-build.yml`。`[route-test]` Issue 只携带一个 `build-request.json`。Dispatcher 通过 GitHub API 固定 Issue 快照，并用自定义 `REQUEST_EVENT_PATH` 交给 `fetch-build-request.mjs`；正文来源优先级固定为显式 `ISSUE_BODY` → `REQUEST_EVENT_PATH` → GitHub 原生 `GITHUB_EVENT_PATH`，不能用 workflow `env:` 覆盖 `GITHUB_*` 默认变量。随后只解析 `sourceEnv`、完整 40 位 `requestCommit`、`requestId`，确认远端 branch HEAD 精确等于 request commit，再派发对应 ref 的只读 Probe。Probe 必须满足 `github.ref_name == sourceEnv`、`github.sha == requestCommit`、`git rev-parse HEAD == requestCommit`。Phase A 不执行 OpenWrt Build；这些真实 Run 全部通过后才能进入会修改生产 Worker/Issue 流量的 Phase B。
 
 - Catalog Target 的 `arch`、`archPackages` 与 Target/Profile 身份仍是原子构建契约。Profile 声明包改为紧凑管理列表，默认“跟随上游”不写显式值；只有用户逐项选择“加入”或“排除”时才写 `y`/`n`。提交配置仅在 Defconfig 前进行通用 Catalog 检查；用户勾选后运行一次官方 `make defconfig`，成功输出不再接受项目自定义 post-defconfig 验证。`tools/apply-config-overrides.mjs`、`tools/config-overrides.mjs` 与 `system-overrides.json` 已删除，不再强制 `CONFIG_DEVEL`/`CONFIG_BUILD_LOG`。
 

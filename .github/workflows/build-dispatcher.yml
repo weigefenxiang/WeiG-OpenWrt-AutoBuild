@@ -79,7 +79,7 @@ jobs:
 
       - name: Read authoritative Build Request / 读取权威 Build Request
         env:
-          GITHUB_EVENT_PATH: ${{ github.workspace }}/route-probe-event.json
+          REQUEST_EVENT_PATH: ${{ github.workspace }}/route-probe-event.json
           REQUEST_MANIFEST_OUT: route-probe-request.json
           REQUEST_DIR: route-probe-request
         run: node tools/fetch-build-request.mjs

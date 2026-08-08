@@ -1440,6 +1440,8 @@ mirrorRulesOk
     dispatcherWorkflow.includes('Run this dispatcher from ${expected}, not ${actual}.') &&
     dispatcherWorkflow.includes("startsWith('[route-test]')") &&
     dispatcherWorkflow.includes('tools/fetch-build-request.mjs') &&
+    dispatcherWorkflow.includes('REQUEST_EVENT_PATH: ${{ github.workspace }}/route-probe-event.json') &&
+    !dispatcherWorkflow.includes('GITHUB_EVENT_PATH: ${{ github.workspace }}/route-probe-event.json') &&
     dispatcherWorkflow.includes('tools/parse-build-request-identity.mjs') &&
     dispatcherWorkflow.includes("workflow_id: 'build-routing-probe.yml'") &&
     !dispatcherWorkflow.includes("workflow_id: 'custom-build.yml'") &&
@@ -1777,12 +1779,15 @@ mirrorRulesOk
   buildEnvironmentIdentityContract
     ? ok('build identity: main stays unprefixed; every non-main branch shares one Issue/Action/Artifact identity rule')
     : bad('build identity contract', 'main/non-main 分支身份、请求 commit、Issue 标题或 Artifact 命名没有共用统一规则');
-  const issueEventBodyContract = issueRequestReader.includes('GITHUB_EVENT_PATH') &&
+  const issueEventBodyContract =
+    issueRequestReader.includes("const requestEventPath = String(process.env.REQUEST_EVENT_PATH || '').trim();") &&
+    issueRequestReader.includes("const githubEventPath = String(process.env.GITHUB_EVENT_PATH || '').trim();") &&
+    issueRequestReader.includes('const eventPath = requestEventPath || githubEventPath;') &&
     issueRequestReader.includes("event.issue?.body") &&
     workflow.includes("if: always() && steps.req.outcome == 'success'");
   issueEventBodyContract
-    ? ok('Issue 事件正文从 GITHUB_EVENT_PATH 读取，解析失败前不上传空 CONFIG artifact')
-    : bad('Issue event payload contract', '事件正文回退或 CONFIG artifact 门禁缺失');
+    ? ok('Issue 事件正文: REQUEST_EVENT_PATH 可读固定快照，GITHUB_EVENT_PATH 保持生产回退')
+    : bad('Issue event payload contract', '自定义事件快照优先级、GitHub 事件回退或 CONFIG artifact 门禁缺失');
   const issueEventFixtureRoot = mkdtempSync(join(tmpdir(), 'weig-issue-event-body-'));
   try {
     const requestText = JSON.stringify({
@@ -1790,42 +1795,55 @@ mirrorRulesOk
       config: 'CONFIG_TARGET_x86=y\nCONFIG_TARGET_x86_64=y\n',
     }) + '\n';
     const attachmentUrl = 'https://github.com/user-attachments/files/123456/build-request.json';
-    const eventPath = join(issueEventFixtureRoot, 'event.json');
-    const manifestPath = join(issueEventFixtureRoot, 'request-attachments.json');
-    const requestDir = join(issueEventFixtureRoot, 'request-attachments');
+    const fallbackEventPath = join(issueEventFixtureRoot, 'github-event.json');
+    const overrideEventPath = join(issueEventFixtureRoot, 'request-event.json');
+    const shadowEventPath = join(issueEventFixtureRoot, 'shadow-github-event.json');
+    const fallbackManifestPath = join(issueEventFixtureRoot, 'fallback-request-attachments.json');
+    const fallbackRequestDir = join(issueEventFixtureRoot, 'fallback-request-attachments');
+    const overrideManifestPath = join(issueEventFixtureRoot, 'override-request-attachments.json');
+    const overrideRequestDir = join(issueEventFixtureRoot, 'override-request-attachments');
     const preloadPath = join(issueEventFixtureRoot, 'mock-fetch.mjs');
-    writeFileSync(eventPath, JSON.stringify({
-      action: 'opened',
-      issue: { body: `### Build request\n\n[build-request.json](${attachmentUrl})\n` },
-    }));
+    const attachmentBody = `### Build request\n\n[build-request.json](${attachmentUrl})\n`;
+    writeFileSync(fallbackEventPath, JSON.stringify({ action: 'opened', issue: { body: attachmentBody } }));
+    writeFileSync(overrideEventPath, JSON.stringify({ issue: { body: attachmentBody } }));
+    writeFileSync(shadowEventPath, JSON.stringify({ issue: { body: '### Build request\n\nNo attachment here.\n' } }));
     writeFileSync(preloadPath, [
       `const payload = ${JSON.stringify(requestText)};`,
       "const bytes = Buffer.from(payload, 'utf8');",
       "globalThis.fetch = async () => ({ ok: true, status: 200, headers: { get: (name) => name === 'content-length' ? String(bytes.length) : null }, arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) });",
       '',
     ].join('\n'));
-    const issueEventRun = spawnSync(process.execPath, [
+    const runIssueReader = (env) => spawnSync(process.execPath, [
       '--import',
       pathToFileURL(preloadPath).href,
       join(ROOT, 'tools', 'fetch-build-request.mjs'),
     ], {
       cwd: issueEventFixtureRoot,
       encoding: 'utf8',
-      env: {
-        ...process.env,
-        ISSUE_BODY: '',
-        GITHUB_EVENT_PATH: eventPath,
-        REQUEST_MANIFEST_OUT: manifestPath,
-        REQUEST_DIR: requestDir,
-      },
+      env: { ...process.env, ISSUE_BODY: '', ...env },
     });
-    const fixtureManifest = issueEventRun.status === 0 && existsSync(manifestPath)
-      ? JSON.parse(readFileSync(manifestPath, 'utf8'))
+    const fallbackRun = runIssueReader({
+      GITHUB_EVENT_PATH: fallbackEventPath,
+      REQUEST_MANIFEST_OUT: fallbackManifestPath,
+      REQUEST_DIR: fallbackRequestDir,
+    });
+    const fallbackManifest = fallbackRun.status === 0 && existsSync(fallbackManifestPath)
+      ? JSON.parse(readFileSync(fallbackManifestPath, 'utf8'))
       : null;
-    issueEventRun.status === 0 && fixtureManifest?.files?.length === 1 &&
-        fixtureManifest.files[0].type === 'json'
-      ? ok('Issue event fixture: attachment body is discovered without ISSUE_BODY env injection')
-      : bad('Issue event fixture', (issueEventRun.stderr || issueEventRun.stdout || 'manifest missing').trim().slice(0, 500));
+    const overrideRun = runIssueReader({
+      REQUEST_EVENT_PATH: overrideEventPath,
+      GITHUB_EVENT_PATH: shadowEventPath,
+      REQUEST_MANIFEST_OUT: overrideManifestPath,
+      REQUEST_DIR: overrideRequestDir,
+    });
+    const overrideManifest = overrideRun.status === 0 && existsSync(overrideManifestPath)
+      ? JSON.parse(readFileSync(overrideManifestPath, 'utf8'))
+      : null;
+    fallbackRun.status === 0 && fallbackManifest?.files?.length === 1 && fallbackManifest.files[0].type === 'json' &&
+        overrideRun.status === 0 && overrideManifest?.files?.length === 1 && overrideManifest.files[0].type === 'json'
+      ? ok('Issue event fixture: GitHub fallback + REQUEST_EVENT_PATH snapshot precedence both work')
+      : bad('Issue event fixture',
+        `fallback=${fallbackRun.status}, override=${overrideRun.status}, ${(fallbackRun.stderr || overrideRun.stderr || fallbackRun.stdout || overrideRun.stdout || 'manifest missing').trim().slice(0, 420)}`);
   } catch (error) {
     bad('Issue event fixture', error.message.slice(0, 300));
   } finally {

@@ -72,7 +72,7 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ gen-plugins.mjs              config × meta → plugins/packages.json + README count refresh
 │  ├─ gen-i18n.mjs                 validate & merge strings → i18n.json + translation table
 │  ├─ gen-pkg-page.mjs             generates site/wrt/packages.html
-│  ├─ fetch-build-request.mjs      fetches one allowlisted GitHub Issue attachment
+│  ├─ fetch-build-request.mjs      fetches allowlisted Issue attachments with REQUEST_EVENT_PATH snapshot override + GITHUB_EVENT_PATH fallback
 │  ├─ parse-build-request-identity.mjs E v2 probe parser for sourceEnv/requestCommit/requestId only
 │  ├─ parse-request.mjs            payload + pinned Catalog/source contract + strict shared-engine validation
 │  ├─ check-all.mjs                health check; check-drift.mjs upstream drift sentinel
@@ -133,7 +133,7 @@ Type scale: 17px body (15.5px compact via the Aa toggle); 15px pills/plugin cell
 
 ### 2.5 Build pipeline
 
-- **E v2 Phase A (zero production impact):** production `.github/workflows/custom-build.yml` remains `issues: opened` only, so normal `[build]` Issues and Blog builds are unchanged. The new `build-dispatcher.yml` and `build-routing-probe.yml` are manual `workflow_dispatch` workflows only. A `[route-test]` Issue contains exactly one generated `build-request.json`; the dispatcher reads only `sourceEnv`, the full 40-character `requestCommit`, and `requestId`, verifies that the remote branch HEAD exactly equals the requested commit, then dispatches a read-only probe on that ref. The probe requires `github.ref_name == sourceEnv`, `github.sha == requestCommit`, and `git rev-parse HEAD == requestCommit`. Phase A never compiles OpenWrt; Phase B must not take over production Issue traffic until these real routing runs pass.
+- **E v2 Phase A (zero production traffic cutover):** normal `[build]` Issues continue through the existing `custom-build.yml` production entry. The manual `build-dispatcher.yml` and `build-routing-probe.yml` do not listen for Issue events, and the dispatcher dispatches only the probe, never `custom-build.yml`. A `[route-test]` Issue contains exactly one generated `build-request.json`. The dispatcher snapshots the Issue through the GitHub API and passes that snapshot to `fetch-build-request.mjs` through custom `REQUEST_EVENT_PATH`; body-source precedence is explicit `ISSUE_BODY` → `REQUEST_EVENT_PATH` → GitHub's native `GITHUB_EVENT_PATH`, so workflows never try to overwrite reserved `GITHUB_*` defaults. It then reads only `sourceEnv`, the full 40-character `requestCommit`, and `requestId`, verifies that the remote branch HEAD exactly equals the requested commit, and dispatches a read-only probe on that ref. The probe requires `github.ref_name == sourceEnv`, `github.sha == requestCommit`, and `git rev-parse HEAD == requestCommit`. Phase A never compiles OpenWrt; Phase B must not take over production Issue traffic until these real routing runs pass.
 
 - For a Catalog Target, `arch`, `archPackages`, Target, and Profile identity remain one atomic build contract. Profile-declared packages move to a compact manager: Follow upstream writes nothing, while explicit Include or Exclude writes `y` or `n`. The submitted config is generically checked only before optional Defconfig. A successful upstream `make defconfig` is not subject to project-specific post-validation. `tools/apply-config-overrides.mjs`, `tools/config-overrides.mjs`, and `system-overrides.json` are removed, so the workflow no longer forces `CONFIG_DEVEL` or `CONFIG_BUILD_LOG`.
 

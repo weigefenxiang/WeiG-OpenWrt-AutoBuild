@@ -30,7 +30,11 @@ function readIssueBody() {
   if (typeof process.env.ISSUE_BODY === 'string' && process.env.ISSUE_BODY !== '') {
     return process.env.ISSUE_BODY;
   }
-  const eventPath = String(process.env.GITHUB_EVENT_PATH || '').trim();
+  // Manual dispatchers may point at an immutable Issue snapshot through a custom variable.
+  // GitHub-provided GITHUB_* defaults cannot be overridden, so keep GITHUB_EVENT_PATH as fallback only.
+  const requestEventPath = String(process.env.REQUEST_EVENT_PATH || '').trim();
+  const githubEventPath = String(process.env.GITHUB_EVENT_PATH || '').trim();
+  const eventPath = requestEventPath || githubEventPath;
   if (!eventPath) return '';
   try {
     const event = JSON.parse(readFileSync(eventPath, 'utf8'));
