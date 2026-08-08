@@ -409,6 +409,11 @@ buildIdentityTest.status === 0
   ? ok('build identity: every non-main request is prefixed with one sanitized branch identity')
   : bad('build identity tests', (buildIdentityTest.stderr || buildIdentityTest.stdout || '').trim().slice(0, 500));
 
+const buildRouteTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-build-route.mjs')], { encoding: 'utf8' });
+buildRouteTest.status === 0
+  ? ok('build route: exact branch+40-char commit marker rejects stale/invalid/mismatched identities')
+  : bad('build route tests', (buildRouteTest.stderr || buildRouteTest.stdout || '').trim().slice(0, 500));
+
 const buildDiagnosticsTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-build-diagnostics.mjs')], { encoding: 'utf8' });
 buildDiagnosticsTest.status === 0
   ? ok('build diagnostics: parallel evidence is frozen before isolated 180m single-thread retry')
@@ -792,6 +797,7 @@ mirrorRulesOk
     .filter((entry) => entry.isFile() && /\.ya?ml$/i.test(entry.name))
     .map((entry) => ({ name: entry.name, source: readFileSync(join(workflowDir, entry.name), 'utf8') }));
   const buildWorkflow = readFileSync(join(workflowDir, 'custom-build.yml'), 'utf8');
+  const dispatcherWorkflow = readFileSync(join(workflowDir, 'build-dispatcher.yml'), 'utf8');
   const syncWorkflow = readFileSync(join(workflowDir, 'sync-upstream.yml'), 'utf8');
   const pagesWorkflow = readFileSync(join(workflowDir, 'pages.yml'), 'utf8');
   const ciWorkflow = readFileSync(join(workflowDir, 'ci.yml'), 'utf8');
@@ -1319,12 +1325,18 @@ mirrorRulesOk
   const submitGateContract = html.includes('id="submitBtn" data-i18n="btn.submit" disabled') &&
     js.includes('function submitReadiness()') &&
     js.includes('function updateSubmitGate()') &&
+    js.includes('const identityReady = Boolean(') &&
+    js.includes('BUILD_IDENTITY_MODULE?.normalizeBuildEnvironment') &&
+    js.includes("['identity', Boolean(identityReady && sourceEnv && requestCommit)]") &&
+    js.includes('startCatalogAfterFirstPaint();\n    updateSubmitGate();') &&
+    !js.includes('init();\nupdateSubmitGate();') &&
+    js.trimEnd().endsWith('init();') &&
     js.includes('Waiting for build stages:') &&
     js.includes('if (!readiness.ok) {') &&
     !js.includes('setInterval(updateSubmitGate');
   submitGateContract
-    ? ok('提交门禁:Target/Catalog/menuconfig/theme/recommended/defconfig 阶段就绪后才可提交')
-    : bad('submit readiness gate', '提交按钮未按构建阶段状态禁用或缺少事件驱动门禁');
+    ? ok('提交门禁:异步身份模块就绪后刷新；未就绪时安全禁用，Target/Catalog/menuconfig/theme/recommended/defconfig 就绪后才可提交')
+    : bad('submit readiness gate', '提交按钮的异步身份初始化保护、启动时序或事件驱动门禁不符合约定');
   const failureDiagnosticsContract =
     !buildWorkflow.includes('apply-config-overrides.mjs') &&
     !buildWorkflow.includes('system-overrides.json') &&
@@ -1373,7 +1385,8 @@ mirrorRulesOk
       .replace(/\s*$/, '\n');
     fixtureConfig += 'CONFIG_PACKAGE_dnsmasq=y\nCONFIG_PACKAGE_dnsmasq-full=y\nCONFIG_DROPBEAR_ED25519=y\n';
     const fixtureRequest = {
-      schema: 4, pageVersion: 'v2608062236', requestId: '260807_2114', sourceEnv: 'dev', configId: fixtureId,
+      schema: 4, pageVersion: 'v2608062236', requestId: '260807_2114', sourceEnv: 'dev',
+      requestCommit: '0123456789abcdef0123456789abcdef01234567', configId: fixtureId,
       device: '360t7', source: 'ImmortalWrt', version: 'master', branch: 'master',
       variant: 'qihoo_360t7', plugins: [], tag: 'boundary-fixture', config: fixtureConfig,
       use_defconfig: false,
@@ -1388,10 +1401,17 @@ mirrorRulesOk
       ...process.env, REQUEST_FILE: requestPath, REQUEST_MANIFEST: '',
       SUBMITTED_CONFIG_OUT: submittedPath, RECOMMENDED_AUDIT_OUT: auditPath,
       ISSUE_TITLE: '[build] dev/260807_2114/boundary-fixture/fixture',
+      EXPECTED_REQUEST_BRANCH: 'dev', EXPECTED_REQUEST_COMMIT: '0123456789abcdef0123456789abcdef01234567',
     };
     const accepted = spawnSync(process.execPath, [join(ROOT, 'tools', 'parse-request.mjs')], {
       encoding: 'utf8', env: parserEnv,
     });
+    fixtureRequest.requestCommit = 'fedcba9876543210fedcba9876543210fedcba98';
+    writeFileSync(requestPath, JSON.stringify(fixtureRequest));
+    const identityRejected = spawnSync(process.execPath, [join(ROOT, 'tools', 'parse-request.mjs')], {
+      encoding: 'utf8', env: parserEnv,
+    });
+    fixtureRequest.requestCommit = '0123456789abcdef0123456789abcdef01234567';
     fixtureRequest.config = fixtureConfig.replace(
       'CONFIG_TARGET_mediatek_filogic_DEVICE_qihoo_360t7=y',
       'CONFIG_TARGET_mediatek_filogic_DEVICE_wrong_profile=y');
@@ -1401,27 +1421,37 @@ mirrorRulesOk
     });
     accepted.status === 0 && accepted.stdout.includes('build_ref=260807_2114-boundary-fixture') &&
         accepted.stdout.includes('artifact_ref=dev-260807_2114-boundary-fixture') &&
+        identityRejected.status !== 0 && String(identityRejected.stderr || identityRejected.stdout).includes('实际 Worker 提交不一致') &&
         rejected.status !== 0 && String(rejected.stderr || rejected.stdout).includes('目标设备签名')
-      ? ok('后端边界夹具:不审判插件依赖/HAVE_DOT_CONFIG,但拒绝错误 Target/Profile')
+      ? ok('后端边界夹具:不审判插件依赖/HAVE_DOT_CONFIG,但拒绝 Worker 身份错配与错误 Target/Profile')
       : bad('backend config boundary fixture',
-        `accepted=${accepted.status}, rejected=${rejected.status}, ${(accepted.stderr || rejected.stderr || '').slice(0, 220)}`);
+        `accepted=${accepted.status}, identity=${identityRejected.status}, rejected=${rejected.status}, ${(accepted.stderr || identityRejected.stderr || rejected.stderr || '').slice(0, 220)}`);
   } catch (error) {
     bad('backend config boundary fixture', error.message.slice(0, 300));
   } finally {
     rmSync(backendBoundaryFixtureRoot, { recursive: true, force: true });
   }
-  const issueOnlyBuildContract = !buildWorkflow.includes('workflow_dispatch:') &&
-    !buildWorkflow.includes('repository_dispatch:') &&
-    !buildWorkflow.includes('client_payload') &&
+  const branchAwareBuildContract = buildWorkflow.includes('workflow_dispatch:') &&
+    !buildWorkflow.includes('\n  issues:\n    types: [opened]') &&
+    dispatcherWorkflow.includes('issues:') && dispatcherWorkflow.includes('types: [opened]') &&
+    dispatcherWorkflow.includes("workflow_id: 'custom-build.yml'") && dispatcherWorkflow.includes('ref: branch') &&
+    dispatcherWorkflow.includes('tools/parse-build-route.mjs') && dispatcherWorkflow.includes('repos.getBranch') &&
+    dispatcherWorkflow.includes('inputs: workerInputs') && dispatcherWorkflow.includes('ISSUE_BODY: ${{ github.event.issue.body }}') &&
+    buildWorkflow.includes('WORKFLOW_BRANCH: ${{ github.ref_name }}') && buildWorkflow.includes('WORKFLOW_COMMIT: ${{ github.sha }}') &&
+    buildWorkflow.includes('workflowBranch !== requestBranch || workflowCommit !== requestCommit') &&
+    buildWorkflow.includes('ref: ${{ inputs.request_commit }}') &&
+    buildWorkflow.includes('ISSUE_BODY: ${{ inputs.issue_body }}') &&
+    buildWorkflow.includes('EXPECTED_REQUEST_BRANCH: ${{ inputs.request_branch }}') &&
+    buildWorkflow.includes('EXPECTED_REQUEST_COMMIT: ${{ inputs.request_commit }}') &&
+    !buildWorkflow.includes('repository_dispatch:') && !buildWorkflow.includes('client_payload') &&
     !existsSync(join(ROOT, '.github', 'workflows', 'smoke-all.yml')) &&
     !existsSync(join(ROOT, 'tools', 'build-config.mjs')) &&
     parser.includes('仅支持网页生成的 build-request.json') &&
-    !parser.includes('smoke-internal') &&
-    !parser.includes('IN_DEVICE') &&
+    !parser.includes('smoke-internal') && !parser.includes('IN_DEVICE') &&
     !buildWorkflow.includes('authoritative_config');
-  issueOnlyBuildContract
-    ? ok('构建入口:仅接受网页生成的 Issue 权威附件，旧 smoke 生成链已删除')
-    : bad('build entrypoint', '仍残留 repository_dispatch、smoke workflow 或旧配置生成器');
+  branchAwareBuildContract
+    ? ok('构建入口:main Dispatcher 仅路由，custom-build Worker 按 request branch+commit 精确执行')
+    : bad('build entrypoint', 'Dispatcher/Worker 精确版本契约缺失，或残留旧 dispatch/smoke 配置生成链');
   const driftSentinelContract = driftSentinel.includes("const forbidden = ['lede-17.01', 'pcs-standalone-back', 'master'];") &&
     driftSentinel.includes("names.has('main')") && !driftSentinel.includes('360T7') &&
     !driftSentinel.includes('qihoo_360t7') && !syncWorkflow.includes('360T7');
@@ -1433,6 +1463,7 @@ mirrorRulesOk
   const previewServer = readFileSync(join(ROOT, 'tools', 'serve.mjs'), 'utf8');
   const previewBatOk = !previewBatBytes.some((byte) => byte > 0x7f) &&
     !/(?<!\r)\n/.test(previewBat) &&
+    previewBat.includes('node tools\\prepare-web-deployment.mjs') &&
     previewBat.includes('node tools\\serve.mjs site\\wrt 8642 --interactive') &&
     previewBat.includes('if "%SERVER_EXIT%"=="0" goto local_return') &&
     previewBat.includes(':local_return') && previewBat.includes('goto menu') &&
@@ -1691,6 +1722,8 @@ mirrorRulesOk
   const issueForm = readFileSync(join(ROOT, '.github', 'ISSUE_TEMPLATE', 'custom-build.yml'), 'utf8');
   const workflow = readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8')
     .replace(/\r\n/g, '\n');
+  const dispatcher = readFileSync(join(ROOT, '.github', 'workflows', 'build-dispatcher.yml'), 'utf8')
+    .replace(/\r\n/g, '\n');
   const issueRequestReader = readFileSync(join(ROOT, 'tools', 'fetch-build-request.mjs'), 'utf8');
   const cancelWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'cancel-build.yml'), 'utf8')
     .replace(/\r\n/g, '\n');
@@ -1714,6 +1747,8 @@ mirrorRulesOk
     ? ok('Issue attachment → submitted.config → openwrt/.config 权威链路已接通')
     : bad('Issue attachment contract', `Issue 表单或 workflow 关键链路缺失；字段=${issueFieldIds.join(',') || '(无)'}`);
   const mobileIssueContract = js.includes('function mobileIssuePayload') &&
+    js.includes("params.set('request', request)") &&
+    js.includes('buildIssueRequestPrefill') &&
     js.includes('WEIG_BUILD_REQUEST_GZIP_BASE64') &&
     issueRequestReader.includes('WEIG_BUILD_REQUEST_GZIP_BASE64') &&
     issueRequestReader.includes('gunzipSync') && workflow.includes('mobile request');
@@ -1727,7 +1762,9 @@ mirrorRulesOk
     buildIdentitySource.includes('artifactBuildRef') && buildIdentitySource.includes('buildIssueRequestPrefix') &&
     buildMetaGenerator.includes('process.env.CF_PAGES_BRANCH') && buildMetaGenerator.includes('branch: resolveBranch') &&
     js.includes('BUILD_IDENTITY_MODULE.buildIssueRequestPrefix(sourceEnv)') &&
-    js.includes('requestId: requestStamp') && js.includes('sourceEnv,') && js.includes('requestCommit: String(state.buildMeta?.commit') &&
+    js.includes('requestId: requestStamp') && js.includes('sourceEnv,') && js.includes('requestCommit,') &&
+    buildIdentitySource.includes('buildRequestRouteMarker') && buildIdentitySource.includes('parseBuildRequestRouteMarker') &&
+    js.includes('BUILD_IDENTITY_MODULE.buildRequestRouteMarker(sourceEnv, requestCommit)') &&
     requestParser.includes('parseBuildIssueTitleIdentity') && requestParser.includes('buildEnvironmentIdentity') &&
     requestParser.includes('artifact_ref=${artifactRef}') && requestParser.includes('request_commit=${requestCommit}') &&
     workflow.includes('artifact_ref: ${{ steps.req.outputs.artifact_ref }}') &&
@@ -1744,11 +1781,14 @@ mirrorRulesOk
     ? ok('build identity: main stays unprefixed; every non-main branch shares one Issue/Action/Artifact identity rule')
     : bad('build identity contract', 'main/non-main 分支身份、请求 commit、Issue 标题或 Artifact 命名没有共用统一规则');
   const issueEventBodyContract = issueRequestReader.includes('GITHUB_EVENT_PATH') &&
-    issueRequestReader.includes("event.issue?.body") &&
+    issueRequestReader.includes("event.issue?.body") && issueRequestReader.includes('process.env.ISSUE_BODY') &&
+    dispatcher.includes('ISSUE_BODY: ${{ github.event.issue.body }}') &&
+    dispatcher.includes('issue_body: issueBody') &&
+    workflow.includes('ISSUE_BODY: ${{ inputs.issue_body }}') &&
     workflow.includes("if: always() && steps.req.outcome == 'success'");
   issueEventBodyContract
-    ? ok('Issue 事件正文从 GITHUB_EVENT_PATH 读取，解析失败前不上传空 CONFIG artifact')
-    : bad('Issue event payload contract', '事件正文回退或 CONFIG artifact 门禁缺失');
+    ? ok('Issue 创建时正文快照由 Dispatcher 传入 Worker；fetch helper 仍保留事件文件回退')
+    : bad('Issue event payload contract', 'Dispatcher 正文快照、Worker 注入、事件正文回退或 CONFIG artifact 门禁缺失');
   const issueEventFixtureRoot = mkdtempSync(join(tmpdir(), 'weig-issue-event-body-'));
   try {
     const requestText = JSON.stringify({
@@ -1818,7 +1858,7 @@ mirrorRulesOk
       obsoleteArtifactContract.every((token) => !requestParser.includes(token))
     ? ok('Actions 独立 .img.gz、分类资料、桥接清理与 14/30 天保留期已接通')
     : bad('Actions artifact contract', '独立固件发布、分类、清理或旧产物链仍有问题');
-  const firmwareSettingsContract = workflow.includes('ISSUE_TITLE: ${{ github.event.issue.title }}') &&
+  const firmwareSettingsContract = workflow.includes('ISSUE_TITLE: ${{ inputs.issue_title }}') &&
     workflow.includes('Apply package mirror / 应用软件包镜像（APK/OPKG）') &&
     workflow.includes('Verify firmware settings / 核验固件设置') &&
     workflow.includes('package-mirror-report.json') &&
@@ -1873,7 +1913,7 @@ mirrorRulesOk
     : bad('Actions live log contract', '动态并发、逐行 tee、单次下载、失败诊断或旧过滤清理不完整');
   const buildLimitContract = workflow.includes('MAX_BUILDS_PER_USER') &&
     workflow.includes('Build admission refused') &&
-    workflow.includes('const requester = context.payload.issue.user.login;') &&
+    workflow.includes('const requester = process.env.REQUESTER;') &&
     workflow.includes('const isRepositoryOwner = requester.toLowerCase() === context.repo.owner.toLowerCase();') &&
     workflow.includes('`owner-${context.runId}`') &&
     workflow.includes('Repository owner build admitted without queue') &&
@@ -1884,8 +1924,9 @@ mirrorRulesOk
     cancelWorkflow.includes('issue_comment:') &&
     cancelWorkflow.includes("['/cancel', '/cancel-build']") &&
     cancelWorkflow.includes('commenter.toLowerCase() !== requester.toLowerCase()') &&
-    cancelWorkflow.includes('cancelWorkflowRun') &&
-    cancelWorkflow.includes('force-cancel');
+    !workflow.includes('actor: requester') && workflow.includes("run.event === 'workflow_dispatch'") &&
+    cancelWorkflow.includes("'build-dispatcher.yml'") && cancelWorkflow.includes("'custom-build.yml'") &&
+    cancelWorkflow.includes('cancelWorkflowRun') && cancelWorkflow.includes('force-cancel');
   buildLimitContract
     ? ok('仓库主免排队、每用户构建上限、Issue 自助取消与强制取消兜底已接通')
     : bad('per-user build control', '仓库主绕过、准入上限、分槽并发或 Issue 作者取消链路缺失');
@@ -2153,7 +2194,7 @@ mirrorRulesOk
     js.includes('function selectedTargetProfileLabel') &&
     js.includes('function requestTargetProfilePart') &&
     js.includes('BUILD_IDENTITY_MODULE.buildIssueRequestPrefix(sourceEnv)') &&
-    js.includes('requestId: requestStamp') && js.includes('sourceEnv,') && js.includes('requestCommit: String(state.buildMeta?.commit') &&
+    js.includes('requestId: requestStamp') && js.includes('sourceEnv,') && js.includes('requestCommit,') &&
     js.includes("const filename = [requestStamp, requestTargetProfilePart(true), safeDownloadNamePart(state.source.id, 'source')");
   selfTestContract
     ? ok('网页自检使用 Catalog/上传配置与真实 .config 生成演算')

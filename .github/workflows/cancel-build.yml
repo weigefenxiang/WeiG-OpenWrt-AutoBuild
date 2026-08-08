@@ -35,34 +35,74 @@ jobs:
               });
               return;
             }
-            const list = async (status) => (await github.rest.actions.listWorkflowRuns({
-              owner, repo, workflow_id: 'custom-build.yml', actor: requester, status, per_page: 100,
-            })).data.workflow_runs;
-            const active = [...await list('queued'), ...await list('in_progress')]
-              .filter((run) => run.event === 'issues' && run.display_title === issue.title);
-            if (!active.length) {
+
+            // Close first so a dispatcher/worker that is racing with this command fails its live Issue guard.
+            await github.rest.issues.update({
+              owner, repo, issue_number: issue.number, state: 'closed', state_reason: 'not_planned',
+            });
+
+            const prefixes = new Map([
+              ['build-dispatcher.yml', `Dispatch ${requester}#${issue.number} ·`.toLowerCase()],
+              ['custom-build.yml', `Build ${requester}#${issue.number} ·`.toLowerCase()],
+            ]);
+            const activeStatuses = new Set(['queued', 'in_progress', 'waiting', 'pending', 'requested']);
+            const findActive = async () => {
+              const runs = [];
+              for (const [workflowId, prefix] of prefixes) {
+                const { data } = await github.rest.actions.listWorkflowRuns({
+                  owner, repo, workflow_id: workflowId, per_page: 100,
+                });
+                runs.push(...data.workflow_runs.filter((run) =>
+                  activeStatuses.has(run.status) &&
+                  String(run.display_title || '').toLowerCase().startsWith(prefix)));
+              }
+              return [...new Map(runs.map((run) => [String(run.id), run])).values()];
+            };
+
+            const cancelled = new Map();
+            const cancelRuns = async (runs) => {
+              for (const run of runs) {
+                if (cancelled.has(String(run.id))) continue;
+                try {
+                  await github.rest.actions.cancelWorkflowRun({ owner, repo, run_id: run.id });
+                  cancelled.set(String(run.id), run.html_url);
+                } catch (error) {
+                  if ([404, 409, 422].includes(error.status)) {
+                    core.notice(`Run ${run.id} became non-cancellable before the request completed.`);
+                    continue;
+                  }
+                  throw error;
+                }
+              }
+            };
+
+            await cancelRuns(await findActive());
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+            await cancelRuns(await findActive());
+
+            if (!cancelled.size) {
               await github.rest.issues.createComment({
                 owner, repo, issue_number: issue.number,
-                body: `@${requester}\n\nℹ️ 没有找到可取消的排队中或运行中的构建。`,
+                body: `@${requester}\n\nℹ️ 没有找到可取消的排队中或运行中的构建；Issue 已关闭，新的 Dispatcher/Worker 也会被身份门禁阻止。`,
               });
               return;
             }
-            const cancelled = [];
-            for (const run of active) {
-              await github.rest.actions.cancelWorkflowRun({ owner, repo, run_id: run.id });
-              await new Promise((resolve) => setTimeout(resolve, 15000));
-              const { data: latest } = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: run.id });
+
+            await new Promise((resolve) => setTimeout(resolve, 12000));
+            for (const runId of cancelled.keys()) {
+              const { data: latest } = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: Number(runId) });
               if (latest.status !== 'completed') {
-                await github.request('POST /repos/{owner}/{repo}/actions/runs/{run_id}/force-cancel', {
-                  owner, repo, run_id: run.id,
-                });
+                try {
+                  await github.request('POST /repos/{owner}/{repo}/actions/runs/{run_id}/force-cancel', {
+                    owner, repo, run_id: Number(runId),
+                  });
+                } catch (error) {
+                  if (![404, 409, 422].includes(error.status)) throw error;
+                  core.notice(`Run ${runId} completed before force-cancel was applied.`);
+                }
               }
-              cancelled.push(run.html_url);
             }
             await github.rest.issues.createComment({
               owner, repo, issue_number: issue.number,
-              body: `@${requester}\n\n🛑 已请求取消构建：${cancelled.join('、')}\n\n任务将停止；若普通取消未在约 15 秒内完成，系统已自动改用强制取消。`,
-            });
-            await github.rest.issues.update({
-              owner, repo, issue_number: issue.number, state: 'closed', state_reason: 'not_planned',
+              body: `@${requester}\n\n🛑 已请求取消构建：${[...cancelled.values()].join('、')}\n\n任务将停止；若普通取消未及时完成，系统已自动改用强制取消。`,
             });

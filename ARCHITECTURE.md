@@ -18,8 +18,9 @@
 ├─ ARCHITECTURE.md               # 本文档 / this document
 ├─ README.md + translations/     # 多语言说明 / multilingual READMEs
 ├─ .github/workflows/
-│  ├─ custom-build.yml           # Issue 附件权威构建 / authoritative Issue-attachment build
-│  └─ cancel-build.yml           # Issue 作者 /cancel 取消自己的构建 / Issue-author-only build cancellation
+│  ├─ build-dispatcher.yml      # 默认分支 Issue 路由器 / default-branch Issue dispatcher
+│  ├─ custom-build.yml           # branch+commit 精确 Worker / exact branch+commit build worker
+│  └─ cancel-build.yml           # Issue 作者 /cancel 取消 Dispatcher/Worker / Issue-author-only cancellation
 ├─ config/<品牌>/<机型>/          # base 配置,按品牌分层 / base configs, grouped by brand
 │  └─ 360/360t7/*.config         # 360T7 源码/分支/Profile 独立配置 / per-source, branch and profile configs
 ├─ Shell/                        # diy 脚本 + 通用软件包镜像框架 / diy scripts + shared package-mirror framework
@@ -50,7 +51,8 @@
    ├─ gen-i18n.mjs               # 词条校验合并 → i18n.json / validate & merge strings
    ├─ gen-seed-configs.mjs       # 机型目录 → 版本化 Profile config / catalog → versioned profile configs
    ├─ fetch-build-request.mjs    # 下载并限制 GitHub Issue 附件 / fetch allowlisted GitHub Issue attachment
-   ├─ parse-request.mjs          # 载荷、安全白名单、Target/Profile 身份与 Catalog 版本契约 / payload, safety allowlists, Target/Profile identity, and Catalog version contract
+   ├─ parse-build-route.mjs      # 只解析 branch+40 位 commit 路由 / parses only branch+40-char commit route
+   ├─ parse-request.mjs          # Worker 内载荷、安全白名单、身份与 Catalog 契约 / worker payload, allowlists, identity and Catalog contract
    ├─ check-text-format.mjs      # 变更文本 LF/CRLF/BOM/EOF 门禁 / changed-text LF/CRLF/BOM/EOF gate
    ├─ sync-blog.mjs              # 当前树或 exact ref → 博客 source/wrt + WRT 源身份 / current tree or exact ref → blog mirror + source identity
    ├─ promote-release.mjs        # dev→staging→main FF-only 晋级事务 / FF-only exact promotion transaction
@@ -61,7 +63,7 @@
    └─ serve.mjs                  # 本地静态服务器 / local static server
 ```
 
-Build environment identity is deployment metadata, not application configuration. `build-meta.branch` is generated from the deployment branch; `site/wrt/lib/build-identity.js` is the single naming authority shared by the browser and request parser. Only `dev` and `staging` add prefixes to `[build]` Action titles and Artifact names; `main` remains unprefixed. No hostname or provider-specific branch detection belongs in `app.js`.
+Build environment identity is deployment metadata, not application configuration. `build-meta.branch` is generated from the deployment branch; `site/wrt/lib/build-identity.js` is the single naming and route-marker authority shared by the browser and Node tools. Every non-`main` request adds its sanitized branch identity to `[build]` titles and Artifact names; `main` remains unprefixed. Cloud-build submission additionally requires an exact 40-character deployment commit. No hostname, provider, or named-branch special case belongs in `app.js`.
 
 ## 数据流 / Data flow
 
@@ -69,6 +71,10 @@ Build environment identity is deployment metadata, not application configuration
 config/*.config + plugins-meta.json + plugin-sizes.json ──gen-plugins──▶ site/wrt/data/seed/plugins.json + 360t7/{plugins,packages}.json
 i18n-source.json + i18n-translations.json ──gen-i18n──▶ site/wrt/data/i18n.json
 上游分支 makefile ──fetch-catalog──▶ 分支/Profile 目录 ──gen-seed-configs──▶ devices.json + 独立种子 config
+
+网页提交云编译时把 `sourceEnv + requestCommit` 同时写入 `build-request.json`，并在 Issue 的唯一请求字段中预填 `WEIG_BUILD_ROUTE_V1` 隐藏标记。Issue `opened` 事件只进入默认分支 `build-dispatcher.yml`；Dispatcher 只解析路由身份、确认请求 branch 存在且 HEAD 仍等于请求 commit，然后以 `workflow_dispatch(ref=request_branch)` 调用 `custom-build.yml`。Worker 启动后再次要求 `GITHUB_REF_NAME/GITHUB_SHA == request branch/commit`，checkout 也固定到同一 commit，`parse-request.mjs` 再核对 JSON 的 `sourceEnv/requestCommit` 与 Worker 输入一致。任何 branch 不存在、非法、HEAD 已前进、路由/JSON/Worker 身份不一致都直接阻止，不会静默使用新 HEAD。Issue 创建时正文由 Dispatcher 作为快照传入 Worker；`/cancel` 先关闭 Issue，再取消同一 Issue 的 Dispatcher/Worker，关闭状态同时阻断竞态派发。Local Preview 启动前用现有 `prepare-web-deployment.mjs` 生成 gitignored `build-meta.json`；无 Git 的静态副本仍可浏览，但不会伪造可提交的 branch/commit 身份。
+
+For cloud builds, the page writes both `sourceEnv` and `requestCommit` to `build-request.json` and pre-fills one hidden `WEIG_BUILD_ROUTE_V1` marker in the Issue request field. The default-branch `build-dispatcher.yml` is the only `issues: opened` entry; it validates that the requested branch still exists at the exact requested commit, then dispatches `custom-build.yml` with `ref=request_branch`. The Worker independently verifies `GITHUB_REF_NAME/GITHUB_SHA`, checks out the same commit, and requires the JSON route identity to match its dispatch inputs. Missing/invalid branches, stale HEADs, or marker/JSON/Worker mismatches are blocked rather than silently building a newer revision. The Dispatcher forwards the original Issue-body snapshot, and cancellation closes the Issue before cancelling both Dispatcher and Worker to close the race window. Local Preview prepares gitignored deployment metadata from the current Git checkout; a source archive without Git remains viewable but cannot invent a cloud-build identity.
 独立 WeiG-OpenWrt-Menuconfig-Catalog 按清单扫描 ImmortalWrt、OpenWrt、Lean LEDE 与 hanwckf 兼容源的 Config.in/.targetinfo/.packageinfo ──▶ 按 Kconfig symbol 合并声明并发布 Target、菜单、隐藏项、必需依赖、choice/select/conflict/provides 与反向索引 ──▶ `site/wrt/lib/catalog-engine.js` 在浏览器和 Node 中解释同一份 Catalog。`app.js` 的 `applyCatalogIntent()` 仅把用户 N/M/Y 操作交给引擎并同步 UI，不包含插件名或语言包特例。启用项目时只递归补齐能够唯一确定的强依赖和 `select`；关闭依赖时递归关闭失效依赖者；关闭项目时清理仅由自动依赖层带入、已无使用者且未被基础/推荐/导入/用户层保护的孤立依赖。`imply`、多 provider 和 deferred 条件不由网页猜测。后端不再用 Catalog 扫描整份 `.config` 的插件依赖、choice 或冲突；仅保留请求安全白名单、固定 Catalog/源码版本契约以及最小 Target/Profile 身份核对。用户勾选时运行官方 `make defconfig`，未勾选时直接采用提交配置；两种路径都不再写入 `CONFIG_DEVEL`/`CONFIG_BUILD_LOG`。Profile 软件包只作为 Catalog 可读列表展示，默认“跟随上游”不写显式值，用户可逐项加入或排除。网页仍按固定提交/hash/bytes 校验和加载 Catalog 分片，VPS 不保存 Catalog。
 
 Catalog 交互只报告本次操作产生的直接冲突，不再把整份配置的 `violations` 通过全局 Toast 展开。结构化 `CatalogIntentError` 交给网页主题冲突框，用户可在冲突项间选择最终 N/M/Y，再一次应用切换。顶部 Target 定位、“当前构建契约”和构建控制位于同一卡片；桌面默认严格一行三段：左侧定位框缩窄且用 `… Subtarget / Target Profile` 保留辨识度更高的尾部提示，中间契约保持原折叠标题，右侧 `推荐项/配置/Defconfig/Selected only/来源` 位于契约边框之外并整组不换行。契约展开后详情横跨整行，以 Source/Branch、Target/Subtarget、Profile/Packages、Catalog/Architecture 两列展示。导入器先严格 `JSON.parse`，仅对具有 WeiG schema/pageVersion/config/use_defconfig 特征的旧版损坏 JSON 安全恢复内嵌 `.config` 引号，不使用 `eval`，成功后提示重新导出标准 JSON。推荐项“配置”按钮保持固定位置，关闭推荐项时可见但禁用。

@@ -103,6 +103,14 @@ if errorlevel 1 (
   exit /b 1
 )
 
+node tools\prepare-web-deployment.mjs
+if errorlevel 1 (
+  echo [ERROR] Could not prepare local build metadata.
+  if not "%~1"=="" exit /b 1
+  pause
+  goto menu
+)
+
 powershell -NoProfile -Command "try { $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/index.html'; $e=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-engine.js'; $l=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-loader.js'; $s=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-schema6.js'; $w=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-search-worker.js'; if ($r.StatusCode -eq 200 -and $r.Content -match 'menuconfigBox' -and $e.Headers['Content-Type'] -match 'javascript' -and $l.Headers['Content-Type'] -match 'javascript' -and $s.Headers['Content-Type'] -match 'javascript' -and $w.Headers['Content-Type'] -match 'javascript') { exit 0 } } catch {}; exit 1"
 if not errorlevel 1 (
   start "" "http://localhost:8642"

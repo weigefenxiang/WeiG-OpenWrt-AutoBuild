@@ -578,7 +578,7 @@ async function init() {
       import('./lib/catalog-engine.js?v=9f03d1396d'),
       import('./lib/catalog-loader.js?v=e1801742f9'),
       import('./lib/catalog-schema6.js?v=0a165903c2'),
-      import('./lib/build-identity.js?v=3509184d42'),
+      import('./lib/build-identity.js?v=cc4907d8bf'),
     ]);
     I18N = await loadJson('i18n.json');
     state.lang = pickLang();
@@ -639,6 +639,7 @@ async function init() {
     $('actionbar').hidden = false;
     if (localStorage.getItem('wrt_risk') !== 'ok') $('riskBar').hidden = false;
     startCatalogAfterFirstPaint();
+    updateSubmitGate();
   } catch (err) {
     $('loading').textContent = (I18N ? t('loading.fail', { msg: err.message }) : '加载失败: ' + err.message);
   }
@@ -5673,14 +5674,21 @@ let lastFocus = null;
 let modalCancelHandler = null;
 const MOBILE_ISSUE_URL_LIMIT = 6000;
 const mobileIssueClient = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
-function issueSubmitUrl(repo, title, body = '') {
+function issueSubmitUrl(repo, title, request = '') {
   const params = new URLSearchParams({ template: 'custom-build.yml', title });
-  if (body) params.set('body', body);
+  if (request) params.set('request', request);
   return 'https://github.com/' + repo + '/issues/new?' + params;
 }
 function submitReadiness() {
   const isCatalog = state.device?.id === 'catalog-target';
+  const identityReady = Boolean(
+    BUILD_IDENTITY_MODULE?.normalizeBuildEnvironment &&
+    BUILD_IDENTITY_MODULE?.normalizeBuildCommit
+  );
+  const sourceEnv = identityReady ? BUILD_IDENTITY_MODULE.normalizeBuildEnvironment(state.buildMeta?.branch) : '';
+  const requestCommit = identityReady ? BUILD_IDENTITY_MODULE.normalizeBuildCommit(state.buildMeta?.commit) : '';
   const checks = [
+    ['identity', Boolean(identityReady && sourceEnv && requestCommit)],
     ['target', Boolean(state.device && state.source && state.version && state.variant)],
     ['catalog', !isCatalog || Boolean(MENU_CATALOG && catalogLoadMode === 'idle')],
     ['menuconfig', !isCatalog || Boolean(MENU_CATALOG && menuOptionBySymbol.size)],
@@ -5709,11 +5717,17 @@ async function mobileIssuePayload(payload) {
     new Blob([raw]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
   let binary = '';
   for (let i = 0; i < zipped.length; i += 0x4000) binary += String.fromCharCode(...zipped.subarray(i, i + 0x4000));
-  const body = '<!-- WEIG_BUILD_REQUEST_GZIP_BASE64\n' + btoa(binary) + '\n-->';
-  if (encodeURIComponent(body).length > MOBILE_ISSUE_URL_LIMIT) {
+  return '<!-- WEIG_BUILD_REQUEST_GZIP_BASE64\n' + btoa(binary) + '\n-->';
+}
+async function buildIssueRequestPrefill(payload, sourceEnv, requestCommit) {
+  const routeMarker = BUILD_IDENTITY_MODULE.buildRequestRouteMarker(sourceEnv, requestCommit);
+  if (!routeMarker) throw new Error('当前网页缺少有效的分支/提交身份，请刷新已部署页面或使用带 Git 元数据的本地预览');
+  const inlineRequest = await mobileIssuePayload(payload);
+  const request = [routeMarker, inlineRequest].filter(Boolean).join('\n\n');
+  if (mobileIssueClient() && encodeURIComponent(request).length > MOBILE_ISSUE_URL_LIMIT) {
     throw new Error('手机请求过大，请用浏览器上传刚下载的 JSON 文件');
   }
-  return body;
+  return request;
 }
 function openModal(title) {
   $('modalTitle').textContent = title;
@@ -5773,6 +5787,7 @@ function openSubmitModal() {
   Object.assign(state, firmware);
   const requestStamp = localStamp();
   const sourceEnv = BUILD_IDENTITY_MODULE.normalizeBuildEnvironment(state.buildMeta?.branch);
+  const requestCommit = BUILD_IDENTITY_MODULE.normalizeBuildCommit(state.buildMeta?.commit);
   const titleTag = safeDownloadNamePart(tag, 'anonymous');
   const title = '[build] ' + BUILD_IDENTITY_MODULE.buildIssueRequestPrefix(sourceEnv) + requestStamp + '/' + titleTag + '/' + requestTargetProfilePart() + '/' + state.source.id + '/' + state.version.id + '/' + selectedTargetProfileName();
 
@@ -5826,7 +5841,7 @@ function openSubmitModal() {
           generatedAt: new Date().toISOString(),
           requestId: requestStamp,
           sourceEnv,
-          requestCommit: String(state.buildMeta?.commit || ''),
+          requestCommit,
           pageVersion: state.siteVersion,
           configId: [state.device.id, state.source.id, state.version.id, state.variant.id].join('/'),
           device: state.device.id, source: state.source.id, version: state.version.id,
@@ -5842,7 +5857,7 @@ function openSubmitModal() {
         const filename = [requestStamp, requestTargetProfilePart(true), safeDownloadNamePart(state.source.id, 'source'),
           safeDownloadNamePart(state.version.id, 'branch'), safeDownloadNamePart(selectedTargetProfileName())].join('-') + '.json';
         downloadBlob(JSON.stringify(payload, null, 2) + '\n', 'application/json;charset=utf-8', filename);
-        const issueUrl = issueSubmitUrl(repo, title, await mobileIssuePayload(payload));
+        const issueUrl = issueSubmitUrl(repo, title, await buildIssueRequestPrefill(payload, sourceEnv, requestCommit));
         const issueWindow = window.open(issueUrl, '_blank');
         if (issueWindow) issueWindow.opener = null;
         else window.location.assign(issueUrl);
@@ -6096,4 +6111,3 @@ $('themeBtn').addEventListener('click', () => {
 applyTheme(themeMode);
 
 init();
-updateSubmitGate();
