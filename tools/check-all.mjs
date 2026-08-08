@@ -406,7 +406,7 @@ try {
 
 const buildIdentityTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-build-identity.mjs')], { encoding: 'utf8' });
 buildIdentityTest.status === 0
-  ? ok('build identity: every non-main request is prefixed with one sanitized branch identity')
+  ? ok('build identity: branch naming + full commit + fresh deployment identity validation matrix')
   : bad('build identity tests', (buildIdentityTest.stderr || buildIdentityTest.stdout || '').trim().slice(0, 500));
 
 const buildRequestIdentityTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-build-request-identity.mjs')], { encoding: 'utf8' });
@@ -1326,9 +1326,10 @@ mirrorRulesOk
     js.includes('function updateSubmitGate()') &&
     js.includes('Waiting for build stages:') &&
     js.includes('if (!readiness.ok) {') &&
+    js.includes("['identity', Boolean(state.buildMeta && state.buildMeta.version === state.siteVersion") &&
     !js.includes('setInterval(updateSubmitGate');
   submitGateContract
-    ? ok('提交门禁:Target/Catalog/menuconfig/theme/recommended/defconfig 阶段就绪后才可提交')
+    ? ok('提交门禁:Target/Catalog/menuconfig/theme/recommended/defconfig/deployment identity 阶段就绪后才可提交')
     : bad('submit readiness gate', '提交按钮未按构建阶段状态禁用或缺少事件驱动门禁');
   const failureDiagnosticsContract =
     !buildWorkflow.includes('apply-config-overrides.mjs') &&
@@ -1424,40 +1425,45 @@ mirrorRulesOk
   }
   const dispatcherWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'build-dispatcher.yml'), 'utf8');
   const routingProbeWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'build-routing-probe.yml'), 'utf8');
-  const buildEntrypointContract = buildWorkflow.includes('issues:') && buildWorkflow.includes('workflow_dispatch:') &&
+  const buildEntrypointContract =
+    dispatcherWorkflow.includes('\n  issues:\n') && dispatcherWorkflow.includes('types: [opened]') &&
+    dispatcherWorkflow.includes('workflow_dispatch:') &&
+    buildWorkflow.includes('workflow_dispatch:') && !buildWorkflow.includes('\n  issues:\n') &&
     !buildWorkflow.includes('repository_dispatch:') && !buildWorkflow.includes('client_payload') &&
     !existsSync(join(ROOT, '.github', 'workflows', 'smoke-all.yml')) &&
     !existsSync(join(ROOT, 'tools', 'build-config.mjs')) &&
     parser.includes('仅支持网页生成的 build-request.json') &&
     !parser.includes('smoke-internal') && !parser.includes('IN_DEVICE') && !buildWorkflow.includes('authoritative_config');
   buildEntrypointContract
-    ? ok('build entrypoint: stable Issue build path remains and legacy smoke generators stay retired')
-    : bad('build entrypoint', 'stable Issue entry or retired legacy build paths regressed');
+    ? ok('build entrypoint: [build] Issue enters the stable Dispatcher once; custom-build is exact-ref workflow_dispatch Worker only')
+    : bad('build entrypoint', 'production Issue routing or single exact-ref Worker entrypoint regressed');
 
-  const routingCanaryContract =
-    dispatcherWorkflow.includes('workflow_dispatch:') &&
-    !dispatcherWorkflow.includes('\n  issues:\n') &&
-    dispatcherWorkflow.includes('default: probe') &&
-    dispatcherWorkflow.includes('          - probe') &&
-    dispatcherWorkflow.includes('          - build-canary') &&
-    dispatcherWorkflow.includes('Run this dispatcher from ${expected}, not ${actual}.') &&
+  const routingProductionContract =
+    dispatcherWorkflow.includes("github.event_name == 'workflow_dispatch' || startsWith(github.event.issue.title, '[build]')") &&
+    dispatcherWorkflow.includes("github.event_name == 'issues' && 'build' || inputs.mode") &&
+    dispatcherWorkflow.includes("!['build', 'probe', 'build-canary'].includes(mode)") &&
+    dispatcherWorkflow.includes("mode === 'build' && context.eventName !== 'issues'") &&
+    dispatcherWorkflow.includes("mode !== 'build' && context.eventName !== 'workflow_dispatch'") &&
     dispatcherWorkflow.includes("mode === 'build-canary' && context.actor.toLowerCase() !== context.repo.owner.toLowerCase()") &&
+    dispatcherWorkflow.includes("issue = context.payload.issue") &&
     dispatcherWorkflow.includes("const requiredPrefix = mode === 'probe' ? '[route-test]' : '[build]'") &&
     dispatcherWorkflow.includes('tools/fetch-build-request.mjs') &&
     dispatcherWorkflow.includes('REQUEST_EVENT_PATH: ${{ github.workspace }}/dispatcher-event.json') &&
     !dispatcherWorkflow.includes('GITHUB_EVENT_PATH: ${{ github.workspace }}/dispatcher-event.json') &&
     dispatcherWorkflow.includes('tools/parse-build-request-identity.mjs') &&
-    dispatcherWorkflow.includes('ISSUE_TITLE: ${{ steps.issue.outputs.title }}') &&
     dispatcherWorkflow.includes('currentIssue.title !== process.env.ISSUE_TITLE') &&
     dispatcherWorkflow.includes("String(currentIssue.body || '') !== issueBody") &&
     dispatcherWorkflow.includes("workflow_id: 'build-routing-probe.yml'") &&
     dispatcherWorkflow.includes("workflow_id: 'custom-build.yml'") &&
+    dispatcherWorkflow.includes("mode === 'build' || mode === 'build-canary'") &&
     dispatcherWorkflow.includes('issue_body: issueBody') &&
     dispatcherWorkflow.includes('issue_created_at: process.env.ISSUE_CREATED_AT') &&
     dispatcherWorkflow.includes('request_branch: branch') &&
     dispatcherWorkflow.includes('request_commit: commit') &&
     dispatcherWorkflow.includes('if (bytes > 60000)') &&
     dispatcherWorkflow.includes('ref: branch') &&
+    dispatcherWorkflow.includes("if: failure() && github.event_name == 'issues'") &&
+    dispatcherWorkflow.includes('Worker 未启动') &&
     routingProbeWorkflow.includes('workflow_dispatch:') &&
     !routingProbeWorkflow.includes('\n  issues:\n') &&
     routingProbeWorkflow.includes('WORKFLOW_BRANCH: ${{ github.ref_name }}') &&
@@ -1466,16 +1472,17 @@ mirrorRulesOk
     routingProbeWorkflow.includes('git rev-parse HEAD') &&
     !routingProbeWorkflow.includes('make -j') &&
     !routingProbeWorkflow.includes('Shell/') &&
-    buildWorkflow.includes('workflow_dispatch:') &&
-    buildWorkflow.includes('request_branch:') &&
-    buildWorkflow.includes('request_commit:') &&
-    buildWorkflow.includes('EXPECTED_REQUEST_BRANCH:') &&
-    buildWorkflow.includes('EXPECTED_REQUEST_COMMIT:') &&
+    buildWorkflow.includes('request_branch:') && buildWorkflow.includes('request_commit:') &&
+    buildWorkflow.includes('ISSUE_BODY: ${{ inputs.issue_body }}') &&
+    buildWorkflow.includes("String(issue.body || '') !== String(process.env.ISSUE_BODY || '')") &&
+    buildWorkflow.includes('EXPECTED_REQUEST_BRANCH: ${{ inputs.request_branch }}') &&
+    buildWorkflow.includes('EXPECTED_REQUEST_COMMIT: ${{ inputs.request_commit }}') &&
+    buildWorkflow.includes('ref: ${{ inputs.request_commit }}') &&
     buildWorkflow.includes('Verify checked-out commit / 核对检出提交');
-  routingCanaryContract
-    ? ok('E v2 Phase B1 routing canary: manual-only Dispatcher preserves Probe and can dispatch the existing exact-ref custom-build Worker')
-    : bad('E v2 Phase B1 routing canary',
-      'Dispatcher must stay manual-only, preserve exact-ref Probe validation, and gate owner-only real custom-build canaries without taking over Issue traffic');
+  routingProductionContract
+    ? ok('E v2 Phase B2 routing: production Issue→Dispatcher→exact-ref Worker is single-entry; manual Probe/canary and frozen Issue rechecks remain')
+    : bad('E v2 Phase B2 routing',
+      'Dispatcher must own Issue traffic, preserve manual validation, freeze/recheck Issue identity, and dispatch only an exact-ref workflow_dispatch Worker');
   const driftSentinelContract = driftSentinel.includes("const forbidden = ['lede-17.01', 'pcs-standalone-back', 'master'];") &&
     driftSentinel.includes("names.has('main')") && !driftSentinel.includes('360T7') &&
     !driftSentinel.includes('qihoo_360t7') && !syncWorkflow.includes('360T7');
@@ -1750,6 +1757,7 @@ mirrorRulesOk
     .replace(/\r\n/g, '\n');
   const versionStamper = readFileSync(join(ROOT, 'tools', 'stamp-site-version.mjs'), 'utf8');
   const buildMetaGenerator = readFileSync(join(ROOT, 'tools', 'gen-build-meta.mjs'), 'utf8');
+  const webDeploymentPreparer = readFileSync(join(ROOT, 'tools', 'prepare-web-deployment.mjs'), 'utf8');
   const requestParser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
   const genericDiy = readFileSync(join(ROOT, 'Shell', 'diy2-generic.sh'), 'utf8');
   const mirrorDiy = readFileSync(join(ROOT, 'Shell', 'apply-package-mirror.sh'), 'utf8');
@@ -1779,7 +1787,8 @@ mirrorRulesOk
     buildIdentitySource.includes("environment === 'main'") &&
     buildIdentitySource.includes("environment.replaceAll('/', '_')") &&
     buildIdentitySource.includes('artifactBuildRef') && buildIdentitySource.includes('buildIssueRequestPrefix') &&
-    buildMetaGenerator.includes('process.env.CF_PAGES_BRANCH') && buildMetaGenerator.includes('branch: resolveBranch') &&
+    buildMetaGenerator.includes('process.env.CF_PAGES_BRANCH') && buildMetaGenerator.includes('branch: resolvedBranch') &&
+    buildMetaGenerator.includes('commit: resolvedCommit') && buildMetaGenerator.includes('normalizeBuildCommit') &&
     js.includes('BUILD_IDENTITY_MODULE.buildIssueRequestPrefix(sourceEnv)') &&
     js.includes('requestId: requestStamp') && js.includes('sourceEnv,') && js.includes('requestCommit: String(state.buildMeta?.commit') &&
     requestParser.includes('parseBuildIssueTitleIdentity') && requestParser.includes('buildEnvironmentIdentity') &&
@@ -1944,7 +1953,9 @@ mirrorRulesOk
   const buildLimitContract = workflow.includes('MAX_BUILDS_PER_USER') &&
     workflow.includes('Build admission refused') &&
     workflow.includes('const requester = process.env.REQUESTER;') &&
+    workflow.includes('REQUESTER: ${{ inputs.requester }}') &&
     workflow.includes("run.event === 'workflow_dispatch'") && workflow.includes("run.event === 'issues'") &&
+    workflow.includes('pre-cutover direct Issue runs in admission accounting') &&
     workflow.includes('const isRepositoryOwner = requester.toLowerCase() === context.repo.owner.toLowerCase();') &&
     workflow.includes('`owner-${context.runId}`') &&
     workflow.includes('Repository owner build admitted without queue') &&
@@ -1955,6 +1966,9 @@ mirrorRulesOk
     cancelWorkflow.includes('issue_comment:') &&
     cancelWorkflow.includes("['/cancel', '/cancel-build']") &&
     cancelWorkflow.includes('commenter.toLowerCase() !== requester.toLowerCase()') &&
+    cancelWorkflow.includes('const dispatchPrefix = `Build ${requester}#${issue.number} · `.toLowerCase();') &&
+    cancelWorkflow.includes("run.event === 'workflow_dispatch'") && cancelWorkflow.includes("run.event === 'issues'") &&
+    cancelWorkflow.includes('Migration compatibility for direct Issue workers') &&
     cancelWorkflow.includes('cancelWorkflowRun') &&
     cancelWorkflow.includes('force-cancel');
   buildLimitContract
@@ -2180,6 +2194,28 @@ mirrorRulesOk
     catalogSelectionLayerContract
       ? ok('Catalog 选择状态已分为基础/推荐/用户覆盖/依赖/导入层；首次用户插件计数不再吸收上游默认')
       : bad('Catalog selection layers', '状态分层、deferred 默认、来源筛选、恢复默认或用户计数隔离不完整');
+    const deploymentIdentityContract =
+    js.includes('async function loadDeploymentIdentity()') &&
+    js.includes("fetch('./data/site-version.json', { cache: 'no-store' })") &&
+    js.includes("fetch('./data/build-meta.json', { cache: 'no-store' })") &&
+    js.includes('const [stampResponse, metaResponse] = await Promise.all([') &&
+    !js.includes("loadJson('site-version.json')") &&
+    js.includes('BUILD_IDENTITY_MODULE.normalizeDeploymentIdentity(stamp, meta)') &&
+    buildIdentitySource.includes('export function normalizeDeploymentIdentity(siteStamp, buildMeta)') &&
+    buildIdentitySource.includes('normalizeBuildEnvironment(buildMeta.branch)') &&
+    buildIdentitySource.includes('normalizeBuildCommit(buildMeta.commit)') &&
+    buildMetaGenerator.includes('normalizeBuildCommit') &&
+    !buildMetaGenerator.includes('^[a-f0-9]{7,64}$') &&
+    webDeploymentPreparer.includes('Deployment identity requires a canonical branch and full 40-character Git commit.') &&
+    js.includes('state.siteVersion = deploymentIdentity.siteVersion;') &&
+    js.includes('state.buildMeta = deploymentIdentity.buildMeta;') &&
+    js.includes("['identity', Boolean(state.buildMeta && state.buildMeta.version === state.siteVersion") &&
+    js.includes('BUILD_IDENTITY_MODULE.normalizeBuildCommit(state.buildMeta.commit)') &&
+    js.includes("requestCommit: String(state.buildMeta?.commit || '')");
+  deploymentIdentityContract
+    ? ok('deployment identity: site-version + build-meta load fresh together; mismatched/missing route identity cannot enable cloud submit')
+    : bad('deployment identity', 'fresh atomic deployment identity bootstrap or cloud-submit identity gate regressed');
+
     const versionContract =
     !existsSync(join(ROOT, '.github', 'workflows', 'site-version.yml')) &&
     ciWorkflow.includes('permissions:') &&
@@ -2206,14 +2242,14 @@ mirrorRulesOk
     versionStamper.includes('^v\\d{10}$') &&
     requestParser.includes('v\\d{8}(?:\\d{2})?') &&
     js.includes('^v\\d{10}$') &&
-    js.includes('shortSiteVersion') && js.includes("fetch('./data/build-meta.json'") &&
+    js.includes('shortSiteVersion') && js.includes('loadDeploymentIdentity') &&
     js.includes('formatBuildTime') &&
     html.indexOf('id="siteVersion"') > html.indexOf('id="submitBtn"') &&
     html.includes('id="buildInfoCard"') && html.includes('id="buildInfoCommit"') &&
     !html.includes('id="siteVersionModal"');
   versionContract
-    ? ok('项目版本由本地生成、CI 只验证；build-meta 可选且网页短版本维护卡已接通')
-    : bad('project version contract', '本地版本生成、CI 只读验证、build-meta 或网页维护信息契约缺失');
+    ? ok('项目版本由本地生成、CI 只验证；网页短版本与 fresh deployment identity 已接通')
+    : bad('project version contract', '本地版本生成、CI 只读验证、fresh deployment identity 或网页维护信息契约缺失');
   const selfTestContract = js.includes("const path2 = 'seed/plugins.json'") &&
     js.includes("state.device?.id === 'catalog-target'") &&
     js.includes("state.device?.id === 'custom-target' && state.importedConfig") &&

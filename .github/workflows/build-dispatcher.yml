@@ -1,7 +1,9 @@
-name: Build Routing Validation Dispatcher / 构建路由验证派发器
-run-name: Route ${{ inputs.mode }} / 路由验证 · #${{ inputs.issue_number }}
+name: Build Dispatcher / 构建派发器
+run-name: ${{ github.event_name == 'issues' && format('Route build / 构建路由 · #{0}', github.event.issue.number) || format('Route {0} / 路由验证 · #{1}', inputs.mode, inputs.issue_number) }}
 
 on:
+  issues:
+    types: [opened]
   workflow_dispatch:
     inputs:
       issue_number:
@@ -20,11 +22,12 @@ on:
 permissions:
   contents: read
   actions: write
-  issues: read
+  issues: write
 
 jobs:
   dispatch:
-    name: Validate request and dispatch canary / 校验请求并派发验证
+    name: Validate request and dispatch exact ref / 校验请求并派发精确版本
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.issue.title, '[build]')
     runs-on: ubuntu-22.04
     timeout-minutes: 4
     steps:
@@ -43,12 +46,12 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
 
-      - name: Snapshot canary Issue / 固定验证 Issue
+      - name: Snapshot build Issue / 固定构建 Issue
         id: issue
         uses: actions/github-script@v8
         env:
-          ISSUE_NUMBER: ${{ inputs.issue_number }}
-          DISPATCH_MODE: ${{ inputs.mode }}
+          ISSUE_NUMBER: ${{ github.event_name == 'issues' && github.event.issue.number || inputs.issue_number }}
+          DISPATCH_MODE: ${{ github.event_name == 'issues' && 'build' || inputs.mode }}
         with:
           script: |
             const fs = require('fs');
@@ -58,21 +61,39 @@ jobs:
               core.setFailed('Invalid Issue number / Issue 编号非法');
               return;
             }
-            if (!['probe', 'build-canary'].includes(mode)) {
+            if (!['build', 'probe', 'build-canary'].includes(mode)) {
               core.setFailed(`Unsupported dispatch mode: ${mode} / 不支持的派发模式`);
+              return;
+            }
+            if (mode === 'build' && context.eventName !== 'issues') {
+              core.setFailed('Production build routing is Issue-event only / 生产构建路由只接受 Issue opened 事件');
+              return;
+            }
+            if (mode !== 'build' && context.eventName !== 'workflow_dispatch') {
+              core.setFailed('Routing validation modes are manual-only / 路由验证模式只允许手动运行');
               return;
             }
             if (mode === 'build-canary' && context.actor.toLowerCase() !== context.repo.owner.toLowerCase()) {
               core.setFailed('build-canary is restricted to the repository owner / build-canary 仅允许仓库 Owner 手动运行');
               return;
             }
-            const { data: issue } = await github.rest.issues.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issueNumber,
-            });
+
+            let issue;
+            if (context.eventName === 'issues') {
+              issue = context.payload.issue;
+              if (Number(issue?.number) !== issueNumber) {
+                core.setFailed('Issue event identity mismatch / Issue 事件身份不一致');
+                return;
+              }
+            } else {
+              ({ data: issue } = await github.rest.issues.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+              }));
+            }
             if (issue.pull_request) {
-              core.setFailed('Pull requests are not routing canaries / PR 不能作为路由验证');
+              core.setFailed('Pull requests are not build requests / PR 不能作为构建请求');
               return;
             }
             if (issue.state !== 'open') {
@@ -95,6 +116,7 @@ jobs:
               },
             };
             fs.writeFileSync('dispatcher-event.json', `${JSON.stringify(snapshot)}\n`);
+            core.setOutput('mode', mode);
             core.setOutput('number', String(issue.number));
             core.setOutput('title', title);
             core.setOutput('requester', issue.user.login);
@@ -114,10 +136,10 @@ jobs:
           ISSUE_TITLE: ${{ steps.issue.outputs.title }}
         run: node tools/parse-build-request-identity.mjs
 
-      - name: Validate exact branch head and dispatch canary / 核对精确分支并派发验证
+      - name: Validate exact branch head and dispatch / 核对精确分支并派发
         uses: actions/github-script@v8
         env:
-          DISPATCH_MODE: ${{ inputs.mode }}
+          DISPATCH_MODE: ${{ steps.issue.outputs.mode }}
           REQUEST_BRANCH: ${{ steps.route.outputs.request_branch }}
           REQUEST_COMMIT: ${{ steps.route.outputs.request_commit }}
           REQUEST_ID: ${{ steps.route.outputs.request_id }}
@@ -184,7 +206,7 @@ jobs:
               return;
             }
 
-            if (mode === 'build-canary') {
+            if (mode === 'build' || mode === 'build-canary') {
               const workerInputs = {
                 issue_number: String(issueNumber),
                 issue_title: process.env.ISSUE_TITLE,
@@ -206,8 +228,32 @@ jobs:
                 ref: branch,
                 inputs: workerInputs,
               });
-              core.notice(`Dispatched custom-build canary at ${branch}@${commit}.`);
+              core.notice(`Dispatched custom-build ${mode} at ${branch}@${commit}.`);
               return;
             }
 
             core.setFailed(`Unsupported dispatch mode: ${mode} / 不支持的派发模式`);
+
+      - name: Comment & close rejected production request / 路由失败时回评并关闭生产请求
+        if: failure() && github.event_name == 'issues'
+        uses: actions/github-script@v8
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REQUESTER: ${{ github.event.issue.user.login }}
+        with:
+          script: |
+            const issueNumber = Number(process.env.ISSUE_NUMBER);
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: `@${process.env.REQUESTER}\n\n❌ 构建请求路由校验未通过，Worker 未启动。\n\n日志 / Log: ${url}\n\n请从当前网页重新生成并上传完整 build-request.json 后再提交。`,
+            });
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              state: 'closed',
+              state_reason: 'not_planned',
+            });

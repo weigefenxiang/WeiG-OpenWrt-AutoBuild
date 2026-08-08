@@ -517,15 +517,18 @@ function formatBuildTime(value) {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):\d{2}\+08:00$/.exec(value || '');
   return match ? `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]} CST` : '—';
 }
-async function loadBuildMeta() {
-  try {
-    const response = await fetch('./data/build-meta.json', { cache: 'no-store' });
-    if (!response.ok) return null;
-    const meta = await response.json();
-    if (meta.version !== state.siteVersion || meta.timezone !== 'Asia/Shanghai' || !/^[a-f0-9]{7,64}$/i.test(meta.commit || '') || formatBuildTime(meta.builtAt) === '—') return null;
-    return { ...meta, branch: BUILD_IDENTITY_MODULE.normalizeBuildEnvironment(meta.branch) };
-  } catch (e) { return null; }
+async function loadDeploymentIdentity() {
+  const [stampResponse, metaResponse] = await Promise.all([
+    fetch('./data/site-version.json', { cache: 'no-store' }).catch(() => null),
+    fetch('./data/build-meta.json', { cache: 'no-store' }).catch(() => null),
+  ]);
+  let stamp = null;
+  let meta = null;
+  try { if (stampResponse?.ok) stamp = await stampResponse.json(); } catch (e) { /* invalid deployment stamp */ }
+  try { if (metaResponse?.ok) meta = await metaResponse.json(); } catch (e) { /* invalid deployment metadata */ }
+  return BUILD_IDENTITY_MODULE.normalizeDeploymentIdentity(stamp, meta);
 }
+
 function renderBuildInfo() {
   const trigger = $('siteVersion');
   const panel = $('buildInfo');
@@ -578,7 +581,7 @@ async function init() {
       import('./lib/catalog-engine.js?v=9f03d1396d'),
       import('./lib/catalog-loader.js?v=e1801742f9'),
       import('./lib/catalog-schema6.js?v=0a165903c2'),
-      import('./lib/build-identity.js?v=3732f4f110'),
+      import('./lib/build-identity.js?v=a407fd8158'),
     ]);
     I18N = await loadJson('i18n.json');
     state.lang = pickLang();
@@ -613,11 +616,9 @@ async function init() {
     ]);
     initializeTimezone();
     MENU_INDEX = stableCatalogIndex(MENU_INDEX);
-    try {
-      const stamp = await loadJson('site-version.json');
-      if (/^v\d{10}$/.test(stamp.version)) state.siteVersion = stamp.version;
-    } catch (e) { /* 旧部署没有版本文件时保持占位符 / old deployments keep the placeholder */ }
-    state.buildMeta = await loadBuildMeta();
+    const deploymentIdentity = await loadDeploymentIdentity();
+    state.siteVersion = deploymentIdentity.siteVersion;
+    state.buildMeta = deploymentIdentity.buildMeta;
     renderBuildInfo();
     resetPluginWorkspace(PLUGINS, 'seed/plugins.json');
     renderDevices();
@@ -5687,6 +5688,9 @@ function submitReadiness() {
     ['theme', Boolean($('fwThemeBox')?.options?.length && $('fwThemeBox')?.value)],
     ['recommended', !state.minimumBoot || Boolean(MINIMUM_BOOT && minimumBootRows().length)],
     ['defconfig', typeof state.useDefconfig === 'boolean'],
+    ['identity', Boolean(state.buildMeta && state.buildMeta.version === state.siteVersion &&
+      BUILD_IDENTITY_MODULE.normalizeBuildEnvironment(state.buildMeta.branch) &&
+      BUILD_IDENTITY_MODULE.normalizeBuildCommit(state.buildMeta.commit))],
   ];
   return { ok: checks.every(([, ok]) => ok), missing: checks.filter(([, ok]) => !ok).map(([name]) => name) };
 }

@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { normalizeBuildEnvironment } from '../site/wrt/lib/build-identity.js';
+import { normalizeBuildCommit, normalizeBuildEnvironment } from '../site/wrt/lib/build-identity.js';
 
 const MODULE_PATH = fileURLToPath(import.meta.url);
 const DEFAULT_ROOT = join(dirname(MODULE_PATH), '..');
@@ -32,14 +32,17 @@ function resolveBranch(root, explicitBranch = '') {
 }
 
 function resolveCommit(root, explicitCommit = '') {
-  for (const value of [explicitCommit, process.env.WEIG_BUILD_COMMIT, process.env.CF_PAGES_COMMIT_SHA, process.env.GITHUB_SHA]) {
-    if (/^[a-f0-9]{7,64}$/i.test(value || '')) return value.toLowerCase();
+  const explicit = String(explicitCommit || '').trim();
+  if (explicit) return normalizeBuildCommit(explicit);
+  for (const value of [process.env.WEIG_BUILD_COMMIT, process.env.CF_PAGES_COMMIT_SHA, process.env.GITHUB_SHA]) {
+    const commit = normalizeBuildCommit(value);
+    if (commit) return commit;
   }
   try {
     const value = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], {
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
-    if (/^[a-f0-9]{7,64}$/i.test(value)) return value.toLowerCase();
+    return normalizeBuildCommit(value);
   } catch (error) { /* static copies can work without Git */ }
   return '';
 }
@@ -61,10 +64,14 @@ export function writeBuildMeta({ root = DEFAULT_ROOT, commit = '', branch = '', 
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/.test(buildTime)) {
     throw new Error(`Invalid WEIG_BUILD_TIME: ${buildTime}`);
   }
+  const resolvedCommit = resolveCommit(projectRoot, commit);
+  const resolvedBranch = resolveBranch(projectRoot, branch);
+  if (String(commit || '').trim() && !resolvedCommit) throw new Error('Explicit deployment commit must be a full 40-character Git SHA.');
+  if (String(branch || '').trim() && !resolvedBranch) throw new Error('Explicit deployment branch is invalid.');
   const payload = {
     version,
-    commit: resolveCommit(projectRoot, commit),
-    branch: resolveBranch(projectRoot, branch),
+    commit: resolvedCommit,
+    branch: resolvedBranch,
     builtAt: buildTime,
     timezone: 'Asia/Shanghai',
   };

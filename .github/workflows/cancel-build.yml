@@ -36,10 +36,19 @@ jobs:
               return;
             }
             const list = async (status) => (await github.rest.actions.listWorkflowRuns({
-              owner, repo, workflow_id: 'custom-build.yml', actor: requester, status, per_page: 100,
+              owner, repo, workflow_id: 'custom-build.yml', status, per_page: 100,
             })).data.workflow_runs;
+            const dispatchPrefix = `Build ${requester}#${issue.number} · `.toLowerCase();
             const active = [...await list('queued'), ...await list('in_progress')]
-              .filter((run) => run.event === 'issues' && run.display_title === issue.title);
+              .filter((run) => {
+                if (run.event === 'workflow_dispatch') {
+                  return String(run.display_title || '').toLowerCase().startsWith(dispatchPrefix);
+                }
+                // Migration compatibility for direct Issue workers that started before the B2 cutover.
+                return run.event === 'issues' &&
+                  String(run.actor?.login || '').toLowerCase() === requester.toLowerCase() &&
+                  run.display_title === issue.title;
+              });
             if (!active.length) {
               await github.rest.issues.createComment({
                 owner, repo, issue_number: issue.number,

@@ -19,6 +19,9 @@ export function prepareWebDeployment({ root = process.cwd(), commit = '', branch
     if (!existsSync(join(projectRoot, rel))) throw new Error(`Required web file is missing: ${rel}`);
   }
   const result = writeBuildMeta({ root: projectRoot, commit, branch, builtAt });
+  if (!result.payload.commit || !result.payload.branch) {
+    throw new Error('Deployment identity requires a canonical branch and full 40-character Git commit.');
+  }
   return { ...result, version };
 }
 

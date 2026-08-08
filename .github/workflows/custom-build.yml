@@ -1,9 +1,7 @@
 name: Custom Build / 定制构建
-run-name: ${{ github.event_name == 'workflow_dispatch' && format('Build {0}#{1} · {2}', inputs.requester, inputs.issue_number, inputs.issue_title) || github.event.issue.title }}
+run-name: ${{ format('Build {0}#{1} · {2}', inputs.requester, inputs.issue_number, inputs.issue_title) }}
 
 on:
-  issues:
-    types: [opened]
   workflow_dispatch:
     inputs:
       issue_number:
@@ -46,7 +44,6 @@ permissions:
 jobs:
   identity:
     name: Exact identity / 精确身份
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
     timeout-minutes: 2
     outputs:
@@ -60,6 +57,7 @@ jobs:
           ISSUE_TITLE: ${{ inputs.issue_title }}
           REQUESTER: ${{ inputs.requester }}
           ISSUE_CREATED_AT: ${{ inputs.issue_created_at }}
+          ISSUE_BODY: ${{ inputs.issue_body }}
           REQUEST_BRANCH: ${{ inputs.request_branch }}
           REQUEST_COMMIT: ${{ inputs.request_commit }}
           WORKFLOW_BRANCH: ${{ github.ref_name }}
@@ -101,8 +99,9 @@ jobs:
               return;
             }
             if (issue.user.login.toLowerCase() !== requester.toLowerCase() ||
-                issue.created_at !== process.env.ISSUE_CREATED_AT || issue.title !== process.env.ISSUE_TITLE) {
-              await reject('原始 Issue 身份已变化 / Original Issue identity no longer matches the dispatch snapshot.');
+                issue.created_at !== process.env.ISSUE_CREATED_AT || issue.title !== process.env.ISSUE_TITLE ||
+                String(issue.body || '') !== String(process.env.ISSUE_BODY || '')) {
+              await reject('原始 Issue 快照已变化 / Original Issue no longer matches the dispatch snapshot.');
               return;
             }
             core.setOutput('valid', 'true');
@@ -110,7 +109,7 @@ jobs:
   admission:
     name: Admission / 构建准入
     needs: identity
-    if: always() && ((github.event_name == 'issues' && startsWith(github.event.issue.title, '[build]')) || (github.event_name == 'workflow_dispatch' && needs.identity.outputs.valid == 'true'))
+    if: always() && needs.identity.outputs.valid == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 3
     outputs:
@@ -123,9 +122,9 @@ jobs:
         uses: actions/github-script@v8
         env:
           MAX_BUILDS_PER_USER: ${{ vars.MAX_BUILDS_PER_USER || '2' }}
-          REQUESTER: ${{ github.event_name == 'workflow_dispatch' && inputs.requester || github.event.issue.user.login }}
-          ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || github.event.issue.number }}
-          ISSUE_CREATED_AT: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_created_at || github.event.issue.created_at }}
+          REQUESTER: ${{ inputs.requester }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          ISSUE_CREATED_AT: ${{ inputs.issue_created_at }}
         with:
           script: |
             const requester = process.env.REQUESTER;
@@ -150,6 +149,7 @@ jobs:
                 if (run.event === 'workflow_dispatch') {
                   return String(run.display_title || '').toLowerCase().startsWith(userPrefix);
                 }
+                // Keep pre-cutover direct Issue runs in admission accounting until they finish.
                 return run.event === 'issues' &&
                   String(run.actor?.login || '').toLowerCase() === requester.toLowerCase();
               });
@@ -200,17 +200,16 @@ jobs:
       - name: Checkout exact request commit / 检出精确请求提交
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.request_commit || github.sha }}
+          ref: ${{ inputs.request_commit }}
 
       - name: Verify checked-out commit / 核对检出提交
-        if: github.event_name == 'workflow_dispatch'
         env:
           REQUEST_COMMIT: ${{ inputs.request_commit }}
         run: test "$(git rev-parse HEAD)" = "$REQUEST_COMMIT"
 
       - name: Read Issue attachment or mobile request / 读取附件或手机请求
         env:
-          ISSUE_BODY: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_body || '' }}
+          ISSUE_BODY: ${{ inputs.issue_body }}
           REQUEST_MANIFEST_OUT: request-attachments.json
           REQUEST_DIR: request-attachments
         run: node tools/fetch-build-request.mjs
@@ -221,16 +220,16 @@ jobs:
           REQUEST_MANIFEST: request-attachments.json
           SUBMITTED_CONFIG_OUT: submitted.config
           RECOMMENDED_AUDIT_OUT: recommended-audit.json
-          ISSUE_TITLE: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_title || github.event.issue.title }}
-          EXPECTED_REQUEST_BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.request_branch || '' }}
-          EXPECTED_REQUEST_COMMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.request_commit || '' }}
+          ISSUE_TITLE: ${{ inputs.issue_title }}
+          EXPECTED_REQUEST_BRANCH: ${{ inputs.request_branch }}
+          EXPECTED_REQUEST_COMMIT: ${{ inputs.request_commit }}
         run: node tools/parse-request.mjs
 
       - name: "Comment on issue: build started / 回评 issue:构建开始"
         uses: actions/github-script@v8
         env:
-          ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || github.event.issue.number }}
-          REQUESTER: ${{ github.event_name == 'workflow_dispatch' && inputs.requester || github.event.issue.user.login }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          REQUESTER: ${{ inputs.requester }}
         with:
           script: |
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
@@ -244,8 +243,8 @@ jobs:
         if: failure()
         uses: actions/github-script@v8
         env:
-          ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || github.event.issue.number }}
-          REQUESTER: ${{ github.event_name == 'workflow_dispatch' && inputs.requester || github.event.issue.user.login }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          REQUESTER: ${{ inputs.requester }}
         with:
           script: |
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
@@ -1004,8 +1003,8 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           PUBLISH_RESULT: ${{ needs.publish-firmware.result }}
           ARTIFACT_REF: ${{ needs.build.outputs.artifact_ref }}
-          ISSUE_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || github.event.issue.number }}
-          REQUESTER: ${{ github.event_name == 'workflow_dispatch' && inputs.requester || github.event.issue.user.login }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          REQUESTER: ${{ inputs.requester }}
         with:
           script: |
             const ok = process.env.BUILD_RESULT === 'success' && process.env.PUBLISH_RESULT === 'success';
