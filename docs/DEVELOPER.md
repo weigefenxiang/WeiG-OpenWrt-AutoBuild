@@ -285,7 +285,8 @@ npm.cmd test
 
 - 通道固定一一对应：AutoBuild `fix/* → catalog-fix`、`dev → catalog-dev`、`staging → catalog-staging`、`main → catalog-data`。映射集中在 `site/wrt/data/project.json`，预览通道不读取或生成正式 Release/Pages 地址。
 - Catalog 成功后 18 秒低优先级预取全局压缩规则。索引刷新后若压缩 SHA 不变，先复用内存，再复用 Cache API，不重复下载；提交请求前必须成功取得并验证规则，缺失/损坏时不能用“强制”绕过。
-- 人工证据规则只在“一键自检”和实际创建 `build-request.json` 时执行。弹窗把动态冲突路径、规则 ID 与构建证据分层显示，并提供三种处理：“推荐方案”应用共享 Catalog 引擎推导的唯一最低成本方案、在框内按现有 Catalog record 选择 N/M/Y、保留当前状态并强制继续。操作栏按“强制、自定义｜关闭、推荐”分组，手机端保持同顺序的两行两列；软件包 ID 与 Advanced 共用同一响应式标题字号。没有唯一最低成本方案时禁用推荐并明确提示。首次点击强制只进入风险确认页；返回按钮或确认页右上角关闭会回到原选择页并保留 N/M/Y，只有二次点击“确认强制继续”才生成 forced 审计。
+- 人工证据规则只在“一键自检”和实际创建 `build-request.json` 时执行。弹窗把“冲突文件/规则与证据”和“推荐方案/预计调整”分别放在可换行的左右信息行，路径与推荐动作位于各自下一行；所有内容均动态来自当前规则和方案。三种处理为：“推荐方案”应用共享 Catalog 引擎推导的唯一最低成本方案、在框内按现有 Catalog record 选择 N/M/Y、保留当前状态并强制继续。操作栏按“强制、自定义｜关闭、推荐”分组，手机端保持同顺序的两行两列；软件包 ID 与 Advanced 共用同一响应式标题字号，完整说明正文使用由该字号派生且不小于 14px 的共享字号。没有唯一最低成本方案时禁用推荐并明确提示。首次点击强制只进入风险确认页；返回按钮或确认页右上角关闭会回到原选择页并保留 N/M/Y，只有二次点击“确认强制继续”才生成 forced 审计。
+- bool/tristate 的 `default` 值及条件表达式统一由共享 Catalog 引擎按声明顺序求值。Catalog model 从现有表达式派生闭世界边界：只在 default 中引用、但未被 record 定义且不属于 Target/依赖上下文的缺失 symbol 按 `n` 处理并继续后备；真正省略的上下文仍 deferred，不得越过当前项。顶层 `if` 切分必须识别引号、转义和括号，不能误切 string 字面值。bool 求得 `m` 按 Kconfig 语义归一为 `y`。网页只渲染并序列化 record 类型允许的 N/M/Y，原始表达式或非法值不能成为按钮文字；string（含字面量 `"n"` 和 `"use if available"`）、int、hex 保留原有字面值语义。
 - 强制确认只存在内存中，并绑定规则 SHA、数据通道、Source/Branch、`catalogStateRevision` 和触发规则 ID。配置未变化时，自检后提交不重复询问；配置、Source/Branch、规则 SHA 或页面状态变化后必须重新确认。
 - 构建端只规范化并保存被强制的规则 ID 及规则 SHA/Source/Branch 审计，不重新执行兼容规则、不锁软件包、不修改 `.config`。Kconfig/Catalog 的现有即时硬冲突仍保持原行为。
 - 兼容性开发先在 AutoBuild `fix/catalog-compatibility` 与 Catalog 同名代码分支完成，Catalog 数据发布到 `catalog-fix`。只有用户在 CDN 网页验证成功并明确授权后，才可按 `fix → dev → staging` 推进；`main/catalog-data` 在验证前保持冻结。

@@ -1543,7 +1543,7 @@ mirrorRulesOk
     !js.includes('showToast(CATALOG_ENGINE.formatViolations(result.violations))') &&
     js.includes('function openCatalogConflictModal(option, value, violations') &&
     js.includes("modal.classList.add('catalog-conflict')") &&
-    js.includes("for (const stateValue of ['n', 'm', 'y'])") &&
+    js.includes('for (const stateValue of CATALOG_ENGINE.allowedKconfigStates(row.record))') &&
     css.includes('.modal.catalog-conflict') && css.includes('.catalog-conflict-state button:disabled') &&
     js.includes('function recoverLegacyWeiGJson(text)') &&
     js.includes('function parseImportedJson(text)') &&
@@ -1865,6 +1865,23 @@ mirrorRulesOk
   const choiceRendererStart = js.indexOf('renderChoice = () => {', forceConfirmationStart);
   const forceConfirmationBody = forceConfirmationStart >= 0 && choiceRendererStart > forceConfirmationStart
     ? js.slice(forceConfirmationStart, choiceRendererStart) : '';
+  const compatibilityCssStart = css.indexOf('.compatibility-summary{');
+  const compatibilityCssEnd = css.indexOf('.summary-box {', compatibilityCssStart);
+  const compatibilityCss = compatibilityCssStart >= 0 && compatibilityCssEnd > compatibilityCssStart
+    ? css.slice(compatibilityCssStart, compatibilityCssEnd) : '';
+  const kconfigDefaultContract =
+    catalogEngineJs.includes('export function resolveKconfigDefault(') &&
+    catalogEngineJs.includes('export function allowedKconfigStates(') &&
+    catalogEngineJs.includes('export function normalizeKconfigStateValue(') &&
+    catalogEngineJs.includes("type === 'bool' && level === 1 ? 'y'") &&
+    js.includes('CATALOG_ENGINE.resolveKconfigDefault(') &&
+    !js.includes('const [value, condition] = raw.split(/\\s+if\\s+/, 2)') &&
+    js.includes('const allowedStates = CATALOG_ENGINE?.allowedKconfigStates?.(option) || [];') &&
+    js.includes('CATALOG_ENGINE.normalizeKconfigStateValue(option, rawValue)') &&
+    (js.match(/CATALOG_ENGINE\.allowedKconfigStates\(row\.record\)/g) || []).length === 2;
+  kconfigDefaultContract
+    ? ok('Kconfig defaults: bool/tristate expressions resolve in the shared engine and UI states stay inside declared N/M/Y')
+    : bad('Kconfig default-expression contract', 'shared typed resolver, app bridge, bool m normalization or legal-state UI boundary is incomplete');
   const compatibilityModalContract =
     !js.includes('应用最小方案') &&
     js.includes("recommendedButton.textContent = uiText('推荐方案'") &&
@@ -1883,13 +1900,22 @@ mirrorRulesOk
     css.includes('grid-template-columns:repeat(2,minmax(0,1fr))') &&
     css.includes('.compatibility-actions-spacer{display:none}') &&
     css.includes('--menuconfig-title-size: 18px;') &&
+    css.includes('--menuconfig-body-size: max(14px, calc(var(--menuconfig-title-size) - 1px));') &&
+    (css.match(/--menuconfig-body-size\s*:/g) || []).length === 1 &&
     css.includes(':root{--menuconfig-title-size:15px}') &&
     css.includes(':root{--menuconfig-title-size:14px}') &&
     (css.match(/--menuconfig-title-size:\s*\d+px/g) || []).length === 3 &&
     !css.includes('.menuconfig-box{--menuconfig-title-size') &&
     css.includes('.menuconfig-option-id{font:650 var(--menuconfig-title-size)/1.35 ui-monospace,Consolas,monospace') &&
     css.includes('.catalog-conflict-row code{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font:650 var(--menuconfig-title-size)/1.35 ui-monospace,Consolas,monospace}') &&
-    css.includes('.catalog-conflict-warning{min-height:20px;margin:10px 0 0;color:var(--danger);font-size:14px;line-height:1.55}') &&
+    js.includes('summaryLine.append(pathLabel, metadata);') &&
+    js.includes('card.append(heading, copy, summaryLine, paths);') &&
+    js.includes('recommendationHeader.append(recommendationTitle, recommendationDetail);') &&
+    js.includes('recommendation.append(recommendationHeader, recommendationAction);') &&
+    css.includes('.compatibility-info-line,.compatibility-recommendation-header{display:flex;') &&
+    css.includes('.compatibility-evidence,.compatibility-recommendation-detail{flex:1 1 100%;margin-left:0;text-align:left}') &&
+    !/font-size:(?:1[0-3](?:\.\d+)?|14)px/.test(compatibilityCss) &&
+    css.includes('.catalog-conflict-warning{min-height:20px;margin:10px 0 0;color:var(--danger);font-size:var(--menuconfig-body-size);line-height:1.55}') &&
     css.includes('@media(max-width:560px)');
   const compatibilityContract =
     JSON.stringify(project.catalogDataBranches) === JSON.stringify({
@@ -2356,7 +2382,7 @@ mirrorRulesOk
     js.includes('promptZh') &&
     js.includes("branch.state === 'unavailable'") &&
     css.includes('.catalog-stale') &&
-    js.includes("option.type === 'tristate' ? ['n', 'm', 'y']") &&
+    js.includes('const allowedStates = CATALOG_ENGINE?.allowedKconfigStates?.(option) || []') &&
     js.includes('function showMenuHelp') &&
     js.includes('function setCatalogLoadState') &&
     js.includes('function retryCatalogLoad') &&
@@ -2526,7 +2552,7 @@ mirrorRulesOk
       js.includes('function catalogOriginMeta(option)') &&
       js.includes('function catalogSelectionSummary()') &&
       js.includes('function restoreCatalogDefault(option)') &&
-      js.includes("evaluated.status === 'satisfied'") &&
+      catalogEngineJs.includes('export function resolveKconfigDefault(') &&
       js.includes('resetCatalogSelectionLayers();') &&
       js.indexOf('state.device = device;') < js.indexOf('initializeCatalogBaseline();', js.indexOf('async function applyCatalogTarget()')) &&
       js.includes("if (source !== 'user') return true") &&

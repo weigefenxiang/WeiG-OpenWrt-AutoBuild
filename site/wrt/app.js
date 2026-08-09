@@ -2006,16 +2006,6 @@ function resetCatalogSelectionLayers() {
   if ($('menuconfigOriginFilter')) $('menuconfigOriginFilter').value = 'all';
   markCatalogStateChanged();
 }
-function defaultConditionState(condition, context = null) {
-  if (!condition) return { status: 'satisfied', level: 2 };
-  if (CATALOG_ENGINE?.evaluateExpressionState) {
-    const activeContext = context || catalogValidationContext(menuValues, 'interactive');
-    return CATALOG_ENGINE.evaluateExpressionState(
-      condition, activeContext.values, activeContext.validationOptions,
-    );
-  }
-  return { status: kconfigExpr(condition) > 0 ? 'satisfied' : 'unsatisfied', level: null };
-}
 function initializeCatalogBaseline() {
   menuValues.clear();
   menuTouched.clear();
@@ -2032,11 +2022,11 @@ function initializeCatalogBaseline() {
   // cache while this batch mutates menuValues, then publish one new revision at the end.
   catalogContextCacheBypass = true;
   try {
-    const needsConditionalContext = menuSearchOptions.some((option) =>
-      !option.hidden && (option.defaults || []).some((raw) => /\s+if\s+/.test(raw)));
+    const needsDefaultContext = menuSearchOptions.some((option) =>
+      !option.hidden && (option.defaults || []).length > 0);
     for (let pass = 0; pass < 8; pass++) {
       let changed = false;
-      const passContext = needsConditionalContext
+      const passContext = needsDefaultContext
         ? catalogValidationContext(menuValues, 'interactive') : null;
       const contextOwnedSymbols = new Set([
         ...(passContext?.changes || []).map((change) => change.symbol),
@@ -2154,12 +2144,11 @@ function restoreCatalogDefault(option) {
   updateStats();
 }
 function simpleKconfigDefault(option, context = null) {
-  for (const raw of option.defaults || []) {
-    const [value, condition] = raw.split(/\s+if\s+/, 2);
-    const evaluated = defaultConditionState(condition, context);
-    if (evaluated.status === 'satisfied') return value.replace(/^"|"$/g, '');
-  }
-  return option.type === 'string' ? '' : 'n';
+  if (!CATALOG_ENGINE?.resolveKconfigDefault) return option.type === 'string' ? '' : 'n';
+  const activeContext = context || catalogValidationContext(menuValues, 'interactive');
+  return CATALOG_ENGINE.resolveKconfigDefault(
+    option, activeContext.values, activeContext.validationOptions,
+  ).value;
 }
 function catalogValidationContext(inputValues = menuValues, phase = 'interactive') {
   const target = state.device?.target || null;
@@ -2560,7 +2549,7 @@ function openCatalogConflictModal(option, value, violations, openChildren = fals
     name.title = row.symbol.startsWith('PACKAGE_') ? `CONFIG_${row.symbol}` : row.symbol;
     const stateBox = document.createElement('span');
     stateBox.className = 'catalog-conflict-state';
-    for (const stateValue of ['n', 'm', 'y']) {
+    for (const stateValue of CATALOG_ENGINE.allowedKconfigStates(row.record)) {
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.value = stateValue;
@@ -2776,6 +2765,8 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       const pathLabel = document.createElement('span');
       pathLabel.className = 'compatibility-path-label';
       pathLabel.textContent = uiText('冲突文件', '衝突檔案', 'Conflicting file');
+      const summaryLine = document.createElement('div');
+      summaryLine.className = 'compatibility-info-line';
       const paths = document.createElement('div');
       paths.className = 'compatibility-paths';
       for (const path of warning.rule.paths) {
@@ -2789,7 +2780,8 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
         `${uiText('规则', '規則', 'Rule')} ${warning.rule.id}`,
         `${uiText('构建证据', '建置證據', 'Build evidence')} ${warning.rule.refs.join(' · ')}`,
       ].join(' · ');
-      card.append(heading, copy, pathLabel, paths, metadata);
+      summaryLine.append(pathLabel, metadata);
+      card.append(heading, copy, summaryLine, paths);
       body.appendChild(card);
     };
 
@@ -2856,7 +2848,7 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
         name.title = `CONFIG_${row.record.configSymbol}`;
         const stateBox = document.createElement('span');
         stateBox.className = 'catalog-conflict-state';
-        for (const stateValue of ['n', 'm', 'y']) {
+        for (const stateValue of CATALOG_ENGINE.allowedKconfigStates(row.record)) {
           const button = document.createElement('button');
           button.type = 'button';
           button.dataset.value = stateValue;
@@ -2872,15 +2864,20 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       body.append(list, warningText);
       const recommendation = document.createElement('section');
       recommendation.className = `compatibility-recommendation${plans.recommended ? '' : ' is-unavailable'}`;
+      const recommendationHeader = document.createElement('div');
+      recommendationHeader.className = 'compatibility-recommendation-header';
       const recommendationTitle = document.createElement('strong');
+      recommendationTitle.className = 'compatibility-recommendation-title';
       recommendationTitle.textContent = uiText('推荐方案', '推薦方案', 'Recommended plan');
       const recommendationAction = document.createElement('span');
+      recommendationAction.className = 'compatibility-recommendation-action';
       recommendationAction.textContent = plans.recommended ? uiText(
         `关闭 ${plans.recommended.package}`,
         `關閉 ${plans.recommended.package}`,
         `Disable ${plans.recommended.package}`) : uiText(
         '当前没有唯一推荐方案', '目前沒有唯一推薦方案', 'No unique recommended plan is available');
       const recommendationDetail = document.createElement('small');
+      recommendationDetail.className = 'compatibility-recommendation-detail';
       recommendationDetail.textContent = plans.recommended ? uiText(
         `预计调整 ${plans.recommended.cost} 个相关配置项`,
         `預計調整 ${plans.recommended.cost} 個相關設定項`,
@@ -2888,7 +2885,8 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
         '请在上方自定义 N/M/Y，或确认风险后强制继续。',
         '請在上方自訂 N/M/Y，或確認風險後強制繼續。',
         'Choose custom N/M/Y states above, or confirm the risk before forcing continuation.');
-      recommendation.append(recommendationTitle, recommendationAction, recommendationDetail);
+      recommendationHeader.append(recommendationTitle, recommendationDetail);
+      recommendation.append(recommendationHeader, recommendationAction);
       body.appendChild(recommendation);
 
       const actions = document.createElement('div');
@@ -3499,7 +3497,10 @@ function initMenuconfigControls() {
   });
 }
 function renderMenuOption(option) {
-  const value = menuValues.get(option.symbol) ?? simpleKconfigDefault(option);
+  const rawValue = menuValues.get(option.symbol) ?? simpleKconfigDefault(option);
+  const allowedStates = CATALOG_ENGINE?.allowedKconfigStates?.(option) || [];
+  const value = option.type === 'bool' || option.type === 'tristate'
+    ? CATALOG_ENGINE.normalizeKconfigStateValue(option, rawValue) : rawValue;
   const childCount = menuNestedCounts.get(option.symbol) || 0;
   const row = document.createElement('div');
   const packageName = option.symbol.startsWith('PACKAGE_') ? option.symbol.slice(8) : '';
@@ -3545,7 +3546,7 @@ function renderMenuOption(option) {
     const tri = document.createElement('span');
     tri.className = 'kconfig-tri';
     const maxLevel = optionMaxLevel(option);
-    const selectableStates = (option.type === 'tristate' ? ['n', 'm', 'y'] : ['n', 'y'])
+    const selectableStates = allowedStates
       .filter((stateValue) => stateValue === 'n' || kconfigLevel(stateValue) <= maxLevel);
     const states = option.userSettable === false
       ? [...new Set(['n', ...(value !== 'n' ? [value] : [])])]

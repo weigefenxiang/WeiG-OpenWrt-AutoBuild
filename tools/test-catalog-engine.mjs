@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import {
+  allowedKconfigStates,
   applyUserIntent,
   compatibilityAcknowledgementKey,
   createCatalogModel,
@@ -9,6 +10,8 @@ import {
   evaluateExpressionState,
   normalizeCompatibilityDocument,
   parseConfigDocument,
+  normalizeKconfigStateValue,
+  resolveKconfigDefault,
   validateConfig,
 } from '../site/wrt/lib/catalog-engine.js';
 
@@ -77,6 +80,16 @@ const records = [
   { kind: 'package', package: 'flow-monitor', configSymbol: 'PACKAGE_flow-monitor', kconfigSymbol: 'PACKAGE_flow-monitor', states: ['n', 'm', 'y'],
     kconfig: { dependsExpressions: [['PACKAGE_flow-core']] } },
   { kind: 'config', configSymbol: 'SOFT_HINT', kconfigSymbol: 'SOFT_HINT', states: ['n', 'y'] },
+  { kind: 'config', configSymbol: 'LANGUAGE_SWITCH', kconfigSymbol: 'LANGUAGE_SWITCH', states: ['n', 'm', 'y'] },
+  { kind: 'config', configSymbol: 'EVERYTHING', kconfigSymbol: 'EVERYTHING', states: ['n', 'y'] },
+  { kind: 'config', configSymbol: 'DEFAULT_FALLBACK', kconfigSymbol: 'DEFAULT_FALLBACK', states: ['n', 'm', 'y'],
+    defaults: ['y if ABSENT_DEFAULT_SWITCH', 'LANGUAGE_SWITCH||(EVERYTHING&&m)',
+      'y if ABSENT_COMPARE = absent_literal', 'y if ABSENT_COUNT = 4', 'y if ABSENT_LABEL = "quoted value"'],
+    hidden: true, visible: false },
+  { kind: 'config', configSymbol: 'DEFERRED_FALLBACK', kconfigSymbol: 'DEFERRED_FALLBACK', states: ['n', 'y'],
+    defaults: ['y if UNPUBLISHED_DEFAULT', 'n'], hidden: true, visible: false },
+  { kind: 'config', configSymbol: 'SCALAR_FALLBACK', kconfigSymbol: 'SCALAR_FALLBACK', type: 'string', states: [],
+    defaults: ['"literal if text" if SCALAR_MISSING'], hidden: true, visible: false },
   { kind: 'package', package: 'imply-source', configSymbol: 'PACKAGE_imply-source', kconfigSymbol: 'PACKAGE_imply-source', states: ['n', 'y'],
     kconfig: { impliesExpressions: [['SOFT_HINT']] } },
   { kind: 'package', package: 'unrelated-tool', configSymbol: 'PACKAGE_unrelated-tool', kconfigSymbol: 'PACKAGE_unrelated-tool', states: ['n', 'm', 'y'] },
@@ -170,6 +183,80 @@ assert(evaluateExpressionState('UNPUBLISHED_DEFAULT', new Map(), { contextComple
   'missing hidden default was not deferred');
 assert(evaluateExpressionState('PACKAGE_missing', new Map(), { contextComplete: false }).status === 'unsatisfied',
   'missing package was not a closed-world disabled value');
+
+const defaultValues = new Map([['ON', 'y'], ['MODULE', 'm'], ['OFF', 'n']]);
+const expressionDefaults = [
+  ['y', 'y', 'y'],
+  ['n', 'n', 'n'],
+  ['MODULE', 'y', 'm'],
+  ['ON && MODULE', 'y', 'm'],
+  ['OFF || MODULE', 'y', 'm'],
+  ['(OFF || ON) && MODULE', 'y', 'm'],
+];
+for (const visible of [true, false]) {
+  for (const [expression, boolExpected, tristateExpected] of expressionDefaults) {
+    for (const [type, expected] of [['bool', boolExpected], ['tristate', tristateExpected]]) {
+      const states = type === 'bool' ? ['n', 'y'] : ['n', 'm', 'y'];
+      const result = resolveKconfigDefault({ type, states, defaults: [expression], visible }, defaultValues);
+      assert(result.status === 'resolved' && result.value === expected,
+        `${type} ${visible ? 'visible' : 'hidden'} default expression ${expression} did not resolve to ${expected}`);
+    }
+  }
+}
+const conditionalFallback = resolveKconfigDefault({
+  type: 'tristate', states: ['n', 'm', 'y'], defaults: ['y if OFF', 'm if ON', 'n'],
+}, defaultValues);
+assert(conditionalFallback.status === 'resolved' && conditionalFallback.value === 'm',
+  'an unsatisfied conditional default did not continue in Kconfig declaration order');
+const topLevelConditional = resolveKconfigDefault({
+  type: 'bool', states: ['n', 'y'], defaults: ['ON || OFF if MODULE'],
+}, defaultValues);
+assert(topLevelConditional.status === 'resolved' && topLevelConditional.value === 'y',
+  'a top-level conditional bool expression was not split and evaluated');
+for (const defaults of [['y if DEFERRED_DEFAULT', 'n'], ['DEFERRED_DEFAULT', 'y']]) {
+  const deferred = resolveKconfigDefault({ type: 'bool', states: ['n', 'y'], defaults }, defaultValues);
+  assert(deferred.status === 'deferred' && deferred.value === 'n',
+    'a deferred earlier default was incorrectly bypassed by a later fallback');
+}
+assert(allowedKconfigStates({ type: 'bool', states: ['n', 'm', 'y', 'invalid'] }).join(',') === 'n,y' &&
+  allowedKconfigStates({ type: 'tristate', states: ['invalid', 'y', 'n', 'm'] }).join(',') === 'n,m,y',
+  'declared states were not intersected with the Kconfig type state boundary');
+assert(normalizeKconfigStateValue({ type: 'bool', states: ['n', 'y'] }, 'ON && MODULE') === 'n' &&
+  normalizeKconfigStateValue({ type: 'tristate', states: ['n', 'm', 'y'] }, 'm') === 'm',
+  'illegal expression text crossed the rendered/serialized N/M/Y state boundary');
+const escapedStringDefault = '"a\\\"b\\\\c"';
+for (const [type, raw, expected] of [
+  ['string', '""', ''], ['string', '"hello"', 'hello'], ['string', '"n"', 'n'],
+  ['string', '"use if available"', 'use if available'],
+  ['string', '"say \\"if ready\\" now"', 'say \\"if ready\\" now'],
+  ['string', escapedStringDefault, escapedStringDefault.slice(1, -1)],
+  ['int', '160', '160'], ['hex', '0x20', '0x20'],
+]) {
+  const scalar = resolveKconfigDefault({ type, defaults: [raw] }, defaultValues);
+  assert(scalar.status === 'resolved' && scalar.value === expected,
+    `${type} literal default ${raw} changed while hardening bool/tristate expressions`);
+}
+
+const defaultBoundaryContext = createCatalogValidationContext(model, selectedTarget, new Map([
+  ['LANGUAGE_SWITCH', 'm'], ['EVERYTHING', 'n'],
+]), { phase: 'interactive' });
+const closedFallback = resolveKconfigDefault(model.bySymbol.get('DEFAULT_FALLBACK'),
+  defaultBoundaryContext.values, defaultBoundaryContext.validationOptions);
+assert(defaultBoundaryContext.validationOptions.closedSymbols.has('ABSENT_DEFAULT_SWITCH') &&
+  closedFallback.status === 'resolved' && closedFallback.value === 'm',
+  'a missing symbol closed by the Catalog default boundary did not fall through to the expression default');
+assert(['ABSENT_COMPARE', 'ABSENT_COUNT', 'ABSENT_LABEL'].every((symbol) =>
+  defaultBoundaryContext.validationOptions.closedSymbols.has(symbol)) &&
+  !defaultBoundaryContext.validationOptions.closedSymbols.has('absent_literal') &&
+  !defaultBoundaryContext.validationOptions.closedSymbols.has('SCALAR_MISSING') &&
+  !defaultBoundaryContext.validationOptions.closedSymbols.has('m') &&
+  !defaultBoundaryContext.validationOptions.closedSymbols.has('y'),
+  'state/numeric/quoted/comparison-right literals leaked into the closed default-symbol boundary');
+const trulyDeferred = resolveKconfigDefault(model.bySymbol.get('DEFERRED_FALLBACK'),
+  defaultBoundaryContext.values, defaultBoundaryContext.validationOptions);
+assert(!defaultBoundaryContext.validationOptions.closedSymbols.has('UNPUBLISHED_DEFAULT') &&
+  trulyDeferred.status === 'deferred' && trulyDeferred.value === 'n',
+  'a genuinely omitted dependency-context symbol incorrectly fell through to a later default');
 
 const base = parseConfigDocument([
   'CONFIG_PACKAGE_profile-driver=y',

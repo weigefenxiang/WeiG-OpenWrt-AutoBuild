@@ -127,6 +127,89 @@ export function evaluateExpression(expression, inputValues, options = {}) {
   return 2;
 }
 
+function defaultParts(raw) {
+  const source = String(raw || '').trim();
+  let quoted = false;
+  let escaped = false;
+  let depth = 0;
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') quoted = false;
+      continue;
+    }
+    if (character === '"') { quoted = true; continue; }
+    if (character === '(') { depth++; continue; }
+    if (character === ')') { depth = Math.max(0, depth - 1); continue; }
+    if (depth > 0 || !/\s/.test(character)) continue;
+    const marker = source.slice(index).match(/^\s+if\s+/);
+    if (!marker) continue;
+    return {
+      valueExpression: source.slice(0, index).trim(),
+      condition: source.slice(index + marker[0].length).trim(),
+    };
+  }
+  return { valueExpression: source, condition: '' };
+}
+
+function referencedExpressionSymbols(expression) {
+  const comparisonOperators = new Set(['=', '!=', '<', '>', '<=', '>=']);
+  const tokens = expressionTokens(expression);
+  return tokens.filter((token, index) =>
+    /^[A-Za-z_][A-Za-z0-9_+@./-]*$/.test(token) &&
+    !Object.hasOwn(LEVEL, token) &&
+    !comparisonOperators.has(tokens[index - 1]));
+}
+
+function nestedExpressionStrings(value) {
+  if (typeof value === 'string') return [value];
+  if (!Array.isArray(value)) return [];
+  return value.flatMap(nestedExpressionStrings);
+}
+
+export function allowedKconfigStates(option = {}) {
+  const type = String(option.type || '').toLowerCase();
+  const typeStates = type === 'bool' ? ['n', 'y'] : type === 'tristate' ? STATE : [];
+  if (!typeStates.length) return [];
+  const declared = Array.isArray(option.states) && option.states.length
+    ? new Set(option.states.map((value) => String(value).toLowerCase())) : new Set(typeStates);
+  return typeStates.filter((value) => declared.has(value));
+}
+
+export function normalizeKconfigStateValue(option, value, fallback = 'n') {
+  const allowed = allowedKconfigStates(option);
+  const normalized = String(value ?? '').toLowerCase();
+  if (allowed.includes(normalized)) return normalized;
+  return allowed.includes(fallback) ? fallback : allowed[0] || 'n';
+}
+
+function scalarDefaultValue(valueExpression) {
+  return String(valueExpression || '').trim().replace(/^"|"$/g, '');
+}
+
+export function resolveKconfigDefault(option = {}, inputValues = new Map(), options = {}) {
+  const type = String(option.type || '').toLowerCase();
+  const fallback = type === 'string' ? '' : 'n';
+  for (const raw of option.defaults || []) {
+    const { valueExpression, condition } = defaultParts(raw);
+    if (!valueExpression) continue;
+    const conditionState = evaluateExpressionRaw(condition, inputValues, options);
+    if (conditionState === UNKNOWN) return { status: 'deferred', value: fallback };
+    if (conditionState === 0) continue;
+    if (type === 'bool' || type === 'tristate') {
+      const level = evaluateExpressionRaw(valueExpression, inputValues, options);
+      if (level === UNKNOWN) return { status: 'deferred', value: fallback };
+      // Kconfig bool has no module state: an m-valued default expression is promoted to y.
+      const resolved = type === 'bool' && level === 1 ? 'y' : STATE[level] || fallback;
+      return { status: 'resolved', value: normalizeKconfigStateValue(option, resolved, fallback) };
+    }
+    return { status: 'resolved', value: scalarDefaultValue(valueExpression) };
+  }
+  return { status: 'fallback', value: fallback };
+}
+
 function compactStates(mask) {
   return ['n', 'm', 'y'].filter((_, index) => Number(mask || 0) & (1 << index));
 }
@@ -207,6 +290,9 @@ export function expandCompactRelations(compact) {
 function normalizeRecord(record) {
   const configSymbol = record.configSymbol || record.symbol ||
     (record.package ? `PACKAGE_${record.package}` : '');
+  const rawStates = Array.isArray(record.states) ? record.states : [];
+  const type = String(record.type || (rawStates.includes('m') ? 'tristate' : rawStates.length ? 'bool' : ''))
+    .toLowerCase();
   const dependsExpressions = record.kconfig?.dependsExpressions ||
     (record.kconfig?.dependsVariants || []).map((row) => row) || [];
   const selectsExpressions = record.kconfig?.selectsExpressions ||
@@ -225,7 +311,8 @@ function normalizeRecord(record) {
     package: record.package || packageNameFromSymbol(configSymbol),
     configSymbol,
     kconfigSymbol: record.kconfigSymbol || record.symbol || '',
-    states: Array.isArray(record.states) ? record.states : [],
+    type,
+    states: allowedKconfigStates({ type, states: rawStates }),
     visible: record.visible !== false,
     hidden: record.hidden === true || record.visible === false,
     userSettable: record.userSettable !== false && record.visible !== false,
@@ -271,6 +358,28 @@ export function createCatalogModel(catalog) {
     if (record.configSymbol) bySymbol.set(record.configSymbol, record);
     if (record.package) byPackage.set(record.package, record);
   }
+  const defaultReferences = new Set();
+  const deferredReferences = new Set();
+  for (const record of records) {
+    for (const raw of record.defaults || []) {
+      const { valueExpression, condition } = defaultParts(raw);
+      if (record.type === 'bool' || record.type === 'tristate') {
+        for (const symbol of referencedExpressionSymbols(valueExpression)) defaultReferences.add(symbol);
+        for (const symbol of referencedExpressionSymbols(condition)) defaultReferences.add(symbol);
+      }
+    }
+    for (const expression of nestedExpressionStrings(record.kconfig?.dependsExpressions || [])) {
+      for (const symbol of referencedExpressionSymbols(expression)) deferredReferences.add(symbol);
+    }
+    for (const rows of [record.kconfig?.selectsExpressions, record.kconfig?.impliesExpressions]) {
+      for (const raw of nestedExpressionStrings(rows || [])) {
+        const { condition } = ruleParts(raw);
+        for (const symbol of referencedExpressionSymbols(condition)) deferredReferences.add(symbol);
+      }
+    }
+  }
+  const closedDefaultSymbols = new Set([...defaultReferences].filter((symbol) =>
+    !bySymbol.has(symbol) && !deferredReferences.has(symbol) && !/^TARGET_/.test(symbol)));
   const providers = new Map();
   for (const [name, rows] of Object.entries(relations.indexes?.providers || {})) {
     providers.set(name, [...rows]);
@@ -315,6 +424,7 @@ export function createCatalogModel(catalog) {
     featureSymbols,
     targetFeatureSymbols,
     archSymbols,
+    closedDefaultSymbols,
   };
 }
 
@@ -499,6 +609,10 @@ export function createCatalogValidationContext(model, target, inputValues = new 
     ].filter(Boolean)) trustedSymbols.add(symbol);
   }
   const contextComplete = options.contextComplete ?? targetContextComplete(resolved);
+  const closedSymbols = new Set([
+    ...(model?.closedDefaultSymbols || []),
+    ...(options.closedSymbols || []),
+  ]);
   return {
     target: resolved,
     values: context.values,
@@ -508,6 +622,7 @@ export function createCatalogValidationContext(model, target, inputValues = new 
       phase,
       contextComplete,
       trustedSymbols,
+      closedSymbols,
       deferred: options.deferred || 'ignore',
     },
   };
@@ -546,6 +661,8 @@ function validationOptions(inputValues, options = {}) {
     phase: String(options.phase || 'interactive'),
     contextComplete,
     trustedSymbols,
+    closedSymbols: options.closedSymbols instanceof Set
+      ? options.closedSymbols : new Set(options.closedSymbols || []),
     deferred: options.deferred || 'ignore',
   };
 }
@@ -1052,14 +1169,10 @@ function materializeCompatibilityDefaults(model, inputValues, options) {
     let changed = false;
     for (const record of model?.records || []) {
       if (!record.configSymbol || values.has(record.configSymbol)) continue;
-      for (const raw of record.defaults || []) {
-        const { symbol: value, condition } = ruleParts(raw);
-        const state = evaluateExpressionState(condition, values, options);
-        if (state.status !== 'satisfied') continue;
-        values.set(record.configSymbol, String(value).replace(/^"|"$/g, ''));
-        changed = true;
-        break;
-      }
+      const resolved = resolveKconfigDefault(record, values, options);
+      if (resolved.status !== 'resolved') continue;
+      values.set(record.configSymbol, resolved.value);
+      changed = true;
     }
     if (!changed) break;
   }

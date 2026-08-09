@@ -6,7 +6,7 @@ import { performance } from 'node:perf_hooks';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
-import { createCatalogModel, evaluateExpressionState } from '../site/wrt/lib/catalog-engine.js';
+import { createCatalogModel, resolveKconfigDefault } from '../site/wrt/lib/catalog-engine.js';
 import { createRuntimeMenu, mergeHiddenShard, mergeMenuShards } from '../site/wrt/lib/catalog-schema6.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -105,7 +105,6 @@ assert.ok(appSource.includes('if (catalogAutoloadReady) loadCatalog(') &&
 'Catalog autoload is not gated behind the first-paint scheduler');
 
 const baselineSource = [
-  appFunctionSource(appSource, 'defaultConditionState', 'initializeCatalogBaseline'),
   appFunctionSource(appSource, 'initializeCatalogBaseline', 'snapshotCatalogBaseline'),
   appFunctionSource(appSource, 'simpleKconfigDefault', 'catalogValidationContext'),
 ].join('\n');
@@ -123,9 +122,9 @@ const baselineOptions = [
 ];
 const baselineContext = {
   CATALOG_ENGINE: {
-    evaluateExpressionState(expression, values, options) {
+    resolveKconfigDefault(option, values, options) {
       baselineConditionEvals++;
-      return evaluateExpressionState(expression, values, options);
+      return resolveKconfigDefault(option, values, options);
     },
   },
   catalogValidationContext(inputValues) {
