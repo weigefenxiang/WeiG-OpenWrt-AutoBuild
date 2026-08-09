@@ -1102,7 +1102,6 @@ export function applyUserIntent(model, inputValues, intent) {
 }
 
 const COMPATIBILITY_DOCUMENT_KEYS = new Set(['schema', 'rules']);
-const COMPATIBILITY_LEGACY_RULE_KEYS = new Set(['id', 'kind', 'scope', 'if', 'packages', 'paths', 'refs']);
 const COMPATIBILITY_RULE_KEYS = new Set(['id', 'issue', 'match', 'scope', 'if', 'packages', 'paths', 'refs']);
 const COMPATIBILITY_ID_RE = /^[A-Z][A-Z0-9-]{2,31}$/;
 const COMPATIBILITY_PACKAGE_RE = /^[A-Za-z0-9][A-Za-z0-9+_.@-]{0,95}$/;
@@ -1140,8 +1139,8 @@ export function normalizeCompatibilityDocument(raw) {
   if (!compatibilityObject(raw)) throw compatibilityError('compatibility document must be an object');
   compatibilityKeys(raw, COMPATIBILITY_DOCUMENT_KEYS, 'compatibility document');
   const schema = Number(raw.schema);
-  if (![1, 2].includes(schema) || !Array.isArray(raw.rules)) {
-    throw compatibilityError('compatibility document requires schema 1 or 2 and a rules array');
+  if (schema !== 2 || !Array.isArray(raw.rules)) {
+    throw compatibilityError('compatibility document requires schema 2 and a rules array');
   }
   if (new TextEncoder().encode(JSON.stringify(raw)).byteLength > 512 * 1024) {
     throw compatibilityError('compatibility document is too large');
@@ -1150,14 +1149,14 @@ export function normalizeCompatibilityDocument(raw) {
   const rules = raw.rules.map((rule, index) => {
     const label = `compatibility.rules[${index}]`;
     if (!compatibilityObject(rule)) throw compatibilityError(`${label} must be an object`);
-    compatibilityKeys(rule, schema === 1 ? COMPATIBILITY_LEGACY_RULE_KEYS : COMPATIBILITY_RULE_KEYS, label);
+    compatibilityKeys(rule, COMPATIBILITY_RULE_KEYS, label);
     const id = String(rule.id || '').trim();
     if (!COMPATIBILITY_ID_RE.test(id) || ids.has(id)) {
       throw compatibilityError(`${label}.id is invalid or duplicate`);
     }
     ids.add(id);
-    const issue = schema === 1 ? (rule.kind === 'ownership' ? 'file-ownership' : '') : rule.issue;
-    const match = schema === 1 ? 'all-installed' : rule.match;
+    const issue = rule.issue;
+    const match = rule.match;
     if (!['file-ownership', 'build-failure'].includes(issue)) {
       throw compatibilityError(`${id}.issue is invalid`);
     }
@@ -1174,7 +1173,7 @@ export function normalizeCompatibilityDocument(raw) {
         COMPATIBILITY_BRANCH_RE, 1, 32);
     }
     const condition = String(rule.if || '').trim();
-    if ((schema === 1 && !condition) || condition.length > 512) {
+    if (condition.length > 512) {
       throw compatibilityError(`${id}.if is invalid`);
     }
     const normalized = {

@@ -103,7 +103,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-powershell -NoProfile -Command "try { $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/index.html'; $e=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-engine.js'; $l=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-loader.js'; $s=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-schema6.js'; $w=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-search-worker.js'; if ($r.StatusCode -eq 200 -and $r.Content -match 'menuconfigBox' -and $e.Headers['Content-Type'] -match 'javascript' -and $l.Headers['Content-Type'] -match 'javascript' -and $s.Headers['Content-Type'] -match 'javascript' -and $w.Headers['Content-Type'] -match 'javascript') { exit 0 } } catch {}; exit 1"
+powershell -NoProfile -Command "try { $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/index.html'; $e=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-engine.js'; $l=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-loader.js'; $s=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-schema6.js'; $w=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-search-worker.js'; $v=(Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/data/site-version.json').Content|ConvertFrom-Json; $m=(Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/data/build-meta.json').Content|ConvertFrom-Json; if ($r.StatusCode -eq 200 -and $r.Content -match 'menuconfigBox' -and $e.Headers['Content-Type'] -match 'javascript' -and $l.Headers['Content-Type'] -match 'javascript' -and $s.Headers['Content-Type'] -match 'javascript' -and $w.Headers['Content-Type'] -match 'javascript' -and $v.version -eq $m.version -and $v.siteSha256 -eq $m.siteSha256 -and $m.branch -and $m.commit.Length -eq 40) { exit 0 } } catch {}; exit 1"
 if not errorlevel 1 (
   start "" "http://localhost:8642"
   goto local_return
@@ -121,8 +121,8 @@ if defined LANIP echo   Phone: http://%LANIP%:8642
 echo.
 echo Enter 0 below to stop the server and return to this menu.
 
-start "" /b powershell -NoProfile -WindowStyle Hidden -Command "$ok=$false; for($i=0;$i -lt 40;$i++){ try { $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/index.html'; $e=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-engine.js'; $l=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-loader.js'; $s=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-schema6.js'; $w=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-search-worker.js'; if($r.StatusCode -eq 200 -and $r.Content -match 'menuconfigBox' -and $e.Headers['Content-Type'] -match 'javascript' -and $l.Headers['Content-Type'] -match 'javascript' -and $s.Headers['Content-Type'] -match 'javascript' -and $w.Headers['Content-Type'] -match 'javascript'){ $ok=$true; break } } catch {}; Start-Sleep -Milliseconds 250 }; if($ok){ Start-Process 'http://localhost:8642' }"
-node tools\serve.mjs site\wrt 8642 --interactive
+start "" /b powershell -NoProfile -WindowStyle Hidden -Command "$ok=$false; for($i=0;$i -lt 40;$i++){ try { $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/index.html'; $e=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-engine.js'; $l=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-loader.js'; $s=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-schema6.js'; $w=Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/lib/catalog-search-worker.js'; $v=(Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/data/site-version.json').Content|ConvertFrom-Json; $m=(Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 'http://localhost:8642/data/build-meta.json').Content|ConvertFrom-Json; if($r.StatusCode -eq 200 -and $r.Content -match 'menuconfigBox' -and $e.Headers['Content-Type'] -match 'javascript' -and $l.Headers['Content-Type'] -match 'javascript' -and $s.Headers['Content-Type'] -match 'javascript' -and $w.Headers['Content-Type'] -match 'javascript' -and $v.version -eq $m.version -and $v.siteSha256 -eq $m.siteSha256 -and $m.branch -and $m.commit.Length -eq 40){ $ok=$true; break } } catch {}; Start-Sleep -Milliseconds 250 }; if($ok){ Start-Process 'http://localhost:8642' }"
+node tools\serve.mjs site\wrt 8642 --interactive --build-meta-root .
 set "SERVER_EXIT=%ERRORLEVEL%"
 if "%SERVER_EXIT%"=="0" goto local_return
 echo.
@@ -138,5 +138,6 @@ goto menu
 :port_occupied
 echo.
 echo [ERROR] Port 8642 is occupied by another program.
+echo If an older local preview is running, enter 0 in its window and start Local Preview again.
 pause
 exit /b 2

@@ -437,9 +437,9 @@ assert(conflictIntentError?.name === 'CatalogIntentError' &&
   'interactive conflict did not preserve structured violation details for the browser dialog');
 
 const compatibility = {
-  schema: 1,
+  schema: 2,
   rules: [{
-    id: 'OWN-TEST', kind: 'ownership', scope: { Demo: ['stable'] }, if: 'USE_APK',
+    id: 'OWN-TEST', issue: 'file-ownership', match: 'all-installed', scope: { Demo: ['stable'] }, if: 'USE_APK',
     packages: ['core-service', 'ui-service'], paths: ['/etc/config/demo'], refs: ['run:1'],
   }],
 };
@@ -504,9 +504,9 @@ assert(buildPlans.recommended?.package === 'core-service' &&
 'single-package compatibility rule did not derive and apply a generic disable intent');
 
 const tiedCompatibility = {
-  schema: 1,
+  schema: 2,
   rules: [{
-    id: 'OWN-TIE', kind: 'ownership', scope: { Demo: ['stable'] }, if: 'USE_APK',
+    id: 'OWN-TIE', issue: 'file-ownership', match: 'all-installed', scope: { Demo: ['stable'] }, if: 'USE_APK',
     packages: ['backend-a', 'backend-b'], paths: ['/etc/config/tie'], refs: ['run:2'],
   }],
 };
@@ -519,8 +519,11 @@ assert(tiedWarning && deriveCompatibilityPlans(model, tiedValues, tiedWarning).r
   'ambiguous equal-cost plans incorrectly received an automatic recommendation');
 
 for (const mutate of [
+  (value) => { value.schema = 1; },
+  (value) => { value.schema = 0; },
+  (value) => { value.schema = 3; },
+  (value) => { value.rules[0].kind = 'ownership'; },
   (value) => { value.rules[0].symbols = ['PACKAGE_duplicate']; },
-  (value) => { delete value.rules[0].if; },
   (value) => { delete value.rules[0].paths; },
   (value) => { value.rules.push(structuredClone(value.rules[0])); },
   (value) => { value.rules[0].packages.push(value.rules[0].packages[0]); },

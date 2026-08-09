@@ -56,9 +56,8 @@ export function shanghaiIsoNow(date = new Date()) {
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+08:00`;
 }
 
-export function writeBuildMeta({ root = DEFAULT_ROOT, commit = '', branch = '', builtAt = '', out = '' } = {}) {
+export function createBuildMeta({ root = DEFAULT_ROOT, commit = '', branch = '', builtAt = '' } = {}) {
   const projectRoot = resolve(root);
-  const output = resolve(out || join(projectRoot, 'site', 'wrt', 'data', 'build-meta.json'));
   const version = readFileSync(join(projectRoot, 'VERSION'), 'utf8').trim();
   if (!/^v\d{10}$/.test(version)) throw new Error(`Invalid VERSION: ${version}`);
   const siteRelease = assertSiteRelease(join(projectRoot, 'site', 'wrt'));
@@ -73,7 +72,7 @@ export function writeBuildMeta({ root = DEFAULT_ROOT, commit = '', branch = '', 
   const resolvedBranch = resolveBranch(projectRoot, branch);
   if (String(commit || '').trim() && !resolvedCommit) throw new Error('Explicit deployment commit must be a full 40-character Git SHA.');
   if (String(branch || '').trim() && !resolvedBranch) throw new Error('Explicit deployment branch is invalid.');
-  const payload = {
+  return {
     version,
     commit: resolvedCommit,
     branch: resolvedBranch,
@@ -81,6 +80,12 @@ export function writeBuildMeta({ root = DEFAULT_ROOT, commit = '', branch = '', 
     timezone: 'Asia/Shanghai',
     siteSha256: siteRelease.siteSha256,
   };
+}
+
+export function writeBuildMeta({ root = DEFAULT_ROOT, commit = '', branch = '', builtAt = '', out = '' } = {}) {
+  const projectRoot = resolve(root);
+  const output = resolve(out || join(projectRoot, 'site', 'wrt', 'data', 'build-meta.json'));
+  const payload = createBuildMeta({ root: projectRoot, commit, branch, builtAt });
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(output, JSON.stringify(payload, null, 2) + '\n');
   return { output, payload };

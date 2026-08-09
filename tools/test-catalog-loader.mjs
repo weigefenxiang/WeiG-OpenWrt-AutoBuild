@@ -300,9 +300,9 @@ await splitBundle.loadShard('menu');
 assert(splitCalls.length === splitCallCount, 'loaded menu shard was not reused');
 
 const compatibilityDocument = {
-  schema: 1,
+  schema: 2,
   rules: [{
-    id: 'OWN-TEST', kind: 'ownership', scope: { ImmortalWrt: ['openwrt-25.12'] },
+    id: 'OWN-TEST', issue: 'file-ownership', match: 'all-installed', scope: { ImmortalWrt: ['openwrt-25.12'] },
     if: 'USE_APK', packages: ['package-a', 'package-b'], paths: ['/etc/config/demo'], refs: ['run:1'],
   }],
 };
@@ -313,7 +313,7 @@ compatibilityIndex.assets = {
     asset: 'compatibility.json.gz', hash: compatibilityPayload.hash,
     bytes: compatibilityPayload.bytes.length,
     jsonBytes: new TextEncoder().encode(JSON.stringify(compatibilityDocument)).byteLength,
-    schema: 1, rules: 1,
+    schema: 2, rules: 1,
   },
 };
 const compatibilityCalls = [];
@@ -358,6 +358,9 @@ assert(!previewCalls.some((url) => url.includes('/releases/')),
   'preview channel attempted to read the production Release');
 
 for (const mutate of [
+  (value) => { value.assets.compatibility.schema = 1; },
+  (value) => { value.assets.compatibility.schema = 0; },
+  (value) => { value.assets.compatibility.schema = 3; },
   (value) => { delete value.assets.compatibility.jsonBytes; },
   (value) => { value.assets.compatibility.jsonBytes = 512 * 1024 + 1; },
   (value) => { value.assets.compatibility.bytes = 512 * 1024 + 1025; },
@@ -370,7 +373,43 @@ for (const mutate of [
       ? new Response(JSON.stringify(invalidIndex), { status: 200 }) : new Response('unexpected', { status: 404 }),
   });
   await assertRejects(() => invalidLoader.fetchCompatibility(), /compatibility asset contract/,
-    'oversized or incomplete compatibility contract was accepted');
+    'invalid compatibility contract was accepted');
+}
+
+for (const mutate of [
+  (value) => { value.schema = 1; },
+  (value) => { value.schema = 0; },
+  (value) => { value.schema = 3; },
+  (value) => { value.rules.push(structuredClone(value.rules[0])); },
+]) {
+  const invalidDocument = structuredClone(compatibilityDocument);
+  mutate(invalidDocument);
+  const invalidPayload = compressedDocument(invalidDocument);
+  const invalidIndex = structuredClone(compatibilityIndex);
+  invalidIndex.assets.compatibility.hash = invalidPayload.hash;
+  invalidIndex.assets.compatibility.bytes = invalidPayload.bytes.length;
+  const invalidLoader = createCatalogLoader({
+    repository: 'owner/catalog', engine: { createCatalogModel }, cacheStorage: fakeCaches(), subtle: null,
+    fetchImpl: async (url) => url.includes('index.json')
+      ? new Response(JSON.stringify(invalidIndex), { status: 200 }) : new Response(invalidPayload.bytes, { status: 200 }),
+  });
+  await assertRejects(() => invalidLoader.fetchCompatibility(), /compatibility document|compatibility asset unavailable/,
+    'schema or rule-count mismatched compatibility document was accepted');
+}
+
+for (const mutate of [
+  (value) => { value.assets.compatibility.rules += 1; },
+  (value) => { value.assets.compatibility.jsonBytes += 1; },
+]) {
+  const invalidIndex = structuredClone(compatibilityIndex);
+  mutate(invalidIndex);
+  const invalidLoader = createCatalogLoader({
+    repository: 'owner/catalog', engine: { createCatalogModel }, cacheStorage: fakeCaches(), subtle: null,
+    fetchImpl: async (url) => url.includes('index.json')
+      ? new Response(JSON.stringify(invalidIndex), { status: 200 }) : new Response(compatibilityPayload.bytes, { status: 200 }),
+  });
+  await assertRejects(() => invalidLoader.fetchCompatibility(), /compatibility document|compatibility asset unavailable/,
+    'rules or JSON-byte contract mismatch was accepted');
 }
 
 console.log('Catalog loader tests passed / Catalog 加载器测试通过');

@@ -536,6 +536,14 @@ buildIdentityTest.status === 0
   ? ok('build identity: branch naming + full commit + fresh deployment identity validation matrix')
   : bad('build identity tests', (buildIdentityTest.stderr || buildIdentityTest.stdout || '').trim().slice(0, 500));
 
+const previewIdentityTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-preview-server.mjs')], {
+  encoding: 'utf8', timeout: 15000,
+});
+previewIdentityTest.status === 0
+  ? ok('local preview identity: virtual build-meta follows current release/branch/commit without changing the tracked file')
+  : bad('local preview identity tests',
+    (previewIdentityTest.stderr || previewIdentityTest.stdout || '').trim().slice(0, 500));
+
 const buildRequestIdentityTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-build-request-identity.mjs')], { encoding: 'utf8' });
 buildRequestIdentityTest.status === 0
   ? ok('build request identity: schema 5 JSON is the exact branch+commit routing envelope')
@@ -555,14 +563,14 @@ const catalogLoaderTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test
   encoding: 'utf8',
 });
 catalogLoaderTest.status === 0
-  ? ok('Catalog loader: Raw index priority, immutable CDN/Raw/Release fallback, cache, SHA-256, schema diagnostics')
+  ? ok('Catalog loader: schema-2-only compatibility contract, immutable CDN/Raw/Release fallback, cache and SHA-256')
   : bad('Catalog loader tests', (catalogLoaderTest.stderr || catalogLoaderTest.stdout || '').trim().slice(0, 240));
 
 const catalogEngineMatrixTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-catalog-engine.mjs')], {
   encoding: 'utf8',
 });
 catalogEngineMatrixTest.status === 0
-  ? ok('Catalog engine matrix: submitted-config validation, dependency closure, reverse disable and orphan pruning')
+  ? ok('Catalog engine matrix: schema-2-only compatibility, submitted-config validation, dependency closure, reverse disable and orphan pruning')
   : bad('Catalog engine matrix tests',
     (catalogEngineMatrixTest.stderr || catalogEngineMatrixTest.stdout || '').trim().slice(0, 320));
 
@@ -903,6 +911,16 @@ mirrorRulesOk
   const catalogEngineJs = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.js'), 'utf8');
   const catalogSchema6Js = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-schema6.js'), 'utf8');
   const catalogSearchWorkerJs = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-search-worker.js'), 'utf8');
+  const compatibilitySchema2Only =
+    catalogLoaderJs.includes('Number(contract.schema) !== 2') &&
+    catalogLoaderJs.includes('Number(data.schema) !== 2') &&
+    catalogLoaderJs.includes('Number(data.schema) !== Number(expected.schema)') &&
+    catalogEngineJs.includes('compatibility document requires schema 2') &&
+    !catalogEngineJs.includes('COMPATIBILITY_LEGACY_RULE_KEYS') &&
+    !catalogEngineJs.includes("rule.kind === 'ownership'");
+  compatibilitySchema2Only
+    ? ok('Catalog compatibility: Loader and engine reject every non-schema-2 contract/document')
+    : bad('Catalog compatibility schema', 'Loader/engine schema-2-only contract is incomplete');
   const genPlugins = readFileSync(join(ROOT, 'tools', 'gen-plugins.mjs'), 'utf8');
   const sensitiveMaskContract = js.includes("'wireguard'") && js.includes("'tor'") &&
     js.includes("/^wireguard$/i.test(w)") && js.includes("w.slice(0, 3) + '***' + w.slice(-3)");
@@ -1754,7 +1772,7 @@ mirrorRulesOk
   const previewServer = readFileSync(join(ROOT, 'tools', 'serve.mjs'), 'utf8');
   const previewBatOk = !previewBatBytes.some((byte) => byte > 0x7f) &&
     !/(?<!\r)\n/.test(previewBat) &&
-    previewBat.includes('node tools\\serve.mjs site\\wrt 8642 --interactive') &&
+    previewBat.includes('node tools\\serve.mjs site\\wrt 8642 --interactive --build-meta-root .') &&
     previewBat.includes('if "%SERVER_EXIT%"=="0" goto local_return') &&
     previewBat.includes(':local_return') && previewBat.includes('goto menu') &&
     previewBat.includes('title wrt-server - local preview 8642') &&
@@ -1763,6 +1781,9 @@ mirrorRulesOk
     previewBat.includes('http://localhost:8642/lib/catalog-loader.js') &&
     previewBat.includes('http://localhost:8642/lib/catalog-schema6.js') &&
     previewBat.includes('http://localhost:8642/lib/catalog-search-worker.js') &&
+    previewBat.includes('http://localhost:8642/data/build-meta.json') &&
+    previewBat.includes('$v.version -eq $m.version') &&
+    previewBat.includes('$v.siteSha256 -eq $m.siteSha256') &&
     previewBat.includes("$l.Headers['Content-Type'] -match 'javascript'") &&
     previewBat.includes('start "" /b powershell') &&
     !previewBat.includes('start "wrt-server" /min') &&
@@ -1773,6 +1794,10 @@ mirrorRulesOk
     previewServer.includes("'.mjs': 'text/javascript; charset=utf-8'") &&
     previewServer.includes("'cache-control': 'no-store'") &&
     previewServer.includes("process.argv.includes('--interactive')") &&
+    previewServer.includes("process.argv.indexOf('--build-meta-root')") &&
+    previewServer.includes("p === '/data/build-meta.json'") &&
+    previewServer.includes("gitOutput(BUILD_META_ROOT, ['branch', '--show-current'])") &&
+    previewServer.includes('root: BUILD_META_ROOT, branch: currentBranch, commit: currentCommit') &&
     previewServer.includes("console.log('0. Stop local preview and return')") &&
     previewServer.includes('server.close(() => process.exit(exitCode))');
   const previewServerFixtureRoot = mkdtempSync(join(tmpdir(), 'weig-preview-server-'));

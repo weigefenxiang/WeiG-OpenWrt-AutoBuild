@@ -234,7 +234,7 @@ function compatibilityContract(index) {
       Number(contract.bytes) > MAX_COMPATIBILITY_JSON_BYTES + 1024 ||
       !Number.isSafeInteger(Number(contract.jsonBytes)) || Number(contract.jsonBytes) <= 0 ||
       Number(contract.jsonBytes) > MAX_COMPATIBILITY_JSON_BYTES ||
-      Number(contract.schema) !== 1 || !Number.isSafeInteger(Number(contract.rules)) || Number(contract.rules) < 0) {
+      Number(contract.schema) !== 2 || !Number.isSafeInteger(Number(contract.rules)) || Number(contract.rules) < 0) {
     throw new Error('Catalog index lacks a valid compatibility asset contract');
   }
   return {
@@ -242,14 +242,14 @@ function compatibilityContract(index) {
     hash: String(contract.hash).toLowerCase(),
     bytes: Number(contract.bytes),
     jsonBytes: Number(contract.jsonBytes),
-    schema: 1,
+    schema: 2,
     rules: Number(contract.rules),
   };
 }
 
 function validateCompatibilityDocument(data, expected) {
   const actualJsonBytes = new TextEncoder().encode(JSON.stringify(data)).byteLength;
-  if (!data || Number(data.schema) !== 1 || !Array.isArray(data.rules) ||
+  if (!data || Number(data.schema) !== 2 || Number(data.schema) !== Number(expected.schema) || !Array.isArray(data.rules) ||
       data.rules.length !== Number(expected.rules) || actualJsonBytes !== Number(expected.jsonBytes)) {
     throw new Error('Catalog compatibility document does not match its index contract');
   }
