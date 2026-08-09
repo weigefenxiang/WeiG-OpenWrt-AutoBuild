@@ -1897,6 +1897,8 @@ mirrorRulesOk
     recommendedHandlerBody.includes("}, { keepOpen: true });") &&
     !recommendedHandlerBody.includes("finish('applied')") &&
     !recommendedHandlerBody.includes('closeModal()') &&
+    js.includes('if (custom.get(row.record.configSymbol) === stateValue) return;') &&
+    js.includes('custom.set(row.record.configSymbol, stateValue);\n            if (recommendationApplied) {\n              recommendationApplied = false;\n              renderChoice();\n              return;\n            }\n            refresh();') &&
     js.includes('recommendedButton.disabled = !plans.recommended || recommendationApplied;') &&
     js.includes('forceButton.disabled = recommendationApplied;') &&
     js.includes('forceButton.onclick = renderForceConfirmation;') &&

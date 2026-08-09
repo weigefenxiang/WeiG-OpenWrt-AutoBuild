@@ -2889,7 +2889,16 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
           button.type = 'button';
           button.dataset.value = stateValue;
           button.textContent = stateValue.toUpperCase();
-          button.onclick = () => { custom.set(row.record.configSymbol, stateValue); refresh(); };
+          button.onclick = () => {
+            if (custom.get(row.record.configSymbol) === stateValue) return;
+            custom.set(row.record.configSymbol, stateValue);
+            if (recommendationApplied) {
+              recommendationApplied = false;
+              renderChoice();
+              return;
+            }
+            refresh();
+          };
           stateBox.appendChild(button);
         }
         line.append(name, stateBox);
