@@ -6,12 +6,23 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { computeSiteSha256 } from './site-release.mjs';
+import { canonicalizeSiteReleaseBytes } from './canonicalize-site-release.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SITE = join(ROOT, 'site', 'wrt');
 const OUT = join(SITE, 'data', 'site-version.json');
 const ROOT_VERSION = join(ROOT, 'VERSION');
 const CHECK_ONLY = process.argv.includes('--check');
+
+const releaseBytes = canonicalizeSiteReleaseBytes(SITE, { write: !CHECK_ONLY });
+if (CHECK_ONLY && releaseBytes.changedFiles.length) {
+  console.error('Site release bytes are not canonical / 站点发布字节未标准化');
+  console.error('Run locally before commit / 提交前请先运行: node tools/canonicalize-site-release.mjs');
+  process.exit(1);
+}
+if (!CHECK_ONLY && releaseBytes.changedFiles.length) {
+  console.log(`[release-bytes] Canonicalized before stamping: ${releaseBytes.changedFiles.length} file(s)`);
+}
 const VERSION_INPUTS = [
   '.github/workflows',
   'Shell',

@@ -41,6 +41,8 @@ function diffCheck() {
 }
 function prepare() {
   verifyGitState();
+  run(process.execPath, ['tools/canonicalize-site-release.mjs']);
+  run(process.execPath, ['tools/check-text-format.mjs', 'site/wrt', '--all']);
   run(process.execPath, ['tools/stamp-site-version.mjs']);
   run(process.execPath, ['tools/check-text-format.mjs', '.', '--changed']);
   run(process.execPath, ['tools/check-all.mjs']);
@@ -49,6 +51,7 @@ function prepare() {
 }
 function verify() {
   verifyGitState();
+  run(process.execPath, ['tools/check-text-format.mjs', 'site/wrt', '--all']);
   run(process.execPath, ['tools/stamp-site-version.mjs', '--check']);
   run(process.execPath, ['tools/check-text-format.mjs', '.', '--changed']);
   run(process.execPath, ['tools/check-all.mjs']);

@@ -14,6 +14,7 @@ import { collectSiteReleaseFiles, computeSiteSha256 } from './site-release.mjs';
 import { checkDevToStaging, checkStagingToMain, promoteExact } from './promote-release.mjs';
 import { prepareSiteDeployment } from './prepare-site-deployment.mjs';
 import { checkTextFiles, expectedLineEnding } from './check-text-format.mjs';
+import { canonicalizeSiteReleaseBytes } from './canonicalize-site-release.mjs';
 import {
   FORBIDDEN_SITE_ARCHIVE_ENTRIES,
   REQUIRED_SITE_ARCHIVE_ENTRIES,
@@ -154,6 +155,8 @@ try {
   };
   writeStampFixture('tools/stamp-site-version.mjs', readFileSync(join(ROOT, 'tools', 'stamp-site-version.mjs')));
   writeStampFixture('tools/site-release.mjs', readFileSync(join(ROOT, 'tools', 'site-release.mjs')));
+  writeStampFixture('tools/canonicalize-site-release.mjs', readFileSync(join(ROOT, 'tools', 'canonicalize-site-release.mjs')));
+  writeStampFixture('tools/check-text-format.mjs', readFileSync(join(ROOT, 'tools', 'check-text-format.mjs')));
   writeStampFixture('tools/helper.mjs', 'export const helper = 1;\n');
   writeStampFixture('.github/workflows/build.yml', 'name: fixture\n');
   writeStampFixture('Shell/diy.sh', '#!/bin/sh\n');
@@ -186,8 +189,10 @@ try {
   const siteLineEndingStale = runStamp(['--check']);
   const siteLineEndingRun = runStamp();
   const lineEndingStamp = readStamp();
-  const lineEndingSemantics = siteLineEndingStale.status === 1 && siteLineEndingRun.status === 0 &&
-    lineEndingStamp.fingerprint === firstStamp.fingerprint && lineEndingStamp.siteSha256 !== firstStamp.siteSha256;
+  const canonicalCss = readFileSync(join(versionStampFixtureRoot, 'site', 'wrt', 'app.css'));
+  const lineEndingCanonicalization = siteLineEndingStale.status === 1 && siteLineEndingRun.status === 0 &&
+    lineEndingStamp.fingerprint === firstStamp.fingerprint && lineEndingStamp.siteSha256 === firstStamp.siteSha256 &&
+    !canonicalCss.includes(Buffer.from('\r\n'));
   writeStampFixture('site/wrt/app.css', 'body { color: black; }\n');
   const restoredRun = runStamp();
   const restoredStamp = readStamp();
@@ -228,10 +233,10 @@ try {
     buildMetaCheck.status === 0 && afterBuildMeta === firstStampText && secondStampText === firstStampText &&
     /^v\d{10}$/.test(firstStamp.version) && firstStamp.timezone === 'Asia/Shanghai' &&
     firstStamp.hashAlgorithm === 'sha256' && /^[a-f0-9]{64}$/.test(firstStamp.fingerprint) &&
-    /^[a-f0-9]{64}$/.test(firstStamp.siteSha256) && lineEndingSemantics && restoredRawBytes &&
+    /^[a-f0-9]{64}$/.test(firstStamp.siteSha256) && lineEndingCanonicalization && restoredRawBytes &&
     scopesChanged && docsCheck.status === 0 && docsRun.status === 0 && beforeDocs === afterDocs;
   stampFixtureOk
-    ? ok('version stamp fixtures: project fingerprint and raw-byte siteSha256 have separate deterministic contracts')
+    ? ok('version stamp fixtures: canonical site bytes precede raw-byte siteSha256 while project fingerprint stays deterministic')
     : bad('version stamp fixtures', JSON.stringify({
       firstStatus: firstRun.status,
       firstCheckStatus: firstCheck.status,
@@ -240,7 +245,7 @@ try {
       firstStamp,
       idempotent: secondStampText === firstStampText,
       buildMetaIgnored: afterBuildMeta === firstStampText,
-      lineEndingSemantics,
+      lineEndingCanonicalization,
       restoredRawBytes,
       scopesChanged,
       docsIgnored: beforeDocs === afterDocs,
@@ -253,7 +258,7 @@ try {
 
 const siteReleaseMatrix = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-site-release.mjs')], { encoding: 'utf8' });
 siteReleaseMatrix.status === 0
-  ? ok('site release SHA-256 matrix: unchanged/change/add/delete/raw-bytes/metadata exclusions are deterministic')
+  ? ok('site release SHA-256 matrix: raw-byte identity, canonical text bytes, binary preservation and metadata exclusions are deterministic')
   : bad('site release SHA-256 matrix', (siteReleaseMatrix.stderr || siteReleaseMatrix.stdout || '').trim().slice(0, 500));
 
 const siteArchiveTestRoot = mkdtempSync(join(tmpdir(), '威格 archive verifier with spaces-'));
@@ -316,6 +321,61 @@ try {
   bad('site archive verifier fixtures', error.message.slice(0, 400));
 } finally {
   rmSync(siteArchiveTestRoot, { recursive: true, force: true });
+}
+
+const releaseBytesGitFixtureRoot = mkdtempSync(join(tmpdir(), 'weig-release-bytes-git-'));
+try {
+  const repo = join(releaseBytesGitFixtureRoot, 'repo');
+  const checkout = join(releaseBytesGitFixtureRoot, 'checkout');
+  mkdirSync(join(repo, 'site', 'wrt', 'data'), { recursive: true });
+  const runGit = (cwd, args) => spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', shell: false });
+  const mustGit = (cwd, args) => {
+    const result = runGit(cwd, args);
+    if (result.status !== 0) throw new Error((result.stderr || result.stdout || `git ${args.join(' ')}`).trim());
+    return result.stdout.trim();
+  };
+  mustGit(repo, ['init']);
+  mustGit(repo, ['config', 'user.email', 'fixture@example.invalid']);
+  mustGit(repo, ['config', 'user.name', 'Fixture']);
+  mustGit(repo, ['config', 'core.autocrlf', 'true']);
+  writeFileSync(join(repo, '.gitattributes'), readFileSync(join(ROOT, '.gitattributes'), 'utf8'));
+  writeFileSync(join(repo, 'site', 'wrt', 'app.js'), 'console.log("fixture");\n');
+  writeFileSync(join(repo, 'site', 'wrt', 'data', 'plugins.json'), '{"plugins":[1]}\n');
+  const binary = Buffer.from([0x00, 0x0d, 0x0a, 0xff, 0x42]);
+  writeFileSync(join(repo, 'site', 'wrt', 'image.png'), binary);
+  const committedSha = computeSiteSha256(join(repo, 'site', 'wrt')).siteSha256;
+  writeFileSync(join(repo, 'site', 'wrt', 'data', 'site-version.json'), JSON.stringify({
+    version: 'v2608091000', timezone: 'Asia/Shanghai', fingerprint: 'f'.repeat(64),
+    siteSha256: committedSha, hashAlgorithm: 'sha256',
+  }, null, 2) + '\n');
+  mustGit(repo, ['add', '.']);
+  mustGit(repo, ['commit', '-m', 'fixture']);
+
+  writeFileSync(join(repo, 'site', 'wrt', 'app.js'), 'console.log("fixture");\r\n');
+  writeFileSync(join(repo, 'site', 'wrt', 'data', 'plugins.json'), '{"plugins":[1]}\r\n');
+  const staleSha = computeSiteSha256(join(repo, 'site', 'wrt')).siteSha256;
+  const dryRun = canonicalizeSiteReleaseBytes(join(repo, 'site', 'wrt'), { write: false });
+  const normalized = canonicalizeSiteReleaseBytes(join(repo, 'site', 'wrt'));
+  const workingSha = computeSiteSha256(join(repo, 'site', 'wrt')).siteSha256;
+  const idempotent = canonicalizeSiteReleaseBytes(join(repo, 'site', 'wrt'));
+  mustGit(repo, ['worktree', 'add', '--detach', checkout, 'HEAD']);
+  const checkoutSha = computeSiteSha256(join(checkout, 'site', 'wrt')).siteSha256;
+  const binaryUnchanged = readFileSync(join(repo, 'site', 'wrt', 'image.png')).equals(binary) &&
+    readFileSync(join(checkout, 'site', 'wrt', 'image.png')).equals(binary);
+  const fixtureOk = staleSha !== committedSha &&
+    dryRun.changedFiles.length === 2 && normalized.changedFiles.length === 2 &&
+    idempotent.changedFiles.length === 0 && workingSha === committedSha && checkoutSha === committedSha && binaryUnchanged;
+  fixtureOk
+    ? ok('F canonical release bytes: stale Windows CRLF working tree normalizes to the same SHA as a clean Git checkout')
+    : bad('F canonical release bytes fixture', JSON.stringify({
+      staleSha, committedSha, workingSha, checkoutSha,
+      dryRun: dryRun.changedFiles, normalized: normalized.changedFiles, idempotent: idempotent.changedFiles,
+      binaryUnchanged,
+    }).slice(0, 700));
+} catch (error) {
+  bad('F canonical release bytes fixture', error.message.slice(0, 500));
+} finally {
+  rmSync(releaseBytesGitFixtureRoot, { recursive: true, force: true });
 }
 
 const releaseFixtureRoot = mkdtempSync(join(tmpdir(), 'weig-release-promotion-'));
@@ -994,6 +1054,7 @@ mirrorRulesOk
   const devAssistant = readFileSync(join(ROOT, 'tools', 'dev-assistant.mjs'), 'utf8');
   const syncBlogSource = readFileSync(join(ROOT, 'tools', 'sync-blog.mjs'), 'utf8');
   const textFormatSource = readFileSync(join(ROOT, 'tools', 'check-text-format.mjs'), 'utf8');
+  const canonicalReleaseSource = readFileSync(join(ROOT, 'tools', 'canonicalize-site-release.mjs'), 'utf8');
   const archiveVerifierSource = readFileSync(join(ROOT, 'tools', 'verify-site-archive.mjs'), 'utf8');
   const gitAttributes = readFileSync(join(ROOT, '.gitattributes'), 'utf8');
   const attributeLines = gitAttributes.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith('#'));
@@ -1331,9 +1392,16 @@ mirrorRulesOk
     textFormatSource.includes("UTF-8 BOM is not allowed") &&
     textFormatSource.includes("has a blank line at EOF") &&
     textFormatSource.includes("No files were changed automatically") &&
+    canonicalReleaseSource.includes("expectedLineEnding(`site/wrt/${file.rel}`)") &&
+    canonicalReleaseSource.includes("canonicalizeSiteReleaseBytes") &&
+    canonicalReleaseSource.includes("write: !checkOnly") &&
+    devAssistant.includes("['tools/canonicalize-site-release.mjs']") &&
+    devAssistant.includes("['tools/check-text-format.mjs', 'site/wrt', '--all']") &&
     devAssistant.includes("['tools/check-text-format.mjs', '.', '--changed']") &&
-    devAssistant.indexOf("tools/stamp-site-version.mjs") < devAssistant.indexOf("tools/check-text-format.mjs") &&
-    devAssistant.indexOf("tools/check-text-format.mjs") < devAssistant.indexOf("tools/check-all.mjs") &&
+    devAssistant.indexOf("tools/canonicalize-site-release.mjs") < devAssistant.indexOf("['tools/check-text-format.mjs', 'site/wrt', '--all']") &&
+    devAssistant.indexOf("['tools/check-text-format.mjs', 'site/wrt', '--all']") < devAssistant.indexOf("['tools/stamp-site-version.mjs']") &&
+    devAssistant.indexOf("['tools/stamp-site-version.mjs']") < devAssistant.indexOf("['tools/check-text-format.mjs', '.', '--changed']") &&
+    devAssistant.indexOf("['tools/check-text-format.mjs', '.', '--changed']") < devAssistant.indexOf("tools/check-all.mjs") &&
     !devAssistant.includes("run('git', ['add'") && !devAssistant.includes("run('git', ['commit'") &&
     gitAttributes.includes('*.mjs text eol=lf') &&
     gitAttributes.includes('*.conf text eol=lf') && gitAttributes.includes('*.txt text eol=lf') &&
@@ -1344,8 +1412,8 @@ mirrorRulesOk
       deployGuide.includes('check-text-format.mjs') &&
       blogGuide.includes('check-text-format.mjs')
     )) &&
-    developerGuideZh.includes('check-text-format.mjs') &&
-    developerGuideEn.includes('check-text-format.mjs');
+    developerGuideZh.includes('check-text-format.mjs') && developerGuideZh.includes('canonicalize-site-release.mjs') &&
+    developerGuideEn.includes('check-text-format.mjs') && developerGuideEn.includes('canonicalize-site-release.mjs');
   textFormatGateContract
     ? ok('prepare helper: stamp -> text format -> check-all -> git diff; Git staging/commit/push stay manual')
     : bad('text format gate contract', 'checker policy, Sync_Deploy ordering, .gitattributes or bilingual docs are incomplete');
@@ -2434,6 +2502,7 @@ mirrorRulesOk
     versionStamper.includes('CHECK_ONLY') &&
     versionStamper.includes('FINGERPRINT_TEXT_EXTENSIONS') &&
     versionStamper.includes('normalizeText') &&
+    versionStamper.includes('canonicalizeSiteReleaseBytes(SITE, { write: !CHECK_ONLY })') &&
     versionStamper.includes('computeSiteSha256(SITE)') &&
     versionStamper.includes("hashAlgorithm: 'sha256'") &&
     versionStamper.includes('siteSha256: siteRelease.siteSha256') &&
@@ -2442,6 +2511,8 @@ mirrorRulesOk
     siteReleaseSource.includes("hash.update(file.rel, 'utf8')") &&
     siteReleaseSource.includes("hash.update(digest, 'ascii')") &&
     siteReleaseSource.includes('assertSiteRelease') &&
+    siteReleaseSource.includes("arg === '--print'") && siteReleaseSource.includes("arg === '--check'") &&
+    siteReleaseSource.includes('Status / 状态:') &&
     versionStamper.includes('writeFileSync(ROOT_VERSION, version') &&
     versionStamper.includes("minute: '2-digit'") &&
     versionStamper.includes("timeZone: 'Asia/Shanghai'") &&

@@ -5,7 +5,8 @@
 
 import { createHash } from 'node:crypto';
 import { closeSync, existsSync, lstatSync, openSync, readFileSync, readSync, readdirSync } from 'node:fs';
-import { join, relative, resolve, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const SITE_RELEASE_EXCLUDES = Object.freeze([
   'data/build-meta.json',
@@ -110,4 +111,46 @@ export function assertSiteRelease(siteRoot) {
     throw new Error(`siteSha256 mismatch / 全站 SHA-256 不一致: expected ${pointer.siteSha256}, actual ${actual.siteSha256}`);
   }
   return { ...actual, pointer };
+}
+
+
+function parseCli(argv) {
+  let siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'site', 'wrt');
+  let mode = 'print';
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--print') mode = 'print';
+    else if (arg === '--check') mode = 'check';
+    else if (arg === '--site') siteRoot = resolve(argv[++i] || '');
+    else throw new Error(`Unknown option / 未知选项: ${arg}`);
+  }
+  return { siteRoot, mode };
+}
+
+function printSiteRelease(siteRoot, mode) {
+  const actual = computeSiteSha256(siteRoot);
+  let pointer = null;
+  try { pointer = readSiteReleasePointer(siteRoot).pointer; } catch { /* pointer may not exist for standalone hash inspection */ }
+  console.log(`Site SHA-256 / 全站 SHA-256: ${actual.siteSha256}`);
+  console.log(`Files / 文件数: ${actual.files}`);
+  console.log(`Bytes / 字节数: ${actual.bytes}`);
+  if (pointer?.siteSha256) {
+    console.log(`Release pointer / 发布指针: ${pointer.siteSha256}`);
+    console.log(`Status / 状态: ${pointer.siteSha256 === actual.siteSha256 ? 'MATCH' : 'MISMATCH'}`);
+  }
+  if (mode === 'check') {
+    const checked = assertSiteRelease(siteRoot);
+    console.log(`Release check / 发布校验: PASS (${checked.pointer.version})`);
+  }
+}
+
+const MODULE_PATH = fileURLToPath(import.meta.url);
+if (process.argv[1] && resolve(process.argv[1]) === resolve(MODULE_PATH)) {
+  try {
+    const { siteRoot, mode } = parseCli(process.argv.slice(2));
+    printSiteRelease(siteRoot, mode);
+  } catch (error) {
+    console.error(`ERROR: ${error.message}`);
+    process.exitCode = 1;
+  }
 }

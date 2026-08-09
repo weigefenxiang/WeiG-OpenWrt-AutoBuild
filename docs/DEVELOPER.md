@@ -10,7 +10,7 @@
 
 - 架构与目录(简版):见根目录 [ARCHITECTURE.md](../ARCHITECTURE.md)(中英双语);**全景详版见下方 1.1**
 - 网页入口:双击 `OpenWebPage_打开网页.bat`；Local Preview 无配置即可用，其他环境从本机 `OpenWebPage.local.cmd` 读取 URL，源码不保存服务器地址
-- 修改后的标准入口:`node tools/dev-assistant.mjs prepare`，统一执行版本 stamp、文本格式、`check-all`、`git diff --check` 与状态输出；只复检不更新时间时运行 `node tools/dev-assistant.mjs verify`
+- 修改后的标准入口:`node tools/dev-assistant.mjs prepare`，统一执行站点发布字节 canonicalize、`site/wrt` 全量文本校验、版本/siteSha stamp、变更文本、`check-all`、`git diff --check` 与状态输出；只复检不更新时间时运行 `node tools/dev-assistant.mjs verify`
 - 业务生成器按实际修改范围运行；本地预览可做页面自检。Blog 正式镜像只在 `main` 晋级后从 `origin/main` 精确同步，不作为普通开发检查步骤
 - 所有生成器只依赖 Node.js ≥18 标准库,无 npm 依赖
 
@@ -76,7 +76,8 @@ WeiG-OpenWrt-AutoBuild/
 │  ├─ parse-build-request-identity.mjs E v2 探针只读 sourceEnv/requestCommit/requestId
 │  ├─ parse-request.mjs            载荷解析 + 固定 Catalog/源码契约 + 共享引擎严格校验
 │  ├─ check-all.mjs                一键体检;check-drift.mjs 上游漂移哨兵
-│  ├─ site-release.mjs             site/wrt 原始字节确定性全站 SHA-256
+│  ├─ canonicalize-site-release.mjs site/wrt 文本发布字节标准化（复用文本格式规则）
+│  ├─ site-release.mjs             site/wrt 原始字节确定性全站 SHA-256；支持 --print/--check
 │  ├─ stamp-site-version.mjs       本地生成 VERSION + siteSha256；--check 供 CI 只读验证
 │  ├─ gen-build-meta.mjs           生成部署实例 Version/Commit/Branch/Built/siteSha256 元数据
 │  ├─ dev-assistant.mjs            Prepare/Verify 编排；不执行 git add/commit/push
@@ -155,7 +156,7 @@ WeiG-OpenWrt-AutoBuild/
 - `.github/workflows/custom-build.yml` 只接受网页生成的 Issue 附件，不再提供 `repository_dispatch` 或隐藏 smoke 配置生成入口。部署实例的 `build-meta.branch` 只作为网页来源身份：`main` 保持无前缀 Issue/Artifact；Actions Worker 标题为 `requester#Issue 请求主体`。任何非 `main` 请求都使用实际 branch 作为前缀，branch 内部 `/` 统一替换为 `_`，例如 `fix/foo` → `[build] fix_foo/请求时间戳/...` 与 `fix_foo-...` Artifact。该规则唯一实现位于 `site/wrt/lib/build-identity.js`，`app.js` 与 `parse-request.mjs` 共用，不按域名判断，也不为 dev/staging/fix/feat 写特判。`build_ref` 仍为稳定的 `请求时间戳-构建标识`，`artifact_ref` 只负责环境感知命名；请求 branch/commit 与实际 Workflow branch/commit 分开写入 Summary/`build-metadata.txt`，旧无前缀 Issue/JSON 继续兼容。时区、主题、NTP、请求/生效软件包镜像与 APK/OPKG 检测结果在提交配置、Summary、`package-mirror-report.json`、`firmware-settings.txt` 与固件内 `/etc/weig-build-info` 交叉核验；固件/config 保留 30 天，完整日志保留 14 天。
 - 软件包镜像唯一规范为 `config/001.presets/package-mirrors.json`。修改 Source family、官方 origin、adapter、镜像或回退顺序后运行 `node tools/gen-package-mirrors.mjs`，不得直接维护网页投影。`Shell/apply-package-mirror.sh` 只做非阻断流程包装，`tools/package-mirror-engine.mjs` 根据实际 `.config`、规范 JSON 登记的 capability 文件与 adapter 文件识别 APK/OPKG，不按 Branch 名猜测；只替换已登记根地址，保留陌生自定义 `CONFIG_VERSION_REPO`。自动策略 USTC→PKU→源码默认，手动失败→源码默认，任何镜像问题都不能终止构建。运行 `node tools/test-package-mirror.mjs` 覆盖 OpenWrt/ImmortalWrt/LEDE、未来分支、混合 adapter 与回退矩阵。
 - 构建准入默认限制每位提交者同时最多 2 个排队中或运行中的任务；第 3 个 Issue 会自动回评并关闭。仓库所有者按 GitHub 登录名识别，不受此上限限制，并为每次构建使用独立并发组，不会在本项目队列中互相等待。Fork 可在仓库 Variables 设置正整数 `MAX_BUILDS_PER_USER` 覆盖默认值。`cancel-build.yml` 只接受原 Issue 提交者的 `/cancel` 或 `/cancel-build`，先普通取消，15 秒未结束才强制取消；管理员仍可在 Actions 页面管理任意任务。
-- 根目录 `VERSION` 是仓库与网页共用的分钟级 `vYYMMDDHHmm` 代码版本；`site-version.json` 保存同一版本、项目输入 fingerprint、`siteSha256` 与 `hashAlgorithm=sha256`。`siteSha256` 递归覆盖 `site/wrt` 的实际发布字节，只排除自引用 pointer 和部署实例 `build-meta.json`。`.gitattributes` 必须为 `site/wrt` 每种发布文件类型显式固定 LF/CRLF 或 binary；回归同时在 `core.autocrlf=false/true` 下验证 exact worktree 得到同一 SHA，SHA 算法本身不做换行归一化。正式改动提交前运行 stamp，CI 只 `--check`；分支晋级不重新生成 VERSION。网页常驻显示 `MMDDHHmm` 短版本。Catalog Target 的操作栏显示当前 `TARGET_ROOTFS_PARTSIZE`，点击可查看“项目/当前值/路径”并直接定位 Advanced 修改；它不再用历史 `p.size/capacity` 生成 RootFS 百分比。非 Catalog 旧设备仍保留原容量估算。可选 `build-meta.json` 提供部署实例的 Commit/Branch/Built。
+- 根目录 `VERSION` 是仓库与网页共用的分钟级 `vYYMMDDHHmm` 代码版本；`site-version.json` 保存同一版本、项目输入 fingerprint、`siteSha256` 与 `hashAlgorithm=sha256`。`siteSha256` 递归覆盖 `site/wrt` 的实际发布字节，只排除自引用 pointer 和部署实例 `build-meta.json`。Prepare 必须先运行 `canonicalize-site-release.mjs`，复用 `check-text-format` 的文本分类把已有 Windows 工作树中的 CRLF/LF 落盘为 `.gitattributes` 约定的确定发布字节，再对 `site/wrt` 做全量文本校验，最后才 stamp。`.gitattributes` 必须为 `site/wrt` 每种发布文件类型显式固定 LF/CRLF 或 binary；回归覆盖 stale CRLF 工作树、`core.autocrlf=false/true` 与 clean detached checkout，canonicalize 后必须得到同一 SHA。SHA 算法本身仍对 raw bytes 哈希，不做换行归一化。排障可运行 `node tools/site-release.mjs --print` 或 `--check`。正式改动提交前运行 Prepare，CI 只 `--check`；分支晋级不重新生成 VERSION。网页常驻显示 `MMDDHHmm` 短版本。Catalog Target 的操作栏显示当前 `TARGET_ROOTFS_PARTSIZE`，点击可查看“项目/当前值/路径”并直接定位 Advanced 修改；它不再用历史 `p.size/capacity` 生成 RootFS 百分比。非 Catalog 旧设备仍保留原容量估算。可选 `build-meta.json` 提供部署实例的 Commit/Branch/Built。
 - 下载与并行编译使用动态并发；并行编译本身开启 `BUILD_LOG=1`。并行失败后先用 `Shell/collect-build-evidence.sh` 冻结 `BUILD-LOGS/parallel/`，再清空 `openwrt/logs` 并执行最长 180 分钟的 `make -j1 V=s BUILD_LOG=1`，诊断证据独立写入 `BUILD-LOGS/diagnostic/`。即使单线程恢复成功也上传 BUILD-LOGS，`00-SUMMARY.txt` 明确区分 FAILED / RECOVERED / TIMEOUT。Catalog 引擎只在网页交互中执行强依赖、`select`、choice、反向失效关闭和孤立自动依赖清理；后端不再对整份 `.config` 判断插件依赖或冲突，也不保留人工 `config-rules`。用户勾选时仅由官方 `make defconfig` 解析配置；未勾选时直接使用提交配置。
 - `config/001.presets/source-build-requirements.json` 目前只承载前端未勾选 Defconfig 时静默加入的 `CONFIG_HAVE_DOT_CONFIG=y`，`site/wrt/data/source-build-requirements.json` 是静态网页副本。后端不读取该规则，也不因缺失而拒绝请求；若以后所有构建都固定运行 Defconfig，可删除这层前端兼容。
 - schema 5 解析器只读取固定 Catalog index，核对 revision/legacy 元数据与 `sourceCommit`，不再下载 Catalog 单体或扫描整份 `.config`。后端只保留安全白名单和最小 Target/Profile 身份核对，不检查 ARCH/ARCH_PACKAGES、插件关系、人工兼容规则、主题包状态或构建必需项。Workflow 获取精确上游 commit；可选官方 Defconfig 是唯一后端配置解析步骤。
@@ -195,7 +196,7 @@ WeiG-OpenWrt-AutoBuild/
 - Fork 后只需修改 `site/wrt/data/project.json` 的主仓库、Catalog 仓库与博客地址；网页链接、Issue 目标和运行时 Catalog 会自动采用该文件。HTML 中保留的人类可读链接仅是旧部署兜底。
 - 独立站部署：`site/wrt/` 本身就是一级静态应用。Cloudflare Pages 建议 Production branch=`main`、Preview branches=`dev/staging`、Build command=`node tools/prepare-web-deployment.mjs`、Output=`site/wrt`；GitHub Pages 发布同一目录。Cloudflare 对 `/wrt/` 必须让 query string 参与 cache key（不要 Ignore Query String）。Release Pointer 以 no-store + refresh query 获取，而带 `?r=<siteSha256>` 的 Release Assets 可安全长缓存；首次从 pre-F 旧页面迁移到 F 时应做一次 Cloudflare purge 或等待旧 HTML TTL，之后发布不依赖 purge。
 - 博客发布镜像：正式版晋级 `main` 后运行 `node tools/sync-blog.mjs [博客路径] --ref origin/main`。工具从 exact AutoBuild commit 镜像完整 `site/wrt/`，临时树和启用树均逐文件比对并重算 siteSha256；任何新增/修改/删除/遗漏文件都拒绝激活。`.wrt-source.json` 记录 Version/Commit/siteSha256；`--check` 同时核对完整树、部署 metadata 与 Release SHA。省略 `--ref` 仅用于本地镜像调试。Blog 不承担 dev/staging Preview，也不得发展第二套 WRT 业务代码。
-- 文本格式门禁：`node tools/check-text-format.mjs <仓库路径> --changed` 只检查当前 Git 变更与未跟踪文本，按 `.gitattributes` 要求验证源码/数据为 LF、BAT/CMD/PowerShell 为 CRLF、UTF-8 无 BOM，且文件末尾只有一个换行；它只报告、不自动改写。`tools/dev-assistant.mjs prepare`（Windows 可由 `Sync_Deploy.bat` 调用）会按 stamp → 文本门禁 → `check-all` → `git diff --check` 的顺序执行；它只提供 Git 状态/建议，不运行 `git add`、`commit` 或 `push`。Git 的“下次将 CRLF 转为 LF”提示只是信息性 warning，真正阻断项会单独列出。
+- 文本格式门禁：`node tools/check-text-format.mjs <仓库路径> --changed` 只检查当前 Git 变更与未跟踪文本，按 `.gitattributes` 要求验证源码/数据为 LF、BAT/CMD/PowerShell 为 CRLF、UTF-8 无 BOM，且文件末尾只有一个换行；它只报告、不自动改写。`tools/dev-assistant.mjs prepare`（Windows 可由 `Sync_Deploy.bat` 调用）会按 canonicalize `site/wrt` → `site/wrt --all` → stamp → changed-text → `check-all` → `git diff --check` 的顺序执行；它只提供 Git 状态/建议，不运行 `git add`、`commit` 或 `push`。Git 的“下次将 CRLF 转为 LF”提示只是信息性 warning，真正阻断项会单独列出。
 
 ### 2.8 云构建测试指南(手动 Run workflow 实战)
 
