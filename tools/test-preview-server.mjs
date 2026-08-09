@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,7 @@ import { createBuildMeta } from './gen-build-meta.mjs';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SITE_ROOT = join(ROOT, 'site', 'wrt');
 const DISK_META = join(SITE_ROOT, 'data', 'build-meta.json');
-const diskMetaBefore = readFileSync(DISK_META);
+const diskMetaBefore = existsSync(DISK_META) ? readFileSync(DISK_META) : null;
 const expectedMeta = createBuildMeta({ root: ROOT, builtAt: '2026-08-10T06:30:00+08:00' });
 
 const child = spawn(process.execPath, [
@@ -55,7 +55,8 @@ try {
   assert.equal(meta.branch, expectedMeta.branch);
   assert.equal(meta.commit, expectedMeta.commit);
   assert.equal(meta.builtAt, '2026-08-10T06:30:00+08:00');
-  assert.deepEqual(readFileSync(DISK_META), diskMetaBefore);
+  if (diskMetaBefore) assert.deepEqual(readFileSync(DISK_META), diskMetaBefore);
+  else assert.equal(existsSync(DISK_META), false, 'local preview created a tracked build-meta file');
   child.stdin.end('0\n');
   const exitCode = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('preview server did not stop')), 5000);
