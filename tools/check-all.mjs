@@ -1861,6 +1861,24 @@ mirrorRulesOk
   catalogProjectContract
     ? ok('Fork 单文件参数 + Catalog 4 源 14 分支 + 构建白名单已接通')
     : bad('project/catalog contract', `源码 ${catalogIndex.sources.length},分支 ${catalogBranches.length},或动态白名单缺失`);
+  const forceConfirmationStart = js.indexOf('const renderForceConfirmation = () => {');
+  const choiceRendererStart = js.indexOf('renderChoice = () => {', forceConfirmationStart);
+  const forceConfirmationBody = forceConfirmationStart >= 0 && choiceRendererStart > forceConfirmationStart
+    ? js.slice(forceConfirmationStart, choiceRendererStart) : '';
+  const compatibilityModalContract =
+    !js.includes('应用最小方案') &&
+    js.includes("recommendedButton.textContent = uiText('推荐方案'") &&
+    js.includes('forceButton.onclick = renderForceConfirmation;') &&
+    !js.includes("forceButton.onclick = () => finish('forced')") &&
+    forceConfirmationBody.includes('modalCancelHandler = renderChoice;') &&
+    forceConfirmationBody.includes('backButton.onclick = renderChoice;') &&
+    forceConfirmationBody.includes("confirmForceButton.onclick = () => finish('forced');") &&
+    !forceConfirmationBody.includes('applyCatalogIntent(') &&
+    !forceConfirmationBody.includes('compatibilityAcknowledgement') &&
+    css.includes('.compatibility-summary-title') &&
+    css.includes('.compatibility-paths code') &&
+    css.includes('.compatibility-force-confirm') &&
+    css.includes('@media(max-width:560px)');
   const compatibilityContract =
     JSON.stringify(project.catalogDataBranches) === JSON.stringify({
       fix: 'catalog-fix', dev: 'catalog-dev', staging: 'catalog-staging', main: 'catalog-data',
@@ -1877,6 +1895,7 @@ mirrorRulesOk
     js.includes('function scheduleCompatibilityPrefetch()') &&
     js.includes('}, 18000);') &&
     js.includes('function openCompatibilityWarningModal(') &&
+    compatibilityModalContract &&
     js.includes('应用自定义 N/M/Y') &&
     js.includes('保留并强制继续') &&
     (js.match(/await ensureCompatibilityRules\(\)/g) || []).length === 2 &&
@@ -1887,8 +1906,8 @@ mirrorRulesOk
     !['OWN-0001', 'luci-app-openvpn-server', 'openvpn-openssl', '/etc/config/openvpn']
       .some((literal) => js.includes(literal));
   compatibilityContract
-    ? ok('Catalog compatibility: fix/dev/staging/main 通道、SHA 缓存、三选一软提示与后端只记审计已接通')
-    : bad('Catalog compatibility contract', '通道映射、缓存、通用规则引擎、提示框或无锁审计边界不完整');
+    ? ok('Catalog compatibility: 通道/SHA 缓存、可读三选一提示、强制二次确认与后端只记审计已接通')
+    : bad('Catalog compatibility contract', '通道、缓存、通用规则、推荐/二次确认提示或无锁审计边界不完整');
   const timezoneUiContract = html.includes('id="timezoneMenu" role="listbox"') &&
     html.includes('role="combobox"') &&
     !html.includes('id="timezoneList"') &&

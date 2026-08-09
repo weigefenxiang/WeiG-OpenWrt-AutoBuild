@@ -2717,94 +2717,11 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       closeModal();
       resolve(action);
     };
-    modalCancelHandler = () => {
+    const cancel = () => {
       if (settled) return;
       settled = true;
       resolve('cancel');
     };
-    openModal(uiText('构建兼容性提示', '建置相容性提示', 'Build compatibility warning'));
-    const modal = $('modal').querySelector('.modal');
-    modal.classList.remove('modal-wide', 'modal-import-source', 'recommended-config',
-      'profile-package-config', 'generation-error', 'catalog-conflict', 'compatibility-warning',
-      'rootfs-guidance');
-    modal.classList.add('catalog-conflict', 'compatibility-warning');
-    const body = $('modalBody');
-    body.textContent = '';
-    const copy = document.createElement('p');
-    copy.className = 'catalog-conflict-copy';
-    copy.textContent = uiText(
-      `规则 ${warning.rule.id}：这些软件包在当前构建条件下同时拥有 ${warning.rule.paths.join('、')}。请选择一种处理方式。`,
-      `規則 ${warning.rule.id}：這些套件在目前建置條件下同時擁有 ${warning.rule.paths.join('、')}。請選擇一種處理方式。`,
-      `Rule ${warning.rule.id}: these packages own ${warning.rule.paths.join(', ')} under the active build condition. Choose how to proceed.`);
-    body.appendChild(copy);
-    const evidence = document.createElement('p');
-    evidence.className = 'compatibility-evidence';
-    evidence.textContent = uiText('证据：', '證據：', 'Evidence: ') + warning.rule.refs.join(' · ');
-    body.appendChild(evidence);
-    const list = document.createElement('div');
-    list.className = 'catalog-conflict-list';
-    const warningText = document.createElement('p');
-    warningText.className = 'catalog-conflict-warning';
-    let customInvalid = true;
-    let customButton = null;
-
-    const refresh = () => {
-      try {
-        const values = new Map(warning.values);
-        for (const [symbol, value] of custom) values.set(symbol, value);
-        customInvalid = CATALOG_ENGINE.evaluateCompatibilityRules(CATALOG_MODEL, {
-          schema: 1, rules: [warning.rule],
-        }, values, evaluation.context).warnings.length > 0;
-        warningText.textContent = customInvalid ? uiText(
-          '自定义状态仍会触发本规则，请至少关闭一个相关软件包。',
-          '自訂狀態仍會觸發本規則，請至少關閉一個相關套件。',
-          'The custom states still trigger this rule; disable at least one related package.') : '';
-      } catch (error) {
-        customInvalid = true;
-        warningText.textContent = error.message;
-      }
-      list.querySelectorAll('.catalog-conflict-row').forEach((line) => {
-        line.querySelectorAll('button[data-value]').forEach((button) => {
-          button.classList.toggle('active', custom.get(line.dataset.symbol) === button.dataset.value);
-        });
-      });
-      if (customButton) customButton.disabled = customInvalid;
-    };
-
-    for (const row of rows) {
-      const line = document.createElement('div');
-      line.className = 'catalog-conflict-row';
-      line.dataset.symbol = row.record.configSymbol;
-      const name = document.createElement('code');
-      name.textContent = row.record.package || row.record.configSymbol;
-      name.title = `CONFIG_${row.record.configSymbol}`;
-      const stateBox = document.createElement('span');
-      stateBox.className = 'catalog-conflict-state';
-      for (const stateValue of ['n', 'm', 'y']) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.dataset.value = stateValue;
-        button.textContent = stateValue.toUpperCase();
-        button.disabled = stateValue === 'n'
-          ? !row.record.canDisable : !row.record.states?.includes(stateValue);
-        button.onclick = () => { custom.set(row.record.configSymbol, stateValue); refresh(); };
-        stateBox.appendChild(button);
-      }
-      line.append(name, stateBox);
-      list.appendChild(line);
-    }
-    body.append(list, warningText);
-    const recommendation = document.createElement('p');
-    recommendation.className = 'compatibility-recommendation';
-    recommendation.textContent = plans.recommended ? uiText(
-      `唯一最小方案：关闭 ${plans.recommended.package}（共改变 ${plans.recommended.cost} 个 symbol）。`,
-      `唯一最小方案：關閉 ${plans.recommended.package}（共改變 ${plans.recommended.cost} 個 symbol）。`,
-      `Unique smallest plan: disable ${plans.recommended.package} (${plans.recommended.cost} symbol changes).`) : uiText(
-      '没有唯一的最小方案，请使用上方 N/M/Y 自定义状态。',
-      '沒有唯一的最小方案，請使用上方 N/M/Y 自訂狀態。',
-      'There is no unique smallest plan; choose custom N/M/Y states above.');
-    body.appendChild(recommendation);
-
     const applyAndVerify = (applyPlan) => {
       const snapshot = snapshotCatalogUiState();
       try {
@@ -2818,49 +2735,204 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
         finish('applied');
       } catch (error) {
         restoreCatalogUiState(snapshot);
-        warningText.textContent = String(error?.message || error).split(';')[0];
+        const warningText = $('modalBody').querySelector('.catalog-conflict-warning');
+        if (warningText) warningText.textContent = String(error?.message || error).split(';')[0];
       }
     };
-    const actions = document.createElement('div');
-    actions.className = 'modal-actions compatibility-actions';
-    const recommendedButton = document.createElement('button');
-    recommendedButton.type = 'button';
-    recommendedButton.className = 'btn btn-primary';
-    recommendedButton.textContent = uiText('应用最小方案', '套用最小方案', 'Apply smallest plan');
-    recommendedButton.disabled = !plans.recommended;
-    recommendedButton.onclick = () => applyAndVerify(() => {
-      const record = warning.records.find((item) => item.configSymbol === plans.recommended.symbol);
-      applyCatalogIntent(menuOptionBySymbol.get(record.configSymbol) || { symbol: record.configSymbol },
-        'n', true, 'user');
-    });
-    customButton = document.createElement('button');
-    customButton.type = 'button';
-    customButton.className = 'btn btn-primary';
-    customButton.textContent = uiText('应用自定义 N/M/Y', '套用自訂 N/M/Y', 'Apply custom N/M/Y');
-    customButton.onclick = () => applyAndVerify(() => {
-      for (const row of rows) {
-        if ((custom.get(row.record.configSymbol) || 'n') === 'n') {
-          applyCatalogIntent(row.option, 'n', true, 'user');
+
+    const renderModalShell = (title) => {
+      if ($('modal').hidden) openModal(title);
+      else {
+        $('modalTitle').textContent = title;
+        $('modalClose').focus();
+      }
+      const modal = $('modal').querySelector('.modal');
+      modal.classList.remove('modal-wide', 'modal-import-source', 'recommended-config',
+        'profile-package-config', 'generation-error', 'catalog-conflict', 'compatibility-warning',
+        'rootfs-guidance');
+      modal.classList.add('catalog-conflict', 'compatibility-warning');
+      const body = $('modalBody');
+      body.textContent = '';
+      return body;
+    };
+
+    const appendCompatibilitySummary = (body, { confirmation = false } = {}) => {
+      const card = document.createElement('section');
+      card.className = `compatibility-summary${confirmation ? ' is-confirmation' : ''}`;
+      const heading = document.createElement('h4');
+      heading.className = 'compatibility-summary-title';
+      heading.textContent = confirmation ? uiText(
+        '当前冲突不会被修复', '目前衝突不會被修復', 'The current conflict will not be resolved') : uiText(
+        '检测到软件包文件冲突', '偵測到套件檔案衝突', 'Package file conflict detected');
+      const copy = document.createElement('p');
+      copy.className = 'compatibility-summary-copy';
+      copy.textContent = confirmation ? uiText(
+        '继续构建可能失败。只有确认接受这个风险后才能继续。',
+        '繼續建置可能失敗。只有確認接受這個風險後才能繼續。',
+        'The build may fail. Continue only after accepting this risk.') : uiText(
+        '以下软件包会写入同一个文件，继续构建可能失败。请选择一种处理方式。',
+        '以下套件會寫入同一個檔案，繼續建置可能失敗。請選擇一種處理方式。',
+        'The packages below write the same file, so the build may fail. Choose how to proceed.');
+      const pathLabel = document.createElement('span');
+      pathLabel.className = 'compatibility-path-label';
+      pathLabel.textContent = uiText('冲突文件', '衝突檔案', 'Conflicting file');
+      const paths = document.createElement('div');
+      paths.className = 'compatibility-paths';
+      for (const path of warning.rule.paths) {
+        const code = document.createElement('code');
+        code.textContent = path;
+        paths.appendChild(code);
+      }
+      const metadata = document.createElement('p');
+      metadata.className = 'compatibility-evidence';
+      metadata.textContent = [
+        `${uiText('规则', '規則', 'Rule')} ${warning.rule.id}`,
+        `${uiText('构建证据', '建置證據', 'Build evidence')} ${warning.rule.refs.join(' · ')}`,
+      ].join(' · ');
+      card.append(heading, copy, pathLabel, paths, metadata);
+      body.appendChild(card);
+    };
+
+    let renderChoice;
+    const renderForceConfirmation = () => {
+      modalCancelHandler = renderChoice;
+      const body = renderModalShell(uiText('确认强制继续', '確認強制繼續', 'Confirm force continuation'));
+      appendCompatibilitySummary(body, { confirmation: true });
+      const actions = document.createElement('div');
+      actions.className = 'modal-actions compatibility-actions compatibility-confirm-actions';
+      const backButton = document.createElement('button');
+      backButton.type = 'button';
+      backButton.className = 'btn compatibility-close';
+      backButton.textContent = uiText('返回修改', '返回修改', 'Back to edit');
+      backButton.onclick = renderChoice;
+      const confirmForceButton = document.createElement('button');
+      confirmForceButton.type = 'button';
+      confirmForceButton.className = 'btn compatibility-force-confirm';
+      confirmForceButton.textContent = uiText('确认强制继续', '確認強制繼續', 'Confirm and force');
+      confirmForceButton.onclick = () => finish('forced');
+      actions.append(backButton, confirmForceButton);
+      body.appendChild(actions);
+    };
+
+    renderChoice = () => {
+      modalCancelHandler = cancel;
+      const body = renderModalShell(uiText(
+        '构建兼容性提示', '建置相容性提示', 'Build compatibility warning'));
+      appendCompatibilitySummary(body);
+      const list = document.createElement('div');
+      list.className = 'catalog-conflict-list';
+      const warningText = document.createElement('p');
+      warningText.className = 'catalog-conflict-warning';
+      let customInvalid = true;
+      let customButton = null;
+      const refresh = () => {
+        try {
+          const values = new Map(warning.values);
+          for (const [symbol, value] of custom) values.set(symbol, value);
+          customInvalid = CATALOG_ENGINE.evaluateCompatibilityRules(CATALOG_MODEL, {
+            schema: 1, rules: [warning.rule],
+          }, values, evaluation.context).warnings.length > 0;
+          warningText.textContent = customInvalid ? uiText(
+            '自定义状态仍会触发本规则，请至少关闭一个相关软件包。',
+            '自訂狀態仍會觸發本規則，請至少關閉一個相關套件。',
+            'The custom states still trigger this rule; disable at least one related package.') : '';
+        } catch (error) {
+          customInvalid = true;
+          warningText.textContent = error.message;
         }
-      }
+        list.querySelectorAll('.catalog-conflict-row').forEach((line) => {
+          line.querySelectorAll('button[data-value]').forEach((button) => {
+            button.classList.toggle('active', custom.get(line.dataset.symbol) === button.dataset.value);
+          });
+        });
+        if (customButton) customButton.disabled = customInvalid;
+      };
       for (const row of rows) {
-        const value = custom.get(row.record.configSymbol) || 'n';
-        if (value !== 'n') applyCatalogIntent(row.option, value, true, 'user');
+        const line = document.createElement('div');
+        line.className = 'catalog-conflict-row';
+        line.dataset.symbol = row.record.configSymbol;
+        const name = document.createElement('code');
+        name.textContent = row.record.package || row.record.configSymbol;
+        name.title = `CONFIG_${row.record.configSymbol}`;
+        const stateBox = document.createElement('span');
+        stateBox.className = 'catalog-conflict-state';
+        for (const stateValue of ['n', 'm', 'y']) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.dataset.value = stateValue;
+          button.textContent = stateValue.toUpperCase();
+          button.disabled = stateValue === 'n'
+            ? !row.record.canDisable : !row.record.states?.includes(stateValue);
+          button.onclick = () => { custom.set(row.record.configSymbol, stateValue); refresh(); };
+          stateBox.appendChild(button);
+        }
+        line.append(name, stateBox);
+        list.appendChild(line);
       }
-    });
-    const forceButton = document.createElement('button');
-    forceButton.type = 'button';
-    forceButton.className = 'btn compatibility-force';
-    forceButton.textContent = uiText('保留并强制继续', '保留並強制繼續', 'Keep and force');
-    forceButton.onclick = () => finish('forced');
-    const cancelButton = document.createElement('button');
-    cancelButton.type = 'button';
-    cancelButton.className = 'btn';
-    cancelButton.textContent = t('btn.close');
-    cancelButton.onclick = closeModal;
-    actions.append(recommendedButton, customButton, forceButton, cancelButton);
-    body.appendChild(actions);
-    refresh();
+      body.append(list, warningText);
+      const recommendation = document.createElement('section');
+      recommendation.className = `compatibility-recommendation${plans.recommended ? '' : ' is-unavailable'}`;
+      const recommendationTitle = document.createElement('strong');
+      recommendationTitle.textContent = uiText('推荐方案', '推薦方案', 'Recommended plan');
+      const recommendationAction = document.createElement('span');
+      recommendationAction.textContent = plans.recommended ? uiText(
+        `关闭 ${plans.recommended.package}`,
+        `關閉 ${plans.recommended.package}`,
+        `Disable ${plans.recommended.package}`) : uiText(
+        '当前没有唯一推荐方案', '目前沒有唯一推薦方案', 'No unique recommended plan is available');
+      const recommendationDetail = document.createElement('small');
+      recommendationDetail.textContent = plans.recommended ? uiText(
+        `预计调整 ${plans.recommended.cost} 个相关配置项`,
+        `預計調整 ${plans.recommended.cost} 個相關設定項`,
+        `Estimated changes: ${plans.recommended.cost} related settings`) : uiText(
+        '请在上方自定义 N/M/Y，或确认风险后强制继续。',
+        '請在上方自訂 N/M/Y，或確認風險後強制繼續。',
+        'Choose custom N/M/Y states above, or confirm the risk before forcing continuation.');
+      recommendation.append(recommendationTitle, recommendationAction, recommendationDetail);
+      body.appendChild(recommendation);
+
+      const actions = document.createElement('div');
+      actions.className = 'modal-actions compatibility-actions';
+      const recommendedButton = document.createElement('button');
+      recommendedButton.type = 'button';
+      recommendedButton.className = 'btn btn-primary compatibility-recommended';
+      recommendedButton.textContent = uiText('推荐方案', '推薦方案', 'Recommended plan');
+      recommendedButton.disabled = !plans.recommended;
+      recommendedButton.onclick = () => applyAndVerify(() => {
+        const record = warning.records.find((item) => item.configSymbol === plans.recommended.symbol);
+        applyCatalogIntent(menuOptionBySymbol.get(record.configSymbol) || { symbol: record.configSymbol },
+          'n', true, 'user');
+      });
+      customButton = document.createElement('button');
+      customButton.type = 'button';
+      customButton.className = 'btn compatibility-custom';
+      customButton.textContent = uiText('应用自定义 N/M/Y', '套用自訂 N/M/Y', 'Apply custom N/M/Y');
+      customButton.onclick = () => applyAndVerify(() => {
+        for (const row of rows) {
+          if ((custom.get(row.record.configSymbol) || 'n') === 'n') {
+            applyCatalogIntent(row.option, 'n', true, 'user');
+          }
+        }
+        for (const row of rows) {
+          const value = custom.get(row.record.configSymbol) || 'n';
+          if (value !== 'n') applyCatalogIntent(row.option, value, true, 'user');
+        }
+      });
+      const forceButton = document.createElement('button');
+      forceButton.type = 'button';
+      forceButton.className = 'btn compatibility-force';
+      forceButton.textContent = uiText('保留并强制继续', '保留並強制繼續', 'Keep and force');
+      forceButton.onclick = renderForceConfirmation;
+      const cancelButton = document.createElement('button');
+      cancelButton.type = 'button';
+      cancelButton.className = 'btn compatibility-close';
+      cancelButton.textContent = t('btn.close');
+      cancelButton.onclick = closeModal;
+      actions.append(recommendedButton, customButton, forceButton, cancelButton);
+      body.appendChild(actions);
+      refresh();
+    };
+    renderChoice();
   });
 }
 
