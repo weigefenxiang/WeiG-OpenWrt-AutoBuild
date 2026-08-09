@@ -1944,7 +1944,10 @@ mirrorRulesOk
     catalogEngineJs.includes('export function evaluateCompatibilityRules') &&
     catalogEngineJs.includes('export function deriveCompatibilityPlans') &&
     catalogEngineJs.includes('export function compatibilityAcknowledgementKey') &&
+    catalogEngineJs.includes("['file-ownership', 'build-failure']") &&
+    catalogEngineJs.includes("['all-installed', 'all-selected']") &&
     catalogEngineJs.includes('records.every((record) => recordInstalled(record, values))') &&
+    catalogEngineJs.includes("['m', 'y'].includes(") &&
     js.includes('BUILD_IDENTITY_MODULE.catalogDataBranch(') &&
     js.includes('allowReleaseFallback: MENU_CATALOG_DATA_REF ===') &&
     js.includes('function scheduleCompatibilityPrefetch()') &&
@@ -1958,7 +1961,13 @@ mirrorRulesOk
     parser.includes('normalizeRequestAudit(raw)') &&
     requestAuditJs.includes('兼容性强制审计') &&
     !parser.includes('evaluateCompatibilityRules') &&
-    !['OWN-0001', 'luci-app-openvpn-server', 'openvpn-openssl', '/etc/config/openvpn']
+    developerGuideZh.includes('issue=file-ownership|build-failure') &&
+    developerGuideZh.includes('build-index.mjs --compatibility-only') &&
+    developerGuideEn.includes('issue=file-ownership|build-failure') &&
+    developerGuideEn.includes('build-index.mjs --compatibility-only') &&
+    js.includes('你选择保留已知失败的配置，构建仍可能失败') &&
+    js.includes('You are keeping a selection known to fail; the build may still fail.') &&
+    !['OWN-0001', 'BLD-0001', 'luci-app-openvpn-server', 'openvpn-openssl', 'oscam', '/etc/config/openvpn']
       .some((literal) => js.includes(literal));
   compatibilityContract
     ? ok('Catalog compatibility: 通道/SHA 缓存、可读三选一提示、强制二次确认与后端只记审计已接通')

@@ -479,6 +479,30 @@ assert(evaluateCompatibilityRules(model, compatibility, ownershipValues, {
   sourceId: 'Demo', branchName: 'next',
 }).warnings.length === 0, 'compatibility scope leaked to another branch');
 
+const buildFailure = {
+  schema: 2,
+  rules: [{
+    id: 'BLD-TEST', issue: 'build-failure', match: 'all-selected',
+    scope: { Demo: ['stable'] }, packages: ['core-service'], refs: ['run:3'],
+  }],
+};
+for (const [value, expected] of [['n', 0], ['m', 1], ['y', 1]]) {
+  const values = new Map(ownershipValues).set('PACKAGE_core-service', value);
+  assert(evaluateCompatibilityRules(model, buildFailure, values, {
+    sourceId: 'Demo', branchName: 'stable',
+  }).warnings.length === expected, `all-selected did not classify ${value}`);
+}
+const buildWarning = evaluateCompatibilityRules(model, buildFailure,
+  new Map(ownershipValues).set('PACKAGE_core-service', 'y'), {
+    sourceId: 'Demo', branchName: 'stable',
+  }).warnings[0];
+const buildPlans = deriveCompatibilityPlans(model, buildWarning.values, buildWarning);
+assert(buildPlans.recommended?.package === 'core-service' &&
+  evaluateCompatibilityRules(model, buildFailure, buildPlans.recommended.values, {
+    sourceId: 'Demo', branchName: 'stable',
+  }).warnings.length === 0,
+'single-package compatibility rule did not derive and apply a generic disable intent');
+
 const tiedCompatibility = {
   schema: 1,
   rules: [{
@@ -496,6 +520,7 @@ assert(tiedWarning && deriveCompatibilityPlans(model, tiedValues, tiedWarning).r
 
 for (const mutate of [
   (value) => { value.rules[0].symbols = ['PACKAGE_duplicate']; },
+  (value) => { delete value.rules[0].if; },
   (value) => { delete value.rules[0].paths; },
   (value) => { value.rules.push(structuredClone(value.rules[0])); },
   (value) => { value.rules[0].packages.push(value.rules[0].packages[0]); },
@@ -506,6 +531,21 @@ for (const mutate of [
   expectThrow(() => normalizeCompatibilityDocument(invalid), /compatibility|OWN-TEST/i,
     'mutated compatibility document was accepted');
 }
+for (const mutate of [
+  (value) => { value.rules[0].issue = 'unknown'; },
+  (value) => { value.rules[0].match = 'any'; },
+  (value) => { value.rules[0].paths = ['/not-applicable']; },
+  (value) => { value.rules[0].packages = []; },
+  (value) => { value.rules[0].extra = true; },
+]) {
+  const invalid = structuredClone(buildFailure);
+  mutate(invalid);
+  expectThrow(() => normalizeCompatibilityDocument(invalid), /compatibility|BLD-TEST/i,
+    'mutated schema-2 compatibility document was accepted');
+}
+expectThrow(() => normalizeCompatibilityDocument({
+  schema: 2, rules: [{ padding: 'x'.repeat(512 * 1024) }],
+}), /too large/i, 'oversized compatibility document was accepted');
 const missingPackage = structuredClone(compatibility);
 missingPackage.rules[0].packages[1] = 'missing-package';
 expectThrow(() => evaluateCompatibilityRules(model, missingPackage, ownershipValues,

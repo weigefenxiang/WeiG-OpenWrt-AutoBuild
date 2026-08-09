@@ -2774,6 +2774,7 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
     };
 
     const appendCompatibilitySummary = (body, { confirmation = false } = {}) => {
+      const ownership = warning.rule.issue === 'file-ownership';
       const card = document.createElement('section');
       card.className = `compatibility-summary${confirmation ? ' is-confirmation' : ''}`;
       const heading = document.createElement('h4');
@@ -2781,6 +2782,12 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       heading.textContent = confirmation ? uiText(
         '当前冲突不会被修复', '目前衝突不會被修復', 'The current conflict will not be resolved') : uiText(
         '检测到软件包文件冲突', '偵測到套件檔案衝突', 'Package file conflict detected');
+      if (!ownership) {
+        heading.textContent = confirmation ? uiText(
+          '当前兼容性问题不会被解决', '目前相容性問題不會被解決',
+          'The current compatibility issue will not be resolved') : uiText(
+          '检测到已知构建失败', '偵測到已知建置失敗', 'Known build failure detected');
+      }
       const copy = document.createElement('p');
       copy.className = 'compatibility-summary-copy';
       copy.textContent = confirmation ? uiText(
@@ -2790,16 +2797,31 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
         '以下软件包会写入同一个文件，继续构建可能失败。请选择一种处理方式。',
         '以下套件會寫入同一個檔案，繼續建置可能失敗。請選擇一種處理方式。',
         'The packages below write the same file, so the build may fail. Choose how to proceed.');
+      if (!ownership) {
+        copy.textContent = confirmation ? uiText(
+          '你选择保留已知失败的配置，构建仍可能失败。确认接受风险后才能继续。',
+          '你選擇保留已知失敗的設定，建置仍可能失敗。確認接受風險後才能繼續。',
+          'You are keeping a selection known to fail; the build may still fail. Continue only after accepting the risk.') : uiText(
+          '真实构建证据已确认以下选择会失败。请选择一种处理方式。',
+          '真實建置證據已確認以下選擇會失敗。請選擇一種處理方式。',
+          'Real build evidence confirms that the selection below fails. Choose how to proceed.');
+      }
       const pathLabel = document.createElement('span');
       pathLabel.className = 'compatibility-path-label';
       pathLabel.textContent = uiText('冲突文件', '衝突檔案', 'Conflicting file');
+      if (!ownership) pathLabel.textContent = uiText('问题类型', '問題類型', 'Issue type');
       const summaryLine = document.createElement('div');
       summaryLine.className = 'compatibility-info-line';
       const paths = document.createElement('div');
       paths.className = 'compatibility-paths';
-      for (const path of warning.rule.paths) {
+      for (const path of warning.rule.paths || []) {
         const code = document.createElement('code');
         code.textContent = path;
+        paths.appendChild(code);
+      }
+      if (!ownership) {
+        const code = document.createElement('code');
+        code.textContent = uiText('已知构建失败', '已知建置失敗', 'Known build failure');
         paths.appendChild(code);
       }
       const metadata = document.createElement('p');
@@ -2851,7 +2873,7 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
         for (const [symbol, value] of custom) values.set(symbol, value);
         try {
           customInvalid = CATALOG_ENGINE.evaluateCompatibilityRules(CATALOG_MODEL, {
-            schema: 1, rules: [warning.rule],
+            schema: 2, rules: [warning.rule],
           }, values, evaluation.context).warnings.length > 0;
           warningText.textContent = customInvalid ? uiText(
             '自定义状态仍会触发本规则，请至少关闭一个相关软件包。',
