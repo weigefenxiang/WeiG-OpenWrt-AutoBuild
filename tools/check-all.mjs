@@ -1875,9 +1875,21 @@ mirrorRulesOk
     forceConfirmationBody.includes("confirmForceButton.onclick = () => finish('forced');") &&
     !forceConfirmationBody.includes('applyCatalogIntent(') &&
     !forceConfirmationBody.includes('compatibilityAcknowledgement') &&
+    js.includes('actions.append(forceButton, customButton, actionsSpacer, cancelButton, recommendedButton);') &&
     css.includes('.compatibility-summary-title') &&
     css.includes('.compatibility-paths code') &&
     css.includes('.compatibility-force-confirm') &&
+    css.includes('.compatibility-actions-spacer{flex:1 1 auto;min-width:24px}') &&
+    css.includes('grid-template-columns:repeat(2,minmax(0,1fr))') &&
+    css.includes('.compatibility-actions-spacer{display:none}') &&
+    css.includes('--menuconfig-title-size: 18px;') &&
+    css.includes(':root{--menuconfig-title-size:15px}') &&
+    css.includes(':root{--menuconfig-title-size:14px}') &&
+    (css.match(/--menuconfig-title-size:\s*\d+px/g) || []).length === 3 &&
+    !css.includes('.menuconfig-box{--menuconfig-title-size') &&
+    css.includes('.menuconfig-option-id{font:650 var(--menuconfig-title-size)/1.35 ui-monospace,Consolas,monospace') &&
+    css.includes('.catalog-conflict-row code{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font:650 var(--menuconfig-title-size)/1.35 ui-monospace,Consolas,monospace}') &&
+    css.includes('.catalog-conflict-warning{min-height:20px;margin:10px 0 0;color:var(--danger);font-size:14px;line-height:1.55}') &&
     css.includes('@media(max-width:560px)');
   const compatibilityContract =
     JSON.stringify(project.catalogDataBranches) === JSON.stringify({

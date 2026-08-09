@@ -2928,7 +2928,10 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       cancelButton.className = 'btn compatibility-close';
       cancelButton.textContent = t('btn.close');
       cancelButton.onclick = closeModal;
-      actions.append(recommendedButton, customButton, forceButton, cancelButton);
+      const actionsSpacer = document.createElement('span');
+      actionsSpacer.className = 'compatibility-actions-spacer';
+      actionsSpacer.setAttribute('aria-hidden', 'true');
+      actions.append(forceButton, customButton, actionsSpacer, cancelButton, recommendedButton);
       body.appendChild(actions);
       refresh();
     };
