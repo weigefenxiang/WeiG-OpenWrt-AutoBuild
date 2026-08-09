@@ -38,10 +38,16 @@ jobs:
             const list = async (status) => (await github.rest.actions.listWorkflowRuns({
               owner, repo, workflow_id: 'custom-build.yml', status, per_page: 100,
             })).data.workflow_runs;
-            const dispatchPrefix = `${requester}#${issue.number} `.toLowerCase();
+            const dispatchPrefixes = [
+              `${requester}#${issue.number} `,
+              `Build ${requester}#${issue.number} · `,
+            ].map((prefix) => prefix.toLowerCase());
             const active = [...await list('queued'), ...await list('in_progress')]
-              .filter((run) => run.event === 'workflow_dispatch' &&
-                String(run.display_title || '').toLowerCase().startsWith(dispatchPrefix));
+              .filter((run) => {
+                const title = String(run.display_title || '').toLowerCase();
+                return run.event === 'workflow_dispatch' &&
+                  dispatchPrefixes.some((prefix) => title.startsWith(prefix));
+              });
             if (!active.length) {
               await github.rest.issues.createComment({
                 owner, repo, issue_number: issue.number,

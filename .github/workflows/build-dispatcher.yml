@@ -225,14 +225,35 @@ jobs:
                 core.setFailed(`Dispatch payload is too large: ${bytes} bytes / 派发请求过大`);
                 return;
               }
-              await github.rest.actions.createWorkflowDispatch({
-                owner,
-                repo,
-                workflow_id: 'custom-build.yml',
-                ref: branch,
-                inputs: workerInputs,
-              });
-              core.notice(`Dispatched custom-build ${mode} at ${branch}@${commit}.`);
+              const dispatchWorker = async (inputs) => {
+                try {
+                  await github.rest.actions.createWorkflowDispatch({
+                    owner,
+                    repo,
+                    workflow_id: 'custom-build.yml',
+                    ref: branch,
+                    inputs,
+                  });
+                  return false;
+                } catch (error) {
+                  const details = `${error.message || ''} ${JSON.stringify(error.response?.data || {})}`;
+                  const status = Number(error.status || error.response?.status || error.response?.data?.status || 0);
+                  const runTitleCompatibilityError = status === 422 && /run_title/i.test(details);
+                  if (!runTitleCompatibilityError) throw error;
+                  const { run_title: _optionalRunTitle, ...legacyInputs } = inputs;
+                  core.warning('Target Worker does not accept optional run_title; retrying legacy dispatch without display metadata.');
+                  await github.rest.actions.createWorkflowDispatch({
+                    owner,
+                    repo,
+                    workflow_id: 'custom-build.yml',
+                    ref: branch,
+                    inputs: legacyInputs,
+                  });
+                  return true;
+                }
+              };
+              const legacyTitleFallback = await dispatchWorker(workerInputs);
+              core.notice(`Dispatched custom-build ${mode} at ${branch}@${commit}${legacyTitleFallback ? ' using legacy input compatibility' : ''}.`);
               return;
             }
 

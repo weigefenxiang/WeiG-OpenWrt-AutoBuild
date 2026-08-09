@@ -1,5 +1,5 @@
 name: Custom Build / 定制构建
-run-name: "${{ inputs.run_title }}"
+run-name: "${{ inputs.run_title || format('Build {0}#{1} · {2}', inputs.requester, inputs.issue_number, inputs.issue_title) }}"
 
 on:
   workflow_dispatch:
@@ -25,8 +25,8 @@ on:
         required: true
         type: string
       run_title:
-        description: Prevalidated Actions run title
-        required: true
+        description: Optional prevalidated Actions run title; legacy Dispatchers may omit it
+        required: false
         type: string
       request_branch:
         description: Exact AutoBuild branch requested by the page
@@ -146,12 +146,16 @@ jobs:
               owner: context.repo.owner, repo: context.repo.repo,
               workflow_id: 'custom-build.yml', status, per_page: 100,
             })).data.workflow_runs;
-            const userPrefix = `${requester}#`.toLowerCase();
+            const userPrefixes = [
+              `${requester}#`,
+              `Build ${requester}#`,
+            ].map((prefix) => prefix.toLowerCase());
             const active = [...await list('queued'), ...await list('in_progress')]
               .filter((run) => {
                 if (String(run.id) === String(context.runId)) return false;
+                const title = String(run.display_title || '').toLowerCase();
                 return run.event === 'workflow_dispatch' &&
-                  String(run.display_title || '').toLowerCase().startsWith(userPrefix);
+                  userPrefixes.some((prefix) => title.startsWith(prefix));
               });
             active.push({
               id: context.runId,

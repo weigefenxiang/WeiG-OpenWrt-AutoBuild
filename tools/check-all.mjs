@@ -1499,6 +1499,12 @@ mirrorRulesOk
     dispatcherWorkflow.includes('issue_created_at: process.env.ISSUE_CREATED_AT') &&
     dispatcherWorkflow.includes('RUN_TITLE: ${{ steps.route.outputs.run_title }}') &&
     dispatcherWorkflow.includes('run_title: process.env.RUN_TITLE') &&
+    dispatcherWorkflow.includes('const status = Number(error.status || error.response?.status || error.response?.data?.status || 0);') &&
+    dispatcherWorkflow.includes('const runTitleCompatibilityError = status === 422 && /run_title/i.test(details);') &&
+    dispatcherWorkflow.includes('const { run_title: _optionalRunTitle, ...legacyInputs } = inputs;') &&
+    dispatcherWorkflow.includes('retrying legacy dispatch without display metadata') &&
+    buildWorkflow.includes('Optional prevalidated Actions run title; legacy Dispatchers may omit it') &&
+    buildWorkflow.includes('run_title:\n        description: Optional prevalidated Actions run title; legacy Dispatchers may omit it\n        required: false') &&
     dispatcherWorkflow.includes('request_branch: branch') &&
     dispatcherWorkflow.includes('request_commit: commit') &&
     dispatcherWorkflow.includes('if (bytes > 60000)') &&
@@ -1519,7 +1525,7 @@ mirrorRulesOk
     buildWorkflow.includes('EXPECTED_REQUEST_BRANCH: ${{ inputs.request_branch }}') &&
     buildWorkflow.includes('EXPECTED_REQUEST_COMMIT: ${{ inputs.request_commit }}') &&
     buildWorkflow.includes('ref: ${{ inputs.request_commit }}') &&
-    buildWorkflow.includes('run-name: "${{ inputs.run_title }}"') &&
+    buildWorkflow.includes('run-name: "${{ inputs.run_title || format(\'Build {0}#{1} · {2}\', inputs.requester, inputs.issue_number, inputs.issue_title) }}"') &&
     buildWorkflow.includes('echo "Request commit: $REQUEST_COMMIT"') &&
     buildWorkflow.includes('echo "Checkout HEAD: $checkout_head"') &&
     buildWorkflow.includes('Verify checked-out commit / 核对检出提交');
@@ -2004,7 +2010,10 @@ mirrorRulesOk
     workflow.includes('const isRepositoryOwner = requester.toLowerCase() === context.repo.owner.toLowerCase();') &&
     workflow.includes('`owner-${context.runId}`') &&
     workflow.includes('Repository owner build admitted without queue') &&
-    workflow.includes('const userPrefix = `${requester}#`.toLowerCase();') &&
+    workflow.includes('const userPrefixes = [') &&
+    workflow.includes('`${requester}#`,') &&
+    workflow.includes('`Build ${requester}#`,') &&
+    workflow.includes('userPrefixes.some((prefix) => title.startsWith(prefix))') &&
     workflow.includes('custom-build-user-${{ needs.admission.outputs.requester }}-${{ needs.admission.outputs.slot }}') &&
     workflow.includes('cancel-in-progress: false') &&
     !/^\s+queue:/m.test(workflow) &&
@@ -2012,7 +2021,10 @@ mirrorRulesOk
     cancelWorkflow.includes('issue_comment:') &&
     cancelWorkflow.includes("['/cancel', '/cancel-build']") &&
     cancelWorkflow.includes('commenter.toLowerCase() !== requester.toLowerCase()') &&
-    cancelWorkflow.includes('const dispatchPrefix = `${requester}#${issue.number} `.toLowerCase();') &&
+    cancelWorkflow.includes('const dispatchPrefixes = [') &&
+    cancelWorkflow.includes('`${requester}#${issue.number} `,') &&
+    cancelWorkflow.includes('`Build ${requester}#${issue.number} · `,') &&
+    cancelWorkflow.includes('dispatchPrefixes.some((prefix) => title.startsWith(prefix))') &&
     cancelWorkflow.includes("run.event === 'workflow_dispatch'") && !cancelWorkflow.includes("run.event === 'issues'") &&
     !cancelWorkflow.includes('Migration compatibility for direct Issue workers') &&
     cancelWorkflow.includes('cancelWorkflowRun') &&
@@ -2020,6 +2032,39 @@ mirrorRulesOk
   buildLimitContract
     ? ok('仓库主免排队、每用户构建上限、Issue 自助取消与强制取消兜底已接通')
     : bad('per-user build control', '仓库主绕过、准入上限、分槽并发或 Issue 作者取消链路缺失');
+
+  const rollingTitleCompatibilityFixtures = [
+    ['new main title', 'weigefenxiang#142 260809_0814/test', 'weigefenxiang', 142, true],
+    ['new dev title', 'weigefenxiang#142 dev-260809_0814/test', 'weigefenxiang', 142, true],
+    ['legacy title', 'Build weigefenxiang#142 · [build] dev/260809_0814/test', 'weigefenxiang', 142, true],
+    ['other issue', 'weigefenxiang#143 dev-260809_0814/test', 'weigefenxiang', 142, false],
+    ['other user', 'other#142 dev-260809_0814/test', 'weigefenxiang', 142, false],
+  ];
+  const titleBelongsToIssue = (title, requester, issueNumber) => {
+    const normalized = String(title || '').toLowerCase();
+    const prefixes = [
+      `${requester}#${issueNumber} `,
+      `Build ${requester}#${issueNumber} · `,
+    ].map((prefix) => prefix.toLowerCase());
+    return prefixes.some((prefix) => normalized.startsWith(prefix));
+  };
+  const titleMatrixOk = rollingTitleCompatibilityFixtures.every(([, title, requester, issueNumber, expected]) =>
+    titleBelongsToIssue(title, requester, issueNumber) === expected);
+  const compatibility422 = {
+    message: "Unexpected inputs provided: ['run_title']",
+    response: { data: { message: "Unexpected inputs provided: ['run_title']", status: 422 } },
+  };
+  const unrelated422 = { status: 422, message: 'Invalid ref', response: { data: { message: 'Invalid ref' } } };
+  const isRunTitleCompatibilityError = (error) => {
+    const details = `${error.message || ''} ${JSON.stringify(error.response?.data || {})}`;
+    const status = Number(error.status || error.response?.status || error.response?.data?.status || 0);
+    return status === 422 && /run_title/i.test(details);
+  };
+  const rollingDispatchContract = titleMatrixOk &&
+    isRunTitleCompatibilityError(compatibility422) && !isRunTitleCompatibilityError(unrelated422);
+  rollingDispatchContract
+    ? ok('rolling exact-ref compatibility: display-only run_title supports old→new and new→old Worker transitions; Admission/Cancel match old and new titles')
+    : bad('rolling exact-ref compatibility', 'run_title became a required routing dependency or old/new Worker titles no longer match Admission/Cancel safely');
   const loadCatalogStart = js.indexOf('async function loadCatalog(');
   const loadCatalogEnd = js.indexOf('function initialCatalogTargetRequest()', loadCatalogStart);
   const loadCatalogBody = loadCatalogStart >= 0 && loadCatalogEnd > loadCatalogStart
