@@ -687,8 +687,10 @@ function dependencyState(record, values, requestedLevel = null, options = {}) {
   for (const expressions of variants) {
     const result = variantLevel(expressions, values, options);
     if (result.status === 'satisfied') {
-      maximum = Math.max(maximum, result.level);
-      if (result.level >= actual) return { status: 'satisfied', maximum: result.level };
+      // Native Kconfig promotes an m-valued direct dependency to y for bool symbols.
+      const level = record.type === 'bool' && result.level === 1 ? 2 : result.level;
+      maximum = Math.max(maximum, level);
+      if (level >= actual) return { status: 'satisfied', maximum: level };
     } else if (result.status === 'deferred') {
       deferred = true;
     }
@@ -703,8 +705,22 @@ function dependencyLevel(record, values, options = {}) {
   return result.maximum;
 }
 
+export function selectableKconfigStates(record = {}, inputValues = new Map(), options = {}) {
+  const values = valuesMap(inputValues);
+  const normalizedOptions = validationOptions(values, options);
+  return allowedKconfigStates(record).filter((value) => {
+    if (value === 'n') return record.canDisable !== false;
+    if (record.userSettable === false) return false;
+    return dependencyState(record, values, stateLevel(value), normalizedOptions).status !== 'unsatisfied';
+  });
+}
+
 function recordEnabled(record, values) {
   return stateLevel(values.get(record.configSymbol) ?? 'n') > 0;
+}
+
+function recordInstalled(record, values) {
+  return normalizeValue(values.get(record.configSymbol) ?? 'n') === 'y';
 }
 
 function enforceablePackage(model, name) {
@@ -1184,7 +1200,7 @@ function compatibilityRuleTriggered(rule, records, values, options) {
   if (condition.status === 'deferred') {
     throw compatibilityError(`${rule.id}.if cannot be resolved from the active Catalog`);
   }
-  return condition.status === 'satisfied' && records.every((record) => recordEnabled(record, values));
+  return condition.status === 'satisfied' && records.every((record) => recordInstalled(record, values));
 }
 
 export function evaluateCompatibilityRules(model, document, inputValues, context = {}) {

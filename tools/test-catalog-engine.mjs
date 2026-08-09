@@ -12,6 +12,7 @@ import {
   parseConfigDocument,
   normalizeKconfigStateValue,
   resolveKconfigDefault,
+  selectableKconfigStates,
   validateConfig,
 } from '../site/wrt/lib/catalog-engine.js';
 
@@ -224,6 +225,38 @@ assert(allowedKconfigStates({ type: 'bool', states: ['n', 'm', 'y', 'invalid'] }
 assert(normalizeKconfigStateValue({ type: 'bool', states: ['n', 'y'] }, 'ON && MODULE') === 'n' &&
   normalizeKconfigStateValue({ type: 'tristate', states: ['n', 'm', 'y'] }, 'm') === 'm',
   'illegal expression text crossed the rendered/serialized N/M/Y state boundary');
+const stateBoundaryRecords = [
+  { kind: 'config', configSymbol: 'MODULE_GATE', kconfigSymbol: 'MODULE_GATE',
+    type: 'tristate', states: ['n', 'm', 'y'] },
+  { kind: 'config', configSymbol: 'BOOL_CHILD', kconfigSymbol: 'BOOL_CHILD',
+    type: 'bool', states: ['n', 'y'], kconfig: { dependsExpressions: [['MODULE_GATE']] } },
+  { kind: 'config', configSymbol: 'TRISTATE_CHILD', kconfigSymbol: 'TRISTATE_CHILD',
+    type: 'tristate', states: ['n', 'm', 'y'], kconfig: { dependsExpressions: [['MODULE_GATE']] } },
+  { kind: 'config', configSymbol: 'LOCKED_BOOL', kconfigSymbol: 'LOCKED_BOOL',
+    type: 'bool', states: ['n', 'y'], canDisable: false },
+  { kind: 'config', configSymbol: 'HIDDEN_BOOL', kconfigSymbol: 'HIDDEN_BOOL',
+    type: 'bool', states: ['n', 'y'], userSettable: false },
+];
+const stateBoundaryModel = createCatalogModel({
+  schema: 5, targets: [], relations: { schema: 2, records: stateBoundaryRecords, indexes: {} },
+});
+for (const [gate, boolStates, tristateStates] of [
+  ['n', 'n', 'n'], ['m', 'n,y', 'n,m'], ['y', 'n,y', 'n,m,y'],
+]) {
+  const values = new Map([['MODULE_GATE', gate]]);
+  assert(selectableKconfigStates(stateBoundaryModel.bySymbol.get('BOOL_CHILD'), values).join(',') === boolStates,
+    `bool selectable states did not follow native Kconfig dependency coercion for ${gate}`);
+  assert(selectableKconfigStates(stateBoundaryModel.bySymbol.get('TRISTATE_CHILD'), values).join(',') === tristateStates,
+    `tristate selectable states did not follow the dependency ceiling for ${gate}`);
+}
+assert(selectableKconfigStates(stateBoundaryModel.bySymbol.get('LOCKED_BOOL'), new Map()).join(',') === 'y',
+  'a non-disableable Kconfig state exposed N as a selectable value');
+assert(selectableKconfigStates(stateBoundaryModel.bySymbol.get('HIDDEN_BOOL'), new Map()).join(',') === 'n',
+  'a hidden Kconfig state was exposed for direct enablement');
+assert(!validateConfig(stateBoundaryModel, new Map([
+  ['MODULE_GATE', 'm'], ['BOOL_CHILD', 'y'], ['TRISTATE_CHILD', 'm'], ['LOCKED_BOOL', 'y'], ['HIDDEN_BOOL', 'n'],
+])).some((row) => row.symbol === 'BOOL_CHILD'),
+'a bool depending on m was rejected instead of receiving Kconfig\'s m-to-y dependency coercion');
 const escapedStringDefault = '"a\\\"b\\\\c"';
 for (const [type, raw, expected] of [
   ['string', '""', ''], ['string', '"hello"', 'hello'], ['string', '"n"', 'n'],
@@ -420,6 +453,18 @@ const ownership = evaluateCompatibilityRules(model, compatibility, ownershipValu
 });
 assert(ownership.warnings.length === 1 && ownership.warnings[0].records.every((record) => record.configSymbol),
   'active ownership rule did not resolve package IDs or the existing hidden-symbol default through the Catalog model');
+for (const [left, right, expected] of [
+  ['y', 'y', 1], ['m', 'm', 0], ['y', 'm', 0], ['m', 'y', 0], ['n', 'y', 0],
+]) {
+  const values = new Map(ownershipValues);
+  values.set('USE_APK', 'y');
+  values.set('PACKAGE_core-service', left);
+  values.set('PACKAGE_ui-service', right);
+  assert(evaluateCompatibilityRules(model, compatibility, values, {
+    sourceId: 'Demo', branchName: 'stable',
+  }).warnings.length === expected,
+  `ownership rule treated ${left}/${right} as ${expected ? 'not installed' : 'simultaneously installed'}`);
+}
 const ownershipPlans = deriveCompatibilityPlans(model, ownershipValues, ownership.warnings[0]);
 assert(ownershipPlans.recommended?.package === 'ui-service' &&
   ownershipPlans.recommended.cost === 2 && ownershipPlans.candidates.find((row) => row.package === 'core-service')?.cost === 3,

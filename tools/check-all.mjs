@@ -1465,7 +1465,7 @@ mirrorRulesOk
     js.includes('useDefconfig: true') && js.includes('use_defconfig: state.useDefconfig') &&
     js.includes('function renderMenuOption(option)') &&
     js.includes('function catalogSelectLock(option)') && js.includes('function catalogSelectLockValue(option, lockedBy)') &&
-    js.includes(".filter((stateValue) => stateValue === 'n' || kconfigLevel(stateValue) <= maxLevel)") &&
+    js.includes('const selectableStates = optionSelectableStates(option);') &&
     js.includes("'# recommended: '") &&
     js.includes('config.hidden = false') && js.includes('config.disabled = !state.minimumBoot');
   recommendedUiContract
@@ -1865,6 +1865,10 @@ mirrorRulesOk
   const choiceRendererStart = js.indexOf('renderChoice = () => {', forceConfirmationStart);
   const forceConfirmationBody = forceConfirmationStart >= 0 && choiceRendererStart > forceConfirmationStart
     ? js.slice(forceConfirmationStart, choiceRendererStart) : '';
+  const recommendedHandlerStart = js.indexOf('recommendedButton.onclick =');
+  const customHandlerStart = js.indexOf('customButton = document.createElement', recommendedHandlerStart);
+  const recommendedHandlerBody = recommendedHandlerStart >= 0 && customHandlerStart > recommendedHandlerStart
+    ? js.slice(recommendedHandlerStart, customHandlerStart) : '';
   const compatibilityCssStart = css.indexOf('.compatibility-summary{');
   const compatibilityCssEnd = css.indexOf('.summary-box {', compatibilityCssStart);
   const compatibilityCss = compatibilityCssStart >= 0 && compatibilityCssEnd > compatibilityCssStart
@@ -1872,11 +1876,14 @@ mirrorRulesOk
   const kconfigDefaultContract =
     catalogEngineJs.includes('export function resolveKconfigDefault(') &&
     catalogEngineJs.includes('export function allowedKconfigStates(') &&
+    catalogEngineJs.includes('export function selectableKconfigStates(') &&
     catalogEngineJs.includes('export function normalizeKconfigStateValue(') &&
     catalogEngineJs.includes("type === 'bool' && level === 1 ? 'y'") &&
+    catalogEngineJs.includes("record.type === 'bool' && result.level === 1 ? 2") &&
     js.includes('CATALOG_ENGINE.resolveKconfigDefault(') &&
     !js.includes('const [value, condition] = raw.split(/\\s+if\\s+/, 2)') &&
-    js.includes('const allowedStates = CATALOG_ENGINE?.allowedKconfigStates?.(option) || [];') &&
+    js.includes('function optionSelectableStates(option)') &&
+    js.includes('const selectableStates = optionSelectableStates(option);') &&
     js.includes('CATALOG_ENGINE.normalizeKconfigStateValue(option, rawValue)') &&
     (js.match(/CATALOG_ENGINE\.allowedKconfigStates\(row\.record\)/g) || []).length === 2;
   kconfigDefaultContract
@@ -1884,7 +1891,14 @@ mirrorRulesOk
     : bad('Kconfig default-expression contract', 'shared typed resolver, app bridge, bool m normalization or legal-state UI boundary is incomplete');
   const compatibilityModalContract =
     !js.includes('应用最小方案') &&
-    js.includes("recommendedButton.textContent = uiText('推荐方案'") &&
+    js.includes('recommendedButton.textContent = recommendationApplied') &&
+    js.includes("? uiText('已应用', '已套用', 'Applied')") &&
+    js.includes("resolve(recommendationApplied ? 'applied' : 'cancel');") &&
+    recommendedHandlerBody.includes("}, { keepOpen: true });") &&
+    !recommendedHandlerBody.includes("finish('applied')") &&
+    !recommendedHandlerBody.includes('closeModal()') &&
+    js.includes('recommendedButton.disabled = !plans.recommended || recommendationApplied;') &&
+    js.includes('forceButton.disabled = recommendationApplied;') &&
     js.includes('forceButton.onclick = renderForceConfirmation;') &&
     !js.includes("forceButton.onclick = () => finish('forced')") &&
     forceConfirmationBody.includes('modalCancelHandler = renderChoice;') &&
@@ -1928,6 +1942,7 @@ mirrorRulesOk
     catalogEngineJs.includes('export function evaluateCompatibilityRules') &&
     catalogEngineJs.includes('export function deriveCompatibilityPlans') &&
     catalogEngineJs.includes('export function compatibilityAcknowledgementKey') &&
+    catalogEngineJs.includes('records.every((record) => recordInstalled(record, values))') &&
     js.includes('BUILD_IDENTITY_MODULE.catalogDataBranch(') &&
     js.includes('allowReleaseFallback: MENU_CATALOG_DATA_REF ===') &&
     js.includes('function scheduleCompatibilityPrefetch()') &&
@@ -2382,7 +2397,7 @@ mirrorRulesOk
     js.includes('promptZh') &&
     js.includes("branch.state === 'unavailable'") &&
     css.includes('.catalog-stale') &&
-    js.includes('const allowedStates = CATALOG_ENGINE?.allowedKconfigStates?.(option) || []') &&
+    js.includes('const selectableStates = optionSelectableStates(option)') &&
     js.includes('function showMenuHelp') &&
     js.includes('function setCatalogLoadState') &&
     js.includes('function retryCatalogLoad') &&
@@ -2483,7 +2498,7 @@ mirrorRulesOk
       js.includes('catalogStateRevision++') &&
       js.includes('catalogContextCache') &&
       js.includes('menuVisibilityCache') &&
-      js.includes('menuMaxLevelCache') &&
+      js.includes('menuSelectableStatesCache') &&
       js.includes('startCatalogSearchWorker()') &&
       js.includes("new Worker(releaseAssetUrl('./lib/catalog-search-worker.js'))") &&
       js.includes('searchPending = matches === null') &&

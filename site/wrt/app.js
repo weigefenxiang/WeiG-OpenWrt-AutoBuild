@@ -129,7 +129,7 @@ let catalogSearchWorkerReady = false, catalogSearchPending = new Set(), catalogS
 let catalogLocatorEntryCache = null;
 let catalogStateRevision = 0, catalogContextCache = new Map(), catalogContextCacheBypass = false;
 let compatibilityPrefetchTimer = null, compatibilityAcknowledgement = null;
-let menuVisibilityRevision = -1, menuVisibilityCache = new Map(), menuMaxLevelCache = new Map();
+let menuVisibilityRevision = -1, menuVisibilityCache = new Map(), menuSelectableStatesCache = new Map();
 const minimumBootOriginal = new Map();
 const minimumBootTouchedOriginal = new Set();
 let minimumBootApplying = false;
@@ -1215,7 +1215,7 @@ function markCatalogStateChanged() {
   catalogContextCache.clear();
   menuVisibilityRevision = -1;
   menuVisibilityCache.clear();
-  menuMaxLevelCache.clear();
+  menuSelectableStatesCache.clear();
 }
 function indexSearchText(option, text) {
   menuSearchText.set(option.symbol, String(text || '').toLowerCase());
@@ -2191,7 +2191,7 @@ function refreshMenuEvaluationCaches() {
   if (menuVisibilityRevision === catalogStateRevision) return;
   menuVisibilityRevision = catalogStateRevision;
   menuVisibilityCache.clear();
-  menuMaxLevelCache.clear();
+  menuSelectableStatesCache.clear();
 }
 function optionVisible(option) {
   if (option?.hidden) return true;
@@ -2202,14 +2202,18 @@ function optionVisible(option) {
   menuVisibilityCache.set(option.symbol, visible);
   return visible;
 }
-function optionMaxLevel(option) {
-  if (option?.hidden) return kconfigLevel(menuValues.get(option.symbol) ?? 'n');
+function optionSelectableStates(option) {
   refreshMenuEvaluationCaches();
-  if (menuMaxLevelCache.has(option.symbol)) return menuMaxLevelCache.get(option.symbol);
-  const level = Math.max(0, ...optionDependencyVariants(option).map((group) =>
-    group.reduce((current, expression) => Math.min(current, kconfigExpr(expression)), 2)));
-  menuMaxLevelCache.set(option.symbol, level);
-  return level;
+  if (menuSelectableStatesCache.has(option.symbol)) return menuSelectableStatesCache.get(option.symbol);
+  const context = catalogValidationContext(menuValues, 'interactive');
+  const states = CATALOG_ENGINE.selectableKconfigStates(
+    option, context.values, context.validationOptions,
+  );
+  menuSelectableStatesCache.set(option.symbol, states);
+  return states;
+}
+function optionMaxLevel(option) {
+  return Math.max(0, ...optionSelectableStates(option).map(kconfigLevel));
 }
 function syncMenuToCurated(option, value, source = 'user') {
   if (!option.symbol.startsWith('PACKAGE_') || !PLUGINS?.plugins || !state.source) return false;
@@ -2525,17 +2529,30 @@ function openCatalogConflictModal(option, value, violations, openChildren = fals
   apply.type = 'button';
   apply.className = 'btn btn-primary';
   apply.textContent = uiText('应用切换', '套用切換', 'Apply switch');
-
   const refresh = () => {
-    const invalid = catalogConflictPlanInvalid(plan, violations);
-    warning.textContent = invalid ? uiText(
-      '冲突的软件包不能同时为 M 或 Y。', '衝突的套件不能同時為 M 或 Y。',
-      'Conflicting packages cannot both remain M or Y.') : '';
+    const context = catalogValidationContext(menuValues, 'interactive');
+    const values = new Map(context.values);
+    for (const [symbol, stateValue] of plan) values.set(symbol, stateValue);
+    const selectableBySymbol = new Map(rows.map((row) => [row.symbol, new Set(
+      CATALOG_ENGINE.selectableKconfigStates(row.record, values, context.validationOptions),
+    )]));
+    const stateInvalid = rows.some((row) => !selectableBySymbol.get(row.symbol).has(plan.get(row.symbol)));
+    const conflictInvalid = catalogConflictPlanInvalid(plan, violations);
+    const invalid = stateInvalid || conflictInvalid;
+    warning.textContent = stateInvalid ? uiText(
+      '所选状态不符合当前 Kconfig 依赖。', '所選狀態不符合目前 Kconfig 相依性。',
+      'The selected states do not satisfy the current Kconfig dependencies.') : conflictInvalid ? uiText(
+        '冲突的软件包不能同时为 M 或 Y。', '衝突的套件不能同時為 M 或 Y。',
+        'Conflicting packages cannot both remain M or Y.') : '';
     apply.disabled = invalid;
-    list.querySelectorAll('.catalog-conflict-row').forEach((row) => {
-      row.classList.toggle('is-invalid', invalid && (plan.get(row.dataset.symbol) || 'n') !== 'n');
-      row.querySelectorAll('button[data-value]').forEach((button) => {
-        button.classList.toggle('active', plan.get(row.dataset.symbol) === button.dataset.value);
+    list.querySelectorAll('.catalog-conflict-row').forEach((line) => {
+      const activeValue = plan.get(line.dataset.symbol) || 'n';
+      line.classList.toggle('is-invalid', invalid && activeValue !== 'n');
+      line.querySelectorAll('button[data-value]').forEach((button) => {
+        const active = activeValue === button.dataset.value;
+        button.classList.toggle('active', active);
+        button.disabled = !selectableBySymbol.get(line.dataset.symbol).has(button.dataset.value);
+        button.hidden = button.disabled && !active;
       });
     });
   };
@@ -2554,7 +2571,6 @@ function openCatalogConflictModal(option, value, violations, openChildren = fals
       button.type = 'button';
       button.dataset.value = stateValue;
       button.textContent = stateValue.toUpperCase();
-      button.disabled = stateValue === 'n' ? !row.record.canDisable : !row.record.states?.includes(stateValue);
       button.onclick = () => { plan.set(row.symbol, stateValue); refresh(); };
       stateBox.appendChild(button);
     }
@@ -2698,7 +2714,9 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       value: warning.values.get(record.configSymbol) ?? 'n',
     }));
     const custom = new Map(rows.map((row) => [row.record.configSymbol, row.value]));
+    let customBaseValues = new Map(warning.values);
     let settled = false;
+    let recommendationApplied = false;
     const finish = (action) => {
       if (settled) return;
       settled = true;
@@ -2709,9 +2727,9 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
     const cancel = () => {
       if (settled) return;
       settled = true;
-      resolve('cancel');
+      resolve(recommendationApplied ? 'applied' : 'cancel');
     };
-    const applyAndVerify = (applyPlan) => {
+    const applyAndVerify = (applyPlan, { keepOpen = false } = {}) => {
       const snapshot = snapshotCatalogUiState();
       try {
         applyPlan();
@@ -2721,7 +2739,17 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
             'The selected plan did not resolve the active rule.'));
         }
         renderCatalogUiAfterIntent();
-        finish('applied');
+        if (!keepOpen) {
+          finish('applied');
+          return;
+        }
+        recommendationApplied = true;
+        const current = evaluateLoadedCompatibility(evaluation.loaded);
+        customBaseValues = new Map(current.values);
+        for (const row of rows) {
+          custom.set(row.record.configSymbol, current.values.get(row.record.configSymbol) ?? 'n');
+        }
+        renderChoice();
       } catch (error) {
         restoreCatalogUiState(snapshot);
         const warningText = $('modalBody').querySelector('.catalog-conflict-warning');
@@ -2817,10 +2845,11 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       warningText.className = 'catalog-conflict-warning';
       let customInvalid = true;
       let customButton = null;
+      const rowBySymbol = new Map(rows.map((row) => [row.record.configSymbol, row]));
       const refresh = () => {
+        const values = new Map(customBaseValues);
+        for (const [symbol, value] of custom) values.set(symbol, value);
         try {
-          const values = new Map(warning.values);
-          for (const [symbol, value] of custom) values.set(symbol, value);
           customInvalid = CATALOG_ENGINE.evaluateCompatibilityRules(CATALOG_MODEL, {
             schema: 1, rules: [warning.rule],
           }, values, evaluation.context).warnings.length > 0;
@@ -2833,8 +2862,15 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
           warningText.textContent = error.message;
         }
         list.querySelectorAll('.catalog-conflict-row').forEach((line) => {
+          const row = rowBySymbol.get(line.dataset.symbol);
+          const selectable = new Set(CATALOG_ENGINE.selectableKconfigStates(
+            row.record, values, evaluation.context.validationOptions,
+          ));
           line.querySelectorAll('button[data-value]').forEach((button) => {
-            button.classList.toggle('active', custom.get(line.dataset.symbol) === button.dataset.value);
+            const active = custom.get(line.dataset.symbol) === button.dataset.value;
+            button.classList.toggle('active', active);
+            button.disabled = !selectable.has(button.dataset.value);
+            button.hidden = button.disabled && !active;
           });
         });
         if (customButton) customButton.disabled = customInvalid;
@@ -2853,8 +2889,6 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
           button.type = 'button';
           button.dataset.value = stateValue;
           button.textContent = stateValue.toUpperCase();
-          button.disabled = stateValue === 'n'
-            ? !row.record.canDisable : !row.record.states?.includes(stateValue);
           button.onclick = () => { custom.set(row.record.configSymbol, stateValue); refresh(); };
           stateBox.appendChild(button);
         }
@@ -2863,12 +2897,14 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       }
       body.append(list, warningText);
       const recommendation = document.createElement('section');
-      recommendation.className = `compatibility-recommendation${plans.recommended ? '' : ' is-unavailable'}`;
+      recommendation.className = `compatibility-recommendation${plans.recommended ? '' : ' is-unavailable'}${recommendationApplied ? ' is-applied' : ''}`;
       const recommendationHeader = document.createElement('div');
       recommendationHeader.className = 'compatibility-recommendation-header';
       const recommendationTitle = document.createElement('strong');
       recommendationTitle.className = 'compatibility-recommendation-title';
-      recommendationTitle.textContent = uiText('推荐方案', '推薦方案', 'Recommended plan');
+      recommendationTitle.textContent = recommendationApplied
+        ? uiText('推荐方案已应用', '推薦方案已套用', 'Recommended plan applied')
+        : uiText('推荐方案', '推薦方案', 'Recommended plan');
       const recommendationAction = document.createElement('span');
       recommendationAction.className = 'compatibility-recommendation-action';
       recommendationAction.textContent = plans.recommended ? uiText(
@@ -2878,7 +2914,10 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
         '当前没有唯一推荐方案', '目前沒有唯一推薦方案', 'No unique recommended plan is available');
       const recommendationDetail = document.createElement('small');
       recommendationDetail.className = 'compatibility-recommendation-detail';
-      recommendationDetail.textContent = plans.recommended ? uiText(
+      recommendationDetail.textContent = recommendationApplied ? uiText(
+        '配置已更新，请检查上方状态；关闭窗口后继续。',
+        '設定已更新，請檢查上方狀態；關閉視窗後繼續。',
+        'The configuration is updated. Review the states above, then close this dialog to continue.') : plans.recommended ? uiText(
         `预计调整 ${plans.recommended.cost} 个相关配置项`,
         `預計調整 ${plans.recommended.cost} 個相關設定項`,
         `Estimated changes: ${plans.recommended.cost} related settings`) : uiText(
@@ -2894,13 +2933,15 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       const recommendedButton = document.createElement('button');
       recommendedButton.type = 'button';
       recommendedButton.className = 'btn btn-primary compatibility-recommended';
-      recommendedButton.textContent = uiText('推荐方案', '推薦方案', 'Recommended plan');
-      recommendedButton.disabled = !plans.recommended;
+      recommendedButton.textContent = recommendationApplied
+        ? uiText('已应用', '已套用', 'Applied')
+        : uiText('推荐方案', '推薦方案', 'Recommended plan');
+      recommendedButton.disabled = !plans.recommended || recommendationApplied;
       recommendedButton.onclick = () => applyAndVerify(() => {
         const record = warning.records.find((item) => item.configSymbol === plans.recommended.symbol);
         applyCatalogIntent(menuOptionBySymbol.get(record.configSymbol) || { symbol: record.configSymbol },
           'n', true, 'user');
-      });
+      }, { keepOpen: true });
       customButton = document.createElement('button');
       customButton.type = 'button';
       customButton.className = 'btn compatibility-custom';
@@ -2920,6 +2961,7 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       forceButton.type = 'button';
       forceButton.className = 'btn compatibility-force';
       forceButton.textContent = uiText('保留并强制继续', '保留並強制繼續', 'Keep and force');
+      forceButton.disabled = recommendationApplied;
       forceButton.onclick = renderForceConfirmation;
       const cancelButton = document.createElement('button');
       cancelButton.type = 'button';
@@ -3498,7 +3540,7 @@ function initMenuconfigControls() {
 }
 function renderMenuOption(option) {
   const rawValue = menuValues.get(option.symbol) ?? simpleKconfigDefault(option);
-  const allowedStates = CATALOG_ENGINE?.allowedKconfigStates?.(option) || [];
+  const selectableStates = optionSelectableStates(option);
   const value = option.type === 'bool' || option.type === 'tristate'
     ? CATALOG_ENGINE.normalizeKconfigStateValue(option, rawValue) : rawValue;
   const childCount = menuNestedCounts.get(option.symbol) || 0;
@@ -3545,9 +3587,6 @@ function renderMenuOption(option) {
   if (option.type === 'bool' || option.type === 'tristate') {
     const tri = document.createElement('span');
     tri.className = 'kconfig-tri';
-    const maxLevel = optionMaxLevel(option);
-    const selectableStates = allowedStates
-      .filter((stateValue) => stateValue === 'n' || kconfigLevel(stateValue) <= maxLevel);
     const states = option.userSettable === false
       ? [...new Set(['n', ...(value !== 'n' ? [value] : [])])]
       : selectableStates;
