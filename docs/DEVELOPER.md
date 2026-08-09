@@ -102,7 +102,7 @@ WeiG-OpenWrt-AutoBuild/
 | `--danger` / `--warn` / `--ok` / `--gold` | 状态色 | — | — |
 | `--radius` / `--shadow` | 圆角/阴影 | `10px` | — |
 
-深色有两份定义(`html[data-theme="dark"]` 手动 + `@media prefers-color-scheme` 自动),**改色要两处同步**。
+深色有两份定义(`html[data-theme="dark"]` 手动 + `@media prefers-color-scheme` 自动),**改色要两处同步**。`index.html` 与生成的 `packages.html` 还共享一段极小的同步 Theme Bootstrap：它在 Release Pointer/CSS/app.js 之前读取 `wrt_theme`，按 `light` / `dark` / `auto + prefers-color-scheme` 立即设置首帧背景、`color-scheme` 与 `theme-color`，避免暗色系统先闪白页；`app.js` 后续主题切换必须复用同一个 `__WEIG_APPLY_THEME__`，不能另写第二套判定。
 字号体系:正文 17px(紧凑档 15.5px,Aa 按钮切换),胶囊/插件/组头 15px,提示 14px。
 响应式断点:860px / 560px / 400px;插件网格 `repeat(auto-fill, minmax(150px,1fr))`(紧凑档 126px)。
 

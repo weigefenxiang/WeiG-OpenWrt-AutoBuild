@@ -3,6 +3,41 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- WEIG_THEME_BOOTSTRAP_START -->
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" id="themeColor" content="#f5f6f8">
+<script data-theme-bootstrap>
+(() => {
+  const root = document.documentElement;
+  const media = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
+  let currentMode = 'auto';
+  const normalize = (mode) => mode === 'light' || mode === 'dark' ? mode : 'auto';
+  const apply = (mode) => {
+    currentMode = normalize(mode);
+    if (currentMode === 'auto') root.removeAttribute('data-theme');
+    else root.dataset.theme = currentMode;
+    const dark = currentMode === 'dark' || (currentMode === 'auto' && Boolean(media?.matches));
+    root.style.colorScheme = dark ? 'dark' : 'light';
+    root.style.backgroundColor = dark ? '#11151c' : '#f5f6f8';
+    const themeColor = document.getElementById('themeColor');
+    if (themeColor) themeColor.setAttribute('content', dark ? '#11151c' : '#f5f6f8');
+    return currentMode;
+  };
+  globalThis.__WEIG_APPLY_THEME__ = apply;
+  let saved = 'auto';
+  try { saved = localStorage.getItem('wrt_theme') || 'auto'; } catch (error) { /* storage may be unavailable */ }
+  apply(saved);
+  media?.addEventListener?.('change', () => { if (currentMode === 'auto') apply('auto'); });
+})();
+</script>
+<style data-theme-bootstrap>
+html, body { background: #f5f6f8; color: #1c2430; }
+html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; color: #e6eaf0; }
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]), html:not([data-theme]) body { background: #11151c; color: #e6eaf0; }
+}
+</style>
+<!-- WEIG_THEME_BOOTSTRAP_END -->
 <meta name="description" data-i18n="app.desc" content="OpenWrt 固件在线定制:选源码、勾插件,GitHub Actions 云编译,免费自取">
 <title>Wei.G · OpenWrt 固件在线定制</title>
 <link rel="icon" data-release-href="Wei.G.ico">

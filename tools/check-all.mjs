@@ -261,6 +261,11 @@ siteReleaseMatrix.status === 0
   ? ok('site release SHA-256 matrix: raw-byte identity, canonical text bytes, binary preservation and metadata exclusions are deterministic')
   : bad('site release SHA-256 matrix', (siteReleaseMatrix.stderr || siteReleaseMatrix.stdout || '').trim().slice(0, 500));
 
+const themeBootstrapMatrix = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-theme-bootstrap.mjs')], { encoding: 'utf8' });
+themeBootstrapMatrix.status === 0
+  ? ok('theme bootstrap: first paint follows saved/system theme before release assets load')
+  : bad('theme bootstrap matrix', (themeBootstrapMatrix.stderr || themeBootstrapMatrix.stdout || '').trim().slice(0, 500));
+
 const siteArchiveTestRoot = mkdtempSync(join(tmpdir(), '威格 archive verifier with spaces-'));
 try {
   const completeSite = join(siteArchiveTestRoot, '完整 网站 source');
@@ -1082,6 +1087,34 @@ mirrorRulesOk
     : bad('public developer docs', 'DEVELOPER.md 或 DEVELOPER.en.md 仍包含 docs-private');
   const catalogIndex = menuCatalogIndex;
   const packageHtml = readFileSync(join(ROOT, 'site', 'wrt', 'packages.html'), 'utf8');
+  const packagePageGenerator = readFileSync(join(ROOT, 'tools', 'gen-pkg-page.mjs'), 'utf8');
+  const themeBootstrapStart = '<!-- WEIG_THEME_BOOTSTRAP_START -->';
+  const themeBootstrapEnd = '<!-- WEIG_THEME_BOOTSTRAP_END -->';
+  const extractThemeBootstrap = (source) => {
+    const start = source.indexOf(themeBootstrapStart);
+    const end = source.indexOf(themeBootstrapEnd, start + themeBootstrapStart.length);
+    return start >= 0 && end >= 0 ? source.slice(start, end + themeBootstrapEnd.length) : '';
+  };
+  const indexThemeBootstrap = extractThemeBootstrap(html);
+  const packageThemeBootstrap = extractThemeBootstrap(packageHtml);
+  const firstPaintThemeContract = Boolean(indexThemeBootstrap) && indexThemeBootstrap === packageThemeBootstrap &&
+    html.indexOf(themeBootstrapStart) < html.indexOf("new URL('data/site-version.json', document.baseURI)") &&
+    packageHtml.indexOf(themeBootstrapStart) < packageHtml.indexOf("new URL('data/site-version.json',document.baseURI)") &&
+    indexThemeBootstrap.includes('<meta name="color-scheme" content="light dark">') &&
+    indexThemeBootstrap.includes('<meta name="theme-color" id="themeColor" content="#f5f6f8">') &&
+    indexThemeBootstrap.includes("localStorage.getItem('wrt_theme')") &&
+    indexThemeBootstrap.includes("matchMedia('(prefers-color-scheme: dark)')") &&
+    indexThemeBootstrap.includes('globalThis.__WEIG_APPLY_THEME__ = apply') &&
+    indexThemeBootstrap.includes("root.style.backgroundColor = dark ? '#11151c' : '#f5f6f8'") &&
+    js.includes("typeof globalThis.__WEIG_APPLY_THEME__ === 'function'") &&
+    js.includes('themeMode = globalThis.__WEIG_APPLY_THEME__(themeMode)') &&
+    packagePageGenerator.includes('const THEME_BOOTSTRAP = `<!-- WEIG_THEME_BOOTSTRAP_START -->') &&
+    packagePageGenerator.includes('${THEME_BOOTSTRAP}') &&
+    packageHtml.includes('html[data-theme="dark"]{') &&
+    packageHtml.includes('@media (prefers-color-scheme:dark){html:not([data-theme]){');
+  firstPaintThemeContract
+    ? ok('first-paint theme: index/packages share the same synchronous tri-state bootstrap before release assets')
+    : bad('first-paint theme contract', 'theme bootstrap, app theme delegation, package generator persistence or tri-state CSS is incomplete');
   const runtimeReleaseBypasses = [
     /\bfetch\s*\(\s*['"`]\.?\/?data\//g,
     /\bimport\s*\(\s*['"`]\.?\/?lib\//g,

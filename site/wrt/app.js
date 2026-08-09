@@ -6097,7 +6097,9 @@ function applyThemeIcon() {
 }
 function applyTheme(mode) {
   themeMode = (mode === 'light' || mode === 'dark') ? mode : 'auto';
-  if (themeMode === 'auto') delete document.documentElement.dataset.theme;
+  if (typeof globalThis.__WEIG_APPLY_THEME__ === 'function') {
+    themeMode = globalThis.__WEIG_APPLY_THEME__(themeMode);
+  } else if (themeMode === 'auto') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = themeMode;
   applyThemeIcon();
   if (themeMode === 'auto') { try { localStorage.removeItem('wrt_theme'); } catch (e) { /* 隐私模式下 localStorage 可能抛错,忽略 / localStorage may throw in private mode; ignore */ } }

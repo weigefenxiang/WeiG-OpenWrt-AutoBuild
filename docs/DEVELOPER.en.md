@@ -90,7 +90,7 @@ WeiG-OpenWrt-AutoBuild/
 
 Everything lives in the CSS variables at the top of `site/wrt/app.css`; change once, applies site-wide:
 `--bg/--card/--card2` (backgrounds), `--text/--text2/--text3` (text), `--accent*` (brand blue), `--danger/--warn/--ok/--gold` (status), `--radius/--shadow`.
-Dark mode is defined **twice** (`html[data-theme="dark"]` for manual and `@media (prefers-color-scheme: dark)` for auto) — edit both.
+Dark mode is defined **twice** (`html[data-theme="dark"]` for manual and `@media (prefers-color-scheme: dark)` for auto) — edit both. `index.html` and the generated `packages.html` also share a tiny synchronous Theme Bootstrap that runs before the Release Pointer, CSS, and `app.js`: it reads `wrt_theme`, resolves `light` / `dark` / `auto + prefers-color-scheme`, and immediately sets the first-paint background, `color-scheme`, and `theme-color` so dark-mode users never see a white flash. Later theme changes in `app.js` must delegate to the same `__WEIG_APPLY_THEME__` helper instead of duplicating the resolution rule.
 Type scale: 17px body (15.5px compact via the Aa toggle); 15px pills/plugin cells/group headers; 14px hints. Breakpoints: 860px / 560px / 400px; plugin grid `repeat(auto-fill, minmax(150px,1fr))` (126px compact).
 
 ### 2.2 UI strings & i18n

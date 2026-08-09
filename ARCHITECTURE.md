@@ -67,6 +67,7 @@
 ```
 
 Build environment identity is deployment metadata, not application configuration. `build-meta.branch` is generated from the deployment branch; `site/wrt/lib/build-identity.js` is the single naming authority shared by the browser and request parser. Every non-`main` branch adds the same sanitized branch identity to `[build]` Action titles and Artifact names; `main` remains unprefixed. The page bootstrap fetches `site-version.json` and `build-meta.json` together with a fresh no-store release check; `site-version.json` carries the deterministic full-site `siteSha256`, while `build-meta.json` must match that SHA plus version/branch/full commit before cloud submission can be enabled. No hostname or provider-specific branch detection belongs in `app.js`.
+Before that asynchronous release bootstrap, every directly openable WRT HTML page runs the same tiny synchronous Theme Bootstrap. It resolves the saved `wrt_theme` (`light`/`dark`) or system `prefers-color-scheme` (`auto`) before first paint, sets the canvas background plus browser `color-scheme`/`theme-color`, and exposes the same apply helper used by `app.js`; this prevents a white first frame while release metadata and immutable assets are still loading. The package-reference generator emits the identical bootstrap so direct `packages.html` navigation follows the same contract.
 
 ## 数据流 / Data flow
 
