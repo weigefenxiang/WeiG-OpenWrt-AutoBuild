@@ -28,7 +28,7 @@ OpenWrt 固件**在线定制 + 云编译**。在 [网站](https://wrt.weigeshare
 
 ## 我是用户:怎么定制固件
 
-1. 打开 [定制页面](https://wrt.weigeshare.cc.cd/)，依次选择 **Source → Branch → Target System → Subtarget → Target Profile → 插件**，再填写“构建标识”（方便定位固件）。
+1. 打开 [定制页面](https://www.weigeshare.cc.cd/wrt/)，依次选择 **Source → Branch → Target System → Subtarget → Target Profile → 插件**，再填写“构建标识”（方便定位固件）。
 
 2. 点 **提交云编译 → 下载请求并打开 GitHub**，在跳转后的页面只上传刚下载的 `build-request.json`，再点 **Create**；不需要填写机型、源码、版本或分区参数（需登录 GitHub 账号）。已有 `.config` 或 `config.buildinfo` 请先在网页点“加载配置”，识别机型后再提交。
 

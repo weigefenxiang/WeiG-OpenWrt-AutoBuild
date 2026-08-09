@@ -134,6 +134,8 @@ jobs:
         env:
           REQUEST_MANIFEST: dispatcher-request.json
           ISSUE_TITLE: ${{ steps.issue.outputs.title }}
+          REQUESTER: ${{ steps.issue.outputs.requester }}
+          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
         run: node tools/parse-build-request-identity.mjs
 
       - name: Validate exact branch head and dispatch / 核对精确分支并派发
@@ -147,6 +149,7 @@ jobs:
           ISSUE_TITLE: ${{ steps.issue.outputs.title }}
           REQUESTER: ${{ steps.issue.outputs.requester }}
           ISSUE_CREATED_AT: ${{ steps.issue.outputs.created_at }}
+          RUN_TITLE: ${{ steps.route.outputs.run_title }}
         with:
           script: |
             const fs = require('fs');
@@ -213,6 +216,7 @@ jobs:
                 issue_body: issueBody,
                 requester,
                 issue_created_at: process.env.ISSUE_CREATED_AT,
+                run_title: process.env.RUN_TITLE,
                 request_branch: branch,
                 request_commit: commit,
               };

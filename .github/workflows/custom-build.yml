@@ -1,5 +1,5 @@
 name: Custom Build / 定制构建
-run-name: ${{ format('Build {0}#{1} · {2}', inputs.requester, inputs.issue_number, inputs.issue_title) }}
+run-name: "${{ inputs.run_title }}"
 
 on:
   workflow_dispatch:
@@ -22,6 +22,10 @@ on:
         type: string
       issue_created_at:
         description: Original build Issue creation time
+        required: true
+        type: string
+      run_title:
+        description: Prevalidated Actions run title
         required: true
         type: string
       request_branch:
@@ -142,7 +146,7 @@ jobs:
               owner: context.repo.owner, repo: context.repo.repo,
               workflow_id: 'custom-build.yml', status, per_page: 100,
             })).data.workflow_runs;
-            const userPrefix = `Build ${requester}#`.toLowerCase();
+            const userPrefix = `${requester}#`.toLowerCase();
             const active = [...await list('queued'), ...await list('in_progress')]
               .filter((run) => {
                 if (String(run.id) === String(context.runId)) return false;
@@ -201,7 +205,12 @@ jobs:
       - name: Verify checked-out commit / 核对检出提交
         env:
           REQUEST_COMMIT: ${{ inputs.request_commit }}
-        run: test "$(git rev-parse HEAD)" = "$REQUEST_COMMIT"
+        run: |
+          checkout_head="$(git rev-parse HEAD)"
+          echo "Request commit: $REQUEST_COMMIT"
+          echo "Checkout HEAD: $checkout_head"
+          test "$checkout_head" = "$REQUEST_COMMIT"
+          echo "Exact checkout verified."
 
       - name: Read Issue attachment or mobile request / 读取附件或手机请求
         env:

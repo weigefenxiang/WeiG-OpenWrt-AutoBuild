@@ -581,7 +581,7 @@ async function init() {
       import('./lib/catalog-engine.js?v=9f03d1396d'),
       import('./lib/catalog-loader.js?v=e1801742f9'),
       import('./lib/catalog-schema6.js?v=0a165903c2'),
-      import('./lib/build-identity.js?v=a407fd8158'),
+      import('./lib/build-identity.js?v=9bd02841f4'),
     ]);
     I18N = await loadJson('i18n.json');
     state.lang = pickLang();

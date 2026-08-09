@@ -38,7 +38,7 @@ jobs:
             const list = async (status) => (await github.rest.actions.listWorkflowRuns({
               owner, repo, workflow_id: 'custom-build.yml', status, per_page: 100,
             })).data.workflow_runs;
-            const dispatchPrefix = `Build ${requester}#${issue.number} · `.toLowerCase();
+            const dispatchPrefix = `${requester}#${issue.number} `.toLowerCase();
             const active = [...await list('queued'), ...await list('in_progress')]
               .filter((run) => run.event === 'workflow_dispatch' &&
                 String(run.display_title || '').toLowerCase().startsWith(dispatchPrefix));

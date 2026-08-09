@@ -53,6 +53,23 @@ export function artifactBuildRef(buildRef, value) {
   return prefix && ref ? `${prefix}-${ref}` : ref;
 }
 
+export function buildActionRunTitle(requester, issueNumber, issueTitle, value) {
+  const user = String(requester || '').trim();
+  const number = Number(issueNumber);
+  const environment = normalizeBuildEnvironment(value);
+  const match = /^\[build\]\s+(.+)$/.exec(String(issueTitle || '').trim());
+  if (!/^[A-Za-z0-9-]{1,39}$/.test(user) || !Number.isSafeInteger(number) || number <= 0 ||
+      !environment || !match) return '';
+  const identity = buildEnvironmentIdentity(environment);
+  let body = match[1];
+  if (identity) {
+    const prefix = `${identity}/`;
+    if (!body.startsWith(prefix)) return '';
+    body = `${identity}-${body.slice(prefix.length)}`;
+  }
+  return `${user}#${number} ${body}`;
+}
+
 export function parseBuildIssueTitleIdentity(title) {
   const match = /^\[build\]\s+(.+)$/.exec(String(title || '').trim());
   if (!match) return { sourceEnv: '', requestId: '' };

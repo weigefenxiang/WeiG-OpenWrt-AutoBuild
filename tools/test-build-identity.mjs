@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import {
   artifactBuildRef,
+  buildActionRunTitle,
   buildEnvironmentIdentity,
   buildEnvironmentPrefix,
   buildIssueRequestPrefix,
@@ -84,6 +85,23 @@ assert.equal(artifactBuildRef('260807_2114-安卓', ''), '260807_2114-安卓');
 assert.equal(
   artifactBuildRef('260807_2114-安卓', 'fix/kconfig-serializer-hardening'),
   'fix_kconfig-serializer-hardening-260807_2114-安卓',
+);
+
+assert.equal(
+  buildActionRunTitle('weigefenxiang', 141, '[build] 260809_0741/匿名/Generic_x86/64/ImmortalWrt/25.12/generic', 'main'),
+  'weigefenxiang#141 260809_0741/匿名/Generic_x86/64/ImmortalWrt/25.12/generic',
+);
+assert.equal(
+  buildActionRunTitle('weigefenxiang', 141, '[build] dev/260809_0741/匿名/Generic_x86/64/ImmortalWrt/25.12/generic', 'dev'),
+  'weigefenxiang#141 dev-260809_0741/匿名/Generic_x86/64/ImmortalWrt/25.12/generic',
+);
+assert.equal(
+  buildActionRunTitle('weigefenxiang', 141, '[build] fix_e-v2-probe/260809_0741/匿名/Generic_x86/64/ImmortalWrt/25.12/generic', 'fix/e-v2-probe'),
+  'weigefenxiang#141 fix_e-v2-probe-260809_0741/匿名/Generic_x86/64/ImmortalWrt/25.12/generic',
+);
+assert.equal(
+  buildActionRunTitle('weigefenxiang', 141, '[build] wrong/260809_0741/test', 'dev'),
+  '',
 );
 
 assert.deepEqual(

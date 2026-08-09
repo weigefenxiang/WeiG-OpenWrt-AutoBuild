@@ -1497,6 +1497,8 @@ mirrorRulesOk
     dispatcherWorkflow.includes("mode === 'build' || mode === 'build-canary'") &&
     dispatcherWorkflow.includes('issue_body: issueBody') &&
     dispatcherWorkflow.includes('issue_created_at: process.env.ISSUE_CREATED_AT') &&
+    dispatcherWorkflow.includes('RUN_TITLE: ${{ steps.route.outputs.run_title }}') &&
+    dispatcherWorkflow.includes('run_title: process.env.RUN_TITLE') &&
     dispatcherWorkflow.includes('request_branch: branch') &&
     dispatcherWorkflow.includes('request_commit: commit') &&
     dispatcherWorkflow.includes('if (bytes > 60000)') &&
@@ -1517,6 +1519,9 @@ mirrorRulesOk
     buildWorkflow.includes('EXPECTED_REQUEST_BRANCH: ${{ inputs.request_branch }}') &&
     buildWorkflow.includes('EXPECTED_REQUEST_COMMIT: ${{ inputs.request_commit }}') &&
     buildWorkflow.includes('ref: ${{ inputs.request_commit }}') &&
+    buildWorkflow.includes('run-name: "${{ inputs.run_title }}"') &&
+    buildWorkflow.includes('echo "Request commit: $REQUEST_COMMIT"') &&
+    buildWorkflow.includes('echo "Checkout HEAD: $checkout_head"') &&
     buildWorkflow.includes('Verify checked-out commit / 核对检出提交');
   routingProductionContract
     ? ok('E v2 Phase B2 routing: production Issue→Dispatcher→exact-ref Worker is single-entry; manual Probe/canary and frozen Issue rechecks remain')
@@ -1831,6 +1836,7 @@ mirrorRulesOk
     js.includes('BUILD_IDENTITY_MODULE.buildIssueRequestPrefix(sourceEnv)') &&
     js.includes('requestId: requestStamp') && js.includes('sourceEnv,') && js.includes('requestCommit: String(state.buildMeta?.commit') &&
     requestParser.includes('parseBuildIssueTitleIdentity') && requestParser.includes('buildEnvironmentIdentity') &&
+    buildIdentitySource.includes('buildActionRunTitle') &&
     requestParser.includes('artifact_ref=${artifactRef}') && requestParser.includes('request_commit=${requestCommit}') &&
     workflow.includes('artifact_ref: ${{ steps.req.outputs.artifact_ref }}') &&
     workflow.includes('name: ${{ steps.req.outputs.artifact_ref }}-CONFIG') &&
@@ -1998,6 +2004,7 @@ mirrorRulesOk
     workflow.includes('const isRepositoryOwner = requester.toLowerCase() === context.repo.owner.toLowerCase();') &&
     workflow.includes('`owner-${context.runId}`') &&
     workflow.includes('Repository owner build admitted without queue') &&
+    workflow.includes('const userPrefix = `${requester}#`.toLowerCase();') &&
     workflow.includes('custom-build-user-${{ needs.admission.outputs.requester }}-${{ needs.admission.outputs.slot }}') &&
     workflow.includes('cancel-in-progress: false') &&
     !/^\s+queue:/m.test(workflow) &&
@@ -2005,7 +2012,7 @@ mirrorRulesOk
     cancelWorkflow.includes('issue_comment:') &&
     cancelWorkflow.includes("['/cancel', '/cancel-build']") &&
     cancelWorkflow.includes('commenter.toLowerCase() !== requester.toLowerCase()') &&
-    cancelWorkflow.includes('const dispatchPrefix = `Build ${requester}#${issue.number} · `.toLowerCase();') &&
+    cancelWorkflow.includes('const dispatchPrefix = `${requester}#${issue.number} `.toLowerCase();') &&
     cancelWorkflow.includes("run.event === 'workflow_dispatch'") && !cancelWorkflow.includes("run.event === 'issues'") &&
     !cancelWorkflow.includes('Migration compatibility for direct Issue workers') &&
     cancelWorkflow.includes('cancelWorkflowRun') &&

@@ -4,6 +4,7 @@
 
 import { appendFileSync, readFileSync } from 'node:fs';
 import {
+  buildActionRunTitle,
   buildEnvironmentIdentity,
   normalizeBuildCommit,
   normalizeBuildEnvironment,
@@ -44,6 +45,8 @@ if (!REQUEST_ID_RE.test(requestId)) fail(`invalid requestId: ${JSON.stringify(re
 
 const issueTitle = String(process.env.ISSUE_TITLE || '').trim();
 const titleIdentity = parseBuildIssueTitleIdentity(issueTitle);
+const requester = String(process.env.REQUESTER || '').trim();
+const issueNumber = Number(process.env.ISSUE_NUMBER || '0');
 if (issueTitle.startsWith('[build]')) {
   if (!titleIdentity.requestId) fail('Issue title does not contain a valid build request identity');
   const sourceIdentity = buildEnvironmentIdentity(sourceEnv);
@@ -55,10 +58,16 @@ if (issueTitle.startsWith('[build]')) {
   }
 }
 
+const runTitle = issueTitle.startsWith('[build]')
+  ? buildActionRunTitle(requester, issueNumber, issueTitle, sourceEnv)
+  : '';
+if (issueTitle.startsWith('[build]') && !runTitle) fail('cannot format build Actions run title');
+
 const lines = [
   `request_branch=${sourceEnv}`,
   `request_commit=${requestCommit}`,
   `request_id=${requestId}`,
+  `run_title=${runTitle}`,
 ];
 const output = String(process.env.GITHUB_OUTPUT || '').trim();
 if (output) appendFileSync(output, `${lines.join('\n')}\n`);
