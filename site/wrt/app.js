@@ -88,6 +88,7 @@ let PLUGINS = null, I18N = null, TIMEZONES = null, MINIMUM_BOOT = null, BUILD_RE
 let PACKAGE_MIRRORS = { schema: 2, presets: [{ id: 'source-default', label: { 'zh-CN': '跟随源码默认', en: 'Follow source default' }, sources: [] }] };
 let MENU_INDEX = null, MENU_CATALOG = null, CATALOG_ENGINE = null, CATALOG_MODEL = null;
 let CATALOG_LOADER_MODULE = null, CATALOG_SCHEMA6_MODULE = null, BUILD_IDENTITY_MODULE = null, CATALOG_LOADER = null;
+let MENU_CATALOG_DATA_REF = 'catalog-data';
 let catalogShardLoader = null, catalogMenuLoadingPromise = null;
 let catalogHiddenLoadingPromise = null;
 let menuCatalogKey = '', menuLoadingKey = '', menuCatalogSeq = 0, menuCatalogPromise = null;
@@ -127,6 +128,7 @@ let catalogSearchWorker = null, catalogSearchGeneration = 0, catalogSearchReques
 let catalogSearchWorkerReady = false, catalogSearchPending = new Set(), catalogSearchResults = new Map();
 let catalogLocatorEntryCache = null;
 let catalogStateRevision = 0, catalogContextCache = new Map(), catalogContextCacheBypass = false;
+let compatibilityPrefetchTimer = null, compatibilityAcknowledgement = null;
 let menuVisibilityRevision = -1, menuVisibilityCache = new Map(), menuMaxLevelCache = new Map();
 const minimumBootOriginal = new Map();
 const minimumBootTouchedOriginal = new Set();
@@ -611,9 +613,17 @@ async function init() {
         if (/^https?:\/\//.test(PROJECT.blogUrl || '')) link.href = PROJECT.blogUrl;
       });
     } catch (e) { /* old deployments keep the built-in project defaults */ }
+    const deploymentIdentity = await loadDeploymentIdentity();
+    state.siteVersion = deploymentIdentity.siteVersion;
+    state.buildMeta = deploymentIdentity.buildMeta;
+    MENU_CATALOG_DATA_REF = BUILD_IDENTITY_MODULE.catalogDataBranch(
+      state.buildMeta?.branch, PROJECT?.catalogDataBranches,
+    );
     CATALOG_LOADER = CATALOG_LOADER_MODULE.createCatalogLoader({
       repository: MENU_CATALOG_REPO,
-      releaseTag: PROJECT.catalogReleaseTag || 'menuconfig-catalog-complete',
+      releaseTag: PROJECT?.catalogReleaseTag || 'menuconfig-catalog-complete',
+      dataRef: MENU_CATALOG_DATA_REF,
+      allowReleaseFallback: MENU_CATALOG_DATA_REF === 'catalog-data',
       engine: CATALOG_ENGINE,
     });
     [PLUGINS, TIMEZONES, MENU_INDEX, MINIMUM_BOOT, PACKAGE_MIRRORS, BUILD_REQUIREMENTS] = await Promise.all([
@@ -624,9 +634,6 @@ async function init() {
     ]);
     initializeTimezone();
     MENU_INDEX = stableCatalogIndex(MENU_INDEX);
-    const deploymentIdentity = await loadDeploymentIdentity();
-    state.siteVersion = deploymentIdentity.siteVersion;
-    state.buildMeta = deploymentIdentity.buildMeta;
     renderBuildInfo();
     resetPluginWorkspace(PLUGINS, 'seed/plugins.json');
     renderDevices();
@@ -1204,6 +1211,7 @@ function addMenuIndex(map, key, value) {
 }
 function markCatalogStateChanged() {
   catalogStateRevision++;
+  compatibilityAcknowledgement = null;
   catalogContextCache.clear();
   menuVisibilityRevision = -1;
   menuVisibilityCache.clear();
@@ -1544,6 +1552,7 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
     } else {
       renderMinimumBoot();
     }
+    scheduleCompatibilityPrefetch();
     return catalog;
   })().catch((error) => {
     if (seq !== menuCatalogSeq) return null;
@@ -2590,6 +2599,271 @@ function openCatalogConflictModal(option, value, violations, openChildren = fals
   return true;
 }
 
+function compatibilityContext() {
+  const catalog = catalogValidationContext(menuValues, 'interactive');
+  return {
+    sourceId: state.source?.id || selectedCatalogSource()?.id || '',
+    branchName: state.version?.branch || selectedCatalogBranch()?.branch || '',
+    values: catalog.values,
+    validationOptions: catalog.validationOptions,
+  };
+}
+
+function evaluateLoadedCompatibility(loaded) {
+  const context = compatibilityContext();
+  const evaluation = CATALOG_ENGINE.evaluateCompatibilityRules(
+    CATALOG_MODEL, loaded.compatibility, context.values, context,
+  );
+  return { loaded, context, ...evaluation };
+}
+
+async function loadCompatibilityEvaluation(forceRefresh = false) {
+  if (!CATALOG_LOADER || !CATALOG_MODEL || !MENU_CATALOG) {
+    throw new Error(uiText(
+      'Catalog 尚未加载完成，不能执行兼容性检查。',
+      'Catalog 尚未載入完成，不能執行相容性檢查。',
+      'Catalog has not finished loading; compatibility cannot be checked.'));
+  }
+  const loaded = await CATALOG_LOADER.fetchCompatibility({ forceRefresh });
+  return evaluateLoadedCompatibility(loaded);
+}
+
+function scheduleCompatibilityPrefetch() {
+  if (!CATALOG_LOADER?.fetchCompatibility) return;
+  clearTimeout(compatibilityPrefetchTimer);
+  compatibilityPrefetchTimer = setTimeout(() => {
+    const fetchRules = () => CATALOG_LOADER.fetchCompatibility().catch((error) => {
+      console.warn('[Catalog compatibility prefetch]', error);
+    });
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(fetchRules, { timeout: 5000 });
+    else setTimeout(fetchRules, 0);
+  }, 18000);
+}
+
+function compatibilitySignature(evaluation) {
+  return CATALOG_ENGINE.compatibilityAcknowledgementKey({
+    sha256: evaluation.loaded.hash,
+    dataRef: evaluation.loaded.dataRef || MENU_CATALOG_DATA_REF,
+    sourceId: evaluation.context.sourceId,
+    branchName: evaluation.context.branchName,
+    revision: catalogStateRevision,
+    ruleIds: evaluation.warnings.map((warning) => warning.rule.id),
+  });
+}
+
+function forcedCompatibilityAudit(evaluation, forced) {
+  const ruleIds = [...forced].sort();
+  if (!ruleIds.length) return null;
+  return {
+    sha256: evaluation.loaded.hash,
+    source: evaluation.context.sourceId,
+    branch: evaluation.context.branchName,
+    forced: ruleIds,
+  };
+}
+
+function compatibilityRuleStillActive(loaded, ruleId) {
+  return evaluateLoadedCompatibility(loaded).warnings.some((warning) => warning.rule.id === ruleId);
+}
+
+async function ensureCompatibilityRules() {
+  let evaluation = await loadCompatibilityEvaluation();
+  if (!evaluation.warnings.length) return null;
+  const signature = compatibilitySignature(evaluation);
+  if (compatibilityAcknowledgement?.signature === signature) return compatibilityAcknowledgement.audit;
+  const forced = new Set();
+  while (true) {
+    evaluation = evaluateLoadedCompatibility(evaluation.loaded);
+    const pending = evaluation.warnings.filter((warning) => !forced.has(warning.rule.id));
+    if (!pending.length) {
+      const audit = forcedCompatibilityAudit(evaluation, forced);
+      if (audit) compatibilityAcknowledgement = {
+        signature: compatibilitySignature(evaluation), audit,
+      };
+      return audit;
+    }
+    const warning = pending[0];
+    const plans = CATALOG_ENGINE.deriveCompatibilityPlans(
+      CATALOG_MODEL, warning.values, warning, {
+        dependencySymbols: catalogDependencySymbols,
+        protectedSymbols: catalogProtectedSymbols(),
+        validationOptions: evaluation.context.validationOptions,
+      },
+    );
+    const action = await openCompatibilityWarningModal(evaluation, warning, plans);
+    if (action === 'cancel') {
+      const error = new Error('Compatibility check cancelled');
+      error.name = 'CompatibilityCancelledError';
+      throw error;
+    }
+    if (action === 'forced') forced.add(warning.rule.id);
+    else forced.clear();
+  }
+}
+
+function openCompatibilityWarningModal(evaluation, warning, plans) {
+  return new Promise((resolve) => {
+    const rows = warning.records.map((record) => ({
+      record,
+      option: menuOptionBySymbol.get(record.configSymbol) || { symbol: record.configSymbol },
+      value: warning.values.get(record.configSymbol) ?? 'n',
+    }));
+    const custom = new Map(rows.map((row) => [row.record.configSymbol, row.value]));
+    let settled = false;
+    const finish = (action) => {
+      if (settled) return;
+      settled = true;
+      modalCancelHandler = null;
+      closeModal();
+      resolve(action);
+    };
+    modalCancelHandler = () => {
+      if (settled) return;
+      settled = true;
+      resolve('cancel');
+    };
+    openModal(uiText('构建兼容性提示', '建置相容性提示', 'Build compatibility warning'));
+    const modal = $('modal').querySelector('.modal');
+    modal.classList.remove('modal-wide', 'modal-import-source', 'recommended-config',
+      'profile-package-config', 'generation-error', 'catalog-conflict', 'compatibility-warning',
+      'rootfs-guidance');
+    modal.classList.add('catalog-conflict', 'compatibility-warning');
+    const body = $('modalBody');
+    body.textContent = '';
+    const copy = document.createElement('p');
+    copy.className = 'catalog-conflict-copy';
+    copy.textContent = uiText(
+      `规则 ${warning.rule.id}：这些软件包在当前构建条件下同时拥有 ${warning.rule.paths.join('、')}。请选择一种处理方式。`,
+      `規則 ${warning.rule.id}：這些套件在目前建置條件下同時擁有 ${warning.rule.paths.join('、')}。請選擇一種處理方式。`,
+      `Rule ${warning.rule.id}: these packages own ${warning.rule.paths.join(', ')} under the active build condition. Choose how to proceed.`);
+    body.appendChild(copy);
+    const evidence = document.createElement('p');
+    evidence.className = 'compatibility-evidence';
+    evidence.textContent = uiText('证据：', '證據：', 'Evidence: ') + warning.rule.refs.join(' · ');
+    body.appendChild(evidence);
+    const list = document.createElement('div');
+    list.className = 'catalog-conflict-list';
+    const warningText = document.createElement('p');
+    warningText.className = 'catalog-conflict-warning';
+    let customInvalid = true;
+    let customButton = null;
+
+    const refresh = () => {
+      try {
+        const values = new Map(warning.values);
+        for (const [symbol, value] of custom) values.set(symbol, value);
+        customInvalid = CATALOG_ENGINE.evaluateCompatibilityRules(CATALOG_MODEL, {
+          schema: 1, rules: [warning.rule],
+        }, values, evaluation.context).warnings.length > 0;
+        warningText.textContent = customInvalid ? uiText(
+          '自定义状态仍会触发本规则，请至少关闭一个相关软件包。',
+          '自訂狀態仍會觸發本規則，請至少關閉一個相關套件。',
+          'The custom states still trigger this rule; disable at least one related package.') : '';
+      } catch (error) {
+        customInvalid = true;
+        warningText.textContent = error.message;
+      }
+      list.querySelectorAll('.catalog-conflict-row').forEach((line) => {
+        line.querySelectorAll('button[data-value]').forEach((button) => {
+          button.classList.toggle('active', custom.get(line.dataset.symbol) === button.dataset.value);
+        });
+      });
+      if (customButton) customButton.disabled = customInvalid;
+    };
+
+    for (const row of rows) {
+      const line = document.createElement('div');
+      line.className = 'catalog-conflict-row';
+      line.dataset.symbol = row.record.configSymbol;
+      const name = document.createElement('code');
+      name.textContent = row.record.package || row.record.configSymbol;
+      name.title = `CONFIG_${row.record.configSymbol}`;
+      const stateBox = document.createElement('span');
+      stateBox.className = 'catalog-conflict-state';
+      for (const stateValue of ['n', 'm', 'y']) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.value = stateValue;
+        button.textContent = stateValue.toUpperCase();
+        button.disabled = stateValue === 'n'
+          ? !row.record.canDisable : !row.record.states?.includes(stateValue);
+        button.onclick = () => { custom.set(row.record.configSymbol, stateValue); refresh(); };
+        stateBox.appendChild(button);
+      }
+      line.append(name, stateBox);
+      list.appendChild(line);
+    }
+    body.append(list, warningText);
+    const recommendation = document.createElement('p');
+    recommendation.className = 'compatibility-recommendation';
+    recommendation.textContent = plans.recommended ? uiText(
+      `唯一最小方案：关闭 ${plans.recommended.package}（共改变 ${plans.recommended.cost} 个 symbol）。`,
+      `唯一最小方案：關閉 ${plans.recommended.package}（共改變 ${plans.recommended.cost} 個 symbol）。`,
+      `Unique smallest plan: disable ${plans.recommended.package} (${plans.recommended.cost} symbol changes).`) : uiText(
+      '没有唯一的最小方案，请使用上方 N/M/Y 自定义状态。',
+      '沒有唯一的最小方案，請使用上方 N/M/Y 自訂狀態。',
+      'There is no unique smallest plan; choose custom N/M/Y states above.');
+    body.appendChild(recommendation);
+
+    const applyAndVerify = (applyPlan) => {
+      const snapshot = snapshotCatalogUiState();
+      try {
+        applyPlan();
+        if (compatibilityRuleStillActive(evaluation.loaded, warning.rule.id)) {
+          throw new Error(uiText(
+            '所选方案没有解除当前规则。', '所選方案沒有解除目前規則。',
+            'The selected plan did not resolve the active rule.'));
+        }
+        renderCatalogUiAfterIntent();
+        finish('applied');
+      } catch (error) {
+        restoreCatalogUiState(snapshot);
+        warningText.textContent = String(error?.message || error).split(';')[0];
+      }
+    };
+    const actions = document.createElement('div');
+    actions.className = 'modal-actions compatibility-actions';
+    const recommendedButton = document.createElement('button');
+    recommendedButton.type = 'button';
+    recommendedButton.className = 'btn btn-primary';
+    recommendedButton.textContent = uiText('应用最小方案', '套用最小方案', 'Apply smallest plan');
+    recommendedButton.disabled = !plans.recommended;
+    recommendedButton.onclick = () => applyAndVerify(() => {
+      const record = warning.records.find((item) => item.configSymbol === plans.recommended.symbol);
+      applyCatalogIntent(menuOptionBySymbol.get(record.configSymbol) || { symbol: record.configSymbol },
+        'n', true, 'user');
+    });
+    customButton = document.createElement('button');
+    customButton.type = 'button';
+    customButton.className = 'btn btn-primary';
+    customButton.textContent = uiText('应用自定义 N/M/Y', '套用自訂 N/M/Y', 'Apply custom N/M/Y');
+    customButton.onclick = () => applyAndVerify(() => {
+      for (const row of rows) {
+        if ((custom.get(row.record.configSymbol) || 'n') === 'n') {
+          applyCatalogIntent(row.option, 'n', true, 'user');
+        }
+      }
+      for (const row of rows) {
+        const value = custom.get(row.record.configSymbol) || 'n';
+        if (value !== 'n') applyCatalogIntent(row.option, value, true, 'user');
+      }
+    });
+    const forceButton = document.createElement('button');
+    forceButton.type = 'button';
+    forceButton.className = 'btn compatibility-force';
+    forceButton.textContent = uiText('保留并强制继续', '保留並強制繼續', 'Keep and force');
+    forceButton.onclick = () => finish('forced');
+    const cancelButton = document.createElement('button');
+    cancelButton.type = 'button';
+    cancelButton.className = 'btn';
+    cancelButton.textContent = t('btn.close');
+    cancelButton.onclick = closeModal;
+    actions.append(recommendedButton, customButton, forceButton, cancelButton);
+    body.appendChild(actions);
+    refresh();
+  });
+}
+
 function setMenuValue(option, value, openChildren = false) {
   let result;
   try {
@@ -2616,7 +2890,7 @@ function minimumBootRows() {
   if (!MINIMUM_BOOT) return [];
   return [...(MINIMUM_BOOT.items || []), ...(MINIMUM_BOOT.firewallBackend?.candidates || [])];
 }
-function minimumBootAudit() {
+function minimumBootAudit(compatibility = null) {
   const enabled = state.minimumBoot === true;
   const requested = [];
   if (enabled) {
@@ -2635,6 +2909,7 @@ function minimumBootAudit() {
       requested,
     },
     defconfig: { enabled: state.useDefconfig === true },
+    ...(compatibility?.forced?.length ? { compatibility } : {}),
   };
 }
 function minimumBootHelp(item) {
@@ -5740,7 +6015,7 @@ function closeModal() {
   const cancel = modalCancelHandler;
   modalCancelHandler = null;
   $('modal').hidden = true;
-  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'profile-package-config', 'generation-error', 'catalog-conflict', 'rootfs-guidance');
+  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'profile-package-config', 'generation-error', 'catalog-conflict', 'compatibility-warning', 'rootfs-guidance');
   document.body.classList.remove('modal-open');
   if (lastFocus && lastFocus.focus) lastFocus.focus();
   if (cancel) cancel();
@@ -5833,6 +6108,7 @@ function openSubmitModal() {
       const button = event.currentTarget;
       button.disabled = true;
       try {
+        const forcedCompatibility = await ensureCompatibilityRules();
         const config = await generateResolvedConfigText({ enforceBuildRequirements: true });
         const payload = {
           schema: 5,
@@ -5846,7 +6122,7 @@ function openSubmitModal() {
           branch: state.version.branch,
           variant: state.variant.id, plugins, tag, lanip: state.lanip, config,
           use_defconfig: state.useDefconfig === true,
-          audit: minimumBootAudit(),
+          audit: minimumBootAudit(forcedCompatibility),
           firmware: configFirmwareSettings(config),
           catalog: currentCatalogContract(),
         };
@@ -5900,6 +6176,13 @@ async function timedFetch(url, timeout) {
 const TIER_NAMES = ['local', 'jsDelivr', 'raw.github'];
 
 async function runSelfTest() {
+  try {
+    await ensureCompatibilityRules();
+  } catch (error) {
+    if (error?.name === 'CompatibilityCancelledError') return;
+    showGenerationError(error);
+    return;
+  }
   openModal(t('st.title'));
   const mb = $('modalBody');
   mb.textContent = '';

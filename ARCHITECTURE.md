@@ -167,3 +167,11 @@ Schema 6 浏览器运行时使用 `core + graph`，其关系模型为 Relations 
 - `legacy`：构建验证单体，包含 `asset/hash/bytes/catalogSchema/relationsSchema`。
 
 网页生成 `build-request.json` 时只能从同一个 `branch.legacy` 对象读取资产、哈希、大小和两个 schema，禁止从 `MENU_CATALOG` 运行对象拼接 schema。解析器读取固定 index 中的 `legacy` 并逐字段核对请求，用于锁定版本而非插件依赖判定；不再下载或解压单体 Catalog。根级 `asset/hash/bytes` 仅作为迁移期旧客户端镜像。
+
+## Catalog 兼容性证据通道 / Catalog compatibility evidence channel
+
+Catalog 根级 `assets.compatibility` 指向一个小型、全局、按压缩 SHA 固定的 `compatibility.json.gz`。AutoBuild 代码分支只读取对应数据分支：`fix/* → catalog-fix`、`dev → catalog-dev`、`staging → catalog-staging`、`main → catalog-data`；预览通道不回退正式 Release。Catalog 加载完成 18 秒后低优先级预取规则，相同 SHA 依次复用内存和 Cache API。
+
+规则只保存 Kconfig/Catalog 无法表达的证据事实和稳定 ID。浏览器通过现有 `model.byPackage` 取得 config symbol、类型、N/M/Y、依赖与反向依赖，再通过同一个 `applyUserIntent` 引擎推导候选方案；唯一最低变更成本的方案才可自动推荐。软规则只在自检与请求创建时运行。强制确认绑定规则 SHA + 数据通道 + Source/Branch + 配置 revision；后端仅保存强制规则 ID 审计，不复判、不上锁、不改配置。
+
+The root `assets.compatibility` contract points to one small global `compatibility.json.gz` pinned by compressed SHA. AutoBuild code channels read only their matching data channels, and preview channels never fall back to the production Release. The browser resolves package IDs through the existing Catalog model and derives plans through the existing intent engine; it does not duplicate symbol/state/dependency data. Soft rules run only at self-test and request creation. Force acknowledgement is revision-bound, while the backend records forced IDs without re-evaluation, package locks, or configuration changes.

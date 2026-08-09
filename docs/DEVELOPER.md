@@ -278,3 +278,16 @@ Windows 运行 Catalog 检查使用：
 ```powershell
 npm.cmd test
 ```
+
+## Catalog 兼容性证据规则
+
+上游 Kconfig/Catalog 暂时无法表达、但已有真实构建证据确认的少量兼容事实，由 `WeiG-OpenWrt-Menuconfig-Catalog` 根目录的 `compatibility.json` 维护并生成单一 `compatibility.json.gz`。它不是第二套依赖数据库。新增规则或字段前，必须依次检查 Kconfig、Catalog relations/index、网页运行模型和请求契约；已有 symbol、类型、N/M/Y、名称、依赖、provider、conflict、SHA 等事实只能通过 package/rule ID 引用，禁止复制。
+
+- 通道固定一一对应：AutoBuild `fix/* → catalog-fix`、`dev → catalog-dev`、`staging → catalog-staging`、`main → catalog-data`。映射集中在 `site/wrt/data/project.json`，预览通道不读取或生成正式 Release/Pages 地址。
+- Catalog 成功后 18 秒低优先级预取全局压缩规则。索引刷新后若压缩 SHA 不变，先复用内存，再复用 Cache API，不重复下载；提交请求前必须成功取得并验证规则，缺失/损坏时不能用“强制”绕过。
+- 人工证据规则只在“一键自检”和实际创建 `build-request.json` 时执行。弹窗提供三种处理：应用共享 Catalog 引擎推导的唯一最小方案、在框内按现有 Catalog record 选择 N/M/Y、保留当前状态并强制继续。没有唯一最低成本方案时禁止自动推荐。
+- 强制确认只存在内存中，并绑定规则 SHA、数据通道、Source/Branch、`catalogStateRevision` 和触发规则 ID。配置未变化时，自检后提交不重复询问；配置、Source/Branch、规则 SHA 或页面状态变化后必须重新确认。
+- 构建端只规范化并保存被强制的规则 ID 及规则 SHA/Source/Branch 审计，不重新执行兼容规则、不锁软件包、不修改 `.config`。Kconfig/Catalog 的现有即时硬冲突仍保持原行为。
+- 兼容性开发先在 AutoBuild `fix/catalog-compatibility` 与 Catalog 同名代码分支完成，Catalog 数据发布到 `catalog-fix`。只有用户在 CDN 网页验证成功并明确授权后，才可按 `fix → dev → staging` 推进；`main/catalog-data` 在验证前保持冻结。
+
+规则字段、证据生命周期和中英文解释见 Catalog 仓库的 `docs/COMPATIBILITY.md` 与 `docs/COMPATIBILITY.en.md`。

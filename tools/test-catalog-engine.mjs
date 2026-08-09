@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 import {
   applyUserIntent,
+  compatibilityAcknowledgementKey,
   createCatalogModel,
   createCatalogValidationContext,
+  deriveCompatibilityPlans,
+  evaluateCompatibilityRules,
   evaluateExpressionState,
+  normalizeCompatibilityDocument,
   parseConfigDocument,
   validateConfig,
 } from '../site/wrt/lib/catalog-engine.js';
@@ -52,6 +56,8 @@ const targetLite = {
   }],
 };
 const records = [
+  { kind: 'config', configSymbol: 'USE_APK', kconfigSymbol: 'USE_APK', states: ['n', 'y'],
+    defaults: ['y'], hidden: true, visible: false, userSettable: false },
   { kind: 'config', configSymbol: 'ARCH_DEMO', kconfigSymbol: 'ARCH_DEMO', states: ['n', 'y'], hidden: true, visible: false },
   { kind: 'config', configSymbol: 'BUS_SUPPORT', kconfigSymbol: 'BUS_SUPPORT', states: ['n', 'y'], hidden: true, visible: false },
   { kind: 'package', package: 'profile-driver', configSymbol: 'PACKAGE_profile-driver', kconfigSymbol: 'PACKAGE_profile-driver', states: ['n', 'm', 'y'],
@@ -309,6 +315,86 @@ try {
 assert(conflictIntentError?.name === 'CatalogIntentError' &&
   conflictIntentError.violations?.some((row) => row.code === 'package-conflict'),
   'interactive conflict did not preserve structured violation details for the browser dialog');
+
+const compatibility = {
+  schema: 1,
+  rules: [{
+    id: 'OWN-TEST', kind: 'ownership', scope: { Demo: ['stable'] }, if: 'USE_APK',
+    packages: ['core-service', 'ui-service'], paths: ['/etc/config/demo'], refs: ['run:1'],
+  }],
+};
+const ownershipValues = parseConfigDocument([
+  'CONFIG_PACKAGE_core-service=y',
+  'CONFIG_PACKAGE_ui-service=y',
+  'CONFIG_PACKAGE_i18n-service=y',
+].join('\n'));
+const ownership = evaluateCompatibilityRules(model, compatibility, ownershipValues, {
+  sourceId: 'Demo', branchName: 'stable',
+});
+assert(ownership.warnings.length === 1 && ownership.warnings[0].records.every((record) => record.configSymbol),
+  'active ownership rule did not resolve package IDs or the existing hidden-symbol default through the Catalog model');
+const ownershipPlans = deriveCompatibilityPlans(model, ownershipValues, ownership.warnings[0]);
+assert(ownershipPlans.recommended?.package === 'ui-service' &&
+  ownershipPlans.recommended.cost === 2 && ownershipPlans.candidates.find((row) => row.package === 'core-service')?.cost === 3,
+  'unique lowest-cost compatibility plan was not derived from generic dependency cascades');
+assert(evaluateCompatibilityRules(model, compatibility, ownershipPlans.recommended.values, {
+  sourceId: 'Demo', branchName: 'stable',
+}).warnings.length === 0, 'recommended compatibility plan did not resolve the rule');
+assert(evaluateCompatibilityRules(model, compatibility,
+  new Map(ownershipValues).set('USE_APK', 'n'), { sourceId: 'Demo', branchName: 'stable' }).warnings.length === 0,
+  'unsatisfied compatibility condition still triggered');
+assert(evaluateCompatibilityRules(model, compatibility, ownershipValues, {
+  sourceId: 'Demo', branchName: 'next',
+}).warnings.length === 0, 'compatibility scope leaked to another branch');
+
+const tiedCompatibility = {
+  schema: 1,
+  rules: [{
+    id: 'OWN-TIE', kind: 'ownership', scope: { Demo: ['stable'] }, if: 'USE_APK',
+    packages: ['backend-a', 'backend-b'], paths: ['/etc/config/tie'], refs: ['run:2'],
+  }],
+};
+const tiedValues = parseConfigDocument([
+  'CONFIG_USE_APK=y', 'CONFIG_PACKAGE_backend-a=y', 'CONFIG_PACKAGE_backend-b=y',
+].join('\n'));
+const tiedWarning = evaluateCompatibilityRules(model, tiedCompatibility, tiedValues,
+  { sourceId: 'Demo', branchName: 'stable' }).warnings[0];
+assert(tiedWarning && deriveCompatibilityPlans(model, tiedValues, tiedWarning).recommended === null,
+  'ambiguous equal-cost plans incorrectly received an automatic recommendation');
+
+for (const mutate of [
+  (value) => { value.rules[0].symbols = ['PACKAGE_duplicate']; },
+  (value) => { delete value.rules[0].paths; },
+  (value) => { value.rules.push(structuredClone(value.rules[0])); },
+  (value) => { value.rules[0].packages.push(value.rules[0].packages[0]); },
+  (value) => { value.rules[0].paths = ['relative']; },
+]) {
+  const invalid = structuredClone(compatibility);
+  mutate(invalid);
+  expectThrow(() => normalizeCompatibilityDocument(invalid), /compatibility|OWN-TEST/i,
+    'mutated compatibility document was accepted');
+}
+const missingPackage = structuredClone(compatibility);
+missingPackage.rules[0].packages[1] = 'missing-package';
+expectThrow(() => evaluateCompatibilityRules(model, missingPackage, ownershipValues,
+  { sourceId: 'Demo', branchName: 'stable' }), /missing from the active Catalog/,
+'active compatibility rule silently accepted a missing package ID');
+
+const acknowledgement = {
+  sha256: 'a'.repeat(64), dataRef: 'catalog-fix', sourceId: 'Demo', branchName: 'stable',
+  revision: 7, ruleIds: ['OWN-TEST', 'OWN-TIE'],
+};
+const acknowledgementKey = compatibilityAcknowledgementKey(acknowledgement);
+assert(acknowledgementKey === compatibilityAcknowledgementKey({
+  ...acknowledgement, ruleIds: [...acknowledgement.ruleIds].reverse(),
+}), 'acknowledgement key depended on rule ordering');
+for (const changed of [
+  { sha256: 'b'.repeat(64) }, { dataRef: 'catalog-dev' }, { sourceId: 'Other' },
+  { branchName: 'next' }, { revision: 8 }, { ruleIds: ['OWN-TEST'] },
+]) {
+  assert(compatibilityAcknowledgementKey({ ...acknowledgement, ...changed }) !== acknowledgementKey,
+    'compatibility acknowledgement survived a bound context change');
+}
 
 // Broad anonymous matrix: every Target/Profile contract package depends on its own
 // selector plus an upstream hidden default omitted from the compact Catalog. This

@@ -541,6 +541,11 @@ buildRequestIdentityTest.status === 0
   ? ok('build request identity: schema 5 JSON is the exact branch+commit routing envelope')
   : bad('build request identity tests', (buildRequestIdentityTest.stderr || buildRequestIdentityTest.stdout || '').trim().slice(0, 500));
 
+const requestAuditTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-request-audit.mjs')], { encoding: 'utf8' });
+requestAuditTest.status === 0
+  ? ok('request compatibility audit: valid forced IDs are recorded; malformed/duplicate/extra data is rejected')
+  : bad('request compatibility audit tests', (requestAuditTest.stderr || requestAuditTest.stdout || '').trim().slice(0, 500));
+
 const buildDiagnosticsTest = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-build-diagnostics.mjs')], { encoding: 'utf8' });
 buildDiagnosticsTest.status === 0
   ? ok('build diagnostics: parallel evidence is frozen before isolated 180m single-thread retry')
@@ -895,6 +900,7 @@ mirrorRulesOk
   const html = readFileSync(join(ROOT, 'site', 'wrt', 'index.html'), 'utf8');
   const js = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
   const catalogLoaderJs = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.js'), 'utf8');
+  const catalogEngineJs = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.js'), 'utf8');
   const catalogSchema6Js = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-schema6.js'), 'utf8');
   const catalogSearchWorkerJs = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-search-worker.js'), 'utf8');
   const genPlugins = readFileSync(join(ROOT, 'tools', 'gen-plugins.mjs'), 'utf8');
@@ -955,6 +961,7 @@ mirrorRulesOk
   const ciWorkflow = readFileSync(join(workflowDir, 'ci.yml'), 'utf8');
   const driftSentinel = readFileSync(join(ROOT, 'tools', 'check-drift.mjs'), 'utf8');
   const parser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
+  const requestAuditJs = readFileSync(join(ROOT, 'tools', 'request-audit.mjs'), 'utf8');
   const requirementsSource = JSON.parse(readFileSync(
     join(ROOT, 'config', '001.presets', 'source-build-requirements.json'), 'utf8'));
   const requirementsPublic = JSON.parse(readFileSync(
@@ -1854,6 +1861,34 @@ mirrorRulesOk
   catalogProjectContract
     ? ok('Fork 单文件参数 + Catalog 4 源 14 分支 + 构建白名单已接通')
     : bad('project/catalog contract', `源码 ${catalogIndex.sources.length},分支 ${catalogBranches.length},或动态白名单缺失`);
+  const compatibilityContract =
+    JSON.stringify(project.catalogDataBranches) === JSON.stringify({
+      fix: 'catalog-fix', dev: 'catalog-dev', staging: 'catalog-staging', main: 'catalog-data',
+    }) &&
+    catalogLoaderJs.includes("dataRef = 'catalog-data'") &&
+    catalogLoaderJs.includes('async function fetchCompatibility') &&
+    catalogLoaderJs.includes('compatibilityMemory.has(key)') &&
+    catalogLoaderJs.includes('includeRelease: false') &&
+    catalogEngineJs.includes('export function evaluateCompatibilityRules') &&
+    catalogEngineJs.includes('export function deriveCompatibilityPlans') &&
+    catalogEngineJs.includes('export function compatibilityAcknowledgementKey') &&
+    js.includes('BUILD_IDENTITY_MODULE.catalogDataBranch(') &&
+    js.includes('allowReleaseFallback: MENU_CATALOG_DATA_REF ===') &&
+    js.includes('function scheduleCompatibilityPrefetch()') &&
+    js.includes('}, 18000);') &&
+    js.includes('function openCompatibilityWarningModal(') &&
+    js.includes('应用自定义 N/M/Y') &&
+    js.includes('保留并强制继续') &&
+    (js.match(/await ensureCompatibilityRules\(\)/g) || []).length === 2 &&
+    js.includes('compatibilityAcknowledgement = null') &&
+    parser.includes('normalizeRequestAudit(raw)') &&
+    requestAuditJs.includes('兼容性强制审计') &&
+    !parser.includes('evaluateCompatibilityRules') &&
+    !['OWN-0001', 'luci-app-openvpn-server', 'openvpn-openssl', '/etc/config/openvpn']
+      .some((literal) => js.includes(literal));
+  compatibilityContract
+    ? ok('Catalog compatibility: fix/dev/staging/main 通道、SHA 缓存、三选一软提示与后端只记审计已接通')
+    : bad('Catalog compatibility contract', '通道映射、缓存、通用规则引擎、提示框或无锁审计边界不完整');
   const timezoneUiContract = html.includes('id="timezoneMenu" role="listbox"') &&
     html.includes('role="combobox"') &&
     !html.includes('id="timezoneList"') &&

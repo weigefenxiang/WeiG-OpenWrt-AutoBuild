@@ -10,6 +10,16 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+async function assertRejects(run, pattern, message) {
+  try {
+    await run();
+  } catch (error) {
+    if (pattern.test(String(error?.message || error))) return;
+    throw new Error(`${message}: unexpected error: ${error?.message || error}`);
+  }
+  throw new Error(message);
+}
+
 function catalog(commit, schema = 5, relationsSchema = 2) {
   return {
     schema,
@@ -288,5 +298,79 @@ assert(splitMenu.kind === 'menu' && splitCalls.some((url) => url.includes(splitA
 const splitCallCount = splitCalls.length;
 await splitBundle.loadShard('menu');
 assert(splitCalls.length === splitCallCount, 'loaded menu shard was not reused');
+
+const compatibilityDocument = {
+  schema: 1,
+  rules: [{
+    id: 'OWN-TEST', kind: 'ownership', scope: { ImmortalWrt: ['openwrt-25.12'] },
+    if: 'USE_APK', packages: ['package-a', 'package-b'], paths: ['/etc/config/demo'], refs: ['run:1'],
+  }],
+};
+const compatibilityPayload = compressedDocument(compatibilityDocument);
+const compatibilityIndex = indexFor(asset, valid, commit, '6'.repeat(40));
+compatibilityIndex.assets = {
+  compatibility: {
+    asset: 'compatibility.json.gz', hash: compatibilityPayload.hash,
+    bytes: compatibilityPayload.bytes.length,
+    jsonBytes: new TextEncoder().encode(JSON.stringify(compatibilityDocument)).byteLength,
+    schema: 1, rules: 1,
+  },
+};
+const compatibilityCalls = [];
+const compatibilityLoader = createCatalogLoader({
+  repository: 'owner/catalog',
+  engine: { createCatalogModel },
+  fetchImpl: async (url) => {
+    compatibilityCalls.push(url);
+    if (url.includes('index.json')) return new Response(JSON.stringify(compatibilityIndex), { status: 200 });
+    if (url.includes('compatibility.json.gz')) return new Response(compatibilityPayload.bytes, { status: 200 });
+    return new Response('unexpected', { status: 404 });
+  },
+  cacheStorage: fakeCaches(), subtle: null,
+});
+const compatibilityFirst = await compatibilityLoader.fetchCompatibility();
+const compatibilityAssetCalls = () => compatibilityCalls.filter((url) => url.includes('compatibility.json.gz')).length;
+assert(compatibilityFirst.compatibility.rules[0].id === 'OWN-TEST' && compatibilityAssetCalls() === 1,
+  'compatibility asset was not verified and decoded');
+await compatibilityLoader.fetchCompatibility();
+assert(compatibilityAssetCalls() === 1, 'compatibility in-memory cache did not suppress a second fetch');
+await compatibilityLoader.fetchCompatibility({ forceRefresh: true });
+assert(compatibilityAssetCalls() === 1,
+  'unchanged compatibility SHA was downloaded after an index refresh');
+
+const previewCalls = [];
+const previewLoader = createCatalogLoader({
+  repository: 'owner/catalog', dataRef: 'catalog-fix',
+  engine: { createCatalogModel }, cacheStorage: fakeCaches(), subtle: null,
+  fetchImpl: async (url) => {
+    previewCalls.push(url);
+    if (url.includes('raw.githubusercontent.com')) return new Response('offline', { status: 503 });
+    if (url.includes('cdn.jsdelivr.net') && url.includes('index.json')) {
+      return new Response(JSON.stringify(index), { status: 200 });
+    }
+    return new Response('unexpected', { status: 404 });
+  },
+});
+const preview = await previewLoader.fetchIndex({ forceRefresh: true });
+assert(preview.provider === 'jsdelivr' && previewCalls.some((url) => url.includes('@catalog-fix/index.json')),
+  'fix channel did not read catalog-fix');
+assert(!previewCalls.some((url) => url.includes('/releases/')),
+  'preview channel attempted to read the production Release');
+
+for (const mutate of [
+  (value) => { delete value.assets.compatibility.jsonBytes; },
+  (value) => { value.assets.compatibility.jsonBytes = 512 * 1024 + 1; },
+  (value) => { value.assets.compatibility.bytes = 512 * 1024 + 1025; },
+]) {
+  const invalidIndex = structuredClone(compatibilityIndex);
+  mutate(invalidIndex);
+  const invalidLoader = createCatalogLoader({
+    repository: 'owner/catalog', engine: { createCatalogModel }, cacheStorage: fakeCaches(), subtle: null,
+    fetchImpl: async (url) => url.includes('index.json')
+      ? new Response(JSON.stringify(invalidIndex), { status: 200 }) : new Response('unexpected', { status: 404 }),
+  });
+  await assertRejects(() => invalidLoader.fetchCompatibility(), /compatibility asset contract/,
+    'oversized or incomplete compatibility contract was accepted');
+}
 
 console.log('Catalog loader tests passed / Catalog 加载器测试通过');

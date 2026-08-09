@@ -2,6 +2,7 @@ const MIN_INDEX_SCHEMA = 2;
 const MIN_CATALOG_SCHEMA = 5;
 const MIN_RELATIONS_SCHEMA = 2;
 export const CATALOG_CACHE_NAME = 'wrt-catalog-cache-v3';
+const MAX_COMPATIBILITY_JSON_BYTES = 512 * 1024;
 
 function safeRepository(value) {
   const repository = String(value || '').trim();
@@ -15,6 +16,14 @@ function safeReleaseTag(value) {
   const tag = String(value || '').trim();
   if (!/^[A-Za-z0-9._-]+$/.test(tag)) throw new Error(`invalid Catalog release tag: ${value}`);
   return tag;
+}
+
+export function safeCatalogDataRef(value) {
+  const ref = String(value || '').trim();
+  if (!/^catalog-(?:fix|dev|staging|data)$/.test(ref)) {
+    throw new Error(`invalid Catalog data branch: ${value}`);
+  }
+  return ref;
 }
 
 export function safeCatalogAsset(asset) {
@@ -47,18 +56,19 @@ function exactAssetRef(index) {
   return ref;
 }
 
-function providers(repository, releaseTag) {
+function providers(repository, releaseTag, dataRef) {
   const repo = safeRepository(repository);
   const defaultReleaseTag = safeReleaseTag(releaseTag);
+  const branch = safeCatalogDataRef(dataRef);
   return {
     'github-raw': {
       id: 'github-raw',
-      indexUrl: (nonce) => `https://raw.githubusercontent.com/${repo}/catalog-data/index.json?wrt_refresh=${nonce}`,
+      indexUrl: (nonce) => `https://raw.githubusercontent.com/${repo}/${branch}/index.json?wrt_refresh=${nonce}`,
       assetUrl: (asset, ref) => `https://raw.githubusercontent.com/${repo}/${ref}/${asset}`,
     },
     jsdelivr: {
       id: 'jsdelivr',
-      indexUrl: (nonce) => `https://cdn.jsdelivr.net/gh/${repo}@catalog-data/index.json?wrt_refresh=${nonce}`,
+      indexUrl: (nonce) => `https://cdn.jsdelivr.net/gh/${repo}@${branch}/index.json?wrt_refresh=${nonce}`,
       assetUrl: (asset, ref) => `https://cdn.jsdelivr.net/gh/${repo}@${ref}/${asset}`,
     },
     'github-release': {
@@ -216,6 +226,36 @@ function validateIndex(index) {
   return normalized;
 }
 
+function compatibilityContract(index) {
+  const contract = index?.assets?.compatibility;
+  if (!contract || safeCatalogAsset(contract.asset) !== 'compatibility.json.gz' ||
+      !/^[a-f0-9]{64}$/.test(String(contract.hash || '')) ||
+      !Number.isSafeInteger(Number(contract.bytes)) || Number(contract.bytes) <= 0 ||
+      Number(contract.bytes) > MAX_COMPATIBILITY_JSON_BYTES + 1024 ||
+      !Number.isSafeInteger(Number(contract.jsonBytes)) || Number(contract.jsonBytes) <= 0 ||
+      Number(contract.jsonBytes) > MAX_COMPATIBILITY_JSON_BYTES ||
+      Number(contract.schema) !== 1 || !Number.isSafeInteger(Number(contract.rules)) || Number(contract.rules) < 0) {
+    throw new Error('Catalog index lacks a valid compatibility asset contract');
+  }
+  return {
+    asset: 'compatibility.json.gz',
+    hash: String(contract.hash).toLowerCase(),
+    bytes: Number(contract.bytes),
+    jsonBytes: Number(contract.jsonBytes),
+    schema: 1,
+    rules: Number(contract.rules),
+  };
+}
+
+function validateCompatibilityDocument(data, expected) {
+  const actualJsonBytes = new TextEncoder().encode(JSON.stringify(data)).byteLength;
+  if (!data || Number(data.schema) !== 1 || !Array.isArray(data.rules) ||
+      data.rules.length !== Number(expected.rules) || actualJsonBytes !== Number(expected.jsonBytes)) {
+    throw new Error('Catalog compatibility document does not match its index contract');
+  }
+  return data;
+}
+
 function cacheKey(repository, asset, expected) {
   const revision = String(expected?.hash || expected?.commit || 'latest').replace(/[^A-Za-z0-9._-]/g, '_');
   return `./catalog-cache-v3/${repository}/${asset}?revision=${revision}`;
@@ -233,6 +273,8 @@ export function formatCatalogDiagnostics(diagnostics = []) {
 export function createCatalogLoader({
   repository,
   releaseTag = 'menuconfig-catalog-complete',
+  dataRef = 'catalog-data',
+  allowReleaseFallback = dataRef === 'catalog-data',
   engine,
   fetchImpl = globalThis.fetch,
   cacheStorage = globalThis.caches,
@@ -240,16 +282,21 @@ export function createCatalogLoader({
   Decompression = globalThis.DecompressionStream,
   now = () => Date.now(),
 } = {}) {
-  const providerMap = providers(repository, releaseTag);
+  const exactDataRef = safeCatalogDataRef(dataRef);
+  const providerMap = providers(repository, releaseTag, exactDataRef);
+  const indexProviderOrder = allowReleaseFallback
+    ? ['github-raw', 'jsdelivr', 'github-release'] : ['github-raw', 'jsdelivr'];
   let lastIndexResult = null;
   let indexPromise = null;
+  const compatibilityMemory = new Map();
+  const compatibilityPromises = new Map();
 
   async function fetchIndex({ signal, forceRefresh = false, diagnostics = [] } = {}) {
     if (!forceRefresh && lastIndexResult) return { ...lastIndexResult, diagnostics };
     if (!forceRefresh && indexPromise) return indexPromise;
     const run = async () => {
       const errors = [];
-      for (const id of ['github-raw', 'jsdelivr', 'github-release']) {
+      for (const id of indexProviderOrder) {
         const provider = providerMap[id];
         const url = provider.indexUrl(now());
         try {
@@ -301,8 +348,8 @@ export function createCatalogLoader({
     })).catch(() => {});
   }
 
-  function assetProviderOrder(preferredAssetProvider = '') {
-    const order = ['jsdelivr', 'github-raw', 'github-release'];
+  function assetProviderOrder(preferredAssetProvider = '', includeRelease = allowReleaseFallback) {
+    const order = includeRelease ? ['jsdelivr', 'github-raw', 'github-release'] : ['jsdelivr', 'github-raw'];
     if (order.includes(preferredAssetProvider)) {
       order.splice(order.indexOf(preferredAssetProvider), 1);
       order.unshift(preferredAssetProvider);
@@ -319,6 +366,7 @@ export function createCatalogLoader({
     preferredAssetProvider = '',
     forceRefresh = false,
     stage = 'asset',
+    includeRelease = allowReleaseFallback,
   }) {
     const safeAsset = safeCatalogAsset(asset);
     if (!forceRefresh) {
@@ -334,7 +382,7 @@ export function createCatalogLoader({
     }
     const ref = exactAssetRef(index);
     const errors = [];
-    for (const id of assetProviderOrder(preferredAssetProvider)) {
+    for (const id of assetProviderOrder(preferredAssetProvider, includeRelease)) {
       const provider = providerMap[id];
       const url = provider.assetUrl(safeAsset, ref, index);
       try {
@@ -461,11 +509,55 @@ export function createCatalogLoader({
     };
   }
 
+  async function fetchCompatibility({ signal, forceRefresh = false } = {}) {
+    const diagnostics = [];
+    const indexResult = await fetchIndex({ signal, forceRefresh, diagnostics });
+    const contract = compatibilityContract(indexResult.index);
+    const key = `${contract.asset}:${contract.hash}`;
+    if (compatibilityMemory.has(key)) {
+      diagnostic(diagnostics, 'compatibility-memory', 'memory', true, `sha256 ${contract.hash}`, key);
+      return { ...compatibilityMemory.get(key), diagnostics };
+    }
+    if (compatibilityPromises.has(key)) return compatibilityPromises.get(key);
+    const run = (async () => {
+      const result = await fetchAssetDocument({
+        asset: contract.asset,
+        contract,
+        index: indexResult.index,
+        signal,
+        diagnostics,
+        preferredAssetProvider: indexResult.provider,
+        // A force refresh refreshes the index. An unchanged compressed SHA still reuses
+        // the verified Cache API entry and never downloads the same evidence twice.
+        forceRefresh: false,
+        stage: 'compatibility',
+        includeRelease: false,
+      });
+      const compatibility = validateCompatibilityDocument(result.data, contract);
+      const loaded = {
+        compatibility,
+        contract,
+        hash: contract.hash,
+        dataRef: exactDataRef,
+        index: indexResult.index,
+        indexProvider: indexResult.provider,
+        provider: result.provider,
+        url: result.url,
+      };
+      compatibilityMemory.set(key, loaded);
+      return { ...loaded, diagnostics };
+    })().finally(() => compatibilityPromises.delete(key));
+    compatibilityPromises.set(key, run);
+    return run;
+  }
+
   async function clearCache() {
     lastIndexResult = null;
     indexPromise = null;
+    compatibilityMemory.clear();
+    compatibilityPromises.clear();
     if (cacheStorage?.delete) await cacheStorage.delete(CATALOG_CACHE_NAME).catch(() => false);
   }
 
-  return { fetchIndex, fetchBundle, clearCache };
+  return { fetchIndex, fetchBundle, fetchCompatibility, clearCache, dataRef: exactDataRef };
 }

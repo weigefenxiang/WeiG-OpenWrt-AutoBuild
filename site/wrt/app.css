@@ -809,6 +809,10 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
 .catalog-conflict-state button:disabled{opacity:.3;cursor:not-allowed}
 .catalog-conflict-warning{min-height:20px;margin:10px 0 0;color:var(--danger);font-size:13px}
 .modal.catalog-conflict .modal-actions{justify-content:flex-end}
+.compatibility-evidence,.compatibility-recommendation{margin:8px 0;color:var(--text2);font-size:13px;line-height:1.55;overflow-wrap:anywhere}
+.compatibility-recommendation{padding:9px 11px;border-radius:8px;background:color-mix(in srgb,var(--accent) 7%,var(--card2))}
+.compatibility-actions{flex-wrap:wrap}
+.compatibility-force{border-color:color-mix(in srgb,var(--warn) 60%,var(--border));color:var(--warn)}
 @media(max-width:560px){.modal.catalog-conflict{align-self:flex-end;max-height:84vh;border-radius:16px 16px 10px 10px}.catalog-conflict-row{grid-template-columns:1fr}.catalog-conflict-state{justify-self:end}}
 .summary-box {
   background: var(--card2); border-radius: var(--radius);

@@ -4,5 +4,11 @@
   "repository": "weigefenxiang/WeiG-OpenWrt-AutoBuild",
   "catalogRepository": "weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog",
   "blogUrl": "https://www.weigeshare.cc.cd/",
-  "catalogReleaseTag": "menuconfig-catalog-complete"
+  "catalogReleaseTag": "menuconfig-catalog-complete",
+  "catalogDataBranches": {
+    "fix": "catalog-fix",
+    "dev": "catalog-dev",
+    "staging": "catalog-staging",
+    "main": "catalog-data"
+  }
 }

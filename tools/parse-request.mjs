@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { artifactBuildRef, buildEnvironmentIdentity, normalizeBuildCommit, normalizeBuildEnvironment, parseBuildIssueTitleIdentity } from '../site/wrt/lib/build-identity.js';
+import { normalizeRequestAudit } from './request-audit.mjs';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DEVICES = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'devices.json'), 'utf8'));
 const CONFIG_MANIFEST = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'config-manifest.json'), 'utf8'));
@@ -26,32 +27,8 @@ function configStringValue(text, symbol) {
 }
 
 function normalizeAudit(raw) {
-  const audit = raw && typeof raw === 'object' ? raw : {};
-  const recommended = audit.recommended && typeof audit.recommended === 'object'
-    ? audit.recommended : {};
-  const enabled = recommended.enabled === true;
-  const preset = String(recommended.preset || '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 64);
-  const requested = Array.isArray(recommended.requested) ? recommended.requested : [];
-  if (requested.length > 64) fail('推荐项审计 requested 超过 64 项');
-  const seen = new Set();
-  const rows = [];
-  for (const row of requested) {
-    if (!row || typeof row !== 'object' ||
-        !/^PACKAGE_[A-Za-z0-9_.+@-]{1,96}$/.test(String(row.symbol || '')) ||
-        !['n', 'm', 'y'].includes(String(row.value || ''))) {
-      fail(`推荐项审计格式非法: ${JSON.stringify(row)}`);
-    }
-    const symbol = String(row.symbol);
-    if (seen.has(symbol)) continue;
-    seen.add(symbol);
-    rows.push({ symbol, value: String(row.value) });
-  }
-  const defconfig = audit.defconfig && typeof audit.defconfig === 'object'
-    ? audit.defconfig : {};
-  return {
-    recommended: { enabled, preset, requested: enabled ? rows : [] },
-    defconfig: { enabled: defconfig.enabled === true },
-  };
+  try { return normalizeRequestAudit(raw); }
+  catch (error) { fail(error.message); }
 }
 async function loadCatalogIndex(revision = 'catalog-data') {
   const repo = PROJECT.catalogRepository || LOCAL_CATALOG_INDEX.catalogRepo;

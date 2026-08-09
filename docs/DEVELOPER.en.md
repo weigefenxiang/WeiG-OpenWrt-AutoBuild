@@ -225,3 +225,16 @@ On Windows, run the Catalog checks with:
 ```powershell
 npm.cmd test
 ```
+
+## Catalog compatibility evidence rules
+
+A small number of compatibility facts that upstream Kconfig/Catalog cannot yet express, but real builds have confirmed, live in `compatibility.json` at the root of `WeiG-OpenWrt-Menuconfig-Catalog` and are published as one `compatibility.json.gz`. This is not a second dependency database. Before adding a rule or field, inspect Kconfig, Catalog relations/index, the browser runtime model, and the request contract. Existing symbols, types, N/M/Y capabilities, names, dependencies, providers, conflicts, and hashes must be referenced through package/rule IDs and never copied.
+
+- Channels are fixed one-to-one: AutoBuild `fix/* → catalog-fix`, `dev → catalog-dev`, `staging → catalog-staging`, and `main → catalog-data`. `site/wrt/data/project.json` owns the mapping. Preview channels neither read nor create the production Release or a Pages URL.
+- Eighteen seconds after a Catalog load succeeds, the browser prefetches the global compressed rules at low priority. An unchanged compressed SHA reuses memory and then the Cache API without another download. Actual request creation must obtain and validate the rules; missing or corrupt rules cannot be bypassed with Force.
+- Evidence rules run only during One-click self test and actual `build-request.json` creation. The modal offers three actions: apply the unique smallest plan derived by the shared Catalog engine, choose N/M/Y inside the dialog using existing Catalog records, or keep the current state and force continuation. Equal-cost plans never receive an automatic recommendation.
+- A force acknowledgement is memory-only and binds the rule SHA, data channel, Source/Branch, `catalogStateRevision`, and triggered rule IDs. Submission does not ask again after an unchanged self test; any configuration, Source/Branch, rule-SHA, or page-state change invalidates the acknowledgement.
+- The build backend only normalizes and records forced rule IDs plus rule SHA/Source/Branch audit data. It does not re-evaluate compatibility, lock packages, or change `.config`. Existing immediate Kconfig/Catalog hard conflicts remain unchanged.
+- Compatibility work starts on `fix/catalog-compatibility` in both repositories, with Catalog data published to `catalog-fix`. Promotion through `fix → dev → staging` requires an explicit user decision after the CDN-hosted page passes testing; `main/catalog-data` stays frozen before that validation.
+
+The Catalog repository documents rule fields and evidence lifecycle separately in `docs/COMPATIBILITY.md` and `docs/COMPATIBILITY.en.md`.

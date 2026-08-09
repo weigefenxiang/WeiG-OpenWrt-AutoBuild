@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import {
   artifactBuildRef,
+  catalogDataBranch,
   buildActionRunTitle,
   buildEnvironmentIdentity,
   buildEnvironmentPrefix,
@@ -20,6 +21,18 @@ assert.equal(normalizeBuildEnvironment('fix/kconfig-serializer-hardening'), 'fix
 assert.equal(normalizeBuildEnvironment('feat/rootfs-capacity-guidance'), 'feat/rootfs-capacity-guidance');
 assert.equal(normalizeBuildEnvironment('bad branch'), '');
 assert.equal(normalizeBuildEnvironment('../main'), '');
+
+const catalogChannels = {
+  fix: 'catalog-fix', dev: 'catalog-dev', staging: 'catalog-staging', main: 'catalog-data',
+};
+assert.equal(catalogDataBranch('fix/catalog-compatibility', catalogChannels), 'catalog-fix');
+assert.equal(catalogDataBranch('dev', catalogChannels), 'catalog-dev');
+assert.equal(catalogDataBranch('staging', catalogChannels), 'catalog-staging');
+assert.equal(catalogDataBranch('main', catalogChannels), 'catalog-data');
+assert.equal(catalogDataBranch('', catalogChannels), 'catalog-data');
+assert.equal(catalogDataBranch('feature/unpublished', catalogChannels), 'catalog-data');
+assert.throws(() => catalogDataBranch('dev', { ...catalogChannels, dev: 'catalog-data' }),
+  /invalid Catalog data branch/);
 
 assert.equal(normalizeBuildCommit('005e435f91b2c2891cf46468e2cb46e36519df8b'), '005e435f91b2c2891cf46468e2cb46e36519df8b');
 assert.equal(normalizeBuildCommit('005E435F91B2C2891CF46468E2CB46E36519DF8B'), '005e435f91b2c2891cf46468e2cb46e36519df8b');

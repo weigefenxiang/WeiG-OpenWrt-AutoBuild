@@ -4,6 +4,12 @@ const REQUEST_ID_RE = /^\d{6}_\d{4}$/;
 const BRANCH_RE = /^[A-Za-z0-9._/-]{1,160}$/;
 const DISPLAY_RE = /^[A-Za-z0-9._-]{1,160}$/;
 const SITE_SHA256_RE = /^[a-f0-9]{64}$/;
+const CATALOG_DATA_BRANCHES = Object.freeze({
+  fix: 'catalog-fix',
+  dev: 'catalog-dev',
+  staging: 'catalog-staging',
+  main: 'catalog-data',
+});
 
 export function normalizeBuildEnvironment(value) {
   let environment = String(value || '').trim();
@@ -18,6 +24,18 @@ export function normalizeBuildEnvironment(value) {
 export function normalizeBuildCommit(value) {
   const commit = String(value || '').trim().toLowerCase();
   return /^[a-f0-9]{40}$/.test(commit) ? commit : '';
+}
+
+export function catalogDataBranch(value, configured = CATALOG_DATA_BRANCHES) {
+  const environment = normalizeBuildEnvironment(value) || 'main';
+  const channel = environment.startsWith('fix/') ? 'fix'
+    : ['dev', 'staging', 'main'].includes(environment) ? environment : 'main';
+  const mapping = configured && typeof configured === 'object' ? configured : {};
+  const branch = String(mapping[channel] || CATALOG_DATA_BRANCHES[channel] || '').trim();
+  if (branch !== CATALOG_DATA_BRANCHES[channel]) {
+    throw new Error(`invalid Catalog data branch for ${channel}`);
+  }
+  return branch;
 }
 
 export function normalizeDeploymentIdentity(siteStamp, buildMeta) {
