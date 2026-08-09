@@ -16,6 +16,8 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 *.config text eol=lf
+*.conf text eol=lf
+*.txt text eol=lf
 VERSION text eol=lf
 .gitignore text eol=lf
 .gitattributes text eol=lf

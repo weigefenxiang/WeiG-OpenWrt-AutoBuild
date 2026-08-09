@@ -26,44 +26,59 @@ assert.equal(normalizeBuildCommit('005E435F91B2C2891CF46468E2CB46E36519DF8B'), '
 assert.equal(normalizeBuildCommit('005e435'), '');
 assert.equal(normalizeBuildCommit('g05e435f91b2c2891cf46468e2cb46e36519df8b'), '');
 
-const deploymentStamp = { version: 'v2608090613', timezone: 'Asia/Shanghai' };
+const deploymentSiteSha = 'a'.repeat(64);
+const deploymentStamp = { version: 'v2608090613', timezone: 'Asia/Shanghai', siteSha256: deploymentSiteSha, hashAlgorithm: 'sha256' };
 const deploymentMeta = {
   version: 'v2608090613',
   timezone: 'Asia/Shanghai',
   branch: 'refs/heads/dev',
   commit: '63aafb274720345df1d5d659dbdebb2307865dd7',
   builtAt: '2026-08-09T06:13:00+08:00',
+  siteSha256: deploymentSiteSha,
 };
 assert.deepEqual(normalizeDeploymentIdentity(deploymentStamp, deploymentMeta), {
   siteVersion: 'v2608090613',
+  siteSha256: deploymentSiteSha,
   buildMeta: { ...deploymentMeta, branch: 'dev', commit: '63aafb274720345df1d5d659dbdebb2307865dd7' },
 });
-assert.deepEqual(normalizeDeploymentIdentity(deploymentStamp, null), { siteVersion: 'v2608090613', buildMeta: null });
+assert.deepEqual(normalizeDeploymentIdentity(deploymentStamp, null), { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null });
 assert.deepEqual(
   normalizeDeploymentIdentity(deploymentStamp, { ...deploymentMeta, version: 'v2608090612' }),
-  { siteVersion: 'v2608090613', buildMeta: null },
+  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null },
 );
 assert.deepEqual(
   normalizeDeploymentIdentity(deploymentStamp, { ...deploymentMeta, commit: '63aafb2' }),
-  { siteVersion: 'v2608090613', buildMeta: null },
+  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null },
 );
 assert.deepEqual(
   normalizeDeploymentIdentity(deploymentStamp, { ...deploymentMeta, branch: '../dev' }),
-  { siteVersion: 'v2608090613', buildMeta: null },
+  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null },
 );
 assert.deepEqual(
   normalizeDeploymentIdentity(deploymentStamp, { ...deploymentMeta, timezone: 'UTC' }),
-  { siteVersion: 'v2608090613', buildMeta: null },
+  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null },
 );
 assert.deepEqual(
   normalizeDeploymentIdentity(deploymentStamp, { ...deploymentMeta, builtAt: '2026-08-08T22:13:00Z' }),
-  { siteVersion: 'v2608090613', buildMeta: null },
+  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null },
+);
+assert.deepEqual(
+  normalizeDeploymentIdentity(deploymentStamp, { ...deploymentMeta, siteSha256: 'b'.repeat(64) }),
+  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null },
+);
+assert.deepEqual(
+  normalizeDeploymentIdentity({ ...deploymentStamp, siteSha256: 'bad' }, deploymentMeta),
+  { siteVersion: 'v2608090613', siteSha256: '', buildMeta: null },
+);
+assert.deepEqual(
+  normalizeDeploymentIdentity({ ...deploymentStamp, hashAlgorithm: 'sha1' }, deploymentMeta),
+  { siteVersion: 'v2608090613', siteSha256: '', buildMeta: null },
 );
 assert.deepEqual(
   normalizeDeploymentIdentity({ ...deploymentStamp, timezone: 'UTC' }, deploymentMeta),
-  { siteVersion: 'v----------', buildMeta: null },
+  { siteVersion: 'v----------', siteSha256: '', buildMeta: null },
 );
-assert.deepEqual(normalizeDeploymentIdentity(null, deploymentMeta), { siteVersion: 'v----------', buildMeta: null });
+assert.deepEqual(normalizeDeploymentIdentity(null, deploymentMeta), { siteVersion: 'v----------', siteSha256: '', buildMeta: null });
 
 
 assert.equal(buildEnvironmentIdentity('dev'), 'dev');

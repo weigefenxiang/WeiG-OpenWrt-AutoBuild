@@ -5,14 +5,72 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" data-i18n="app.desc" content="OpenWrt 固件在线定制:选源码、勾插件,GitHub Actions 云编译,免费自取">
 <title>Wei.G · OpenWrt 固件在线定制</title>
-<link rel="icon" href="Wei.G.ico">
-<link rel="stylesheet" href="app.css?v=d7cdae3eca">
+<link rel="icon" data-release-href="Wei.G.ico">
+<script>
+(() => {
+  const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  const pointerUrl = new URL('data/site-version.json', document.baseURI);
+  const metaUrl = new URL('data/build-meta.json', document.baseURI);
+  pointerUrl.searchParams.set('refresh', nonce);
+  metaUrl.searchParams.set('refresh', nonce);
+  const readJson = async (url, optional = false) => {
+    try {
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) { if (optional) return null; throw new Error(`HTTP ${response.status}`); }
+      return await response.json();
+    } catch (error) {
+      if (optional) return null;
+      throw error;
+    }
+  };
+  window.__WEIG_RELEASE_PROMISE__ = Promise.all([readJson(pointerUrl), readJson(metaUrl, true)]).then(([stamp, meta]) => {
+    if (!/^v\d{10}$/.test(String(stamp?.version || '')) || stamp?.timezone !== 'Asia/Shanghai' ||
+        stamp?.hashAlgorithm !== 'sha256' || !/^[a-f0-9]{64}$/.test(String(stamp?.siteSha256 || ''))) {
+      throw new Error('Invalid site release pointer');
+    }
+    const pageUrl = new URL(location.href);
+    if (pageUrl.searchParams.get('r') !== stamp.siteSha256) {
+      pageUrl.searchParams.set('r', stamp.siteSha256);
+      location.replace(pageUrl.href);
+      return new Promise(() => {});
+    }
+    const releaseUrl = (path) => {
+      const url = new URL(path, document.baseURI);
+      url.searchParams.set('r', stamp.siteSha256);
+      return url.href;
+    };
+    const releaseMeta = meta && meta.version === stamp.version && meta.siteSha256 === stamp.siteSha256 &&
+      meta.timezone === stamp.timezone && /^[a-f0-9]{40}$/.test(String(meta.commit || '')) ? meta : null;
+    window.__WEIG_RELEASE_URL__ = releaseUrl;
+    window.__WEIG_RELEASE__ = Object.freeze({ stamp: Object.freeze(stamp), meta: releaseMeta ? Object.freeze(releaseMeta) : null, siteSha256: stamp.siteSha256 });
+    document.querySelectorAll('[data-release-href]').forEach((node) => { node.href = releaseUrl(node.dataset.releaseHref); });
+    document.querySelectorAll('[data-release-src]').forEach((node) => { node.src = releaseUrl(node.dataset.releaseSrc); });
+    const stylesheet = document.createElement('link');
+    stylesheet.rel = 'stylesheet';
+    stylesheet.href = releaseUrl('app.css');
+    document.head.appendChild(stylesheet);
+    return window.__WEIG_RELEASE__;
+  });
+  window.__WEIG_RELEASE_PROMISE__.catch((error) => {
+    console.error('Release bootstrap failed / 发布身份加载失败', error);
+    const show = () => {
+      const banner = document.createElement('div');
+      banner.setAttribute('role', 'alert');
+      banner.style.cssText = 'margin:16px;padding:12px;border:1px solid #dc2626;border-radius:8px;color:#b91c1c;background:#fef2f2;font:14px/1.6 sans-serif';
+      banner.textContent = '站点版本信息加载失败，请稍后刷新。 / Site release metadata failed to load. Please refresh later.';
+      document.body.prepend(banner);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show, { once: true });
+    else show();
+  });
+})();
+</script>
 </head>
 <body>
 <header class="site-header">
   <div class="wrap header-row">
     <div class="brand">
-      <img class="brand-icon" src="Wei.G-favicon_little.png" alt="Wei.G" width="34" height="34">
+      <img class="brand-icon" data-release-src="Wei.G-favicon_little.png" alt="Wei.G" width="34" height="34">
       <div>
         <h1><span class="brand-name">Wei.G</span> <span data-i18n="app.title">OpenWrt 固件在线定制</span></h1>
         <p class="sub" data-i18n="app.subtitle">选好插件,云端自动编译,喝杯卡布奇诺，迎接开“源”盛世</p>
@@ -24,7 +82,7 @@
         <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
       </a>
       <a class="icon-btn blog-link" href="https://www.weigeshare.cc.cd" target="_blank" rel="noopener" title="Wei.G Blog" aria-label="Wei.G Blog">
-        <img src="Wei.G-favicon_little.png" alt="" width="20" height="20">
+        <img data-release-src="Wei.G-favicon_little.png" alt="" width="20" height="20">
       </a>
     </div>
   </div>
@@ -309,7 +367,7 @@
      <a href="https://openwrt.org/" target="_blank" rel="noopener">OpenWrt</a> /
      <a href="https://immortalwrt.org/" target="_blank" rel="noopener">ImmortalWrt</a> /
      <a href="https://github.com/coolsnowwolf/lede" target="_blank" rel="noopener">Lean</a> /
-     <a href="packages.html" target="_blank" rel="noopener" data-i18n="footer.pluginAuthors">全部插件作者</a>
+     <a href="packages.html" data-release-href="packages.html" target="_blank" rel="noopener" data-i18n="footer.pluginAuthors">全部插件作者</a>
   </p>
   <p><span data-i18n="footer.actionsPrefix">固件在</span>
      <a id="actionsLink" href="https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions" target="_blank" rel="noopener">Actions</a>
@@ -317,7 +375,7 @@
   </p>
   <p><a id="footRepo" href="https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild" target="_blank" rel="noopener">GitHub</a> ·
      <a class="blog-link" href="https://www.weigeshare.cc.cd/" target="_blank" rel="noopener">Weige Share Blog</a> ·
-     <a href="packages.html" target="_blank" rel="noopener" data-i18n="pkgpage.title">软件包用途说明</a></p>
+     <a href="packages.html" data-release-href="packages.html" target="_blank" rel="noopener" data-i18n="pkgpage.title">软件包用途说明</a></p>
 </footer>
 
 <div class="popover" id="popover" hidden role="tooltip">
@@ -338,6 +396,13 @@
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <noscript><p class="wrap" style="padding:2rem 0">本页面需要启用 JavaScript 才能使用。/ JavaScript is required.</p></noscript>
-<script src="app.js?v=b5cdb5d546"></script>
+<script>
+window.__WEIG_RELEASE_PROMISE__.then(() => {
+  const script = document.createElement('script');
+  script.src = window.__WEIG_RELEASE_URL__('app.js');
+  script.async = false;
+  document.body.appendChild(script);
+});
+</script>
 </body>
 </html>

@@ -22,7 +22,7 @@ export function prepareWebDeployment({ root = process.cwd(), commit = '', branch
   if (!result.payload.commit || !result.payload.branch) {
     throw new Error('Deployment identity requires a canonical branch and full 40-character Git commit.');
   }
-  return { ...result, version };
+  return { ...result, version, siteSha256: result.payload.siteSha256 };
 }
 
 function parseCli(argv) {
@@ -44,6 +44,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(MODULE_PATH)) {
   try {
     const result = prepareWebDeployment(parseCli(process.argv.slice(2)));
     console.log(`Prepared web deployment metadata: ${result.version} ${result.payload.commit || '(no commit)'}`);
+    console.log(`Site SHA-256 / 全站 SHA-256: ${result.siteSha256}`);
   } catch (error) {
     console.error(`ERROR: ${error.message}`);
     process.exitCode = 1;

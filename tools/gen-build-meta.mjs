@@ -6,6 +6,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalizeBuildCommit, normalizeBuildEnvironment } from '../site/wrt/lib/build-identity.js';
+import { assertSiteRelease } from './site-release.mjs';
 
 const MODULE_PATH = fileURLToPath(import.meta.url);
 const DEFAULT_ROOT = join(dirname(MODULE_PATH), '..');
@@ -60,6 +61,10 @@ export function writeBuildMeta({ root = DEFAULT_ROOT, commit = '', branch = '', 
   const output = resolve(out || join(projectRoot, 'site', 'wrt', 'data', 'build-meta.json'));
   const version = readFileSync(join(projectRoot, 'VERSION'), 'utf8').trim();
   if (!/^v\d{10}$/.test(version)) throw new Error(`Invalid VERSION: ${version}`);
+  const siteRelease = assertSiteRelease(join(projectRoot, 'site', 'wrt'));
+  if (siteRelease.pointer.version !== version) {
+    throw new Error(`VERSION/site-version mismatch: ${version} != ${siteRelease.pointer.version || '(missing)'}`);
+  }
   const buildTime = builtAt || process.env.WEIG_BUILD_TIME || shanghaiIsoNow();
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/.test(buildTime)) {
     throw new Error(`Invalid WEIG_BUILD_TIME: ${buildTime}`);
@@ -74,6 +79,7 @@ export function writeBuildMeta({ root = DEFAULT_ROOT, commit = '', branch = '', 
     branch: resolvedBranch,
     builtAt: buildTime,
     timezone: 'Asia/Shanghai',
+    siteSha256: siteRelease.siteSha256,
   };
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(output, JSON.stringify(payload, null, 2) + '\n');

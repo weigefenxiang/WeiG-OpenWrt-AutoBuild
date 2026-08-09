@@ -3,6 +3,7 @@
 const REQUEST_ID_RE = /^\d{6}_\d{4}$/;
 const BRANCH_RE = /^[A-Za-z0-9._/-]{1,160}$/;
 const DISPLAY_RE = /^[A-Za-z0-9._-]{1,160}$/;
+const SITE_SHA256_RE = /^[a-f0-9]{64}$/;
 
 export function normalizeBuildEnvironment(value) {
   let environment = String(value || '').trim();
@@ -22,14 +23,16 @@ export function normalizeBuildCommit(value) {
 export function normalizeDeploymentIdentity(siteStamp, buildMeta) {
   const siteVersion = /^v\d{10}$/.test(String(siteStamp?.version || '')) &&
     siteStamp?.timezone === 'Asia/Shanghai' ? siteStamp.version : '';
-  const empty = { siteVersion: siteVersion || 'v----------', buildMeta: null };
-  if (!siteVersion || !buildMeta || buildMeta.version !== siteVersion ||
-      buildMeta.timezone !== siteStamp.timezone ||
+  const siteSha256 = siteVersion && SITE_SHA256_RE.test(String(siteStamp?.siteSha256 || '')) &&
+    siteStamp?.hashAlgorithm === 'sha256' ? siteStamp.siteSha256 : '';
+  const empty = { siteVersion: siteVersion || 'v----------', siteSha256: siteSha256 || '', buildMeta: null };
+  if (!siteVersion || !siteSha256 || !buildMeta || buildMeta.version !== siteVersion ||
+      buildMeta.siteSha256 !== siteSha256 || buildMeta.timezone !== siteStamp.timezone ||
       !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/.test(String(buildMeta.builtAt || ''))) return empty;
   const branch = normalizeBuildEnvironment(buildMeta.branch);
   const commit = normalizeBuildCommit(buildMeta.commit);
   if (!branch || !commit) return empty;
-  return { siteVersion, buildMeta: { ...buildMeta, branch, commit } };
+  return { siteVersion, siteSha256, buildMeta: { ...buildMeta, branch, commit } };
 }
 
 export function buildEnvironmentIdentity(value) {

@@ -50,7 +50,20 @@ const html = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Wei.G · 软件包用途说明 / Package Reference</title>
-<link rel="icon" href="Wei.G.ico">
+<link rel="icon" href="Wei.G.ico" data-release-href="Wei.G.ico">
+<script>
+(function(){
+  if(location.protocol!=='http:'&&location.protocol!=='https:')return;
+  var nonce=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+  var pointer=new URL('data/site-version.json',document.baseURI);pointer.searchParams.set('refresh',nonce);
+  fetch(pointer,{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(stamp){
+    if(!/^v\\d{10}$/.test(String(stamp&&stamp.version||''))||stamp.timezone!=='Asia/Shanghai'||stamp.hashAlgorithm!=='sha256'||!/^[a-f0-9]{64}$/.test(String(stamp.siteSha256||'')))throw new Error('Invalid site release pointer');
+    var page=new URL(location.href);if(page.searchParams.get('r')!==stamp.siteSha256){page.searchParams.set('r',stamp.siteSha256);location.replace(page.href);return}
+    var releaseUrl=function(path){var u=new URL(path,document.baseURI);u.searchParams.set('r',stamp.siteSha256);return u.href};
+    document.querySelectorAll('[data-release-href]').forEach(function(node){node.href=releaseUrl(node.getAttribute('data-release-href'))});
+  }).catch(function(error){console.error('Package page release check failed / 软件包页面发布身份检查失败',error)});
+})();
+</script>
 <style>
 :root{--bg:#f5f6f8;--card:#fff;--card2:#f2f4f7;--text:#1c2430;--text2:#5b6572;--border:#dde2e9;--accent:#2563eb;--accent-text:#1d4ed8;--gold:#b45309;--gold-bg:#fef3c7}
 @media (prefers-color-scheme:dark){:root{--bg:#11151c;--card:#1a202b;--card2:#222a37;--text:#e6eaf0;--text2:#9aa4b2;--border:#2c3543;--accent:#4f83f1;--accent-text:#9db9f7;--gold:#fbbf24;--gold-bg:#3a2f14}}
@@ -80,7 +93,7 @@ a{color:var(--accent-text)}
 <body>
 <div class="wrap">
 <div class="top">
-  <a class="back" href="index.html" data-i18n="pkgpage.back">← 返回定制器</a>
+  <a class="back" href="index.html" data-release-href="index.html" data-i18n="pkgpage.back">← 返回定制器</a>
   <select id="lang" aria-label="Language"></select>
 </div>
 <h1><span data-i18n="pkgpage.title">软件包用途说明</span></h1>

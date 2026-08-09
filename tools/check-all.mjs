@@ -5,15 +5,15 @@
 
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { directoriesMatch, syncBlogMirror } from './sync-blog.mjs';
+import { collectSiteReleaseFiles, computeSiteSha256 } from './site-release.mjs';
 import { checkDevToStaging, checkStagingToMain, promoteExact } from './promote-release.mjs';
 import { prepareSiteDeployment } from './prepare-site-deployment.mjs';
-import { checkTextFiles } from './check-text-format.mjs';
+import { checkTextFiles, expectedLineEnding } from './check-text-format.mjs';
 import {
   FORBIDDEN_SITE_ARCHIVE_ENTRIES,
   REQUIRED_SITE_ARCHIVE_ENTRIES,
@@ -153,24 +153,15 @@ try {
     writeFileSync(target, content);
   };
   writeStampFixture('tools/stamp-site-version.mjs', readFileSync(join(ROOT, 'tools', 'stamp-site-version.mjs')));
+  writeStampFixture('tools/site-release.mjs', readFileSync(join(ROOT, 'tools', 'site-release.mjs')));
   writeStampFixture('tools/helper.mjs', 'export const helper = 1;\n');
   writeStampFixture('.github/workflows/build.yml', 'name: fixture\n');
   writeStampFixture('Shell/diy.sh', '#!/bin/sh\n');
   writeStampFixture('config/device.config', 'CONFIG_FIXTURE=y\n');
   writeStampFixture('site/wrt/app.css', 'body { color: black; }\n');
-  writeStampFixture('site/wrt/app.js', [
-    "import('./lib/catalog-engine.js');",
-    "import('./lib/catalog-loader.js');",
-    "import('./lib/catalog-schema6.js');",
-    "new Worker('./lib/catalog-search-worker.js');",
-    "import('./lib/build-identity.js');",
-    '',
-  ].join('\n'));
-  writeStampFixture('site/wrt/index.html', '<link rel="stylesheet" href="app.css?v=old">\n<script src="app.js?v=old"></script>\n');
+  writeStampFixture('site/wrt/app.js', 'console.log("fixture");\n');
+  writeStampFixture('site/wrt/index.html', '<!doctype html><title>fixture</title>\n');
   writeStampFixture('site/wrt/data/runtime.json', '{"fixture":1}\n');
-  for (const moduleName of ['catalog-engine.js', 'catalog-loader.js', 'catalog-schema6.js', 'catalog-search-worker.js', 'build-identity.js']) {
-    writeStampFixture(`site/wrt/lib/${moduleName}`, `export const name = '${moduleName}';\n`);
-  }
   writeStampFixture('VERSION', 'v0000000000\n');
   const runStamp = (args = []) => spawnSync(process.execPath, [
     join(versionStampFixtureRoot, 'tools', 'stamp-site-version.mjs'), ...args,
@@ -180,40 +171,51 @@ try {
 
   const firstRun = runStamp();
   const firstStamp = readStamp();
+  const firstStampText = JSON.stringify(firstStamp, null, 2) + '\n';
   const firstCheck = runStamp(['--check']);
-  const firstApp = readFileSync(join(versionStampFixtureRoot, 'site', 'wrt', 'app.js'), 'utf8');
-  const firstHtml = readFileSync(join(versionStampFixtureRoot, 'site', 'wrt', 'index.html'), 'utf8');
   const secondRun = runStamp();
   const secondStampText = readFileSync(
     join(versionStampFixtureRoot, 'site', 'wrt', 'data', 'site-version.json'), 'utf8');
-  const firstStampText = JSON.stringify(firstStamp, null, 2) + '\n';
-  writeStampFixture('site/wrt/data/build-meta.json', '{\"version\":\"ignored\"}\n');
+
+  writeStampFixture('site/wrt/data/build-meta.json', '{"version":"ignored","builtAt":"ignored"}\n');
   const buildMetaCheck = runStamp(['--check']);
   const afterBuildMeta = readFileSync(
     join(versionStampFixtureRoot, 'site', 'wrt', 'data', 'site-version.json'), 'utf8');
-  writeStampFixture('Shell/diy.sh', '#!/bin/sh\r\n');
-  const lineEndingRun = runStamp();
-  const afterLineEnding = readFileSync(
-    join(versionStampFixtureRoot, 'site', 'wrt', 'data', 'site-version.json'), 'utf8');
+
+  writeStampFixture('site/wrt/app.css', 'body { color: black; }\r\n');
+  const siteLineEndingStale = runStamp(['--check']);
+  const siteLineEndingRun = runStamp();
+  const lineEndingStamp = readStamp();
+  const lineEndingSemantics = siteLineEndingStale.status === 1 && siteLineEndingRun.status === 0 &&
+    lineEndingStamp.fingerprint === firstStamp.fingerprint && lineEndingStamp.siteSha256 !== firstStamp.siteSha256;
+  writeStampFixture('site/wrt/app.css', 'body { color: black; }\n');
+  const restoredRun = runStamp();
+  const restoredStamp = readStamp();
+  const restoredRawBytes = restoredRun.status === 0 && restoredStamp.siteSha256 === firstStamp.siteSha256 &&
+    restoredStamp.fingerprint === firstStamp.fingerprint;
+
   const scopeMutations = [
-    ['tools/helper.mjs', 'export const helper = 2;\n'],
-    ['.github/workflows/build.yml', 'name: fixture-updated\n'],
-    ['Shell/diy.sh', '#!/bin/sh\necho updated\n'],
-    ['config/device.config', 'CONFIG_FIXTURE=m\n'],
-    ['site/wrt/data/runtime.json', '{"fixture":2}\n'],
+    ['tools/helper.mjs', 'export const helper = 2;\n', false],
+    ['.github/workflows/build.yml', 'name: fixture-updated\n', false],
+    ['Shell/diy.sh', '#!/bin/sh\necho updated\n', false],
+    ['config/device.config', 'CONFIG_FIXTURE=m\n', false],
+    ['site/wrt/data/runtime.json', '{"fixture":2}\n', true],
   ];
-  let previousFingerprint = firstStamp.fingerprint;
+  let previousFingerprint = restoredStamp.fingerprint;
+  let previousSiteSha = restoredStamp.siteSha256;
   let scopesChanged = true;
-  for (const [relativePath, content] of scopeMutations) {
+  for (const [relativePath, content, changesSite] of scopeMutations) {
     writeStampFixture(relativePath, content);
     const staleCheck = runStamp(['--check']);
     const result = runStamp();
     const freshCheck = runStamp(['--check']);
     const stamp = readStamp();
     scopesChanged &&= staleCheck.status === 1 && result.status === 0 && freshCheck.status === 0 &&
-      stamp.fingerprint !== previousFingerprint;
+      stamp.fingerprint !== previousFingerprint && (changesSite ? stamp.siteSha256 !== previousSiteSha : stamp.siteSha256 === previousSiteSha);
     previousFingerprint = stamp.fingerprint;
+    previousSiteSha = stamp.siteSha256;
   }
+
   const beforeDocs = readFileSync(
     join(versionStampFixtureRoot, 'site', 'wrt', 'data', 'site-version.json'), 'utf8');
   writeStampFixture('docs/DEVELOPER.md', '# unrelated docs fixture\n');
@@ -221,39 +223,38 @@ try {
   const docsRun = runStamp();
   const afterDocs = readFileSync(
     join(versionStampFixtureRoot, 'site', 'wrt', 'data', 'site-version.json'), 'utf8');
+
   const stampFixtureOk = firstRun.status === 0 && firstCheck.status === 0 && secondRun.status === 0 &&
-    buildMetaCheck.status === 0 && afterBuildMeta === firstStampText &&
-    lineEndingRun.status === 0 && docsCheck.status === 0 && docsRun.status === 0 &&
+    buildMetaCheck.status === 0 && afterBuildMeta === firstStampText && secondStampText === firstStampText &&
     /^v\d{10}$/.test(firstStamp.version) && firstStamp.timezone === 'Asia/Shanghai' &&
-    /^[a-f0-9]{64}$/.test(firstStamp.fingerprint) && secondStampText === firstStampText &&
-    afterLineEnding === firstStampText &&
-    firstApp.includes('./lib/catalog-engine.js?v=') &&
-    firstApp.includes('./lib/catalog-loader.js?v=') &&
-    firstApp.includes('./lib/catalog-schema6.js?v=') &&
-    firstApp.includes('./lib/catalog-search-worker.js?v=') &&
-    firstHtml.includes('app.css?v=') && !firstHtml.includes('app.css?v=old') &&
-    firstHtml.includes('app.js?v=') && !firstHtml.includes('app.js?v=old') &&
-    scopesChanged && beforeDocs === afterDocs;
+    firstStamp.hashAlgorithm === 'sha256' && /^[a-f0-9]{64}$/.test(firstStamp.fingerprint) &&
+    /^[a-f0-9]{64}$/.test(firstStamp.siteSha256) && lineEndingSemantics && restoredRawBytes &&
+    scopesChanged && docsCheck.status === 0 && docsRun.status === 0 && beforeDocs === afterDocs;
   stampFixtureOk
-    ? ok('version stamp fixtures: tracked scopes change the fingerprint; LF/CRLF-only and unrelated docs do not')
+    ? ok('version stamp fixtures: project fingerprint and raw-byte siteSha256 have separate deterministic contracts')
     : bad('version stamp fixtures', JSON.stringify({
       firstStatus: firstRun.status,
       firstCheckStatus: firstCheck.status,
       secondStatus: secondRun.status,
       buildMetaCheckStatus: buildMetaCheck.status,
-      lineEndingStatus: lineEndingRun.status,
-      docsStatus: docsRun.status,
       firstStamp,
       idempotent: secondStampText === firstStampText,
-      lineEndingsStable: afterLineEnding === firstStampText,
+      buildMetaIgnored: afterBuildMeta === firstStampText,
+      lineEndingSemantics,
+      restoredRawBytes,
       scopesChanged,
       docsIgnored: beforeDocs === afterDocs,
-    }).slice(0, 700));
+    }).slice(0, 900));
 } catch (error) {
   bad('version stamp fixtures', error.message.slice(0, 400));
 } finally {
   rmSync(versionStampFixtureRoot, { recursive: true, force: true });
 }
+
+const siteReleaseMatrix = spawnSync(process.execPath, [join(ROOT, 'tools', 'test-site-release.mjs')], { encoding: 'utf8' });
+siteReleaseMatrix.status === 0
+  ? ok('site release SHA-256 matrix: unchanged/change/add/delete/raw-bytes/metadata exclusions are deterministic')
+  : bad('site release SHA-256 matrix', (siteReleaseMatrix.stderr || siteReleaseMatrix.stdout || '').trim().slice(0, 500));
 
 const siteArchiveTestRoot = mkdtempSync(join(tmpdir(), '威格 archive verifier with spaces-'));
 try {
@@ -340,17 +341,29 @@ try {
   mustGit(repo, ['init']);
   mustGit(repo, ['config', 'user.email', 'fixture@example.invalid']);
   mustGit(repo, ['config', 'user.name', 'Fixture']);
+  // The promotion fixture must model the real repository checkout contract. Without
+  // .gitattributes, a hostile/global core.autocrlf=true rewrites LF site bytes to
+  // CRLF in detached worktrees and creates a false siteSha256 mismatch.
+  writeFileSync(join(repo, '.gitattributes'), readFileSync(join(ROOT, '.gitattributes'), 'utf8'));
+  mustGit(repo, ['config', 'core.autocrlf', 'true']);
   const writeReleaseState = (version, body) => {
     mkdirSync(join(repo, 'site', 'wrt', 'data'), { recursive: true });
     mkdirSync(join(repo, 'site', 'wrt', 'lib'), { recursive: true });
     writeFileSync(join(repo, 'VERSION'), `${version}\n`);
-    writeFileSync(join(repo, 'site', 'wrt', 'data', 'site-version.json'), `${JSON.stringify({ version })}\n`);
     writeFileSync(join(repo, 'site', 'wrt', 'index.html'), '<!doctype html>menuconfigBox\n');
     writeFileSync(join(repo, 'site', 'wrt', 'app.js'), `${body}\n`);
     for (const module of ['catalog-engine.js', 'catalog-loader.js', 'catalog-schema6.js', 'catalog-search-worker.js']) {
       writeFileSync(join(repo, 'site', 'wrt', 'lib', module), 'export const fixture = true;\n');
     }
     writeFileSync(join(repo, 'site', 'wrt', 'lib', 'package.json'), '{"type":"module"}\n');
+    const siteSha256 = computeSiteSha256(join(repo, 'site', 'wrt')).siteSha256;
+    writeFileSync(join(repo, 'site', 'wrt', 'data', 'site-version.json'), JSON.stringify({
+      version,
+      timezone: 'Asia/Shanghai',
+      fingerprint: 'f'.repeat(64),
+      siteSha256,
+      hashAlgorithm: 'sha256',
+    }, null, 2) + '\n');
   };
   writeReleaseState('v2608071200', 'A');
   mustGit(repo, ['add', '.']); mustGit(repo, ['commit', '-m', 'A']); mustGit(repo, ['branch', '-M', 'main']);
@@ -362,6 +375,30 @@ try {
   writeReleaseState('v2608071203', 'D'); mustGit(repo, ['add', '.']); mustGit(repo, ['commit', '-m', 'D']);
   const candidate = mustGit(repo, ['rev-parse', 'HEAD']);
   mustGit(repo, ['push', '-u', 'origin', 'dev']);
+
+  const verifyAutocrlfCheckout = (value) => {
+    mustGit(repo, ['config', 'core.autocrlf', value]);
+    const checkout = join(releaseFixtureRoot, `checkout-autocrlf-${value}`);
+    mustGit(repo, ['worktree', 'add', '--detach', '--force', checkout, candidate]);
+    try {
+      const pointer = JSON.parse(readFileSync(join(checkout, 'site', 'wrt', 'data', 'site-version.json'), 'utf8'));
+      const actual = computeSiteSha256(join(checkout, 'site', 'wrt')).siteSha256;
+      const appBytes = readFileSync(join(checkout, 'site', 'wrt', 'app.js'));
+      return {
+        value,
+        expected: pointer.siteSha256,
+        actual,
+        lfPreserved: !appBytes.includes(Buffer.from('\r\n')),
+        ok: actual === pointer.siteSha256 && !appBytes.includes(Buffer.from('\r\n')),
+      };
+    } finally {
+      spawnSync('git', ['-C', repo, 'worktree', 'remove', '--force', checkout], { stdio: 'ignore', shell: false });
+      rmSync(checkout, { recursive: true, force: true });
+    }
+  };
+  const autocrlfFalse = verifyAutocrlfCheckout('false');
+  const autocrlfTrue = verifyAutocrlfCheckout('true');
+  mustGit(repo, ['config', 'core.autocrlf', 'true']);
 
   const devPromotion = checkDevToStaging(repo);
   const enterCancel = promotionCli('dev-staging', '\n');
@@ -411,15 +448,17 @@ try {
     mainAfterYes === candidate;
   const releaseFixtureOk = devPromotion.candidate === candidate && devPromotion.version === 'v2608071203' &&
     devPromotion.createsStaging === true && prodPromotion.candidate === candidate &&
-    cancellationOk && yesPromotionOk && raceOk && mainPromotionOk &&
+    cancellationOk && yesPromotionOk && raceOk && mainPromotionOk && autocrlfFalse.ok && autocrlfTrue.ok &&
+    autocrlfFalse.actual === autocrlfTrue.actual &&
     staged.commit === candidate && meta.commit === candidate && meta.version === 'v2608071203' && meta.branch === 'staging' &&
+    /^[a-f0-9]{64}$/.test(meta.siteSha256 || '') &&
     untar.status === 0 && readFileSync(join(extracted, 'app.js'), 'utf8').trim() === 'D';
   releaseFixtureOk
     ? ok('release promotion/deployment: Enter/n/other cancel, y exact-pushes, ref races block, dev→staging→main verifies, dirty worktree excluded')
     : bad('release promotion/deployment fixture', JSON.stringify({
       devPromotion, prodPromotion, cancellationOk, yesPromotionOk, raceOk, mainPromotionOk,
       enter: enterCancel.status, n: nCancel.status, other: otherCancel.status, yes: yesPromotion.status,
-      raceCandidate, stagingAfterRace, mainAfterYes, staged, meta,
+      raceCandidate, stagingAfterRace, mainAfterYes, autocrlfFalse, autocrlfTrue, staged, meta,
     }).slice(0, 900));
 } catch (error) {
   bad('release promotion/deployment fixture', error.message.slice(0, 700));
@@ -507,10 +546,18 @@ try {
   mkdirSync(join(unicodeNested, 'empty'), { recursive: true });
   writeFileSync(join(sourceDir, 'index.html'), '<!doctype html>');
   writeFileSync(join(sourceDir, 'app.js'), 'console.log("source");\n');
-  writeFileSync(join(sourceDir, 'data', 'site-version.json'), '{"version":"test"}\n');
   writeFileSync(join(unicodeNested, 'base.config'), 'CONFIG_TEST=y\n');
   writeFileSync(join(unicodeNested, 'asset.txt'), 'asset\n');
   writeFileSync(join(unicodeNested, 'large-binary.bin'), Buffer.alloc(3 * 1024 * 1024 + 123, 0xa5));
+  const mirrorVersion = 'v2608071201';
+  const mirrorSiteSha = computeSiteSha256(sourceDir).siteSha256;
+  writeFileSync(join(sourceDir, 'data', 'site-version.json'), JSON.stringify({
+    version: mirrorVersion,
+    timezone: 'Asia/Shanghai',
+    fingerprint: 'f'.repeat(64),
+    siteSha256: mirrorSiteSha,
+    hashAlgorithm: 'sha256',
+  }, null, 2) + '\n');
   mkdirSync(join(blogRepo, '.git'), { recursive: true });
   mkdirSync(join(blogDestination, 'old'), { recursive: true });
   writeFileSync(join(blogRepo, '_config.yml'), 'skip_render:\n  - wrt/**\n');
@@ -518,7 +565,7 @@ try {
   writeFileSync(join(blogDestination, 'app.js'), 'old\n');
 
   const progress = [];
-  const sourceIdentity = { version: 'v2608071201', commit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' };
+  const sourceIdentity = { version: mirrorVersion, commit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', siteSha256: mirrorSiteSha };
   const before = syncBlogMirror({ sourceDir, blogRepo, checkOnly: true, sourceIdentity });
   const first = syncBlogMirror({
     sourceDir,
@@ -531,6 +578,7 @@ try {
     directoriesMatch(sourceDir, blogDestination, { ignoredPaths: ['data/build-meta.json'] }) &&
     JSON.parse(readFileSync(join(blogDestination, 'data', 'build-meta.json'), 'utf8')).commit === sourceIdentity.commit &&
     JSON.parse(readFileSync(join(blogDestination, 'data', 'build-meta.json'), 'utf8')).branch === 'main' &&
+    JSON.parse(readFileSync(join(blogDestination, 'data', 'build-meta.json'), 'utf8')).siteSha256 === mirrorSiteSha &&
     readFileSync(join(blogDestination, 'nested', '中文 空格', 'base.config'), 'utf8') === 'CONFIG_TEST=y\n' &&
     existsSync(join(blogDestination, 'nested', '中文 空格', 'empty')) &&
     readFileSync(join(blogDestination, 'nested', '中文 空格', 'large-binary.bin')).length ===
@@ -539,6 +587,7 @@ try {
     !existsSync(join(blogRepo, 'source', 'wrt.sync-tmp')) &&
     !existsSync(join(blogRepo, 'source', 'wrt.sync-prev')) &&
     JSON.parse(readFileSync(join(blogRepo, '.wrt-source.json'), 'utf8')).commit === sourceIdentity.commit &&
+    JSON.parse(readFileSync(join(blogRepo, '.wrt-source.json'), 'utf8')).siteSha256 === mirrorSiteSha &&
     !syncBlogMirror({ sourceDir, blogRepo, checkOnly: true, sourceIdentity: { ...sourceIdentity, commit: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' } }).current &&
     progress[0]?.copied === 0 && progress.at(-1)?.copied === progress.at(-1)?.total;
 
@@ -947,6 +996,20 @@ mirrorRulesOk
   const textFormatSource = readFileSync(join(ROOT, 'tools', 'check-text-format.mjs'), 'utf8');
   const archiveVerifierSource = readFileSync(join(ROOT, 'tools', 'verify-site-archive.mjs'), 'utf8');
   const gitAttributes = readFileSync(join(ROOT, '.gitattributes'), 'utf8');
+  const attributeLines = gitAttributes.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith('#'));
+  const siteReleaseAttributeIssues = collectSiteReleaseFiles(join(ROOT, 'site', 'wrt'), { excludedPaths: [] }).flatMap(({ rel }) => {
+    const name = rel.split('/').pop() || rel;
+    const dot = name.lastIndexOf('.');
+    const patterns = dot > 0 ? [`*${name.slice(dot)}`, name, rel] : [name, rel];
+    const expected = expectedLineEnding(`site/wrt/${rel}`);
+    const hasRule = (suffix) => patterns.some((pattern) => attributeLines.includes(`${pattern} ${suffix}`));
+    if (expected === 'lf') return hasRule('text eol=lf') ? [] : [`${rel}: missing explicit text eol=lf rule`];
+    if (expected === 'crlf') return hasRule('text eol=crlf') ? [] : [`${rel}: missing explicit text eol=crlf rule`];
+    return hasRule('binary') ? [] : [`${rel}: file type is not classified as deterministic text or binary`];
+  });
+  siteReleaseAttributeIssues.length === 0
+    ? ok('F release bytes: every site/wrt file type has an explicit Git LF/CRLF/binary checkout rule')
+    : bad('F release Git attributes', siteReleaseAttributeIssues.slice(0, 8).join('; '));
   const deployGuide = readPrivate('部署与同步.md');
   const blogGuide = readPrivate('003.weige-share-blog同步与推送.md');
   const developerGuideZh = readFileSync(join(ROOT, 'docs', 'DEVELOPER.md'), 'utf8');
@@ -957,21 +1020,46 @@ mirrorRulesOk
     ? ok('公开开发者指南不暴露私有文档目录或路径')
     : bad('public developer docs', 'DEVELOPER.md 或 DEVELOPER.en.md 仍包含 docs-private');
   const catalogIndex = menuCatalogIndex;
-  const assetHash = (name) => createHash('sha256')
-    .update(readFileSync(join(ROOT, 'site', 'wrt', name), 'utf8').replace(/\r\n/g, '\n'))
-    .digest('hex').slice(0, 10);
-  const moduleHash = (name) => createHash('sha256')
-    .update(readFileSync(join(ROOT, 'site', 'wrt', 'lib', name), 'utf8').replace(/\r\n/g, '\n'))
-    .digest('hex').slice(0, 10);
-  const assetVersionOk = html.includes(`app.css?v=${assetHash('app.css')}`) &&
-    html.includes(`app.js?v=${assetHash('app.js')}`) &&
-    js.includes(`./lib/catalog-engine.js?v=${moduleHash('catalog-engine.js')}`) &&
-    js.includes(`./lib/catalog-loader.js?v=${moduleHash('catalog-loader.js')}`) &&
-    js.includes(`./lib/catalog-schema6.js?v=${moduleHash('catalog-schema6.js')}`) &&
-    js.includes(`./lib/catalog-search-worker.js?v=${moduleHash('catalog-search-worker.js')}`);
-  assetVersionOk
-    ? ok('前端 CSS/JS 与动态 Catalog 模块查询版本均和内容指纹一致')
-    : bad('frontend asset cache bust', 'index.html 或 app.js 的静态/动态资源查询版本未按内容指纹更新');
+  const packageHtml = readFileSync(join(ROOT, 'site', 'wrt', 'packages.html'), 'utf8');
+  const runtimeReleaseBypasses = [
+    /\bfetch\s*\(\s*['"`]\.?\/?data\//g,
+    /\bimport\s*\(\s*['"`]\.?\/?lib\//g,
+    /\bnew\s+Worker\s*\(\s*['"`]\.?\/?lib\//g,
+  ].flatMap((pattern) => [...js.matchAll(pattern)].map((match) => match[0]));
+  const runtimeReleaseLoaderGate = runtimeReleaseBypasses.length === 0;
+  runtimeReleaseLoaderGate
+    ? ok('F runtime asset gate: ordinary local data/modules/workers cannot bypass the release URL helper')
+    : bad('F runtime asset bypass', runtimeReleaseBypasses.join(', '));
+  const releaseCacheContract = runtimeReleaseLoaderGate &&
+    html.includes("new URL('data/site-version.json', document.baseURI)") &&
+    html.includes("new URL('data/build-meta.json', document.baseURI)") &&
+    html.includes("searchParams.set('refresh', nonce)") &&
+    html.includes("fetch(url, { cache: 'no-store' })") &&
+    html.includes("pageUrl.searchParams.set('r', stamp.siteSha256)") &&
+    html.includes('location.replace(pageUrl.href)') &&
+    html.includes("url.searchParams.set('r', stamp.siteSha256)") &&
+    html.includes("stylesheet.href = releaseUrl('app.css')") &&
+    html.includes("script.src = window.__WEIG_RELEASE_URL__('app.js')") &&
+    !html.includes('app.css?v=') && !html.includes('app.js?v=') &&
+    js.includes('const SITE_RELEASE_SHA = String(RELEASE_BOOTSTRAP?.siteSha256') &&
+    js.includes('const releaseAssetUrl = (path) => globalThis.__WEIG_RELEASE_URL__(path)') &&
+    js.includes('`wrt_cache:${SITE_RELEASE_SHA}:${path}`') &&
+    js.includes("key?.startsWith('wrt_cache:')") &&
+    !js.includes('localStorage.clear()') &&
+    js.includes("import(releaseAssetUrl('./lib/catalog-engine.js'))") &&
+    js.includes("import(releaseAssetUrl('./lib/catalog-loader.js'))") &&
+    js.includes("import(releaseAssetUrl('./lib/catalog-schema6.js'))") &&
+    js.includes("import(releaseAssetUrl('./lib/build-identity.js'))") &&
+    js.includes("new Worker(releaseAssetUrl('./lib/catalog-search-worker.js'))") &&
+    js.includes("const releaseCommit = String(RELEASE_BOOTSTRAP.meta?.commit || '')") &&
+    js.includes("'@' + releaseCommit + '/site/wrt/data/'") &&
+    !js.includes("'@' + BRANCH + '/site/wrt/data/'") &&
+    packageHtml.includes("new URL('data/site-version.json',document.baseURI)") &&
+    packageHtml.includes("page.searchParams.set('r',stamp.siteSha256)") &&
+    packageHtml.includes('data-release-href="index.html"');
+  releaseCacheContract
+    ? ok('F release cache: fresh pointer + page/asset siteSha256 keys + release-scoped runtime data are unified')
+    : bad('F release cache contract', 'fresh pointer, page/asset release keys, exact-commit fallbacks or release-scoped local cache is incomplete');
   const browserGenerationContract =
     !js.includes('function assertCatalogConfiguration(') &&
     !js.includes('assertCatalogConfiguration(config)') &&
@@ -995,11 +1083,11 @@ mirrorRulesOk
     existsSync(join(ROOT, 'site', 'wrt', 'lib', 'build-identity.js')) &&
     !existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.mjs')) &&
     !existsSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.mjs')) &&
-    js.includes("import('./lib/catalog-engine.js?v=") &&
-    js.includes("import('./lib/catalog-loader.js?v=") &&
-    js.includes("import('./lib/catalog-schema6.js?v=") &&
-    js.includes("import('./lib/build-identity.js?v=") &&
-    js.includes("new Worker('./lib/catalog-search-worker.js?v=") &&
+    js.includes("import(releaseAssetUrl('./lib/catalog-engine.js'))") &&
+    js.includes("import(releaseAssetUrl('./lib/catalog-loader.js'))") &&
+    js.includes("import(releaseAssetUrl('./lib/catalog-schema6.js'))") &&
+    js.includes("import(releaseAssetUrl('./lib/build-identity.js'))") &&
+    js.includes("new Worker(releaseAssetUrl('./lib/catalog-search-worker.js'))") &&
     !js.includes('catalog-engine.mjs') && !js.includes('catalog-loader.mjs');
   catalogBrowserModuleContract
     ? ok('Catalog browser modules use .js with a scoped Node ESM package and no legacy .mjs files')
@@ -1027,6 +1115,14 @@ mirrorRulesOk
     !syncDeployScript.includes('Legacy VPS deploy') && !syncDeployScript.includes(':deploy') &&
     remoteDeploySource.includes('require_nonempty_file "$NEW/data/build-meta.json" "data/build-meta.json"') &&
     remoteDeploySource.includes('require_nonempty_file "$NEW/lib/catalog-engine.js" "lib/catalog-engine.js"') &&
+    remoteDeploySource.includes(`require_fixed_text "$NEW/index.html" '__WEIG_RELEASE_PROMISE__' "index.html release bootstrap"`) &&
+    remoteDeploySource.includes(`require_fixed_text "$NEW/data/site-version.json" '"siteSha256":' "data/site-version.json release SHA"`) &&
+    remoteDeploySource.includes(`require_fixed_text "$NEW/data/site-version.json" '"hashAlgorithm": "sha256"' "data/site-version.json hash algorithm"`) &&
+    remoteDeploySource.includes(`releaseAssetUrl('./lib/catalog-engine.js')`) &&
+    remoteDeploySource.includes(`releaseAssetUrl('./lib/catalog-loader.js')`) &&
+    remoteDeploySource.includes(`releaseAssetUrl('./lib/catalog-schema6.js')`) &&
+    remoteDeploySource.includes(`releaseAssetUrl('./lib/catalog-search-worker.js')`) &&
+    !remoteDeploySource.includes('./lib/catalog-engine.js?v=') &&
     remoteDeploySource.includes('Content-Type:') &&
     remoteDeploySource.includes('catalog-search-worker.js') &&
     remoteDeploySource.includes('require_absent_path "$NEW/lib/catalog-engine.mjs" "lib/catalog-engine.mjs"');
@@ -1131,6 +1227,11 @@ mirrorRulesOk
     !syncBlogSource.includes('cpSync') &&
     syncBlogSource.includes('return 3;') &&
     syncBlogSource.includes("SOURCE_META_FILE = '.wrt-source.json'") &&
+    syncBlogSource.includes('assertSiteRelease(source)') &&
+    syncBlogSource.includes('mirrorReleaseMatches(temporary)') &&
+    syncBlogSource.includes('mirrorReleaseMatches(destination)') &&
+    syncBlogSource.includes('siteSha256: identity.siteSha256') &&
+    syncBlogSource.includes('schema: 2') &&
     syncBlogSource.includes("join(root, 'data', 'build-meta.json')") &&
     syncBlogSource.includes("timezone: 'Asia/Shanghai'") &&
     syncBlogSource.includes("'--source-repo'") && syncBlogSource.includes("'--ref'") &&
@@ -1150,8 +1251,8 @@ mirrorRulesOk
       !blogGuide.includes('wrt-preview-dev') && !blogGuide.includes('wrt-preview-staging')
     ));
   exactBlogMirrorContract
-    ? ok('blog sync: dev assistant mirrors/verifies files only; Git remains manual and legacy .config filtering is removed')
-    : bad('blog exact mirror contract', '同步工具、选项 3 编排、回滚验证或中英文文档仍保留旧过滤逻辑');
+    ? ok('blog sync: exact tree + siteSha256 proof; dev assistant mirrors/verifies only and Git remains manual')
+    : bad('blog exact mirror contract', '精确树镜像、siteSha256 证明、选项 3 编排、回滚验证或文档契约不完整');
   const node24ActionFloors = new Map([
     ['checkout', 5],
     ['github-script', 8],
@@ -1235,6 +1336,7 @@ mirrorRulesOk
     devAssistant.indexOf("tools/check-text-format.mjs") < devAssistant.indexOf("tools/check-all.mjs") &&
     !devAssistant.includes("run('git', ['add'") && !devAssistant.includes("run('git', ['commit'") &&
     gitAttributes.includes('*.mjs text eol=lf') &&
+    gitAttributes.includes('*.conf text eol=lf') && gitAttributes.includes('*.txt text eol=lf') &&
     gitAttributes.includes('*.bat text eol=crlf') &&
     gitAttributes.includes('.gitignore text eol=lf') &&
     gitAttributes.includes('.gitattributes text eol=lf') &&
@@ -1806,6 +1908,7 @@ mirrorRulesOk
   const cancelWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'cancel-build.yml'), 'utf8')
     .replace(/\r\n/g, '\n');
   const versionStamper = readFileSync(join(ROOT, 'tools', 'stamp-site-version.mjs'), 'utf8');
+  const siteReleaseSource = readFileSync(join(ROOT, 'tools', 'site-release.mjs'), 'utf8');
   const buildMetaGenerator = readFileSync(join(ROOT, 'tools', 'gen-build-meta.mjs'), 'utf8');
   const webDeploymentPreparer = readFileSync(join(ROOT, 'tools', 'prepare-web-deployment.mjs'), 'utf8');
   const requestParser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
@@ -2189,7 +2292,7 @@ mirrorRulesOk
       js.includes('menuVisibilityCache') &&
       js.includes('menuMaxLevelCache') &&
       js.includes('startCatalogSearchWorker()') &&
-      js.includes("new Worker('./lib/catalog-search-worker.js?v=") &&
+      js.includes("new Worker(releaseAssetUrl('./lib/catalog-search-worker.js'))") &&
       js.includes('searchPending = matches === null') &&
       catalogSearchWorkerJs.includes('function intersectSorted') &&
       catalogSearchWorkerJs.includes("message.type === 'query'") &&
@@ -2287,20 +2390,25 @@ mirrorRulesOk
       : bad('Catalog selection layers', '状态分层、deferred 默认、来源筛选、恢复默认或用户计数隔离不完整');
     const deploymentIdentityContract =
     js.includes('async function loadDeploymentIdentity()') &&
-    js.includes("fetch('./data/site-version.json', { cache: 'no-store' })") &&
-    js.includes("fetch('./data/build-meta.json', { cache: 'no-store' })") &&
-    js.includes('const [stampResponse, metaResponse] = await Promise.all([') &&
+    html.includes("new URL('data/site-version.json', document.baseURI)") &&
+    html.includes("new URL('data/build-meta.json', document.baseURI)") &&
+    html.includes("fetch(url, { cache: 'no-store' })") &&
+    html.includes('Promise.all([readJson(pointerUrl), readJson(metaUrl, true)])') &&
+    html.includes('meta.version === stamp.version && meta.siteSha256 === stamp.siteSha256') &&
     !js.includes("loadJson('site-version.json')") &&
-    js.includes('BUILD_IDENTITY_MODULE.normalizeDeploymentIdentity(stamp, meta)') &&
+    js.includes('BUILD_IDENTITY_MODULE.normalizeDeploymentIdentity(RELEASE_BOOTSTRAP.stamp, RELEASE_BOOTSTRAP.meta)') &&
     buildIdentitySource.includes('export function normalizeDeploymentIdentity(siteStamp, buildMeta)') &&
+    buildIdentitySource.includes('buildMeta.siteSha256 !== siteSha256') &&
     buildIdentitySource.includes('normalizeBuildEnvironment(buildMeta.branch)') &&
     buildIdentitySource.includes('normalizeBuildCommit(buildMeta.commit)') &&
+    buildMetaGenerator.includes('assertSiteRelease') &&
+    buildMetaGenerator.includes('siteSha256: siteRelease.siteSha256') &&
     buildMetaGenerator.includes('normalizeBuildCommit') &&
     !buildMetaGenerator.includes('^[a-f0-9]{7,64}$') &&
     webDeploymentPreparer.includes('Deployment identity requires a canonical branch and full 40-character Git commit.') &&
     js.includes('state.siteVersion = deploymentIdentity.siteVersion;') &&
     js.includes('state.buildMeta = deploymentIdentity.buildMeta;') &&
-    js.includes("['identity', Boolean(state.buildMeta && state.buildMeta.version === state.siteVersion") &&
+    js.includes("state.buildMeta.siteSha256 === SITE_RELEASE_SHA") &&
     js.includes('BUILD_IDENTITY_MODULE.normalizeBuildCommit(state.buildMeta.commit)') &&
     js.includes("requestCommit: String(state.buildMeta?.commit || '')");
   deploymentIdentityContract
@@ -2326,6 +2434,14 @@ mirrorRulesOk
     versionStamper.includes('CHECK_ONLY') &&
     versionStamper.includes('FINGERPRINT_TEXT_EXTENSIONS') &&
     versionStamper.includes('normalizeText') &&
+    versionStamper.includes('computeSiteSha256(SITE)') &&
+    versionStamper.includes("hashAlgorithm: 'sha256'") &&
+    versionStamper.includes('siteSha256: siteRelease.siteSha256') &&
+    siteReleaseSource.includes("'data/build-meta.json'") &&
+    siteReleaseSource.includes("'data/site-version.json'") &&
+    siteReleaseSource.includes("hash.update(file.rel, 'utf8')") &&
+    siteReleaseSource.includes("hash.update(digest, 'ascii')") &&
+    siteReleaseSource.includes('assertSiteRelease') &&
     versionStamper.includes('writeFileSync(ROOT_VERSION, version') &&
     versionStamper.includes("minute: '2-digit'") &&
     versionStamper.includes("timeZone: 'Asia/Shanghai'") &&
@@ -2339,8 +2455,8 @@ mirrorRulesOk
     html.includes('id="buildInfoCard"') && html.includes('id="buildInfoCommit"') &&
     !html.includes('id="siteVersionModal"');
   versionContract
-    ? ok('项目版本由本地生成、CI 只验证；网页短版本与 fresh deployment identity 已接通')
-    : bad('project version contract', '本地版本生成、CI 只读验证、fresh deployment identity 或网页维护信息契约缺失');
+    ? ok('项目版本 + 全站 siteSha256 由本地生成、CI 只验证；网页 Release Identity 已接通')
+    : bad('project version contract', '本地版本/siteSha256 生成、CI 只读验证或 Release Identity 契约缺失');
   const selfTestContract = js.includes("const path2 = 'seed/plugins.json'") &&
     js.includes("state.device?.id === 'catalog-target'") &&
     js.includes("state.device?.id === 'custom-target' && state.importedConfig") &&
@@ -2358,7 +2474,7 @@ mirrorRulesOk
     : bad('web self-test contract', '种子数据路径、Catalog/上传配置或真实生成演算缺失');
   const catalogEngineUiContract = !html.includes('id="devpkgToggle"') &&
     !js.includes('devPkgs') && !js.includes('PKGDATA') &&
-    js.includes("import('./lib/catalog-engine.js?v=") &&
+    js.includes("import(releaseAssetUrl('./lib/catalog-engine.js'))") &&
     js.includes('menuSearchOptions = [...options, ...hiddenOptions]') &&
     js.includes('CATALOG_ENGINE.applyUserIntent') &&
     js.includes('function applyMenuValue(option, value') &&

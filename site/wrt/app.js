@@ -6,10 +6,31 @@
 'use strict';
 
 /* ============ 常量 / Constants ============ */
+const RELEASE_BOOTSTRAP = globalThis.__WEIG_RELEASE__ || null;
+const SITE_RELEASE_SHA = String(RELEASE_BOOTSTRAP?.siteSha256 || '');
+if (!/^[a-f0-9]{64}$/.test(SITE_RELEASE_SHA) || typeof globalThis.__WEIG_RELEASE_URL__ !== 'function') {
+  throw new Error('Missing validated site release bootstrap / 缺少已验证的站点发布身份');
+}
+const releaseAssetUrl = (path) => globalThis.__WEIG_RELEASE_URL__(path);
+function releaseScopedUrl(url) {
+  const resolved = new URL(url, document.baseURI);
+  resolved.searchParams.set('r', SITE_RELEASE_SHA);
+  return resolved.href;
+}
+function pruneOldReleaseDataCaches() {
+  const keepPrefix = `wrt_cache:${SITE_RELEASE_SHA}:`;
+  try {
+    for (let index = localStorage.length - 1; index >= 0; index--) {
+      const key = localStorage.key(index);
+      if (key?.startsWith('wrt_cache:') && !key.startsWith(keepPrefix)) localStorage.removeItem(key);
+    }
+  } catch (e) { /* localStorage may be unavailable in privacy modes */ }
+}
+pruneOldReleaseDataCaches();
+
 let OFFICIAL_REPO = 'weigefenxiang/WeiG-OpenWrt-AutoBuild';
 let REPO_NAME = OFFICIAL_REPO.split('/')[1];
 let PROJECT = null;
-const BRANCH = 'main';
 const FALLBACK = 'en';               // 译文缺失时的兜底语言 / Fallback language when a translation is missing
 const SOURCE_LANG = 'zh-CN';         // 源语言,词条必须完整 / Source language; its entries must be complete
 const GROUP_ICONS = {
@@ -180,7 +201,6 @@ const INITIAL_CATALOG_TARGET = {
   system: 'x86', subtarget: '64', profileSymbol: 'DEVICE_generic',
 };
 let catalogInitialTargetPending = true;
-const DATA_CACHE_VERSION = 'v21-d102-ui-layout';
 const NTP_PRESETS = {
   cn: ['ntp.aliyun.com', 'time1.cloud.tencent.com', 'cn.ntp.org.cn', 'cn.pool.ntp.org'],
   global: ['0.openwrt.pool.ntp.org', '1.openwrt.pool.ntp.org', '2.openwrt.pool.ntp.org', '3.openwrt.pool.ntp.org'],
@@ -417,37 +437,33 @@ const groupLabel = (g) => maskText(t('group.' + g));
 /* ============ 数据加载 / Data loading ============ */
 function dataUrls(path) {
   if (path.includes('..') || !/^[\w./-]+$/.test(path)) throw new Error('非法数据路径: ' + path);
-  return [
-    './data/' + path,
-    'https://cdn.jsdelivr.net/gh/' + OFFICIAL_REPO + '@' + BRANCH + '/site/wrt/data/' + path,
-    'https://raw.githubusercontent.com/' + OFFICIAL_REPO + '/' + BRANCH + '/site/wrt/data/' + path,
-  ];
+  const urls = [releaseAssetUrl('./data/' + path)];
+  const releaseCommit = String(RELEASE_BOOTSTRAP.meta?.commit || '');
+  if (/^[a-f0-9]{40}$/.test(releaseCommit)) {
+    urls.push(
+      releaseScopedUrl('https://cdn.jsdelivr.net/gh/' + OFFICIAL_REPO + '@' + releaseCommit + '/site/wrt/data/' + path),
+      releaseScopedUrl('https://raw.githubusercontent.com/' + OFFICIAL_REPO + '/' + releaseCommit + '/site/wrt/data/' + path),
+    );
+  }
+  return urls;
 }
 async function fetchData(path) {
   for (const u of dataUrls(path)) {
-    try { const r = await fetch(u, { cache: 'no-cache' }); if (r.ok) return r; } catch (e) { /* 失败则回退到下一级镜像 / Fall through to the next mirror tier */ }
+    try { const r = await fetch(u, { cache: 'force-cache' }); if (r.ok) return r; } catch (e) { /* 失败则回退到下一级镜像 / Fall through to the next mirror tier */ }
   }
   throw new Error('数据加载失败: ' + path);
 }
 async function loadJson(path) {
-  const key = 'wrt_cache:' + DATA_CACHE_VERSION + ':' + path;
+  const key = `wrt_cache:${SITE_RELEASE_SHA}:${path}`;
   const cached = localStorage.getItem(key);
-  const refresh = async () => {
-    const text = await (await fetchData(path)).text();
-    if (text !== cached) {
-      safeSet(key, text);
-      // i18n 在 init 最前加载,此时还不能用旧 I18N 弹更新提示 / i18n loads before I18N is initialized, so do not toast through the stale table
-      if (cached && path !== 'i18n.json') showToast(t('toast.dataUpdated'));
-    }
-    return text;
-  };
-  // 文案必须网络优先,否则新增键会在本次页面继续使用旧 localStorage;断网时才回退缓存 / Strings are network-first so new keys take effect in the current page; use cache only when offline
-  if (path === 'i18n.json') {
-    try { return JSON.parse(await refresh()); }
-    catch (e) { if (cached) return JSON.parse(cached); throw e; }
+  if (cached) {
+    try { return JSON.parse(cached); }
+    catch (e) { try { localStorage.removeItem(key); } catch (removeError) { /* ignore */ } }
   }
-  if (cached) { refresh().catch(() => {}); return JSON.parse(cached); }
-  return JSON.parse(await refresh());
+  const text = await (await fetchData(path)).text();
+  const value = JSON.parse(text);
+  safeSet(key, text);
+  return value;
 }
 
 /* ============ 轻提示 / Toast ============ */
@@ -518,15 +534,7 @@ function formatBuildTime(value) {
   return match ? `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]} CST` : '—';
 }
 async function loadDeploymentIdentity() {
-  const [stampResponse, metaResponse] = await Promise.all([
-    fetch('./data/site-version.json', { cache: 'no-store' }).catch(() => null),
-    fetch('./data/build-meta.json', { cache: 'no-store' }).catch(() => null),
-  ]);
-  let stamp = null;
-  let meta = null;
-  try { if (stampResponse?.ok) stamp = await stampResponse.json(); } catch (e) { /* invalid deployment stamp */ }
-  try { if (metaResponse?.ok) meta = await metaResponse.json(); } catch (e) { /* invalid deployment metadata */ }
-  return BUILD_IDENTITY_MODULE.normalizeDeploymentIdentity(stamp, meta);
+  return BUILD_IDENTITY_MODULE.normalizeDeploymentIdentity(RELEASE_BOOTSTRAP.stamp, RELEASE_BOOTSTRAP.meta);
 }
 
 function renderBuildInfo() {
@@ -578,10 +586,10 @@ function startCatalogAfterFirstPaint() {
 async function init() {
   try {
     [CATALOG_ENGINE, CATALOG_LOADER_MODULE, CATALOG_SCHEMA6_MODULE, BUILD_IDENTITY_MODULE] = await Promise.all([
-      import('./lib/catalog-engine.js?v=9f03d1396d'),
-      import('./lib/catalog-loader.js?v=e1801742f9'),
-      import('./lib/catalog-schema6.js?v=0a165903c2'),
-      import('./lib/build-identity.js?v=9bd02841f4'),
+      import(releaseAssetUrl('./lib/catalog-engine.js')),
+      import(releaseAssetUrl('./lib/catalog-loader.js')),
+      import(releaseAssetUrl('./lib/catalog-schema6.js')),
+      import(releaseAssetUrl('./lib/build-identity.js')),
     ]);
     I18N = await loadJson('i18n.json');
     state.lang = pickLang();
@@ -1233,7 +1241,7 @@ function startCatalogSearchWorker() {
   if (!globalThis.Worker || !menuSearchText.size) return;
   const generation = ++catalogSearchGeneration;
   try {
-    catalogSearchWorker = new Worker('./lib/catalog-search-worker.js?v=b1e611c48d');
+    catalogSearchWorker = new Worker(releaseAssetUrl('./lib/catalog-search-worker.js'));
   } catch (error) {
     console.warn('[Catalog search worker unavailable]', error);
     catalogSearchWorker = null;
@@ -5689,6 +5697,7 @@ function submitReadiness() {
     ['recommended', !state.minimumBoot || Boolean(MINIMUM_BOOT && minimumBootRows().length)],
     ['defconfig', typeof state.useDefconfig === 'boolean'],
     ['identity', Boolean(state.buildMeta && state.buildMeta.version === state.siteVersion &&
+      state.buildMeta.siteSha256 === SITE_RELEASE_SHA &&
       BUILD_IDENTITY_MODULE.normalizeBuildEnvironment(state.buildMeta.branch) &&
       BUILD_IDENTITY_MODULE.normalizeBuildCommit(state.buildMeta.commit))],
   ];

@@ -22,6 +22,7 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { shanghaiIsoNow } from './gen-build-meta.mjs';
+import { assertSiteRelease } from './site-release.mjs';
 
 const MODULE_PATH = fileURLToPath(import.meta.url);
 const ROOT = resolve(dirname(MODULE_PATH), '..');
@@ -193,7 +194,8 @@ function sourceMetaMatches(path, identity) {
   if (!existsSync(path)) return false;
   try {
     const current = JSON.parse(readFileSync(path, 'utf8'));
-    return current.schema === 1 && current.version === identity.version && current.commit === identity.commit;
+    return current.schema === 2 && current.version === identity.version && current.commit === identity.commit &&
+      current.siteSha256 === identity.siteSha256;
   } catch (error) { return false; }
 }
 
@@ -208,6 +210,7 @@ function writeDeploymentMeta(root, identity) {
     branch: 'main',
     builtAt: shanghaiIsoNow(),
     timezone: 'Asia/Shanghai',
+    siteSha256: identity.siteSha256,
   }, null, 2) + '\n');
 }
 
@@ -218,7 +221,7 @@ function deploymentMetaMatches(root, identity) {
   try {
     const meta = JSON.parse(readFileSync(target, 'utf8'));
     return meta.version === identity.version && meta.commit === identity.commit && meta.branch === 'main' &&
-      meta.timezone === 'Asia/Shanghai' &&
+      meta.siteSha256 === identity.siteSha256 && meta.timezone === 'Asia/Shanghai' &&
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/.test(meta.builtAt || '');
   } catch (error) { return false; }
 }
@@ -226,19 +229,29 @@ function deploymentMetaMatches(root, identity) {
 function writeSourceMeta(path, identity) {
   if (!identity) return;
   const temporary = `${path}.tmp`;
-  writeFileSync(temporary, JSON.stringify({ schema: 1, version: identity.version, commit: identity.commit }, null, 2) + '\n');
+  writeFileSync(temporary, JSON.stringify({ schema: 2, version: identity.version, commit: identity.commit, siteSha256: identity.siteSha256 }, null, 2) + '\n');
   renameSync(temporary, path);
 }
 
 export function syncBlogMirror({ sourceDir = DEFAULT_SOURCE, blogRepo = DEFAULT_BLOG, checkOnly = false, sourceIdentity = null, hooks = {} } = {}) {
   const layout = validateLayout(sourceDir, blogRepo);
   const { source, destination, temporary, previous, sourceMeta } = layout;
+  const sourceRelease = assertSiteRelease(source);
+  if (sourceIdentity && (sourceIdentity.version !== sourceRelease.pointer.version || sourceIdentity.siteSha256 !== sourceRelease.siteSha256)) {
+    throw new Error('Source Git identity and site release identity disagree / Git 源身份与全站发布身份不一致');
+  }
+  const mirrorReleaseMatches = (root) => {
+    try {
+      const release = assertSiteRelease(root);
+      return release.siteSha256 === sourceRelease.siteSha256;
+    } catch (error) { return false; }
+  };
   if (typeof hooks.onStart === 'function') hooks.onStart({ ...layout, checkOnly, sourceIdentity });
   if (checkOnly) {
     const ignoredPaths = sourceIdentity ? ['data/build-meta.json'] : [];
     return {
       ...layout,
-      current: directoriesMatch(source, destination, { ignoredPaths }) &&
+      current: directoriesMatch(source, destination, { ignoredPaths }) && mirrorReleaseMatches(destination) &&
         sourceMetaMatches(sourceMeta, sourceIdentity) && deploymentMetaMatches(destination, sourceIdentity),
       stats: treeStats(source),
     };
@@ -253,7 +266,7 @@ export function syncBlogMirror({ sourceDir = DEFAULT_SOURCE, blogRepo = DEFAULT_
     writeDeploymentMeta(temporary, sourceIdentity);
     if (typeof hooks.afterCopy === 'function') hooks.afterCopy({ ...layout });
     const ignoredPaths = sourceIdentity ? ['data/build-meta.json'] : [];
-    if (!directoriesMatch(source, temporary, { ignoredPaths }) || !deploymentMetaMatches(temporary, sourceIdentity)) {
+    if (!directoriesMatch(source, temporary, { ignoredPaths }) || !mirrorReleaseMatches(temporary) || !deploymentMetaMatches(temporary, sourceIdentity)) {
       throw new Error('Temporary mirror verification failed / 临时镜像校验失败');
     }
   } catch (error) {
@@ -271,7 +284,7 @@ export function syncBlogMirror({ sourceDir = DEFAULT_SOURCE, blogRepo = DEFAULT_
     renameSync(temporary, destination);
     if (typeof hooks.afterActivate === 'function') hooks.afterActivate({ ...layout });
     const ignoredPaths = sourceIdentity ? ['data/build-meta.json'] : [];
-    if (!directoriesMatch(source, destination, { ignoredPaths }) || !deploymentMetaMatches(destination, sourceIdentity)) {
+    if (!directoriesMatch(source, destination, { ignoredPaths }) || !mirrorReleaseMatches(destination) || !deploymentMetaMatches(destination, sourceIdentity)) {
       throw new Error('Activated mirror verification failed / 启用后的镜像校验失败');
     }
     writeSourceMeta(sourceMeta, sourceIdentity);
@@ -285,7 +298,7 @@ export function syncBlogMirror({ sourceDir = DEFAULT_SOURCE, blogRepo = DEFAULT_
     else writeFileSync(sourceMeta, previousMeta);
     throw error;
   }
-  return { ...layout, current: true, stats: treeStats(destination), sourceIdentity };
+  return { ...layout, current: true, stats: treeStats(destination), sourceIdentity, siteSha256: sourceRelease.siteSha256 };
 }
 
 function gitText(args, cwd = ROOT) {
@@ -302,9 +315,13 @@ function exactSourceSnapshot(ref, sourceRepo = ROOT) {
     added = true;
     const version = readFileSync(join(worktree, 'VERSION'), 'utf8').trim();
     if (!/^v\d{10}$/.test(version)) throw new Error(`Invalid VERSION at ${ref}: ${version}`);
+    const release = assertSiteRelease(join(worktree, 'site', 'wrt'));
+    if (release.pointer.version !== version) {
+      throw new Error(`VERSION/site-version mismatch at ${ref}: ${version} != ${release.pointer.version || '(missing)'}`);
+    }
     return {
       sourceDir: join(worktree, 'site', 'wrt'),
-      sourceIdentity: { version, commit },
+      sourceIdentity: { version, commit, siteSha256: release.siteSha256 },
       cleanup() {
         if (added) {
           try { execFileSync('git', ['-C', repo, 'worktree', 'remove', '--force', worktree], { stdio: 'ignore' }); } catch (error) { /* cleanup below */ }
@@ -356,7 +373,10 @@ function runCli() {
       onStart: ({ source, destination }) => {
         console.log(`[blog:source] ${source}`);
         console.log(`[blog:destination] ${destination}`);
-        if (sourceIdentity) console.log(`[blog:identity] ${sourceIdentity.version} ${sourceIdentity.commit}`);
+        if (sourceIdentity) {
+          console.log(`[blog:identity] ${sourceIdentity.version} ${sourceIdentity.commit}`);
+          console.log(`[blog:site-sha256] ${sourceIdentity.siteSha256}`);
+        }
       },
       onProgress: ({ copied, total, relativePath }) => {
         const suffix = relativePath ? ` (${relativePath})` : '';
@@ -372,7 +392,8 @@ function runCli() {
       console.log('Blog WRT mirror needs synchronization / 博客 WRT 镜像需要同步。');
       return 3;
     }
-    console.log('[blog:verify] Exact mirror confirmed / 已确认精确镜像');
+    console.log('[blog:verify] Exact mirror + siteSha256 confirmed / 已确认精确镜像与全站 SHA-256');
+    console.log(`[blog:site-sha256] ${result.siteSha256}`);
     console.log(`[blog:summary] ${result.stats.files} files, ${result.stats.directories} directories, ${result.stats.bytes} bytes`);
     return 0;
   } catch (error) {
