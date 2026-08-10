@@ -503,6 +503,31 @@ assert(buildPlans.recommended?.package === 'core-service' &&
   }).warnings.length === 0,
 'single-package compatibility rule did not derive and apply a generic disable intent');
 
+const wildcardCompatibility = structuredClone(buildFailure);
+wildcardCompatibility.rules[0].scope = { '*': ['openwrt-*'] };
+assert(evaluateCompatibilityRules(model, wildcardCompatibility,
+  new Map(ownershipValues).set('PACKAGE_core-service', 'y'), {
+    sourceId: 'FutureSource', branchName: 'openwrt-26.01',
+  }).warnings.length === 1, 'source/branch wildcard did not cover a future Catalog branch');
+assert(evaluateCompatibilityRules(model, wildcardCompatibility,
+  new Map(ownershipValues).set('PACKAGE_core-service', 'y'), {
+    sourceId: 'FutureSource', branchName: 'master',
+  }).warnings.length === 0, 'branch wildcard leaked to a non-matching branch');
+const mixedWildcardScope = structuredClone(wildcardCompatibility);
+mixedWildcardScope.rules[0].scope.Demo = ['stable'];
+expectThrow(() => normalizeCompatibilityDocument(mixedWildcardScope), /wildcard source/i,
+  'wildcard source mixed with a named source was accepted');
+const middleGlobScope = structuredClone(buildFailure);
+middleGlobScope.rules[0].scope.Demo = ['open*wrt'];
+assert(evaluateCompatibilityRules(model, middleGlobScope,
+  new Map(ownershipValues).set('PACKAGE_core-service', 'y'), {
+    sourceId: 'Demo', branchName: 'open-demo-wrt',
+  }).warnings.length === 1, 'generic branch glob did not match the Catalog producer semantics');
+const invalidGlobScope = structuredClone(buildFailure);
+invalidGlobScope.rules[0].scope.Demo = ['bad branch'];
+expectThrow(() => normalizeCompatibilityDocument(invalidGlobScope), /scope/i,
+  'invalid branch glob was accepted');
+
 const tiedCompatibility = {
   schema: 2,
   rules: [{

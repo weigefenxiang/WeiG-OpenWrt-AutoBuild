@@ -5,20 +5,16 @@
 // 插件项高级模式前缀:+id 强制开启该源没有的包,-id 取消该源内置项 / advanced plugin prefixes: +id force-enables a pkg the source lacks, -id drops a builtin.
 // 校验失败以非零码退出,workflow 据此回评并终止 / Any validation failure exits non-zero so the workflow can comment back and abort.
 
-import { readFileSync, appendFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, appendFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { artifactBuildRef, buildEnvironmentIdentity, normalizeBuildCommit, normalizeBuildEnvironment, parseBuildIssueTitleIdentity } from '../site/wrt/lib/build-identity.js';
 import { normalizeRequestAudit } from './request-audit.mjs';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const DEVICES = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'devices.json'), 'utf8'));
-const CONFIG_MANIFEST = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'config-manifest.json'), 'utf8'));
 const PROJECT = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
-const LOCAL_CATALOG_INDEX = JSON.parse(
-  readFileSync(join(ROOT, 'site', 'wrt', 'data', 'menuconfig-index.json'), 'utf8'));
 const PACKAGE_MIRROR_RULES = JSON.parse(
-  readFileSync(join(ROOT, 'config', '001.presets', 'package-mirrors.json'), 'utf8'));
+  readFileSync(join(ROOT, 'config', 'policies', 'package-mirrors.json'), 'utf8'));
 
 function fail(msg) { console.error('校验失败: ' + msg); process.exit(1); }
 function configStringValue(text, symbol) {
@@ -31,7 +27,7 @@ function normalizeAudit(raw) {
   catch (error) { fail(error.message); }
 }
 async function loadCatalogIndex(revision = 'catalog-data') {
-  const repo = PROJECT.catalogRepository || LOCAL_CATALOG_INDEX.catalogRepo;
+  const repo = PROJECT.catalogRepository;
   const ref = String(revision || 'catalog-data').trim().toLowerCase();
   if (ref !== 'catalog-data' && !/^[a-f0-9]{40}$/.test(ref)) throw new Error(`Catalog index revision 非法:${ref}`);
   const urls = [
@@ -49,7 +45,6 @@ async function loadCatalogIndex(revision = 'catalog-data') {
       console.warn(`Catalog index fallback / 目录索引回退: ${url}: ${error.message}`);
     }
   }
-  if (ref === 'catalog-data') return LOCAL_CATALOG_INDEX;
   throw new Error(`无法读取固定 Catalog index revision:${ref}`);
 }
 
@@ -82,7 +77,7 @@ function normalizeCatalogContract(raw) {
     sourceRepository: String(raw.sourceRepository || ''),
     sourceCommit: String(raw.sourceCommit || '').toLowerCase(),
   };
-  const expectedRepo = String(PROJECT.catalogRepository || LOCAL_CATALOG_INDEX.catalogRepo || '');
+  const expectedRepo = String(PROJECT.catalogRepository || '');
   if (contract.repository !== expectedRepo) fail(`Catalog 仓库不在白名单:${contract.repository}`);
   if (!/^[a-f0-9]{40}$/.test(contract.revision)) fail('Catalog revision 必须是完整 40 位 Git commit');
   if (!/^[A-Za-z0-9._-]+\.json\.gz$/.test(contract.asset)) fail(`Catalog asset 非法:${contract.asset}`);
@@ -96,66 +91,36 @@ function normalizeCatalogContract(raw) {
 
 
 let req;
-let requestMode = 'issue-attachment';
+let requestMode = 'issue-json';
 let submittedConfig = '';
 let requestAttachmentName = '';
-let recommendationAudit = { recommended: { enabled: false, preset: '', requested: [] }, defconfig: { enabled: false } };
+let requestAudit = { defconfig: { enabled: false } };
 const requestManifest = String(process.env.REQUEST_MANIFEST || '').trim();
 const requestFile = String(process.env.REQUEST_FILE || '').trim();
+let selectedFile = requestFile;
 if (requestManifest) {
   let manifest;
-  try { manifest = JSON.parse(readFileSync(requestManifest, 'utf8')); } catch (e) { fail('附件清单无法解析: ' + e.message); }
-  if (!manifest || manifest.version !== 1 || !Array.isArray(manifest.files) || !manifest.files.length) fail('附件清单格式非法');
-  const jsonFiles = manifest.files.filter((f) => f.type === 'json');
-  if (jsonFiles.length) {
-    if (manifest.files.length !== 1) fail('build-request.json 必须单独上传,不要与 .config/config.buildinfo 混用');
-    requestAttachmentName = jsonFiles[0].name || '';
-    try { req = JSON.parse(readFileSync(jsonFiles[0].path, 'utf8')); } catch (e) { fail('build-request.json 无法解析: ' + e.message); }
-    if (![3, 4, 5].includes(req.schema)) fail(`不支持的 build-request schema:${JSON.stringify(req.schema)}(需要 3、4 或 5)`);
-    submittedConfig = req.config;
-    requestMode = 'issue-json';
-  } else {
-    const configs = manifest.files.filter((f) => f.type === 'config');
-    const buildinfos = manifest.files.filter((f) => f.type === 'buildinfo');
-    if (configs.length > 1 || (!configs.length && buildinfos.length > 1)) fail('请只上传一份 .config 或 config.buildinfo,避免配置冲突');
-    const picked = configs[0] || buildinfos[0];
-    requestAttachmentName = picked.name || '';
-    submittedConfig = readFileSync(picked.path, 'utf8');
-    const header = submittedConfig.match(/^# device=([^\s]+) source=([^\s]+) version=([^\s]+)(?: \(([^)]+)\))? variant=([^\s]+)$/m);
-    if (!header) fail('原始配置缺少机型元数据。请先在定制网页点“加载配置”,识别机型后再点“提交云编译”');
-    const fwHeader = submittedConfig.match(
-      /^# firmware-settings: zonename=([^\s]+) timezone=([^\s]+) theme=([^\s]+) ntp=([^\s]+) (?:package-mirror|opkg)=([^\s]+)$/m);
-    req = {
-      device: header[1],
-      source: header[2],
-      version: header[3],
-      branch: header[4] || '',
-      variant: header[5],
-      tag: 'config',
-      plugins: [],
-      config: submittedConfig,
-      firmware: fwHeader ? {
-        zonename: fwHeader[1], timezone: fwHeader[2], theme: fwHeader[3], ntp: fwHeader[4], packageMirror: fwHeader[5],
-      } : undefined,
-    };
-    req.configId = [req.device, req.source, req.version, req.variant].join('/');
-    requestMode = picked.type === 'buildinfo' ? 'issue-buildinfo' : 'issue-config';
+  try { manifest = JSON.parse(readFileSync(requestManifest, 'utf8')); }
+  catch (error) { fail('附件清单无法解析: ' + error.message); }
+  const jsonFiles = manifest?.version === 1 && Array.isArray(manifest.files)
+    ? manifest.files.filter((entry) => entry.type === 'json') : [];
+  if (jsonFiles.length !== 1 || manifest.files.length !== 1) {
+    fail('请只上传一个 schema 5 build-request.json；.config/config.buildinfo 应先在网页导入');
   }
-} else if (requestFile) {
-  requestAttachmentName = basename(requestFile);
-  let raw;
-  try { raw = readFileSync(requestFile); } catch (e) { fail('无法读取 Issue 附件请求文件: ' + e.message); }
-  if (raw.length < 32 || raw.length > 2 * 1024 * 1024) fail(`build-request.json 大小非法:${raw.length} bytes(允许 32B~2MB)`);
-  try { req = JSON.parse(raw.toString('utf8')); } catch (e) { fail('build-request.json 无法解析: ' + e.message); }
-  if (![3, 4, 5].includes(req.schema)) fail(`不支持的 build-request schema:${JSON.stringify(req.schema)}(需要 3、4 或 5)`);
-  submittedConfig = req.config;
-  requestMode = 'issue-attachment';
-} else {
-  fail('仅支持网页生成的 build-request.json、.config 或 config.buildinfo Issue 附件');
+  selectedFile = jsonFiles[0].path;
+  requestAttachmentName = jsonFiles[0].name || '';
 }
+if (!selectedFile) fail('缺少 schema 5 build-request.json');
+requestAttachmentName ||= basename(selectedFile);
+let raw;
+try { raw = readFileSync(selectedFile); } catch (error) { fail('无法读取 build-request.json: ' + error.message); }
+if (raw.length < 32 || raw.length > 2 * 1024 * 1024) fail(`build-request.json 大小非法: ${raw.length} bytes`);
+try { req = JSON.parse(raw.toString('utf8')); } catch (error) { fail('build-request.json 无法解析: ' + error.message); }
+if (req.schema !== 5) fail(`只接受 build-request schema 5，收到: ${JSON.stringify(req.schema)}`);
+submittedConfig = req.config;
 
-recommendationAudit = normalizeAudit(req.audit);
-const catalogContract = req.schema === 5 ? normalizeCatalogContract(req.catalog) : null;
+requestAudit = normalizeAudit(req.audit);
+const catalogContract = normalizeCatalogContract(req.catalog);
 
 const requestDefconfig = typeof req.use_defconfig === 'boolean' ? req.use_defconfig : null;
 const auditDefconfig = req.audit?.defconfig && typeof req.audit.defconfig.enabled === 'boolean'
@@ -165,50 +130,35 @@ if (requestDefconfig !== null && auditDefconfig !== null && requestDefconfig !==
 }
 const useDefconfig = requestDefconfig ?? auditDefconfig ?? false;
 const isCustomTarget = ['custom-target', 'catalog-target'].includes(req.device);
+if (!isCustomTarget) fail(`schema 5 only accepts a Catalog target: ${req.device}`);
 let device, source, version, variant;
 let catalogBranch;
 let catalogIndex;
-if (isCustomTarget) {
-  try {
-    catalogIndex = await loadCatalogIndex(catalogContract?.revision || 'catalog-data');
-  } catch (error) {
-    fail(`无法读取自定义 Target 的固定 Catalog index:${error.message}`);
-  }
-  const catalogSource = catalogIndex.sources.find((item) => item.id === req.source);
-  const requestedBranch = String(req.branch || '');
-  catalogBranch = catalogSource?.branches?.find((item) =>
-    item.id === String(req.version) &&
-    (!requestedBranch || item.branch === requestedBranch));
-  if (!catalogSource || !catalogBranch) {
-    fail(`自定义 Target 的源码/分支不在 Catalog 允许范围:${req.source}/${req.version}/${requestedBranch || '(未提供)'}`);
-  }
-  if (catalogBranch.state === 'unavailable') {
-    fail(`Catalog 已标记该源码/分支不可用:${catalogSource.id}/${catalogBranch.branch}`);
-  }
-
-  version = { id: catalogBranch.id, branch: catalogBranch.branch, label: catalogBranch.branch };
-  source = {
-    id: catalogSource.id, label: catalogSource.label || catalogSource.id, repo: catalogSource.repo, versions: [version],
-    diy1: 'diy-generic.sh', diy2: 'diy2-generic.sh', append: true,
-    loginPw: catalogSource.id === 'lede' ? 'password' : undefined,
-  };
-  variant = { id: String(req.variant || 'custom'), name: String(req.variant || 'Custom Target') };
-  if (!/^[A-Za-z0-9._+-]{1,96}$/.test(variant.id)) fail(`自定义 Target Profile 非法:${variant.id}`);
-  device = {
-    id: req.device, brand: 'Custom Target', name: 'Custom Target',
-    plugins: 'seed', sources: [source],
-  };
-} else {
-  device = DEVICES.devices.find((d) => d.id === req.device);
-  if (!device) fail(`未知设备: ${JSON.stringify(req.device)}(可选: ${DEVICES.devices.map((d) => d.id).join(' / ')})`);
-  source = device.sources.find((s) => s.id === req.source);
-  if (!source) fail(`未知源码: ${JSON.stringify(req.source)}(可选: ${device.sources.map((s) => s.id).join(' / ')})`);
-  version = source.versions.find((v) => v.id === req.version);
-  if (!version) fail(`未知版本: ${JSON.stringify(req.version)}(该源可选: ${source.versions.map((v) => v.id).join(' / ')})`);
-  const variants = source.variants.filter((v) => !v.versions || v.versions.includes(version.id));
-  variant = variants.find((v) => v.id === req.variant);
-  if (!variant) fail(`未知变体: ${req.variant}(该版本可选: ${variants.map((v) => v.id).join(' / ')})`);
+try {
+  catalogIndex = await loadCatalogIndex(catalogContract.revision);
+} catch (error) {
+  fail(`无法读取固定 Catalog index: ${error.message}`);
 }
+const catalogSource = catalogIndex.sources.find((item) => item.id === req.source);
+const requestedBranch = String(req.branch || '');
+catalogBranch = catalogSource?.branches?.find((item) =>
+  item.id === String(req.version) && (!requestedBranch || item.branch === requestedBranch));
+if (!catalogSource || !catalogBranch || catalogBranch.state === 'unavailable') {
+  fail(`Source/Branch 不在固定 Catalog 范围: ${req.source}/${req.version}/${requestedBranch}`);
+}
+const build = catalogSource.build || {};
+if (!/^diy(?:2)?-[A-Za-z0-9._-]+\.sh$/.test(build.diy1 || '') ||
+    !/^diy2-[A-Za-z0-9._-]+\.sh$/.test(build.diy2 || '')) {
+  fail(`Catalog Source 缺少有效构建工具: ${catalogSource.id}`);
+}
+version = { id: catalogBranch.id, branch: catalogBranch.branch, label: catalogBranch.branch };
+source = {
+  id: catalogSource.id, label: catalogSource.label || catalogSource.id, repo: catalogSource.repo,
+  versions: [version], diy1: build.diy1, diy2: build.diy2, append: true,
+};
+variant = { id: String(req.variant || 'custom'), name: String(req.variant || 'Custom Target') };
+if (!/^[A-Za-z0-9._+-]{1,96}$/.test(variant.id)) fail(`Target Profile 非法: ${variant.id}`);
+device = { id: req.device, brand: 'Catalog', name: 'Catalog Target', sources: [source] };
 const configId = [device.id, source.id, version.id, variant.id].join('/');
 if (req.configId !== configId) {
   fail(`configId 不匹配:收到 ${JSON.stringify(req.configId)},应为 ${configId}`);
@@ -228,26 +178,14 @@ let submittedSha256 = '';
     /^CONFIG_TARGET_(?:BOARD|SUBTARGET|PROFILE)=/.test(line) ||
     /^CONFIG_TARGET_.*_DEVICE_.*=y$/.test(line));
   const actualDevices = actualTarget.filter((line) => /^CONFIG_TARGET_.*_DEVICE_.*=y$/.test(line)).sort();
-  if (isCustomTarget) {
-    if (!actualDevices.length && !actualTarget.some((line) => /^CONFIG_TARGET_BOARD=/.test(line))) {
-      fail('自定义配置缺少 CONFIG_TARGET_BOARD 或 CONFIG_TARGET_*_DEVICE_*=y');
-    }
-    const board = actualTarget.find((line) => /^CONFIG_TARGET_BOARD=/.test(line))?.split('=')[1]?.replaceAll('"', '') || '';
-    const subtarget = actualTarget.find((line) => /^CONFIG_TARGET_SUBTARGET=/.test(line))?.split('=')[1]?.replaceAll('"', '') || '';
-    const profile = actualTarget.find((line) => /^CONFIG_TARGET_PROFILE=/.test(line))?.split('=')[1]?.replaceAll('"', '') ||
-      actualDevices[0]?.match(/_DEVICE_(.+)=y$/)?.[1] || '';
-    device.name = [board || 'Target', subtarget, profile].filter(Boolean).join(' / ');
-  } else {
-    const manifest = CONFIG_MANIFEST.configs[configId];
-    if (!manifest) fail(`配置清单不存在该组合:${configId}`);
-    const expectedDevices = manifest.target.filter((line) => /^CONFIG_TARGET_.*_DEVICE_.*=y$/.test(line)).sort();
-    const targetMatches = actualDevices.length && expectedDevices.length
-      ? JSON.stringify(actualDevices) === JSON.stringify(expectedDevices)
-      : JSON.stringify([...actualTarget].sort()) === JSON.stringify([...manifest.target].sort());
-    if (!targetMatches) {
-      fail(`上传配置的目标设备签名与 ${configId} 不一致,请勿上传其他机型的配置`);
-    }
+  if (!actualDevices.length && !actualTarget.some((line) => /^CONFIG_TARGET_BOARD=/.test(line))) {
+    fail('Catalog 配置缺少 CONFIG_TARGET_BOARD 或 CONFIG_TARGET_*_DEVICE_*=y');
   }
+  const board = actualTarget.find((line) => /^CONFIG_TARGET_BOARD=/.test(line))?.split('=')[1]?.replaceAll('"', '') || '';
+  const subtarget = actualTarget.find((line) => /^CONFIG_TARGET_SUBTARGET=/.test(line))?.split('=')[1]?.replaceAll('"', '') || '';
+  const profile = actualTarget.find((line) => /^CONFIG_TARGET_PROFILE=/.test(line))?.split('=')[1]?.replaceAll('"', '') ||
+    actualDevices[0]?.match(/_DEVICE_(.+)=y$/)?.[1] || '';
+  device.name = [board || 'Target', subtarget, profile].filter(Boolean).join(' / ');
   if (!config.endsWith('\n')) config += '\n';
   submittedSha256 = createHash('sha256').update(config).digest('hex');
   const submittedOut = String(process.env.SUBMITTED_CONFIG_OUT || 'submitted.config');
@@ -321,22 +259,19 @@ if (isCustomTarget) {
     ? [...new Set(contract.profilePackagesAdd.map(String))] : [];
 }
 
-// 种子机型共用 seed 表 / seed devices share the seed plugin table
-const PLUGINS = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', device.plugins === 'seed' ? 'seed' : device.id, 'plugins.json'), 'utf8'));
 if (!Array.isArray(req.plugins)) fail('plugins 必须是数组');
-if (req.plugins.length > 120) fail('插件数量超过 120,拒绝');
-
+if (req.plugins.length > 200) fail('插件数量超过 200，拒绝');
 const items = [];
 let advanced = 0;
-for (const raw of req.plugins) {
-  if (typeof raw !== 'string' || !/^[+-]?[a-z0-9._-]{1,64}$/i.test(raw)) fail(`非法插件项: ${JSON.stringify(raw)}`);
-  const id = /^[+-]/.test(raw) ? raw.slice(1) : raw;
-  if (!PLUGINS.plugins.some((p) => p.id === id)) fail(`插件不在白名单: ${id}`);
-  if (/^[+-]/.test(raw)) advanced++;
-  if (!items.includes(raw)) items.push(raw);
+for (const rawPlugin of req.plugins) {
+  if (typeof rawPlugin !== 'string' || !/^[+-]?[a-z0-9._-]{1,96}$/i.test(rawPlugin)) {
+    fail(`非法插件项: ${JSON.stringify(rawPlugin)}`);
+  }
+  if (/^[+-]/.test(rawPlugin)) advanced++;
+  if (!items.includes(rawPlugin)) items.push(rawPlugin);
 }
 
-// tag 只保留中英文、数字、下划线和连字符,用于 artifact 命名与展示,防注入 / tag keeps only CJK, word chars and hyphens — used in artifact names and display, keeps it injection-safe
+// tag 只保留中英文、数字、下划线和连字符// tag 只保留中英文、数字、下划线和连字符,用于 artifact 命名与展示,防注入 / tag keeps only CJK, word chars and hyphens — used in artifact names and display, keeps it injection-safe
 const tag = String(req.tag || '').replace(/[^\w一-龥-]/g, '').slice(0, 24) || 'anonymous';
 const cleanIdentity = (value) =>
   String(value || '').replace(/[^\w一-龥-]/g, '').slice(0, 24);
@@ -370,7 +305,7 @@ if (expectedRequestCommit && requestCommit !== expectedRequestCommit) {
 }
 const requestRef = cleanIdentity(req.requestId || attachmentRef || titleIdentity.requestId);
 const buildRef = requestRef ? `${requestRef}-${tag}` : tag;
-const artifactRef = artifactBuildRef(buildRef, sourceEnv);
+const artifactRef = artifactBuildRef(buildRef, sourceEnv, Number(process.env.ISSUE_NUMBER || 0));
 
 // 后台登录地址:仅内网 IPv4,非法即回落默认,防注入 / admin LAN IP: private IPv4 only, falls back to default — injection-safe
 const lanip = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/.test(String(req.lanip || ''))
@@ -405,14 +340,8 @@ if (mirrorPreset.kind === 'mirror' && !mirrorPreset.roots?.[sourceFamily]) {
   fail(`${source.id} 不接受所选软件包镜像预设:${requestedMirrorInput}`);
 }
 const packageMirrorId = mirrorPreset.id;
-const theme = String(fw.theme || (['OpenWrt', 'lede'].includes(source.id) ? 'luci-theme-bootstrap' : 'luci-theme-argon'));
+const theme = String(fw.theme || '');
 if (!/^luci-theme-[A-Za-z0-9._+-]{1,48}$/.test(theme)) fail('固件主题格式非法');
-const packageTable = join(ROOT, 'site', 'wrt', 'data', device.id, 'packages.json');
-if (existsSync(packageTable)) {
-  const table = JSON.parse(readFileSync(packageTable, 'utf8'));
-  if (!table.pkgs[theme] || !Object.hasOwn(table.pkgs[theme], source.id)) fail(`固件主题不在 ${device.id}/${source.id} 软件包白名单:${theme}`);
-}
-
 const firmwareHeader = submittedConfig.match(
   /^# firmware-settings: zonename=([^\s]+) timezone=([^\s]+) theme=([^\s]+) ntp=([^\s]+) (?:package-mirror|opkg)=([^\s]+)$/m);
 const hasFirmwareSnapshot = Boolean(req.firmware || firmwareHeader);
@@ -430,20 +359,8 @@ if (!pageVersion && typeof submittedConfig === 'string') {
 }
 if (!/^v\d{8}(?:\d{2})?$/.test(pageVersion)) pageVersion = 'unknown';
 
-// 开发者模式原始软件包:逐个对照该机型 packages.json 白名单;种子机型不支持 / raw packages: whitelisted against the device's packages.json; not available on seed devices
-let packages = [];
 const rawPkgs = Array.isArray(req.packages) ? req.packages : [];
-if (rawPkgs.length) {
-  if (device.plugins === 'seed') fail('种子机型不支持原始软件包定制');
-  if (rawPkgs.length > 200) fail('原始软件包数量超过 200,拒绝');
-  const PKGTBL = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', device.id, 'packages.json'), 'utf8'));
-  for (const raw of rawPkgs) {
-    if (typeof raw !== 'string' || !/^-?[A-Za-z0-9._+-]{1,64}$/.test(raw)) fail(`非法软件包项: ${JSON.stringify(raw)}`);
-    const name = raw.startsWith('-') ? raw.slice(1) : raw;
-    if (!PKGTBL.pkgs[name]) fail(`软件包不在白名单: ${name}`);
-    if (!packages.includes(raw)) packages.push(raw);
-  }
-}
+if (rawPkgs.length) fail('schema 5 已由完整 config 表达 Advanced menuconfig，不再接受第二套 packages 字段');
 
 const out = [
   `device=${device.id}`,
@@ -479,8 +396,6 @@ const out = [
   `package_mirror_id=${packageMirrorId}`,
   `firmware_snapshot=${hasFirmwareSnapshot ? 1 : 0}`,
   `use_defconfig=${useDefconfig ? 1 : 0}`,
-  `recommended_enabled=${recommendationAudit.recommended.enabled ? 1 : 0}`,
-  `packages=${packages.join(' ')}`,
   `catalog_arch=${catalogArch}`,
   `catalog_arch_packages=${catalogArchPackages}`,
   `catalog_profile_packages=${catalogProfilePackages.join(' ')}`,
@@ -490,8 +405,8 @@ const out = [
   `summary=${tag} · ${device.name} · ${source.label} ${version.label} · ${variant.name} · ${items.length} 个插件 · ${pageVersion}` +
     (advanced ? `(含 ${advanced} 项高级模式操作)` : ''),
 ];
-const auditOut = String(process.env.RECOMMENDED_AUDIT_OUT || 'recommended-audit.json');
-writeFileSync(auditOut, JSON.stringify(recommendationAudit) + '\n', 'utf8');
+const auditOut = String(process.env.REQUEST_AUDIT_OUT || 'request-audit.json');
+writeFileSync(auditOut, JSON.stringify(requestAudit) + '\n', 'utf8');
 if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, out.join('\n') + '\n');
 // rootpw is intentionally retained only in GITHUB_OUTPUT for the workflow;
 // never echo it into the public Actions log.

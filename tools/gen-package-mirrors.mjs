@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SOURCE = join(ROOT, 'config', '001.presets', 'package-mirrors.json');
+const SOURCE = join(ROOT, 'config', 'policies', 'package-mirrors.json');
 const OUTPUT = join(ROOT, 'site', 'wrt', 'data', 'package-mirrors.json');
 const CHECK = process.argv.includes('--check');
 

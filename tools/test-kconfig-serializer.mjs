@@ -28,7 +28,7 @@ vm.runInContext([
   sourceRange('parseConfigEntries', 'parseConfigValues'),
   sourceRange('normalizeImportedKconfigValue', 'importedValue'),
   sourceRange('serializeKconfigValue', 'setConfigSymbol'),
-  sourceRange('setConfigSymbol', 'requirementScopeMatches'),
+  sourceRange('setConfigSymbol', 'applyMenuConfig'),
 ].join('\n'), context, { filename: 'kconfig-serializer-fixture.js' });
 
 const {

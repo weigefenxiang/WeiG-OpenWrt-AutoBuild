@@ -76,7 +76,7 @@ assert.equal(engineCalls, 1, 'restoring a scalar value must also bypass the N/M/
 
 const setConfigSource = [
   sourceRange('normalizeKconfigValueByType', 'scalarKconfigOption'),
-  sourceRange('serializeKconfigValue', 'requirementScopeMatches'),
+  sourceRange('serializeKconfigValue', 'applyMenuConfig'),
 ].join('\n');
 const configContext = {};
 vm.createContext(configContext);

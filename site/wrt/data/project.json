@@ -5,6 +5,13 @@
   "catalogRepository": "weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog",
   "blogUrl": "https://www.weigeshare.cc.cd/",
   "catalogReleaseTag": "menuconfig-catalog-complete",
+  "catalogLoadPolicy": {
+    "startup": ["menu", "menu:language"],
+    "idle": ["applications", "hidden", "help", "compatibility", "package-mirrors"],
+    "startupConcurrency": 2,
+    "idleConcurrency": 1,
+    "idleDelayMs": 15000
+  },
   "catalogDataBranches": {
     "fix": "catalog-fix",
     "dev": "catalog-dev",

@@ -3,6 +3,7 @@ const MIN_CATALOG_SCHEMA = 5;
 const MIN_RELATIONS_SCHEMA = 2;
 export const CATALOG_CACHE_NAME = 'wrt-catalog-cache-v3';
 const MAX_COMPATIBILITY_JSON_BYTES = 512 * 1024;
+const MAX_APPLICATIONS_JSON_BYTES = 4 * 1024 * 1024;
 
 function safeRepository(value) {
   const repository = String(value || '').trim();
@@ -247,11 +248,39 @@ function compatibilityContract(index) {
   };
 }
 
+function applicationsContract(index) {
+  const contract = index?.assets?.applications;
+  if (!contract || safeCatalogAsset(contract.asset) !== 'applications.json.gz' ||
+      !/^[a-f0-9]{64}$/.test(String(contract.hash || '')) ||
+      !Number.isSafeInteger(Number(contract.bytes)) || Number(contract.bytes) <= 0 ||
+      Number(contract.bytes) > MAX_APPLICATIONS_JSON_BYTES + 1024 ||
+      !Number.isSafeInteger(Number(contract.jsonBytes)) || Number(contract.jsonBytes) <= 0 ||
+      Number(contract.jsonBytes) > MAX_APPLICATIONS_JSON_BYTES ||
+      Number(contract.schema) !== 1 || !Number.isSafeInteger(Number(contract.items)) || Number(contract.items) < 0) {
+    throw new Error('Catalog index lacks a valid applications asset contract');
+  }
+  return {
+    asset: 'applications.json.gz', hash: String(contract.hash).toLowerCase(), bytes: Number(contract.bytes),
+    jsonBytes: Number(contract.jsonBytes), schema: 1, items: Number(contract.items),
+  };
+}
+
 function validateCompatibilityDocument(data, expected) {
   const actualJsonBytes = new TextEncoder().encode(JSON.stringify(data)).byteLength;
   if (!data || Number(data.schema) !== 2 || Number(data.schema) !== Number(expected.schema) || !Array.isArray(data.rules) ||
       data.rules.length !== Number(expected.rules) || actualJsonBytes !== Number(expected.jsonBytes)) {
     throw new Error('Catalog compatibility document does not match its index contract');
+  }
+  return data;
+}
+
+function validateApplicationsDocument(data, expected) {
+  const actualJsonBytes = new TextEncoder().encode(JSON.stringify(data)).byteLength;
+  if (!data || Number(data.schema) !== 1 || !Array.isArray(data.groups) || !Array.isArray(data.items) ||
+      data.items.length !== expected.items || actualJsonBytes !== expected.jsonBytes ||
+      data.items.some((item) => !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$/.test(String(item.id || '')) ||
+        !/^luci-app-[A-Za-z0-9_.+@-]+$/.test(String(item.package || '')))) {
+    throw new Error('Catalog applications document does not match its index contract');
   }
   return data;
 }
@@ -290,6 +319,8 @@ export function createCatalogLoader({
   let indexPromise = null;
   const compatibilityMemory = new Map();
   const compatibilityPromises = new Map();
+  const applicationsMemory = new Map();
+  const applicationsPromises = new Map();
 
   async function fetchIndex({ signal, forceRefresh = false, diagnostics = [] } = {}) {
     if (!forceRefresh && lastIndexResult) return { ...lastIndexResult, diagnostics };
@@ -551,13 +582,44 @@ export function createCatalogLoader({
     return run;
   }
 
+  async function fetchApplications({ signal, forceRefresh = false } = {}) {
+    const diagnostics = [];
+    const indexResult = await fetchIndex({ signal, forceRefresh, diagnostics });
+    const contract = applicationsContract(indexResult.index);
+    const key = `${contract.asset}:${contract.hash}`;
+    if (applicationsMemory.has(key)) {
+      diagnostic(diagnostics, 'applications-memory', 'memory', true, `sha256 ${contract.hash}`, key);
+      return { ...applicationsMemory.get(key), diagnostics };
+    }
+    if (applicationsPromises.has(key)) return applicationsPromises.get(key);
+    const run = (async () => {
+      const result = await fetchAssetDocument({
+        asset: contract.asset, contract, index: indexResult.index, signal, diagnostics,
+        preferredAssetProvider: indexResult.provider, forceRefresh: false,
+        stage: 'applications', includeRelease: false,
+      });
+      const applications = validateApplicationsDocument(result.data, contract);
+      const loaded = {
+        applications, contract, hash: contract.hash, dataRef: exactDataRef,
+        index: indexResult.index, indexProvider: indexResult.provider,
+        provider: result.provider, url: result.url,
+      };
+      applicationsMemory.set(key, loaded);
+      return { ...loaded, diagnostics };
+    })().finally(() => applicationsPromises.delete(key));
+    applicationsPromises.set(key, run);
+    return run;
+  }
+
   async function clearCache() {
     lastIndexResult = null;
     indexPromise = null;
     compatibilityMemory.clear();
     compatibilityPromises.clear();
+    applicationsMemory.clear();
+    applicationsPromises.clear();
     if (cacheStorage?.delete) await cacheStorage.delete(CATALOG_CACHE_NAME).catch(() => false);
   }
 
-  return { fetchIndex, fetchBundle, fetchCompatibility, clearCache, dataRef: exactDataRef };
+  return { fetchIndex, fetchBundle, fetchCompatibility, fetchApplications, clearCache, dataRef: exactDataRef };
 }

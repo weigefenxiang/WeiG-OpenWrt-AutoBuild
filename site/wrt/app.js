@@ -74,7 +74,6 @@ const state = {
   rootpwAuto: false,
   timezone: '',
   theme: '@base',
-  minimumBoot: true,
   useDefconfig: true,
   ntp: 'cn',
   packageMirror: 'source-default',
@@ -84,13 +83,13 @@ const state = {
   importedConfigId: '',
 };
 const LANIP_RE = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/;   // 仅接受内网 IPv4 / private IPv4 only
-let PLUGINS = null, I18N = null, TIMEZONES = null, MINIMUM_BOOT = null, BUILD_REQUIREMENTS = null;
+let PLUGINS = { groups: [], plugins: [] }, I18N = null, TIMEZONES = null;
 let PACKAGE_MIRRORS = { schema: 2, presets: [{ id: 'source-default', label: { 'zh-CN': '跟随源码默认', en: 'Follow source default' }, sources: [] }] };
 let MENU_INDEX = null, MENU_CATALOG = null, CATALOG_ENGINE = null, CATALOG_MODEL = null;
 let CATALOG_LOADER_MODULE = null, CATALOG_SCHEMA6_MODULE = null, BUILD_IDENTITY_MODULE = null, CATALOG_LOADER = null;
 let MENU_CATALOG_DATA_REF = 'catalog-data';
 let catalogShardLoader = null, catalogMenuLoadingPromise = null;
-let catalogHiddenLoadingPromise = null;
+let catalogHiddenLoadingPromise = null, catalogHelpLoadingPromise = null, packageMirrorsPromise = null;
 let menuCatalogKey = '', menuLoadingKey = '', menuCatalogSeq = 0, menuCatalogPromise = null;
 let menuCatalogAbortController = null, menuIndexAbortController = null;
 let menuIndexProvider = '', menuAssetProvider = '';
@@ -129,11 +128,8 @@ let catalogSearchWorkerReady = false, catalogSearchPending = new Set(), catalogS
 let catalogLocatorEntryCache = null;
 let catalogStateRevision = 0, catalogContextCache = new Map(), catalogContextCacheBypass = false;
 let compatibilityPrefetchTimer = null, compatibilityAcknowledgement = null;
+let catalogApplicationsPromise = null;
 let menuVisibilityRevision = -1, menuVisibilityCache = new Map(), menuSelectableStatesCache = new Map();
-const minimumBootOriginal = new Map();
-const minimumBootTouchedOriginal = new Set();
-let minimumBootApplying = false;
-let minimumBootModalOpen = false;
 let MENU_CATALOG_REPO = 'weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog';
 const MENU_PAGE_SIZE = 80;
 const LANG_SHORT = {
@@ -198,11 +194,6 @@ const DEFAULT_TARGET_SELECTORS = [
 ];
 let targetSelectorValues = {};
 let catalogTargetMismatch = false;
-const INITIAL_CATALOG_TARGET = {
-  sourceId: 'ImmortalWrt', branch: 'openwrt-25.12',
-  system: 'x86', subtarget: '64', profileSymbol: 'DEVICE_generic',
-};
-let catalogInitialTargetPending = true;
 const NTP_PRESETS = {
   cn: ['ntp.aliyun.com', 'time1.cloud.tencent.com', 'cn.ntp.org.cn', 'cn.pool.ntp.org'],
   global: ['0.openwrt.pool.ntp.org', '1.openwrt.pool.ntp.org', '2.openwrt.pool.ntp.org', '3.openwrt.pool.ntp.org'],
@@ -236,9 +227,6 @@ function defaultPackageMirrorId(sourceId = state.source?.id) {
   const preferred = browserUsesMainlandPackageMirror() ? 'auto' : 'source-default';
   return packageMirrorAvailable(preferred, sourceId) ? preferred : 'source-default';
 }
-let PLUG_I18N = null;                  // 插件名/说明多语言表,非中文界面按需加载 / plugin name/desc i18n table, lazy-loaded for non-Chinese UIs
-let pluginDataPath = '';                  // 当前插件索引来源，避免跨设备误复用 / current plugin-index source; prevents cross-device cache reuse
-let plugI18nLoading = false;           // 防止重复请求 / guards against duplicate fetches
 let devAllowGrey = false;              // V10:灰色插件二级门禁,不落盘,每次都从未勾开始 / V10: second gate for grey plugins; never persisted, always starts unticked
 const collapsed = new Set();
 
@@ -269,50 +257,32 @@ const uiText = (zhCN, zhTW, en) => state.lang === 'zh-CN' ? zhCN : state.lang ==
 const isZh = () => String(state.lang).startsWith('zh');
 const isZhCn = () => state.lang === 'zh-CN';
 
-/* ============ 插件名/说明多语言 / Plugin name & description i18n ============ */
-/* 非中文界面惰性加载 plugins-i18n.json,一次性缓存;失败静默回退原文 / Lazily load plugins-i18n.json for non-Chinese UIs, cache once; fall back to original text silently on failure */
-function ensurePlugI18n() {
-  if (isZhCn() || PLUG_I18N || plugI18nLoading) return;
-  plugI18nLoading = true;
-  loadJson('plugins-i18n.json')
-    .then((d) => { PLUG_I18N = d; if (PLUGINS) renderGroups(); })
-    .catch(() => { /* 加载失败静默回退原文,下次语言切换可重试 / Silent fallback to original text; next language switch may retry */ })
-    .finally(() => { plugI18nLoading = false; });
-}
-/* 简中使用元数据原文;繁中与其他语言使用独立译文。中文界面继续执行敏感词显示处理 / zh-CN uses metadata originals; zh-TW and other languages use their own translations. Chinese UIs keep display masking. */
+/* ============ Catalog 应用名称与说明 / Catalog application names and descriptions ============ */
 function pName(p) {
-  if (isZhCn()) return maskText(p.name);
-  const row = PLUG_I18N && PLUG_I18N.plugins && PLUG_I18N.plugins[p.id];
-  const m = row && row.name;
-  const value = (m && (m[state.lang] || m[FALLBACK])) || p.id;
+  const value = p.nameI18n?.[state.lang] || p.nameI18n?.[FALLBACK] || p.name || p.id;
   return isZh() ? maskText(value) : value;
 }
 function pDesc(p) {
-  if (isZhCn()) return maskText(p.desc || '');
-  const row = PLUG_I18N && PLUG_I18N.plugins && PLUG_I18N.plugins[p.id];
-  const m = row && row.desc;
-  const value = (m && (m[state.lang] || m[FALLBACK])) || '';
+  const value = p.descI18n?.[state.lang] || p.descI18n?.[FALLBACK] || p.desc || '';
   return isZh() ? maskText(value) : value;
 }
 
 /* V8c:体积人性化显示,输入单位为 MB / V8c: human-readable size, input value in MB */
-function fmtSize(mb) {
-  const value = Math.max(0, Number(mb) || 0);
+function fmtSize(bytes) {
+  const value = Math.max(0, Number(bytes) || 0);
   const format = (number, unit) => {
     if (!number) return `0 ${unit}`;
     const exponent = Math.floor(Math.log10(Math.abs(number)));
     const decimals = exponent >= 0 ? Math.max(0, 2 - exponent) : Math.min(3, 2 - exponent);
     return `${number.toFixed(decimals)} ${unit}`;
   };
-  if (value >= 1000) return format(value / 1024, 'GB');
-  if (value >= 1) return format(value, 'MB');
-  const kb = value * 1024;
-  if (kb >= 1) return format(kb, 'KB');
-  return format(kb * 1024, 'B');
+  if (value >= 1024 ** 3) return format(value / 1024 ** 3, 'GiB');
+  if (value >= 1024 ** 2) return format(value / 1024 ** 2, 'MiB');
+  if (value >= 1024) return format(value / 1024, 'KiB');
+  return format(value, 'B');
 }
 
 function applyI18n() {
-  ensurePlugI18n();   // 非中文界面需要插件译名,未加载则触发并在完成后重渲染 / non-Chinese UIs need translated plugin names; trigger the load, re-render on completion
   document.documentElement.lang = state.lang;
   document.title = 'Wei.G · ' + t('app.title');   // 品牌名不随语言变 / brand name stays across languages
   document.querySelectorAll('[data-i18n]').forEach((el) => {
@@ -368,10 +338,6 @@ function applyI18n() {
     $('menuconfigStateHelp').setAttribute('aria-label',
       uiText('N、M、Y 状态说明', 'N、M、Y 狀態說明', 'N, M, and Y state help'));
   }
-  if ($('minimumBootLabel')) $('minimumBootLabel').textContent =
-    uiText('推荐项', '推薦項', 'Recommended');
-  if ($('minimumBootConfig')) $('minimumBootConfig').textContent =
-    uiText('配置', '設定', 'Configure');
   const defconfigHelp = uiText(
     '根据当前 Target / Subtarget / Profile 解析 Kconfig 默认值和依赖，补齐设备基准配置（驱动、分区、UBI 等），降低缺失配置导致构建失败或固件不可用的风险。仍须确认机型，不能保证绝对防砖。',
     '依目前 Target / Subtarget / Profile 解析 Kconfig 默认值与依赖，补齐设备基准设定（驱动、分区、UBI 等），降低设定缺失导致建置失败或固件不可用的风险。仍须确认机型，不能保证绝对防砖。',
@@ -579,7 +545,15 @@ function startCatalogAfterFirstPaint() {
   const start = () => {
     catalogAutoloadReady = true;
     renderDevices();
-    refreshMenuIndex();
+    const tasks = {
+      menu: refreshMenuIndex,
+      'menu:language': async () => {
+        await menuCatalogPromise;
+        if (MENU_CATALOG?.menu?.displayLoaded) await ensureCatalogMenuLanguage(state.lang);
+      },
+    };
+    runCatalogTaskQueue(PROJECT?.catalogLoadPolicy?.startup || ['menu', 'menu:language'], tasks,
+      PROJECT?.catalogLoadPolicy?.startupConcurrency || 2, '', 'startup');
   };
   if (typeof requestAnimationFrame === 'function') {
     requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(start, 0)));
@@ -626,16 +600,10 @@ async function init() {
       allowReleaseFallback: MENU_CATALOG_DATA_REF === 'catalog-data',
       engine: CATALOG_ENGINE,
     });
-    [PLUGINS, TIMEZONES, MENU_INDEX, MINIMUM_BOOT, PACKAGE_MIRRORS, BUILD_REQUIREMENTS] = await Promise.all([
-      loadJson('seed/plugins.json'), loadJson('timezones.json'),
-      loadJson('menuconfig-index.json'), loadJson('minimum-boot.json'),
-      loadJson('package-mirrors.json').catch(() => PACKAGE_MIRRORS),
-      loadJson('source-build-requirements.json'),
-    ]);
+    TIMEZONES = await loadJson('timezones.json');
     initializeTimezone();
-    MENU_INDEX = stableCatalogIndex(MENU_INDEX);
     renderBuildInfo();
-    resetPluginWorkspace(PLUGINS, 'seed/plugins.json');
+    resetPluginWorkspace(PLUGINS);
     renderDevices();
     renderModes();
     renderFirmwareSettings();
@@ -643,8 +611,6 @@ async function init() {
     initMenuconfigControls();
     initBuildContractControls();
     initCatalogLocator();
-    $('minimumBootToggle').checked = state.minimumBoot;
-    initMinimumBoot();
     $('defconfigToggle').checked = state.useDefconfig;
     initDefconfig();
     applyI18n();
@@ -691,9 +657,8 @@ function renderLangSel() {
   };
 }
 
-function resetPluginWorkspace(data, path) {
+function resetPluginWorkspace(data) {
   PLUGINS = data;
-  pluginDataPath = path;
   state.sel.clear();
   state.removed.clear();
   collapsed.clear();
@@ -704,10 +669,8 @@ let switchSeq = 0;
 async function switchDevice(dev, first, notify = false) {
   const seq = ++switchSeq;
   state.device = dev;
-  const path = dev.plugins === 'seed' ? 'seed/plugins.json' : dev.id + '/plugins.json';
-  const data = PLUGINS && pluginDataPath === path ? PLUGINS : await loadJson(path);
   if (seq !== switchSeq) return;
-  resetPluginWorkspace(data, path);
+  resetPluginWorkspace(PLUGINS);
   renderDevices();
   renderSources();
   renderGroups();
@@ -882,6 +845,34 @@ async function fetchCatalogIndex(signal, forceRefresh = false) {
   index.catalogProvider = remote.provider;
   return { data: index, url: remote.url, provider: remote.provider, diagnostics: remote.diagnostics };
 }
+function catalogApplicationsPluginData(document) {
+  return {
+    groups: [...(document.groups || [])],
+    plugins: (document.items || []).map((item) => ({
+      id: item.id,
+      pkg: item.package,
+      group: item.group,
+      hot: item.hot === true,
+      sizeBytes: Number.isSafeInteger(item.sizeBytes) ? item.sizeBytes : null,
+      name: item.titleZh || item.titleEn || item.id,
+      desc: item.usageZh || item.usageEn || '',
+      nameI18n: { en: item.titleEn || item.id, 'zh-CN': item.titleZh || '', ...(item.titleI18n || {}) },
+      descI18n: { en: item.usageEn || '', 'zh-CN': item.usageZh || '', ...(item.usageI18n || {}) },
+    })),
+  };
+}
+async function ensureCatalogApplications(forceRefresh = false) {
+  if (catalogApplicationsPromise && !forceRefresh) return catalogApplicationsPromise;
+  const run = (async () => {
+    const result = await CATALOG_LOADER.fetchApplications({ forceRefresh });
+    resetPluginWorkspace(catalogApplicationsPluginData(result.applications));
+    renderGroups();
+    updateStats();
+    return result.applications;
+  })();
+  catalogApplicationsPromise = run.finally(() => { catalogApplicationsPromise = null; });
+  return catalogApplicationsPromise;
+}
 async function fetchCatalogBundle(source, branch, signal, forceRefresh = false) {
   const remote = await CATALOG_LOADER.fetchBundle({
     sourceId: source?.id || '',
@@ -1034,11 +1025,8 @@ function menuOptionTranslation(option) {
     const plugin = PLUGINS.plugins.find((item) =>
       (item.pkgs?.[state.source.id] || item.pkg) === packageName);
     if (plugin) {
-      const row = PLUG_I18N?.plugins?.[plugin.id];
-      const desc = state.lang === 'zh-CN' ? plugin.desc
-        : state.lang === 'en' ? '' : row?.desc?.[state.lang] || '';
-      const title = state.lang === 'zh-CN' ? plugin.name
-        : state.lang === 'en' ? '' : row?.name?.[state.lang] || '';
+      const desc = state.lang === 'en' ? '' : plugin.descI18n?.[state.lang] || '';
+      const title = state.lang === 'en' ? '' : plugin.nameI18n?.[state.lang] || '';
       return { title, usage: desc };
     }
   }
@@ -1357,6 +1345,37 @@ async function ensureCatalogHiddenLoaded() {
   }
   return catalogHiddenLoadingPromise;
 }
+async function ensureCatalogHelpLoaded() {
+  if (!MENU_CATALOG?.splitAssets || MENU_CATALOG.menu?.helpLoaded) return true;
+  if (!catalogHelpLoadingPromise) {
+    const catalog = MENU_CATALOG;
+    const loader = catalogShardLoader;
+    const catalogKey = menuCatalogKey;
+    const task = (async () => {
+      const shard = await loader?.('help');
+      if (!shard || MENU_CATALOG !== catalog || menuCatalogKey !== catalogKey) return false;
+      CATALOG_SCHEMA6_MODULE.applyHelpShard(catalog, shard);
+      return true;
+    })();
+    catalogHelpLoadingPromise = task;
+    task.finally(() => {
+      if (catalogHelpLoadingPromise === task) catalogHelpLoadingPromise = null;
+    }).catch(() => {});
+  }
+  return catalogHelpLoadingPromise;
+}
+
+async function ensurePackageMirrors() {
+  if ((PACKAGE_MIRRORS?.presets || []).length > 1) return PACKAGE_MIRRORS;
+  if (!packageMirrorsPromise) {
+    packageMirrorsPromise = loadJson('package-mirrors.json').then((document) => {
+      PACKAGE_MIRRORS = document;
+      renderFirmwareSettings();
+      return document;
+    }).finally(() => { packageMirrorsPromise = null; });
+  }
+  return packageMirrorsPromise;
+}
 async function ensureCatalogMenuLanguage(language) {
   if (!MENU_CATALOG?.splitAssets || language === 'en' || MENU_CATALOG.menu?.loadedLanguages?.includes(language)) return true;
   const catalog = MENU_CATALOG;
@@ -1536,23 +1555,18 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
     if (catalog.splitAssets) buildMenuStartupIndexes(catalog);
     else buildMenuIndexes(catalog);
     resetCatalogSelectionLayers();
-    minimumBootOriginal.clear();
-    minimumBootTouchedOriginal.clear();
     menuImportedOriginal.clear();
     menuImportedNonDefault.clear();
     resetMenuNavigation();
     menuVisibleLimit = MENU_PAGE_SIZE;
     renderCatalogPicker(false, requested || { sourceId: activeSource.id, branchId: activeBranch.id });
     if (applyDefault) {
-      if (requested?.initialCatalogTarget) catalogInitialTargetPending = false;
       // Target/Profile must exist before target-sensitive defaults are evaluated.
       // Target/Profile 必须先建立，之后才能计算依赖 TARGET_* 的主题与最低启动预设。
       await applyCatalogTarget();
-      await applyCatalogStartupPresets();
-    } else {
-      renderMinimumBoot();
     }
-    scheduleCompatibilityPrefetch();
+    ensureCatalogMenuLoaded(false).catch((error) => console.warn('[Catalog menu prefetch]', error));
+    scheduleCatalogIdlePrefetch();
     return catalog;
   })().catch((error) => {
     if (seq !== menuCatalogSeq) return null;
@@ -1576,13 +1590,6 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
   });
   return menuCatalogPromise;
 }
-function initialCatalogTargetRequest() {
-  if (!catalogInitialTargetPending || state.importedConfig) return null;
-  const source = MENU_INDEX?.sources?.find((item) => item.id === INITIAL_CATALOG_TARGET.sourceId);
-  const branch = source?.branches?.find((item) => item.branch === INITIAL_CATALOG_TARGET.branch);
-  if (!source || !branch || branch.state === 'unavailable') return null;
-  return { ...INITIAL_CATALOG_TARGET, sourceId: source.id, branchId: branch.id, initialCatalogTarget: true };
-}
 function isCatalogTargetSymbol(symbol, catalog = MENU_CATALOG) {
   if (menuTargetSymbols.has(symbol)) return true;
   if (/^TARGET_(?:BOARD|SUBTARGET|PROFILE|ARCH_PACKAGES)$/.test(symbol)) return true;
@@ -1591,7 +1598,7 @@ function isCatalogTargetSymbol(symbol, catalog = MENU_CATALOG) {
 }
 function renderCatalogPicker(preferState = true, requested = null) {
   if (!MENU_INDEX?.sources?.length) return null;
-  const targetRequest = requested || initialCatalogTargetRequest();
+  const targetRequest = requested;
   const currentSource = targetRequest?.sourceId ||
     (preferState && state.device?.id === 'catalog-target' ? state.source?.id : '');
   const sourceId = fillTargetSelect('targetSource', MENU_INDEX.sources,
@@ -2074,7 +2081,7 @@ function snapshotCatalogBaseline() {
 }
 function catalogInheritedValue(symbol) {
   if (state.importedConfig && menuImportedOriginal.has(symbol)) return menuImportedOriginal.get(symbol);
-  if (state.minimumBoot && catalogRecommendedValues.has(symbol)) return catalogRecommendedValues.get(symbol);
+  if (catalogRecommendedValues.has(symbol)) return catalogRecommendedValues.get(symbol);
   return catalogBaselineValues.get(symbol) ?? (menuOptionBySymbol.get(symbol)?.type === 'string' ? '' : 'n');
 }
 function catalogOriginMeta(option) {
@@ -2138,7 +2145,6 @@ function restoreCatalogDefault(option) {
   const value = catalogInheritedValue(option.symbol);
   applyMenuValue(option, value, true, 'restore');
   renderMenuconfig();
-  renderMinimumBoot();
   renderFirmwareSettings();
   renderGroups();
   updateStats();
@@ -2350,10 +2356,7 @@ function applyCatalogIntent(option, value, force = false, source = 'user') {
     const changedOption = menuOptionBySymbol.get(change.symbol);
     if (!changedOption) continue;
     syncMenuToCurated(changedOption, change.to, explicit ? source : 'dependency');
-    if (source === 'user' && explicit && !minimumBootApplying) {
-      reconcileMinimumBootChange(changedOption, change.to);
-      syncThemeFromMenu(changedOption, change.to);
-    }
+    if (source === 'user' && explicit) syncThemeFromMenu(changedOption, change.to);
   }
   if (result.changes.length) markCatalogStateChanged();
   return result;
@@ -2485,7 +2488,6 @@ function restoreCatalogUiState(snapshot) {
 function renderCatalogUiAfterIntent(openChildren = false, option = null, value = 'n') {
   if (openChildren && value !== 'n' && option) openMenuChildren(option);
   renderMenuconfig();
-  renderMinimumBoot();
   renderFirmwareSettings();
   renderGroups();
   updateStats();
@@ -2633,16 +2635,38 @@ async function loadCompatibilityEvaluation(forceRefresh = false) {
   return evaluateLoadedCompatibility(loaded);
 }
 
-function scheduleCompatibilityPrefetch() {
-  if (!CATALOG_LOADER?.fetchCompatibility) return;
+async function runCatalogTaskQueue(names, tasks, concurrency, catalogKey = '', phase = 'idle') {
+  const queue = names.map((name) => ({ name, task: tasks[name] })).filter((item) => item.task);
+  const workerCount = Math.max(1, Math.min(queue.length || 1, Number(concurrency) || 1));
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (queue.length) {
+      if (catalogKey && menuCatalogKey !== catalogKey) return;
+      const item = queue.shift();
+      try { await item.task(); }
+      catch (error) { console.warn(`[Catalog ${phase} task: ${item.name}]`, error); }
+    }
+  }));
+}
+
+function scheduleCatalogIdlePrefetch() {
   clearTimeout(compatibilityPrefetchTimer);
+  const catalogKey = menuCatalogKey;
+  const tasks = {
+    applications: ensureCatalogApplications,
+    hidden: ensureCatalogHiddenLoaded,
+    help: ensureCatalogHelpLoaded,
+    compatibility: () => CATALOG_LOADER?.fetchCompatibility(),
+    'package-mirrors': ensurePackageMirrors,
+  };
+  const names = PROJECT?.catalogLoadPolicy?.idle ||
+    ['applications', 'hidden', 'help', 'compatibility', 'package-mirrors'];
+  const delay = Math.max(0, Math.min(60000, Number(PROJECT?.catalogLoadPolicy?.idleDelayMs) || 15000));
   compatibilityPrefetchTimer = setTimeout(() => {
-    const fetchRules = () => CATALOG_LOADER.fetchCompatibility().catch((error) => {
-      console.warn('[Catalog compatibility prefetch]', error);
-    });
-    if (typeof requestIdleCallback === 'function') requestIdleCallback(fetchRules, { timeout: 5000 });
-    else setTimeout(fetchRules, 0);
-  }, 18000);
+    const run = () => runCatalogTaskQueue(names, tasks,
+      PROJECT?.catalogLoadPolicy?.idleConcurrency || 1, catalogKey, 'idle');
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(() => { run(); }, { timeout: 5000 });
+    else setTimeout(() => { run(); }, 0);
+  }, delay);
 }
 
 function compatibilitySignature(evaluation) {
@@ -3026,355 +3050,10 @@ function setMenuValue(option, value, openChildren = false) {
     menuOptionBySymbol.get(change.symbol)?.symbol?.startsWith('PACKAGE_'));
   if (openChildren && value !== 'n') openMenuChildren(option);
   renderMenuconfig();
-  renderMinimumBoot();
   renderFirmwareSettings();
   if (curatedChanged) renderGroups();
   if (curatedChanged || option.symbol === ROOTFS_PARTSIZE_SYMBOL) updateStats();
   return true;
-}
-function minimumBootRows() {
-  if (!MINIMUM_BOOT) return [];
-  return [...(MINIMUM_BOOT.items || []), ...(MINIMUM_BOOT.firewallBackend?.candidates || [])];
-}
-function minimumBootAudit(compatibility = null) {
-  const enabled = state.minimumBoot === true;
-  const requested = [];
-  if (enabled) {
-    for (const item of minimumBootRows()) {
-      const option = minimumBootOption(item);
-      if (!option) continue;
-      const value = menuValues.get(item.symbol) ?? simpleKconfigDefault(option);
-      if (!['n', 'm', 'y'].includes(value)) continue;
-      requested.push({ symbol: item.symbol, value });
-    }
-  }
-  return {
-    recommended: {
-      enabled,
-      preset: `minimum-boot-v${MINIMUM_BOOT?.version || 1}`,
-      requested,
-    },
-    defconfig: { enabled: state.useDefconfig === true },
-    ...(compatibility?.forced?.length ? { compatibility } : {}),
-  };
-}
-function minimumBootHelp(item) {
-  const lang = state.lang === 'zh-CN' ? 'zh-CN' : 'en';
-  const usage = item.description?.[lang] || item.description?.en || '';
-  const without = item.without?.[lang] || item.without?.en || '';
-  return state.lang === 'zh-CN'
-    ? `用途：${usage}\n不选择：${without}`
-    : `Purpose: ${usage}\nWithout it: ${without}`;
-}
-function minimumBootOption(item) {
-  const option = menuOptionBySymbol.get(item.symbol);
-  if (!option || (item.catalogPath && !(option.path || []).includes(item.catalogPath))) return null;
-  return option;
-}
-function minimumFirewallItems() {
-  return MINIMUM_BOOT?.firewallBackend?.candidates || [];
-}
-function setMenuValueQuiet(option, value, source = 'recommended') {
-  if (!option) return { changes: [], violations: [] };
-  return applyMenuValue(option, value, true, source);
-}
-function trySetMenuValueQuiet(option, value, context = 'preset', source = 'recommended') {
-  try {
-    return { result: setMenuValueQuiet(option, value, source), error: null };
-  } catch (error) {
-    console.warn(`[Catalog ${context} skipped] ${option?.symbol || 'unknown'}=${value}`, error);
-    return { result: null, error };
-  }
-}
-function enforceFirewallBackend(preferred = '') {
-  const available = minimumFirewallItems().filter(minimumBootOption);
-  if (!available.length) return [];
-  const ordered = [];
-  const add = (item) => { if (item && !ordered.includes(item)) ordered.push(item); };
-  add(available.find((item) => item.symbol === preferred));
-  add(available.find((item) => menuValues.get(item.symbol) === 'y'));
-  add(available.find((item) => simpleKconfigDefault(minimumBootOption(item)) === 'y'));
-  for (const item of available) add(item);
-  const failures = [];
-  for (const chosen of ordered) {
-    const snapshot = {
-      values: new Map(menuValues), touched: new Set(menuTouched),
-      selected: new Set(state.sel), removed: new Set(state.removed), theme: state.theme,
-      recommended: new Map(catalogRecommendedValues),
-      dependencies: new Set(catalogDependencySymbols),
-      userOverrides: new Map(catalogUserOverrides),
-    };
-    minimumBootApplying = true;
-    const attempt = trySetMenuValueQuiet(minimumBootOption(chosen), 'y', 'firewall preset');
-    if (!attempt.error) {
-      for (const item of available) {
-        if (item !== chosen) trySetMenuValueQuiet(minimumBootOption(item), 'n', 'firewall preset');
-      }
-      minimumBootApplying = false;
-      return failures;
-    }
-    minimumBootApplying = false;
-    restoreMap(menuValues, snapshot.values);
-    restoreSet(menuTouched, snapshot.touched);
-    restoreSet(state.sel, snapshot.selected);
-    restoreSet(state.removed, snapshot.removed);
-    restoreMap(catalogRecommendedValues, snapshot.recommended);
-    restoreSet(catalogDependencySymbols, snapshot.dependencies);
-    restoreMap(catalogUserOverrides, snapshot.userOverrides);
-    state.theme = snapshot.theme;
-    failures.push({ symbol: chosen.symbol, error: attempt.error });
-  }
-  return failures;
-}
-function configSymbolValue(text, symbol) {
-  const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = String(text || '').match(new RegExp(`^CONFIG_${escaped}=([ym])$`, 'm'));
-  return match?.[1] || 'n';
-}
-async function currentBaseConfigText() {
-  return state.importedConfig || '';
-}
-async function applyMinimumBootPreset(readBase = true) {
-  if (!state.minimumBoot || !MENU_CATALOG) return;
-  const rows = minimumBootRows();
-  if (!minimumBootOriginal.size) {
-    const symbols = new Set(rows.map((item) => item.symbol));
-    for (const symbol of menuOptionBySymbol.keys()) {
-      if (symbol.startsWith('PACKAGE_luci-theme-')) symbols.add(symbol);
-    }
-    for (const symbol of symbols) {
-      minimumBootOriginal.set(symbol, menuValues.get(symbol) ?? 'n');
-      if (menuTouched.has(symbol)) minimumBootTouchedOriginal.add(symbol);
-    }
-  }
-  const presetFailures = [];
-  minimumBootApplying = true;
-  try {
-    for (const item of MINIMUM_BOOT.items || []) {
-      const option = minimumBootOption(item);
-      if (!option) continue;
-      const attempt = trySetMenuValueQuiet(
-        option, option.type === 'bool' ? 'y' : (item.default || 'y'), 'minimum-boot preset',
-      );
-      if (attempt.error) presetFailures.push({ symbol: option.symbol, error: attempt.error });
-    }
-  } finally {
-    minimumBootApplying = false;
-  }
-  let preferred = '';
-  if (readBase) {
-    const base = await currentBaseConfigText();
-    preferred = minimumFirewallItems().find((item) =>
-      configSymbolValue(base, item.symbol) === 'y')?.symbol || '';
-  }
-  presetFailures.push(...enforceFirewallBackend(preferred));
-  if (presetFailures.length) {
-    const symbols = [...new Set(presetFailures.map((item) => item.symbol))];
-    showToast(uiText(
-      `部分推荐项不适用于当前 Target，已跳过：${symbols.join(', ')}`,
-      `部分推薦項不適用於目前 Target，已略過：${symbols.join(', ')}`,
-      `Some recommended items are unavailable for this Target and were skipped: ${symbols.join(', ')}`,
-    ));
-  }
-  const argon = menuOptionBySymbol.get('PACKAGE_luci-theme-argon');
-  if (argon && menuValues.get(argon.symbol) === 'y') state.theme = 'luci-theme-argon';
-  renderMinimumBoot();
-  renderFirmwareSettings();
-  renderMenuconfig();
-  renderGroups();
-  updateStats();
-}
-function restoreMinimumBootPreset() {
-  minimumBootApplying = true;
-  for (const [symbol, value] of minimumBootOriginal) {
-    const option = menuOptionBySymbol.get(symbol);
-    if (!option) continue;
-    menuValues.set(symbol, value);
-    if (minimumBootTouchedOriginal.has(symbol)) menuTouched.add(symbol);
-    else menuTouched.delete(symbol);
-    catalogRecommendedValues.delete(symbol);
-    syncMenuToCurated(option, value, 'restore');
-  }
-  minimumBootApplying = false;
-  minimumBootOriginal.clear();
-  minimumBootTouchedOriginal.clear();
-  state.theme = '@base';
-  markCatalogStateChanged();
-}
-function reconcileMinimumBootChange(option, value) {
-  if (!state.minimumBoot || !minimumFirewallItems().some((item) => item.symbol === option.symbol)) return;
-  const other = minimumFirewallItems().find((item) =>
-    item.symbol !== option.symbol && minimumBootOption(item));
-  if (value === 'y') enforceFirewallBackend(option.symbol);
-  else enforceFirewallBackend(other?.symbol || option.symbol);
-}
-function syncThemeFromMenu(option, value) {
-  if (!option.symbol.startsWith('PACKAGE_luci-theme-')) return;
-  if (value === 'y') state.theme = option.symbol.slice('PACKAGE_'.length);
-  else if (`PACKAGE_${state.theme}` === option.symbol) state.theme = '@base';
-}
-function applyDefaultCatalogTheme() {
-  if (state.theme !== '@base') return;
-  const argon = menuOptionBySymbol.get('PACKAGE_luci-theme-argon');
-  if (!argon || !optionVisible(argon)) return;
-  const attempt = trySetMenuValueQuiet(argon, 'y', 'default theme');
-  if (!attempt.error) state.theme = 'luci-theme-argon';
-}
-function restoreMap(target, source) {
-  target.clear();
-  for (const [key, value] of source) target.set(key, value);
-}
-function restoreSet(target, source) {
-  target.clear();
-  for (const value of source) target.add(value);
-}
-async function applyCatalogStartupPresets() {
-  const snapshot = {
-    values: new Map(menuValues),
-    touched: new Set(menuTouched),
-    selected: new Set(state.sel),
-    removed: new Set(state.removed),
-    minimumOriginal: new Map(minimumBootOriginal),
-    minimumTouchedOriginal: new Set(minimumBootTouchedOriginal),
-    recommended: new Map(catalogRecommendedValues),
-    dependencies: new Set(catalogDependencySymbols),
-    userOverrides: new Map(catalogUserOverrides),
-    theme: state.theme,
-  };
-  try {
-    applyDefaultCatalogTheme();
-    if (state.minimumBoot) await applyMinimumBootPreset(false);
-    else renderMinimumBoot();
-  } catch (error) {
-    restoreMap(menuValues, snapshot.values);
-    restoreSet(menuTouched, snapshot.touched);
-    restoreSet(state.sel, snapshot.selected);
-    restoreSet(state.removed, snapshot.removed);
-    restoreMap(minimumBootOriginal, snapshot.minimumOriginal);
-    restoreSet(minimumBootTouchedOriginal, snapshot.minimumTouchedOriginal);
-    restoreMap(catalogRecommendedValues, snapshot.recommended);
-    restoreSet(catalogDependencySymbols, snapshot.dependencies);
-    restoreMap(catalogUserOverrides, snapshot.userOverrides);
-    minimumBootApplying = false;
-    state.theme = snapshot.theme;
-    renderMinimumBoot();
-    renderFirmwareSettings();
-    renderMenuconfig();
-    renderGroups();
-    updateStats();
-    const message = uiText(
-      'Catalog 已加载，但推荐预设应用失败，已回退到该 Target 的上游默认值。',
-      'Catalog 已載入，但推薦預設套用失敗，已回退到該 Target 的上游預設值。',
-      'Catalog loaded, but recommended presets failed; upstream Target defaults were restored.',
-    );
-    console.error('[Catalog startup presets failed]', error);
-    showToast(`${message} ${error?.message || error}`);
-  }
-}
-function catalogSelectLock(option) {
-  return menuSearchOptions.find((candidate) => {
-    const value = menuValues.get(candidate.symbol) ?? simpleKconfigDefault(candidate);
-    return value !== 'n' && (candidate.selects || []).some((rule) =>
-      rule.split(/\s+if\s+/, 2)[0] === option.symbol);
-  }) || null;
-}
-function catalogSelectLockValue(option, lockedBy) {
-  const sourceValue = menuValues.get(lockedBy.symbol) ?? simpleKconfigDefault(lockedBy);
-  return sourceValue === 'm' && option.type === 'tristate' ? 'm' : 'y';
-}
-function renderRecommendedBackend(item, option) {
-  const row = document.createElement('div');
-  row.className = 'menuconfig-option package-option menuconfig-state-help';
-  row.dataset.help = minimumBootHelp(item);
-  const name = document.createElement('span');
-  name.className = 'menuconfig-option-label';
-  name.textContent = item.id;
-  const actions = document.createElement('span');
-  actions.className = 'menuconfig-option-actions';
-  const tri = document.createElement('span');
-  tri.className = 'kconfig-tri';
-  const alone = minimumFirewallItems().filter(minimumBootOption).length === 1;
-  const current = menuValues.get(item.symbol) ?? 'n';
-  for (const value of ['n', 'y']) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = value.toUpperCase();
-    button.className = current === value ? 'active' : '';
-    button.disabled = alone || (current === 'y' && value === 'n' && !minimumFirewallItems()
-      .some((other) => other.symbol !== item.symbol && minimumBootOption(other)));
-    button.onclick = () => setMenuValue(option, value);
-    tri.appendChild(button);
-  }
-  actions.appendChild(tri);
-  row.append(name, actions);
-  return row;
-}
-function renderMinimumBootModal() {
-  if (!minimumBootModalOpen || $('modal').hidden) return;
-  const body = $('modalBody');
-  body.textContent = '';
-  const intro = document.createElement('p');
-  intro.className = 'hint';
-  intro.textContent = uiText(
-    '项目与 N/M/Y 选项以当前 Catalog 为准；防火墙后端必须二选一。',
-    '項目與 N/M/Y 選項以目前 Catalog 為準；防火牆後端必須二選一。',
-    'Items and N/M/Y states come from the current Catalog; choose exactly one firewall backend.');
-  body.appendChild(intro);
-  for (const item of minimumBootRows()) {
-    const option = minimumBootOption(item);
-    const backend = minimumFirewallItems().some((candidate) => candidate.symbol === item.symbol);
-    if (!option) {
-      const row = document.createElement('div');
-      row.className = 'minimum-boot-item is-unavailable menuconfig-state-help';
-      row.dataset.help = minimumBootHelp(item);
-      row.innerHTML = `<span class="minimum-boot-name">${item.id}</span><span>N</span>`;
-      body.appendChild(row);
-      continue;
-    }
-    if (backend) {
-      body.appendChild(renderRecommendedBackend(item, option));
-      continue;
-    }
-    const lockedBy = catalogSelectLock(option);
-    const lockedValue = lockedBy ? catalogSelectLockValue(option, lockedBy) : '';
-    if (lockedValue) setMenuValueQuiet(option, lockedValue);
-    const row = renderMenuOption(option);
-    row.classList.add('recommended-option');
-    row.dataset.help = minimumBootHelp(item);
-    if (lockedBy) {
-      row.querySelectorAll('.kconfig-tri button').forEach((button) => {
-        button.hidden = button.textContent.toLowerCase() !== lockedValue;
-        button.disabled = true;
-        button.title = `Selected by ${lockedBy.symbol}`;
-      });
-    }
-    body.appendChild(row);
-  }
-}
-function openMinimumBootModal() {
-  if (!state.minimumBoot) {
-    showToast(uiText('请先启用推荐项，再修改推荐配置。', '請先啟用推薦項，再修改推薦設定。',
-      'Enable Recommended before editing its configuration.'));
-    return;
-  }
-  minimumBootModalOpen = true;
-  openModal(uiText('推荐项配置', '推薦項設定', 'Recommended configuration'));
-  $('modal').querySelector('.modal').classList.add('modal-wide', 'recommended-config');
-  modalCancelHandler = () => { minimumBootModalOpen = false; };
-  renderMinimumBootModal();
-}
-function renderMinimumBoot() {
-  const config = $('minimumBootConfig');
-  if (config) {
-    config.hidden = false;
-    config.disabled = !state.minimumBoot;
-    config.setAttribute('aria-disabled', String(!state.minimumBoot));
-    config.title = state.minimumBoot ? '' : uiText(
-      '启用推荐项后可修改配置。', '啟用推薦項後可修改設定。',
-      'Enable Recommended to edit its configuration.');
-  }
-  renderMinimumBootModal();
-  updateSubmitGate();
 }
 function initDefconfig() {
   const toggle = $('defconfigToggle');
@@ -3382,27 +3061,6 @@ function initDefconfig() {
   toggle.onchange = () => { state.useDefconfig = toggle.checked; updateSubmitGate(); };
   toggle.checked = state.useDefconfig;
 }
-function initMinimumBoot() {
-  $('minimumBootToggle').onchange = async () => {
-    state.minimumBoot = $('minimumBootToggle').checked;
-    if (state.minimumBoot) {
-      await applyMinimumBootPreset(true);
-      openMinimumBootModal();
-    }
-    else {
-      restoreMinimumBootPreset();
-      if (minimumBootModalOpen) closeModal();
-      renderMinimumBoot();
-      renderFirmwareSettings();
-      renderMenuconfig();
-      renderGroups();
-      updateStats();
-      updateSubmitGate();
-    }
-  };
-  $('minimumBootConfig').onclick = openMinimumBootModal;
-}
-
 function initMenuconfigControls() {
   $('menuconfigToggle').onclick = async () => {
     menuExpanded = !menuExpanded;
@@ -4143,7 +3801,6 @@ function resetImportedChanges() {
     'Restored the original uploaded settings'));
 }
 async function selectCatalogLocatorTarget(values) {
-  catalogInitialTargetPending = false;
   const preferredTarget = { ...values, strictCatalogTarget: true };
   targetSelectorValues = {};
   const selected = renderCatalogTargetSelectors(preferredTarget);
@@ -4310,7 +3967,6 @@ function renderDevices() {
     const select = event.target.closest('select');
     if (!select || !select.closest('#targetPicker')) return;
     const id = select.id;
-    catalogInitialTargetPending = false;
     if (state.importedConfig) {
       if (!confirm('切换 Target 会退出上传配置工作区，并改为网页新建配置。继续吗？')) {
         renderDevices();
@@ -4632,16 +4288,15 @@ function renderTimezones() {
 function renderFirmwareSettings() {
   if (!state.source) return;
   renderTimezones();
-  const knownLabels = {
-    'luci-theme-argon': 'Argon', 'luci-theme-bootstrap': 'Bootstrap',
-    'luci-theme-material': 'Material', 'luci-theme-openwrt-2020': 'OpenWrt 2020',
-  };
   const catalogThemes = [...menuOptionBySymbol.keys()]
     .filter((symbol) => symbol.startsWith('PACKAGE_luci-theme-'))
     .map((symbol) => symbol.slice('PACKAGE_'.length));
   const available = MENU_CATALOG ? catalogThemes : [];
   const themes = [['@base', uiText('跟随基础配置', '跟隨基礎設定', 'Follow base config')]]
-    .concat([...new Set(available)].map((id) => [id, knownLabels[id] || id.replace(/^luci-theme-/, '')]));
+    .concat([...new Set(available)].map((id) => {
+      const option = menuOptionBySymbol.get(`PACKAGE_${id}`);
+      return [id, menuOptionTranslation(option || {}).title || menuOptionLabel(option || { symbol: id })];
+    }));
   if (!themes.some(([id]) => id === state.theme)) state.theme = '@base';
   state.theme = fillSelect('fwThemeBox', themes, state.theme);
   state.ntp = fillSelect('ntpBox', [
@@ -4659,17 +4314,13 @@ function setFirmwareTheme(theme) {
   if (theme !== '@base' && MENU_CATALOG) {
     const option = menuOptionBySymbol.get(`PACKAGE_${theme}`);
     if (option) {
-      minimumBootApplying = true;
       setMenuValueQuiet(option, 'y');
-      minimumBootApplying = false;
     }
     renderMenuconfig();
-    renderMinimumBoot();
     renderGroups();
     updateStats();
   }
   renderFirmwareSettings();
-  renderMinimumBoot();
 }
 
 /* 当前源的登录信息提示,root 与密码状态着色强调 / per-source login hint with colored emphasis on "root" and the password value */
@@ -4724,10 +4375,8 @@ const byId = (id) => PLUGINS.plugins.find((x) => x.id === id);
 
 /* 搜索匹配串:原文名/说明/id/包名 + en 名 + 当前语言名,任何语言下输英文名或本语言名都能命中 / Search haystack: original name/desc/id/package name + English name + current-language name, so English or localized names match in any UI language */
 function searchHay(p) {
-  const row = PLUG_I18N && PLUG_I18N.plugins && PLUG_I18N.plugins[p.id];
-  const nm = row && row.name;
   return [p.id, p.name, p.desc || '', (state.source && p.pkgs?.[state.source.id]) || p.pkg || '',
-    (nm && nm[FALLBACK]) || '', (nm && nm[state.lang]) || ''].join(' ').toLowerCase();
+    ...Object.values(p.nameI18n || {}), ...Object.values(p.descI18n || {})].join(' ').toLowerCase();
 }
 
 function renderGroups() {
@@ -4946,7 +4595,9 @@ function renderPlugin(p) {
   nameBtn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    showPopover(nameBtn, pName(p), detail + '\n' + pkg + ' · ' + t('drawer.size', { n: fmtSize(p.size || 1) }));
+  const size = p.sizeBytes === null ? uiText('大小未知', '大小未知', 'Size unknown')
+    : t('drawer.size', { n: fmtSize(p.sizeBytes) });
+  showPopover(nameBtn, pName(p), detail + '\n' + pkg + ' · ' + size);
   });
   item.appendChild(nameBtn);
   return item;
@@ -5141,14 +4792,18 @@ function updateStats() {
     $('capBox').hidden = false;
     capText.disabled = true;
     capText.classList.remove('rootfs-capacity');
-    const sizeSum = sel.all.reduce((s, p) => s + (p.size || 1), 0);
-    const budget = (state.variant && state.variant.capacity) || 60;
-    const pct = Math.min(100, Math.round((sizeSum / budget) * 100));
-    const fill = $('capFill');
-    fill.style.width = pct + '%';
-    fill.className = 'cap-fill' + (pct >= 100 ? ' over' : pct >= 75 ? ' warn' : '');
-    capText.textContent = t('bar.capacity', { pct }) + (pct >= 100 ? ' ' + t('bar.capacity.over') : '');
-    capText.title = t('bar.capacity.title');
+    const knownBytes = sel.all.reduce((sum, plugin) => sum + (plugin.sizeBytes || 0), 0);
+    const unknownCount = sel.all.filter((plugin) => !plugin.sizeBytes).length;
+    $('capFill').style.width = '0';
+    $('capFill').className = 'cap-fill';
+    capText.textContent = knownBytes
+      ? `${uiText('已知软件包体积', '已知軟體包體積', 'Known package size')} ${fmtSize(knownBytes)}`
+      : uiText('软件包体积未知', '軟體包體積未知', 'Package size unknown');
+    capText.title = unknownCount
+      ? uiText(`另有 ${unknownCount} 项暂无官方体积数据`, `另有 ${unknownCount} 項暫無官方體積資料`,
+        `${unknownCount} selected item(s) have no official size observation`)
+      : uiText('来自 Catalog 的跨源官方软件包观测', '來自 Catalog 的跨源官方軟體包觀測',
+        'Cross-source official package observations from Catalog');
   }
   updateGroupBadges();
   renderBuildContract();
@@ -5183,7 +4838,8 @@ function openSelectedDrawer() {
     }
     const sz = document.createElement('span');
     sz.className = 'sel-size';
-    sz.textContent = t('drawer.size', { n: fmtSize(p.size || 1) });
+    sz.textContent = p.sizeBytes === null ? uiText('大小未知', '大小未知', 'Size unknown')
+      : t('drawer.size', { n: fmtSize(p.sizeBytes) });
     const rm = document.createElement('button');
     rm.type = 'button';
     rm.className = 'sel-rm';
@@ -5243,54 +4899,18 @@ function setConfigSymbol(text, symbol, value, type = 'unknown') {
   if (pattern.test(text)) return text.replace(pattern, line);
   return text.replace(/\s*$/, '\n') + line + '\n';
 }
-function requirementScopeMatches(scope = {}, context = {}) {
-  const fields = [
-    ['sources', 'sourceId'], ['branches', 'branch'], ['systems', 'system'],
-    ['subtargets', 'subtarget'], ['profiles', 'profile'],
-  ];
-  return fields.every(([scopeKey, contextKey]) =>
-    !scope[scopeKey]?.length || scope[scopeKey].includes('*') || scope[scopeKey].includes(context[contextKey]));
-}
-function configStringValue(text, symbol) {
-  const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return String(text).match(new RegExp(`^CONFIG_${escaped}="([^"]*)"$`, 'm'))?.[1] || '';
-}
-function currentBuildRequirementContext(text) {
-  return {
-    sourceId: state.source?.id || '',
-    branch: state.version?.branch || state.version?.id || '',
-    system: configStringValue(text, 'TARGET_BOARD') || state.device?.target?.system || '',
-    subtarget: configStringValue(text, 'TARGET_SUBTARGET') || state.device?.target?.subtarget || '',
-    profile: configStringValue(text, 'TARGET_PROFILE') || state.device?.target?.profileSymbol || '',
-  };
-}
-function matchingBuildRequirements(text) {
-  const context = currentBuildRequirementContext(text);
-  return (BUILD_REQUIREMENTS?.requirements || []).filter((requirement) =>
-    requirementScopeMatches(requirement.scope, context));
-}
-function applyBuildRequirements(text) {
-  let menuChanged = false;
-  for (const requirement of matchingBuildRequirements(text)) {
-    for (const option of requirement.options || []) {
-      text = setConfigSymbol(text, option.symbol, option.value);
-      if (menuOptionBySymbol.has(option.symbol)) {
-        menuValues.set(option.symbol, option.value);
-        menuTouched.add(option.symbol);
-        menuChanged = true;
-      }
-    }
-  }
-  if (menuChanged) markCatalogStateChanged();
-  return text;
-}
-
 function applyMenuConfig(text) {
   if (!MENU_CATALOG) return text;
-  for (const symbol of new Set([
+  const serialized = new Set([
     ...menuTouched, ...catalogRecommendedValues.keys(),
     ...catalogUserOverrides.keys(), ...catalogImportedSymbols,
-  ])) {
+  ]);
+  for (const option of menuSearchOptions) {
+    if (option.visible !== false && option.userSettable !== false && !option.hidden) continue;
+    const value = catalogBaselineValues.get(option.symbol);
+    if (value !== undefined && value !== 'n' && value !== '') serialized.add(option.symbol);
+  }
+  for (const symbol of serialized) {
     const option = menuOptionBySymbol.get(symbol);
     if (option) text = setConfigSymbol(text, symbol, String(menuValues.get(symbol) ?? 'n'), option.type);
   }
@@ -5357,9 +4977,9 @@ function applyToConfig(text, sel) {
     else if (text.includes(asM + '\n') || text.endsWith(asM)) text = text.replace(asM, asY);
     else if (!text.includes(asY)) text += '\n' + asY;
   };
-  for (const p of sel.all) setY(p.pkgs[src] || p.pkg);
+  for (const p of sel.all) setY(p.pkgs?.[src] || p.pkg);
   for (const p of sel.removed) {
-    const pkg = p.pkgs[src] || p.pkg;
+    const pkg = p.pkgs?.[src] || p.pkg;
     text = text.replace('CONFIG_PACKAGE_' + pkg + '=y', '# CONFIG_PACKAGE_' + pkg + ' is not set');
   }
   const zone = currentTimezone();
@@ -5368,31 +4988,23 @@ function applyToConfig(text, sel) {
   text = applyProfilePackageOverrides(text);
   // “跟随基础配置”不改主题；选择具体主题只负责启用该主题，依赖包由 Catalog 保留。
   if (state.theme !== '@base') setY(state.theme);
-  let resolvedTheme = resolveConfigTheme(text, false);
-  if (!resolvedTheme) {
-    resolvedTheme = 'luci-theme-bootstrap';
-    setY(resolvedTheme);
-  }
-  const minimum = state.minimumBoot
-    ? minimumBootRows().filter((item) => configSymbolValue(text, item.symbol) !== 'n')
-      .map((item) => `${item.id}=${configSymbolValue(text, item.symbol)}`).join(' ')
-    : '';
+  const resolvedTheme = resolveConfigTheme(text, false);
+  if (!resolvedTheme) throw new Error('Catalog/Kconfig did not resolve an enabled LuCI theme');
   return '# Generated by WeiG-OpenWrt-AutoBuild web customizer\n' +
     '# page-version=' + state.siteVersion + '\n' +
     '# device=' + state.device.id + ' source=' + src + ' version=' + state.version.id +
     ' (' + state.version.branch + ') variant=' + state.variant.id + '\n' +
     '# firmware-settings: zonename=' + zone.zonename + ' timezone=' + zone.timezone + ' theme=' + resolvedTheme +
     ' ntp=' + state.ntp + ' package-mirror=' + state.packageMirror + '\n' +
-    (minimum ? '# recommended: ' + minimum + '\n' : '') +
     '# plugins: ' + (sel.normal.map((p) => p.id).join(' ') || '(none)') + '\n' +
     (sel.forced.length ? '# forced (advanced): ' + sel.forced.map((p) => p.id).join(' ') + '\n' : '') +
     (sel.removed.length ? '# removed builtin (advanced): ' + sel.removed.map((p) => p.id).join(' ') + '\n' : '') + text;
 }
-function resolveConfigTheme(text, fallback = true) {
+function resolveConfigTheme(text) {
   const enabled = [...String(text).matchAll(/^CONFIG_PACKAGE_(luci-theme-[A-Za-z0-9._+-]+)=y$/gm)]
     .map((match) => match[1]);
   if (state.theme !== '@base' && enabled.includes(state.theme)) return state.theme;
-  return enabled[0] || (fallback ? 'luci-theme-bootstrap' : '');
+  return enabled[0] || '';
 }
 function configFirmwareSettings(text) {
   const match = String(text).match(/^# firmware-settings: .* theme=([^\s]+) ntp=/m);
@@ -5400,7 +5012,7 @@ function configFirmwareSettings(text) {
     ntp: state.ntp, packageMirror: state.packageMirror };
 }
 
-async function generateConfigText({ enforceBuildRequirements = false } = {}) {
+async function generateConfigText() {
   if (state.device.id === 'catalog-target') {
     const source = selectedCatalogSource();
     const branch = selectedCatalogBranch(source);
@@ -5420,7 +5032,6 @@ async function generateConfigText({ enforceBuildRequirements = false } = {}) {
     throw new Error('This workspace requires an uploaded authoritative .config');
   }
   let config = applyToConfig(raw, effectiveSelection());
-  if (enforceBuildRequirements && !state.useDefconfig) config = applyBuildRequirements(config);
   return config;
 }
 
@@ -5938,7 +5549,8 @@ function restoreSelections(config, payload) {
       TIMEZONES.zones.find((item) => item.zonename === fw.timezone) ||
       TIMEZONES.zones.find((item) => item.timezone === fw.timezone);
     if (zone) state.timezone = zone.zonename;
-    if (/^luci-theme-[A-Za-z0-9._+-]+$/.test(String(fw.theme || ''))) state.theme = fw.theme;
+    if (/^luci-theme-[A-Za-z0-9._+-]+$/.test(String(fw.theme || '')) &&
+        menuOptionBySymbol.has(`PACKAGE_${fw.theme}`)) state.theme = fw.theme;
     if (NTP_PRESETS[fw.ntp]) state.ntp = fw.ntp;
     const importedMirror = fw.packageMirror || fw.opkg;
     if (packageMirrorAvailable(importedMirror, state.source?.id)) {
@@ -6046,12 +5658,8 @@ async function importConfigFile(file) {
       text = payload.config;
     }
     text = text.replace(/\r\n/g, '\n');
-    state.minimumBoot = false;
     state.useDefconfig = payload && typeof payload.use_defconfig === 'boolean'
       ? payload.use_defconfig : false;
-    minimumBootOriginal.clear();
-    minimumBootTouchedOriginal.clear();
-    $('minimumBootToggle').checked = false;
     if ($('defconfigToggle')) $('defconfigToggle').checked = state.useDefconfig;
     const configId = await selectImportedTarget(text, file.name, payload);
     if (seq !== configImportSeq) return;
@@ -6115,7 +5723,6 @@ function submitReadiness() {
     ['catalog', !isCatalog || Boolean(MENU_CATALOG && catalogLoadMode === 'idle')],
     ['menuconfig', !isCatalog || Boolean(MENU_CATALOG && menuOptionBySymbol.size)],
     ['theme', Boolean($('fwThemeBox')?.options?.length && $('fwThemeBox')?.value)],
-    ['recommended', !state.minimumBoot || Boolean(MINIMUM_BOOT && minimumBootRows().length)],
     ['defconfig', typeof state.useDefconfig === 'boolean'],
     ['identity', Boolean(state.buildMeta && state.buildMeta.version === state.siteVersion &&
       state.buildMeta.siteSha256 === SITE_RELEASE_SHA &&
@@ -6179,6 +5786,13 @@ $('modal').addEventListener('keydown', (e) => {
 
 async function generateResolvedConfigText(options = {}) {
   return generateConfigText(options);
+}
+
+function buildAudit(compatibility = null) {
+  return {
+    defconfig: { enabled: state.useDefconfig === true },
+    ...(compatibility?.forced?.length ? { compatibility } : {}),
+  };
 }
 
 function openSubmitModal() {
@@ -6254,8 +5868,9 @@ function openSubmitModal() {
       const button = event.currentTarget;
       button.disabled = true;
       try {
+        await ensurePackageMirrors();
         const forcedCompatibility = await ensureCompatibilityRules();
-        const config = await generateResolvedConfigText({ enforceBuildRequirements: true });
+        const config = await generateResolvedConfigText();
         const payload = {
           schema: 5,
           generatedAt: new Date().toISOString(),
@@ -6268,7 +5883,7 @@ function openSubmitModal() {
           branch: state.version.branch,
           variant: state.variant.id, plugins, tag, lanip: state.lanip, config,
           use_defconfig: state.useDefconfig === true,
-          audit: minimumBootAudit(forcedCompatibility),
+          audit: buildAudit(forcedCompatibility),
           firmware: configFirmwareSettings(config),
           catalog: currentCatalogContract(),
         };
@@ -6319,10 +5934,9 @@ async function timedFetch(url, timeout) {
     return { ok: false, ms: Math.round(performance.now() - start), msg: e.name === 'AbortError' ? t('st.timeout') : t('st.connFail') };
   } finally { clearTimeout(timer); }
 }
-const TIER_NAMES = ['local', 'jsDelivr', 'raw.github'];
-
 async function runSelfTest() {
   try {
+    await ensurePackageMirrors();
     await ensureCompatibilityRules();
   } catch (error) {
     if (error?.name === 'CompatibilityCancelledError') return;
@@ -6364,17 +5978,13 @@ async function runSelfTest() {
   d1(missing.length ? 'fail' : 'ok', missing.length ? t('st.browser.fail', { list: missing.join('、') }) : t('st.browser.ok'));
 
   const d2 = addRow(t('st.data'));
-  const path2 = 'seed/plugins.json';
-  const tiers = [];
-  for (const [i, u] of dataUrls(path2).entries()) {
-    const r = await timedFetch(u, 6000);
-    tiers.push(TIER_NAMES[i] + (r.ok ? ' ✓ ' + r.ms + 'ms' : ' ✗ ' + r.msg));
-    if (i === 0 && r.ok) { tiers.push(t('st.data.localHit')); break; }
+  try {
+    const applications = await ensureCatalogApplications();
+    d2(applications.items.length ? 'ok' : 'fail',
+      `${MENU_CATALOG_DATA_REF} · ${applications.items.length} curated applications`);
+  } catch (error) {
+    d2('fail', error.message);
   }
-  const anyOk = tiers.some((x) => x.includes('✓'));
-  const localOk = tiers[0].includes('✓');
-  d2(anyOk ? (localOk ? 'ok' : 'warn') : 'fail',
-    tiers.join(' · ') + (anyOk ? (localOk ? '' : t('st.data.cdnFallback')) : t('st.data.allFail')));
 
   const src = state.source;
   const d3 = addRow(t('st.config') + (src ? ' (' + src.label + ')' : ''));
@@ -6496,8 +6106,7 @@ $('helpBtn').addEventListener('click', () => {
     link.textContent = label;
     links.appendChild(link);
   };
-  addHelpLink('https://openwrt.org/toh/qihoo/360t7_1.0', t('help.link.ubi'));
-  addHelpLink('https://github.com/ATang007ZH/bl-mt798x/wiki/%E5%A4%9A%E5%88%86%E5%8C%BAuboot%E5%88%B6%E4%BD%9C%E6%96%B9%E6%B3%95', t('help.link.layout'));
+  addHelpLink('https://openwrt.org/docs/guide-user/installation/generic.sysupgrade', t('help.link.ubi'));
   mb.appendChild(links);
 });
 

@@ -1105,13 +1105,19 @@ const COMPATIBILITY_DOCUMENT_KEYS = new Set(['schema', 'rules']);
 const COMPATIBILITY_RULE_KEYS = new Set(['id', 'issue', 'match', 'scope', 'if', 'packages', 'paths', 'refs']);
 const COMPATIBILITY_ID_RE = /^[A-Z][A-Z0-9-]{2,31}$/;
 const COMPATIBILITY_PACKAGE_RE = /^[A-Za-z0-9][A-Za-z0-9+_.@-]{0,95}$/;
-const COMPATIBILITY_SOURCE_RE = /^[A-Za-z0-9_.-]{1,64}$/;
-const COMPATIBILITY_BRANCH_RE = /^[A-Za-z0-9._/-]{1,160}$/;
+const COMPATIBILITY_SOURCE_RE = /^(?:\*|[A-Za-z0-9_.-]{1,64})$/;
+const COMPATIBILITY_BRANCH_RE = /^(?:[A-Za-z0-9._/-]{1,160}|[A-Za-z0-9._/-]*\*[A-Za-z0-9._/-]*)$/;
 
 function compatibilityError(message) {
   const error = new Error(message);
   error.name = 'CatalogCompatibilityError';
   return error;
+}
+
+function compatibilityPatternMatches(value, pattern) {
+  if (!pattern.includes('*')) return value === pattern;
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  return new RegExp(`^${escaped}$`).test(value);
 }
 
 function compatibilityObject(value) {
@@ -1171,6 +1177,9 @@ export function normalizeCompatibilityDocument(raw) {
       if (!COMPATIBILITY_SOURCE_RE.test(source)) throw compatibilityError(`${id}.scope source is invalid`);
       scope[source] = compatibilityStrings(branches, `${id}.scope.${source}`,
         COMPATIBILITY_BRANCH_RE, 1, 32);
+    }
+    if (Object.hasOwn(scope, '*') && Object.keys(scope).length !== 1) {
+      throw compatibilityError(`${id}.scope wildcard source cannot be mixed with named sources`);
     }
     const condition = String(rule.if || '').trim();
     if (condition.length > 512) {
@@ -1236,7 +1245,8 @@ export function evaluateCompatibilityRules(model, document, inputValues, context
   const values = materializeCompatibilityDefaults(model, inputValues, options);
   const warnings = [];
   for (const rule of normalized.rules) {
-    if (!(rule.scope[sourceId] || []).includes(branchName)) continue;
+    const branchPatterns = rule.scope[sourceId] || rule.scope['*'] || [];
+    if (!branchPatterns.some((pattern) => compatibilityPatternMatches(branchName, pattern))) continue;
     const records = rule.packages.map((packageName) => {
       const record = model.byPackage.get(packageName);
       if (!record?.configSymbol) {

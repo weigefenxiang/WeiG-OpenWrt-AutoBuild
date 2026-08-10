@@ -8,7 +8,6 @@ import { runInNewContext } from 'node:vm';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const INDEX = join(ROOT, 'site', 'wrt', 'index.html');
-const PACKAGES = join(ROOT, 'site', 'wrt', 'packages.html');
 const START = '<!-- WEIG_THEME_BOOTSTRAP_START -->';
 const END = '<!-- WEIG_THEME_BOOTSTRAP_END -->';
 
@@ -26,15 +25,9 @@ function extractScript(block) {
 }
 
 const indexSource = readFileSync(INDEX, 'utf8');
-const packageSource = readFileSync(PACKAGES, 'utf8');
 const indexBlock = extractBlock(indexSource, INDEX);
-const packageBlock = extractBlock(packageSource, PACKAGES);
-if (indexBlock !== packageBlock) throw new Error('index.html and packages.html theme bootstrap blocks differ');
 if (indexSource.indexOf(START) > indexSource.indexOf("new URL('data/site-version.json', document.baseURI)")) {
   throw new Error('index.html theme bootstrap runs after the release pointer bootstrap');
-}
-if (packageSource.indexOf(START) > packageSource.indexOf("new URL('data/site-version.json',document.baseURI)")) {
-  throw new Error('packages.html theme bootstrap runs after the release pointer bootstrap');
 }
 
 const bootstrapScript = extractScript(indexBlock);
@@ -124,9 +117,3 @@ if (manual.dataset.theme !== 'light' || manual.style.backgroundColor !== LIGHT |
   throw new Error('shared apply helper failed to switch to light mode');
 }
 console.log('PASS manual mode stays authoritative and shared apply helper switches modes');
-
-if (!packageSource.includes('html[data-theme="dark"]{') ||
-    !packageSource.includes('@media (prefers-color-scheme:dark){html:not([data-theme]){')) {
-  throw new Error('packages.html full theme CSS does not preserve manual light/dark overrides');
-}
-console.log('PASS package page full CSS uses the same tri-state theme semantics');

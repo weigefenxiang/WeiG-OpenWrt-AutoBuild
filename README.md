@@ -1,142 +1,70 @@
 # WeiG-OpenWrt-AutoBuild
 
-![JavaScript](https://img.shields.io/badge/JavaScript-ES2020-f7df1e?logo=javascript&logoColor=black)
-![HTML](https://img.shields.io/badge/HTML-5-e34f26?logo=html5&logoColor=white)
-![CSS](https://img.shields.io/badge/CSS-3-1572b6?logo=css3&logoColor=white)
-![Node.js](https://img.shields.io/badge/Node.js-22-339933?logo=nodedotjs&logoColor=white)
-![Bash](https://img.shields.io/badge/Bash-5-4eaa25?logo=gnubash&logoColor=white)
-![YAML](https://img.shields.io/badge/YAML-1.2-cb171e?logo=yaml&logoColor=white)
+OpenWrt 固件在线定制与 GitHub Actions 云编译工具。网页直接读取 [WeiG-OpenWrt-Menuconfig-Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) 的 Source、Branch、Target/Profile、Kconfig、精选应用、软件包体积与兼容性规则；AutoBuild 不再维护第二套机型、种子配置或插件数据库。
 
-**语言**: 简 · [繁](translations/README.zh-TW.md) · [English](translations/README.en.md) · [Русский](translations/README.ru.md) · [Español](translations/README.es.md) · [Português](translations/README.pt.md) · [日本語](translations/README.ja.md) · [한국어](translations/README.ko.md) · [Deutsch](translations/README.de.md) · [Français](translations/README.fr.md) · [Tiếng Việt](translations/README.vi.md)
+**语言**：简体中文 · [English](translations/README.en.md)
 
-OpenWrt 固件**在线定制 + 云编译**。在 [网站](https://wrt.weigeshare.cc.cd/wrt/) 选品牌、型号、插件,GitHub Actions 自动编译,免费自取。
+- 定制页面：[Weige Share](https://www.weigeshare.cc.cd/wrt/)
+- 构建仓库：[WeiG-OpenWrt-AutoBuild](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild)
+- 数据仓库：[WeiG-OpenWrt-Menuconfig-Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog)
 
-当前仅以下机子为完整维护机型
+## 使用方法
 
- **360T7(MT7981)** 
- 
- 页面里其余 200+ 台机型以**种子模式**开放(仅保证"能刷"、未经实机验证,风险自担。
+1. 依次选择 **Source → Branch → Target System → Subtarget → Target Profile**。
+2. 用精选应用或 Advanced menuconfig 修改配置；N/M/Y、依赖、默认值和可见性均以当前 Catalog 的 Kconfig 为准。
+3. 点 **提交云编译 → 下载请求并打开 GitHub**，只上传网页生成的 `build-request.json` 后创建 Issue。
+4. Actions 完成后，在 Run 底部下载固件和资料。
 
+网页也可导入 `build-request.json`、`.config` 或 `config.buildinfo`。只有主动启用 **Defconfig** 时，构建端才运行一次上游 `make defconfig`；否则网页导出的完整 `.config` 是权威输入。
 
-- 定制页面：[主站 Page](https://www.weigeshare.cc.cd/wrt/) 
-- 三种源码：[ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [OpenWrt](https://github.com/openwrt/openwrt) · [Lean](https://github.com/coolsnowwolf/lede)
-- **版本分支**：ImmortalWrt 收录全部远程分支；OpenWrt 收录 `main` 与全部 `openwrt-*` 分支，排除 `lede-17.01`、`pcs-standalone-back`、`master`。
+## 产物与命名
 
-网页会按“源码＋分支＋设备 Profile”生成独立配置，只显示该设备真实存在的分支与布局。
+Run 显示名采用：
 
----
+```text
+staging-260810_0857/匿名#161/Generic_x86/64/lede/master/generic
+```
 
-## 我是用户:怎么定制固件
+Artifact 采用：
 
-1. 打开 [定制页面](https://www.weigeshare.cc.cd/wrt/)，依次选择 **Source → Branch → Target System → Subtarget → Target Profile → 插件**，再填写“构建标识”（方便定位固件）。
+```text
+staging-260810_0857-匿名#161-BUILD-LOGS
+```
 
-2. 点 **提交云编译 → 下载请求并打开 GitHub**，在跳转后的页面只上传刚下载的 `build-request.json`，再点 **Create**；不需要填写机型、源码、版本或分区参数（需登录 GitHub 账号）。已有 `.config` 或 `config.buildinfo` 请先在网页点“加载配置”，识别机型后再提交。
+构建标识仍由用户填写；`#161` 是原始 Build Issue 编号。所有用户可下载的固件、CONFIG、BUILD-LOGS、OPTIONAL-PACKAGES 和 FIRMWARE-OTHER 统一保留 **60 天**。仅供同一 Run 内部转发原始镜像的 RAW-BRIDGE 保留 1 天并在发布后删除。
 
-3. 机器人会在 issue 里回复本次构建的链接,整机编译约 **2~3 小时**。
+## 数据与兼容性
 
-4. 构建完成后,机器人回复通知,打开构建页面,在底部 
+- 页面启动后优先下载当前 Source/Branch 的菜单和语言；精选应用、隐藏项、帮助、兼容性规则和镜像策略按 `project.json` 的空闲队列顺序后台加载。
+- 精选应用名单、中文/英文介绍与跨源软件包体积都属于 Catalog。应用 ID 相同即视为同一项；体积显示三位有效数字，缺少可靠官方观测时明确显示未知。
+- `compatibility.json` 只接受 schema 2。Source 可用 `*`，Branch 可用 glob；规则只描述证据和冲突，网页仍通过同一 Catalog 执行器生成最小修改方案，也允许用户二次确认后强制继续。
+- AutoBuild 不做每周数据同步；未来 Source/Branch 和 Catalog 数据分支发布后，网页自动读取，无需更新 AutoBuild 源码。
 
-**Artifacts** 下载:
+## 快速测试
 
-   - `时间戳-原文件名.img.gz`:每个最终镜像独立下载，不套 ZIP；首次刷机通常选择含 `factory` 的文件；
-   - `时间戳-CONFIG`:用户提交配置、实际开编配置与构建元数据，可留档复现；
-   - `时间戳-BUILD-LOGS`:完整下载/编译日志与报错摘录，成功或失败都会提供，保留 14 天；
-   - `时间戳-OPTIONAL-PACKAGES` / `时间戳-FIRMWARE-OTHER`:M 软件包，以及 manifest、buildinfo、校验和等辅助资料。
-5. 也可以不编译：点 **提交云编译 → 仅下载 .config**，立即拿到按当前选择生成的配置。只有用户主动勾选 **Defconfig** 时，Actions 才执行一次 `make defconfig`；未勾选时完整 `.config` 保持权威输入。未勾选 Defconfig 时，网页会静默补入 OpenWrt 非交互构建标志 `CONFIG_HAVE_DOT_CONFIG=y`；后端不再以该标志或插件依赖为由拒绝请求。
-6. 页面可加载 `build-request.json`、`.config`、`config.buildinfo`；时区提供 OpenWrt/LuCI 完整 IANA 列表并支持搜索，统一显示为 `(UTC±HH:MM) Region/City`。页面还可选择固件 LuCI 主题、NTP 与“软件包镜像（APK / OPKG）”。中国内地浏览器时区默认使用自动策略（USTC → PKU → 源码默认），其他地区跟随源码；镜像不可用时只回退，不会阻断固件编译。提交确认框会再次列出品牌、型号、源码、版本、分区及网页版本。
+```powershell
+node tools/dev-assistant.mjs prepare
+node tools/dev-assistant.mjs verify
+```
 
-> 💡 刷好固件后:浏览器访问
- **192.168.1.1** 
- 
- 用户名: **root**   
- 
-密   码: **空**
- 
- —— Lean 源初始密码是 `password`(默认为空)。
->
-> 💡 页面右上角有 **自检** 按钮:一键检测连通性(本地/jsDelivr/raw 三级)、.config 生成逻辑、GitHub 连通性,加载异常时先点它排查。
->
-> 💡 勾选带依赖的插件（如 MWAN3 分流助手）会自动帮你勾上前置插件;内核依赖编译时会自动补全,无需操心。
->
-> ⚠️ 下载 Artifacts 必须登录 GitHub（ GitHub 的限制）。固件、配置和构建信息保留 30 天, `日志 log` 保留 14 天。
->
-> ⚠️ 刷机有风险。如 **108M 大分区** 、 **原厂分区**
+本地预览：
 
-### 在 Actions 里找到自己的固件
+```powershell
+node tools/serve.mjs
+```
 
-构建列表按 `Build 定制 · 你的标识 · 源码 版本/固件` 命名,认准自己填的标识即可:仓库 → **Actions** → **custom-build**。
+打开 <http://localhost:8642/>，测试 Source/Branch 切换、Target/Profile、精选应用、Advanced menuconfig、兼容性弹窗、自检和请求下载。
 
-## Fork 自建
+## 维护边界
 
-如公共仓库排队拥挤,或有特殊需求配置,可以完全自助：
+- Catalog 是 Kconfig、dependency、menu、symbol/type、Source/Branch、精选应用、体积和兼容性规则的权威数据源。
+- `site/wrt/app.js` 不得写具体插件或规则特判；构建端不加插件冲突锁。
+- 新增或调整精选应用请在 Catalog 运行人工刷新工具并审核介绍；体积由官方 OPKG/APK 索引自动计算。
+- 包级回归请在 Catalog 手动运行 `Package probe controller`。它按 Catalog index 为每个 Source/Branch 派发独立 Run，只编译所选软件包及依赖；`co-install` 还会执行同装检查，不构建完整固件镜像。
+- 每次修改 AutoBuild 必须运行 `prepare`，按 Asia/Shanghai 更新 `VERSION` 与 `site-version.json`。
 
-1. 点右上角**⭐Star** 和 **Fork** 把本仓库复刻到你的账号;
-2. 到你的 Fork 里 **Settings → Features 勾选 Issues**,再到 **Actions 页面点绿色按钮启用 workflows**;
-3. 回到定制页面,第 ④ 步选 **我自己的 Fork** 并填入你的 GitHub 用户名,之后提交的项目就跑在你自己的仓库里;
-4. 网页会先下载 `build-request.json`，再打开只有一个必填附件框的 Issue 表单；上传该文件并提交即可。Actions 直接采用文件内的完整 `.config`，不会再从仓库 base config 重建。
-
-## 我是维护者:怎么加插件 / 改配置
-<details>
-<summary>点击展开查看内容</summary>
-
-数据流:`config/<品牌>/<机型>/*.config`(旧配置导入与历史请求兼容;360T7 当前有 14 份源码/分支/Profile 配置)
-
-`tools/plugins-meta.json`(中文名/分组/说明)→ `tools/gen-plugins.mjs` 生成 → `site/wrt/data/`。新构建参数由 `WeiG-OpenWrt-Menuconfig-Catalog` 动态提供，每次构建以网页导出的 `build-request.json` 内完整 `.config` 为最终输入。
-</details>
-
-
-
-### 新增一个插件选项
-
-<details>
-<summary>点击展开查看内容</summary>
-
-1. 在目标源码/分支的 Catalog 中确认该包存在；若还要维护旧设备兼容层，再确认对应 base config 有 `# CONFIG_PACKAGE_luci-app-xxx is not set` 行；
-
-2. 在 `tools/plugins-meta.json` 的 `plugins` 数组里加一条:`{ "id": "xxx", "name": "中文名", "group": "分组", "desc": "一句话说明", "size": 2, "hot": false }`(包名与 `luci-app-` 后缀不同或三源不同名时,加 `pkgs` 字段显式映射;
-
-3. 有 luci-app 层前置插件时加 `requires: ["前置id"]`,页面会自动联动勾选);
-
-4. 跑 `node tools/gen-plugins.mjs`,脚本会重新生成 `site/wrt/data/360t7/plugins.json`,并确保 base config 只保留在 `config/` 权威目录,同时对"配置里有但没收录"的插件给出警告;
-5. 提交 push。页面无需改任何代码,新选项自动出现。
-
-</details>
-
-### 开启/新增一台路由器机型
-
-<details>
-<summary>点击展开查看内容</summary>
-机型目录在 `site/wrt/data/devices.json`,按品牌组织;360T7 为完整维护档,其余机型为**种子模式**(sources 由模板生成、共用种子插件表、仅保证能开机)。把一台种子机型升级为完整维护档的步骤:
-
-1. 在 `devices.json` 找到该机型,按真实情况补全 `sources`(每源的 config 文件名、versions 分支、variants 变体与分区替换对);
-2. 在 `config/<品牌>/<机型id>/` 放上各源的 base 配置,命名规范 `<品牌>_<机型>_<源>.config`(仓库已为大部分机型生成了"最精简能开机"的种子配置,只含目标机型 + LuCI,可直接用或在其上加料);
-3. 跑 `node tools/gen-plugins.mjs`(会为每台启用的机型生成各自的 plugins.json);
-4. 冒烟:每个源各跑一次云编译确认能出图。
-
-页面与 workflow 代码零改动,`device` 参数照常白名单校验。
-</details>
-
-### 目录结构与技术架构
-
-见 [ARCHITECTURE.md](ARCHITECTURE.md)(中英双语)。
-
-### 安全
-
-- Issue 接受 1~3 个 GitHub 自有附件并自动识别 `build-request.json`、`.config`、`config.buildinfo`;请求字段、插件/软件包 id、配置格式、大小、机型目标签名及源码必需项都会校验。完整配置默认是用户提交的权威输入；只有用户主动勾选 Defconfig 时 Actions 才执行一次官方 `make defconfig`，其输出直接作为后续构建配置，不再由项目自定义脚本比较补全前后的 Target/Profile/架构；实际开编配置会随 artifact 一并保留;
-- 构建标识(tag)会被清洗为中英文数字与连字符,仅用于 artifact 命名与展示;
-- workflow 权限收敛为 `contents: read + issues: write`。
-
-### 文档多语言维护约定
-
-**每次修改本 README ,必须同步更新 `translations/` 下对应语言版本**;开发者文档同理(`docs/DEVELOPER.md` ↔ `docs/DEVELOPER.en.md`)。这是硬性规矩,防止各语言版本漂移。
+更完整的边界和流程见 [ARCHITECTURE.md](ARCHITECTURE.md) 与 [开发者指南](docs/DEVELOPER.md)。
 
 ## 鸣谢
 
-- **源码：** [OpenWrt](https://github.com/openwrt/openwrt) · [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [LEDE](https://github.com/coolsnowwolf/lede) · [hanwckf mt798x](https://github.com/hanwckf/immortalwrt-mt798x) 
-
-- **参考：** [P3TERX](https://github.com/P3TERX/Actions-OpenWrt)
-
-
-- **LuCI 插件的全部作者**
-
-- **每一位**参与的小伙伴
+[OpenWrt](https://github.com/openwrt/openwrt) · [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [hanwckf mt798x](https://github.com/hanwckf/immortalwrt-mt798x) · LuCI 及所有软件包作者。

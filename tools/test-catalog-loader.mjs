@@ -338,6 +338,55 @@ await compatibilityLoader.fetchCompatibility({ forceRefresh: true });
 assert(compatibilityAssetCalls() === 1,
   'unchanged compatibility SHA was downloaded after an index refresh');
 
+const applicationsDocument = {
+  schema: 1,
+  groups: ['Network'],
+  items: [{ id: 'demo', package: 'luci-app-demo', group: 'Network', titleEn: 'Demo', titleZh: '示例' }],
+};
+const applicationsPayload = compressedDocument(applicationsDocument);
+const applicationsIndex = indexFor(asset, valid, commit, '7'.repeat(40));
+applicationsIndex.assets = {
+  applications: {
+    asset: 'applications.json.gz', hash: applicationsPayload.hash,
+    bytes: applicationsPayload.bytes.length,
+    jsonBytes: new TextEncoder().encode(JSON.stringify(applicationsDocument)).byteLength,
+    schema: 1, items: 1,
+  },
+};
+const applicationsCalls = [];
+const applicationsLoader = createCatalogLoader({
+  repository: 'owner/catalog', engine: { createCatalogModel }, cacheStorage: fakeCaches(), subtle: null,
+  fetchImpl: async (url) => {
+    applicationsCalls.push(url);
+    if (url.includes('index.json')) return new Response(JSON.stringify(applicationsIndex), { status: 200 });
+    if (url.includes('applications.json.gz')) return new Response(applicationsPayload.bytes, { status: 200 });
+    return new Response('unexpected', { status: 404 });
+  },
+});
+const applicationsFirst = await applicationsLoader.fetchApplications();
+assert(applicationsFirst.applications.items[0].id === 'demo',
+  'applications asset was not verified and decoded');
+await applicationsLoader.fetchApplications();
+await applicationsLoader.fetchApplications({ forceRefresh: true });
+assert(applicationsCalls.filter((url) => url.includes('applications.json.gz')).length === 1,
+  'applications cache downloaded an unchanged SHA twice');
+for (const mutate of [
+  (value) => { value.assets.applications.schema = 2; },
+  (value) => { value.assets.applications.items = -1; },
+  (value) => { delete value.assets.applications.jsonBytes; },
+]) {
+  const invalidIndex = structuredClone(applicationsIndex);
+  mutate(invalidIndex);
+  const invalidLoader = createCatalogLoader({
+    repository: 'owner/catalog', engine: { createCatalogModel }, cacheStorage: fakeCaches(), subtle: null,
+    fetchImpl: async (url) => url.includes('index.json')
+      ? new Response(JSON.stringify(invalidIndex), { status: 200 })
+      : new Response(applicationsPayload.bytes, { status: 200 }),
+  });
+  await assertRejects(() => invalidLoader.fetchApplications(), /applications asset contract/,
+    'invalid applications contract was accepted');
+}
+
 const previewCalls = [];
 const previewLoader = createCatalogLoader({
   repository: 'owner/catalog', dataRef: 'catalog-fix',

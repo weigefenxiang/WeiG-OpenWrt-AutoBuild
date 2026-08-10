@@ -42,11 +42,12 @@ jobs:
               `${requester}#${issue.number} `,
               `Build ${requester}#${issue.number} · `,
             ].map((prefix) => prefix.toLowerCase());
+            const issueMarker = `#${issue.number}/`.toLowerCase();
             const active = [...await list('queued'), ...await list('in_progress')]
               .filter((run) => {
                 const title = String(run.display_title || '').toLowerCase();
                 return run.event === 'workflow_dispatch' &&
-                  dispatchPrefixes.some((prefix) => title.startsWith(prefix));
+                  (title.includes(issueMarker) || dispatchPrefixes.some((prefix) => title.startsWith(prefix)));
               });
             if (!active.length) {
               await github.rest.issues.createComment({

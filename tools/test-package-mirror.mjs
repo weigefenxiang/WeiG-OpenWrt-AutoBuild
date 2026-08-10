@@ -17,7 +17,7 @@ import {
 } from './package-mirror-engine.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const RULES_PATH = join(ROOT, 'config', '001.presets', 'package-mirrors.json');
+const RULES_PATH = join(ROOT, 'config', 'policies', 'package-mirrors.json');
 const ENGINE_PATH = join(ROOT, 'tools', 'package-mirror-engine.mjs');
 const rules = loadPackageMirrorRules(RULES_PATH);
 const testRoot = mkdtempSync(join(tmpdir(), 'weig-package-mirror-'));

@@ -44,17 +44,17 @@ try {
   assert.match(result.stdout, /^request_branch=dev$/m);
   assert.match(result.stdout, new RegExp(`^request_commit=${commit}$`, 'm'));
   assert.match(result.stdout, /^request_id=260808_2242$/m);
-  assert.match(result.stdout, /^run_title=weigefenxiang#141 dev-260808_2242\/test\/Generic_x86\/64\/ImmortalWrt\/25\.12\/generic$/m);
+  assert.match(result.stdout, /^run_title=dev-260808_2242\/test#141\/Generic_x86\/64\/ImmortalWrt\/25\.12\/generic$/m);
 
   result = run({ ...base, sourceEnv: 'main' }, { title: '[build] 260808_2242/test/Generic_x86/64/ImmortalWrt/25.12/generic' });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /^request_branch=main$/m);
-  assert.match(result.stdout, /^run_title=weigefenxiang#141 260808_2242\/test\/Generic_x86\/64\/ImmortalWrt\/25\.12\/generic$/m);
+  assert.match(result.stdout, /^run_title=260808_2242\/test#141\/Generic_x86\/64\/ImmortalWrt\/25\.12\/generic$/m);
 
   result = run({ ...base, sourceEnv: 'fix/e-v2' }, { title: '[build] fix_e-v2/260808_2242/test/Generic_x86/64/ImmortalWrt/25.12/generic' });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /^request_branch=fix\/e-v2$/m);
-  assert.match(result.stdout, /^run_title=weigefenxiang#141 fix_e-v2-260808_2242\/test\/Generic_x86\/64\/ImmortalWrt\/25\.12\/generic$/m);
+  assert.match(result.stdout, /^run_title=fix_e-v2-260808_2242\/test#141\/Generic_x86\/64\/ImmortalWrt\/25\.12\/generic$/m);
 
   result = run(base, { title: '[route-test] manual E v2' });
   assert.equal(result.status, 0, result.stderr || result.stdout);

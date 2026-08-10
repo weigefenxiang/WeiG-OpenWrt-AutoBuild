@@ -7,7 +7,7 @@ apply_package_mirror() {
   local workspace helper_root rules engine report requested source branch
   helper_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
   workspace="${WRT_WORKSPACE:-${GITHUB_WORKSPACE:-$helper_root}}"
-  rules="$workspace/config/001.presets/package-mirrors.json"
+  rules="$workspace/config/policies/package-mirrors.json"
   engine="$workspace/tools/package-mirror-engine.mjs"
   report="${WRT_PACKAGE_MIRROR_REPORT:-$workspace/package-mirror-report.json}"
   requested="${WRT_PACKAGE_MIRROR_ID:-${WRT_OPKG_ID:-source-default}}"
