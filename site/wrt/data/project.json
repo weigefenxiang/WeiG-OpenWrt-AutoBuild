@@ -5,10 +5,22 @@
   "catalogRepository": "weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog",
   "blogUrl": "https://www.weigeshare.cc.cd/",
   "catalogReleaseTag": "menuconfig-catalog-complete",
+  "catalogSelectionPolicy": {
+    "sourcePriority": ["ImmortalWrt", "lede", "OpenWrt", "hanwckf"],
+    "defaultSource": "ImmortalWrt",
+    "developmentBranches": ["master", "main"],
+    "preferredTarget": {
+      "selectors": {
+        "system": "x86",
+        "subtarget": "64",
+        "profile": "DEVICE_generic"
+      }
+    }
+  },
   "catalogLoadPolicy": {
-    "startup": ["menu", "menu:language"],
-    "idle": ["applications", "hidden", "help", "compatibility", "package-mirrors"],
-    "startupConcurrency": 2,
+    "startup": ["menu", "menu:language", "package-mirrors"],
+    "idle": ["applications", "hidden", "help", "compatibility"],
+    "startupConcurrency": 3,
     "idleConcurrency": 1,
     "idleDelayMs": 15000
   },

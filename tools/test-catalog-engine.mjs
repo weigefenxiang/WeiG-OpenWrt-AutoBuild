@@ -11,7 +11,11 @@ import {
   normalizeCompatibilityDocument,
   parseConfigDocument,
   normalizeKconfigStateValue,
+  orderCatalogIndex,
   resolveKconfigDefault,
+  preferredCatalogTarget,
+  resolveCatalogUserOverride,
+  resolveEffectiveTheme,
   selectableKconfigStates,
   validateConfig,
 } from '../site/wrt/lib/catalog-engine.js';
@@ -23,6 +27,24 @@ function expectThrow(fn, pattern, message) {
   let thrown = null;
   try { fn(); } catch (error) { thrown = error; }
   assert(thrown && pattern.test(String(thrown.message || thrown)), message);
+}
+
+const overrideMutationCases = [
+  { inherited: 'n', requested: 'y', expected: 'y', label: 'bool enable' },
+  { inherited: 'n', requested: 'n', expected: null, label: 'bool cancel' },
+  { inherited: 'y', requested: 'n', expected: 'n', label: 'bool exclude' },
+  { inherited: 'y', requested: 'y', expected: null, label: 'bool restore' },
+  { inherited: 'm', requested: 'y', expected: 'y', label: 'tristate change' },
+  { inherited: 'm', requested: 'm', expected: null, label: 'tristate restore' },
+  { inherited: '', requested: '', expected: null, label: 'empty string restore' },
+  { inherited: '', requested: 'n', expected: 'n', label: 'literal string n' },
+  { inherited: 'a"b', requested: 'a"b', expected: null, label: 'escaped string restore' },
+  { inherited: 16, requested: '16', expected: null, label: 'integer restore' },
+  { inherited: '0x10', requested: '0x20', expected: '0x20', label: 'hex change' },
+];
+for (const sample of overrideMutationCases) {
+  assert(resolveCatalogUserOverride(sample.inherited, sample.requested) === sample.expected,
+    `Catalog user override mutation failed: ${sample.label}`);
 }
 
 const targetFull = {
@@ -663,5 +685,132 @@ for (let index = 0; index < matrixTargets.length; index++) {
   assert(matrixPreset.values.get(presetSymbol) === 'y',
     `matrix ${index}: deferred target-sensitive preset was rejected`);
 }
+
+const ordered = orderCatalogIndex({ sources: [
+  { id: 'source-c', branches: [{ id: 'v-next', branch: 'openwrt-26.10' },
+    { id: 'main', branch: 'main' }, { id: 'v-old', branch: 'openwrt-9.2' }] },
+  { id: 'source-a', branches: [{ id: 'v', branch: 'openwrt-25.1' }] },
+  { id: 'source-b', branches: [{ id: 'master', branch: 'master' },
+    { id: 'future', branch: 'openwrt-30.2' }] },
+] }, {
+  sourcePriority: ['source-a', 'source-b', 'source-c'],
+  developmentBranches: ['master', 'main'],
+});
+assert(ordered.sources.map((row) => row.id).join(',') === 'source-a,source-b,source-c',
+  'selection policy source order was not applied');
+assert(ordered.sources[1].branches.map((row) => row.branch).join(',') === 'master,openwrt-30.2' &&
+  ordered.sources[2].branches.map((row) => row.branch).join(',') === 'main,openwrt-26.10,openwrt-9.2',
+  'development/future version branch order was not applied');
+const targetTree = {
+  targetSelectors: [{ id: 'family' }, { id: 'board' }, { id: 'profile' }],
+  targetTree: [{ value: 'first', children: [{ value: 'fallback', children: [{ value: 'base' }] }] },
+    { value: 'preferred', children: [{ value: 'wanted', children: [{ value: 'generic' }] }] }],
+};
+assert(preferredCatalogTarget(targetTree, { selectors: {
+  family: 'preferred', board: 'wanted', profile: 'generic',
+} }).family === 'preferred', 'preferred target was not selected');
+assert(preferredCatalogTarget(targetTree, { selectors: {
+  family: 'missing', board: 'missing', profile: 'missing',
+} }).family === 'first', 'missing preferred target did not fall back to the first valid path');
+
+for (let index = 0; index < 12; index++) {
+  const baselineName = `luci-theme-baseline-${index}`;
+  const overrideName = `luci-theme-override-${index}`;
+  const baselineSymbol = `PACKAGE_${baselineName}`;
+  const overrideSymbol = `PACKAGE_${overrideName}`;
+  const themeTarget = {
+    board: `theme${index}`, subtarget: 'full', arch: `ARCH_THEME_${index}`,
+    archPackages: `theme_arch_${index}`, packages: [baselineName],
+    contract: { boardSelector: `TARGET_theme${index}`, targetSelector: `TARGET_theme${index}_full` },
+    profiles: [{ id: `DEVICE_theme${index}`, selector: `TARGET_theme${index}_full_DEVICE_theme${index}`,
+      packages: [baselineName] }],
+  };
+  const themeModel = createCatalogModel({ schema: 5, targets: [themeTarget], relations: {
+    schema: 2, records: [
+      { kind: 'package', package: baselineName, configSymbol: baselineSymbol,
+        kconfigSymbol: baselineSymbol, states: ['n', 'y'] },
+      { kind: 'package', package: overrideName, configSymbol: overrideSymbol,
+        kconfigSymbol: overrideSymbol, states: ['n', 'y'] },
+    ], indexes: { providers: {}, reverseDependencies: {}, reverseKconfig: {}, choices: {} },
+  } });
+  const target = { system: themeTarget.board, subtarget: themeTarget.subtarget,
+    profileSymbol: themeTarget.profiles[0].id, profilePackages: [baselineName],
+    targetPackages: [baselineName], targetSelector: themeTarget.contract.targetSelector,
+    boardSelector: themeTarget.contract.boardSelector,
+    profileSelector: themeTarget.profiles[0].selector, arch: themeTarget.arch,
+    archPackages: themeTarget.archPackages };
+  assert(resolveEffectiveTheme(themeModel, target).symbol === baselineSymbol,
+    `theme ${index}: profile baseline was not resolved`);
+  assert(resolveEffectiveTheme(themeModel, target, new Map([[overrideSymbol, 'y']]), {
+    explicitSymbols: [overrideSymbol], preferredSymbol: overrideSymbol,
+  }).symbol === overrideSymbol, `theme ${index}: explicit override did not win`);
+  assert(resolveEffectiveTheme(themeModel, target, new Map([[overrideSymbol, 'n']]), {
+    explicitSymbols: [overrideSymbol], preferredSymbol: overrideSymbol,
+  }).symbol === baselineSymbol, `theme ${index}: disabled override hid the profile baseline`);
+}
+const emptyThemeModel = createCatalogModel({ schema: 5, targets: [], relations: {
+  schema: 2, records: [], indexes: { providers: {}, reverseDependencies: {}, reverseKconfig: {}, choices: {} },
+} });
+assert(resolveEffectiveTheme(emptyThemeModel, null).symbol === '', 'theme zero case did not remain empty');
+for (let index = 0; index < 10; index++) {
+  const blockedName = `luci-theme-blocked-fallback-${index}`;
+  const firstName = `luci-theme-viable-fallback-${index}`;
+  const nextName = `luci-theme-next-fallback-${index}`;
+  const blockedSymbol = `PACKAGE_${blockedName}`;
+  const firstSymbol = `PACKAGE_${firstName}`;
+  const nextSymbol = `PACKAGE_${nextName}`;
+  const fallbackModel = createCatalogModel({ schema: 5, targets: [], relations: {
+    schema: 2, records: [
+      { kind: 'package', package: blockedName, configSymbol: blockedSymbol,
+        kconfigSymbol: blockedSymbol, states: ['n', 'y'],
+        kconfig: { dependsExpressions: [['n']] } },
+      { kind: 'package', package: firstName, configSymbol: firstSymbol,
+        kconfigSymbol: firstSymbol, states: ['n', 'y'] },
+      { kind: 'package', package: nextName, configSymbol: nextSymbol,
+        kconfigSymbol: nextSymbol, states: ['n', 'm', 'y'] },
+    ], indexes: { providers: {}, reverseDependencies: {}, reverseKconfig: {}, choices: {} },
+  } });
+  const fallback = resolveEffectiveTheme(fallbackModel, null);
+  assert(fallback.symbol === firstSymbol && fallback.values.get(firstSymbol) === 'y' &&
+    fallback.changes.some((change) => change.symbol === firstSymbol),
+  `theme fallback ${index}: unavailable first candidate did not advance to the viable candidate`);
+  const skipped = resolveEffectiveTheme(fallbackModel, null, new Map([[firstSymbol, 'n']]), {
+    explicitSymbols: [firstSymbol],
+  });
+  assert(skipped.symbol === nextSymbol,
+    `theme fallback ${index}: explicit n candidate was not skipped`);
+  const excluded = [blockedSymbol, firstSymbol, nextSymbol];
+  const allOff = resolveEffectiveTheme(fallbackModel, null,
+    new Map(excluded.map((symbol) => [symbol, 'n'])), { explicitSymbols: excluded });
+  assert(allOff.symbol === '', `theme fallback ${index}: all-explicit-n did not fail`);
+}
+const selectedThemeName = 'luci-theme-selected-anonymous';
+const selectedThemeSymbol = `PACKAGE_${selectedThemeName}`;
+const selectorSymbol = 'ENABLE_ANONYMOUS_THEME';
+const selectedThemeModel = createCatalogModel({ schema: 5, targets: [], relations: {
+  schema: 2, records: [
+    { kind: 'config', configSymbol: selectorSymbol, kconfigSymbol: selectorSymbol,
+      states: ['n', 'y'], defaults: ['y'], hidden: true, visible: false },
+    { kind: 'package', package: selectedThemeName, configSymbol: selectedThemeSymbol,
+      kconfigSymbol: selectedThemeSymbol, states: ['n', 'y'] },
+  ], indexes: { providers: {}, reverseDependencies: {},
+    reverseKconfig: { [selectedThemeSymbol]: [selectorSymbol] }, choices: {} },
+} });
+selectedThemeModel.bySymbol.get(selectorSymbol).kconfig = {
+  selectsExpressions: [[selectedThemeSymbol]], impliesExpressions: [], dependsExpressions: [],
+};
+assert(resolveEffectiveTheme(selectedThemeModel, null).symbol === selectedThemeSymbol,
+  'Kconfig default/select did not resolve an effective theme');
+const choiceThemeNames = ['luci-theme-choice-anonymous-a', 'luci-theme-choice-anonymous-b'];
+const choiceThemeSymbols = choiceThemeNames.map((name) => `PACKAGE_${name}`);
+const choiceThemeModel = createCatalogModel({ schema: 5, targets: [], relations: {
+  schema: 2, records: choiceThemeNames.map((name, index) => ({
+    kind: 'package', package: name, configSymbol: choiceThemeSymbols[index],
+    kconfigSymbol: choiceThemeSymbols[index], states: ['n', 'y'], defaults: ['y'], choice: 'THEME_CHOICE',
+  })), indexes: { providers: {}, reverseDependencies: {}, reverseKconfig: {},
+    choices: { THEME_CHOICE: choiceThemeSymbols } },
+} });
+assert(resolveEffectiveTheme(choiceThemeModel, null).candidates.length === 1,
+  'Kconfig choice did not converge to one effective theme');
 
 console.log('Catalog interactive dependency matrix passed');

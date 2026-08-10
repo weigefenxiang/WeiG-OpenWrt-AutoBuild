@@ -30,18 +30,16 @@ function gitOutput(root, args) {
   } catch { return ''; }
 }
 
-let localBuildMeta = null;
+let localBuildMetaEnabled = false;
+let localBuildTime = '';
 if (BUILD_META_ROOT) {
   try {
-    const currentBranch = gitOutput(BUILD_META_ROOT, ['branch', '--show-current']);
-    const currentCommit = gitOutput(BUILD_META_ROOT, ['rev-parse', 'HEAD']);
-    const payload = createBuildMeta({
-      root: BUILD_META_ROOT, branch: currentBranch, commit: currentCommit,
-    });
+    const payload = createBuildMeta({ root: BUILD_META_ROOT });
     if (!payload.branch || !payload.commit) {
       throw new Error('a canonical branch and full Git commit are required');
     }
-    localBuildMeta = Buffer.from(JSON.stringify(payload, null, 2) + '\n');
+    localBuildMetaEnabled = true;
+    localBuildTime = payload.builtAt;
     const dirty = gitOutput(BUILD_META_ROOT, ['status', '--porcelain', '--untracked-files=no']);
     if (dirty) {
       console.warn('[WARN] Local changes are preview-only; cloud builds use the committed HEAD shown below.');
@@ -57,6 +55,14 @@ if (BUILD_META_ROOT) {
   }
 }
 
+function currentLocalBuildMeta() {
+  const payload = createBuildMeta({ root: BUILD_META_ROOT, builtAt: localBuildTime });
+  if (!payload.branch || !payload.commit) {
+    throw new Error('a canonical branch and full Git commit are required');
+  }
+  return Buffer.from(JSON.stringify(payload, null, 2) + '\n');
+}
+
 const server = createServer(async (req, res) => {
   try {
     let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
@@ -64,16 +70,17 @@ const server = createServer(async (req, res) => {
     const file = normalize(join(ROOT, p));
     // 规范化后必须仍在 ROOT 内,防 ../ 目录穿越 / normalized path must stay inside ROOT to block ../ directory traversal
     if (!file.startsWith(normalize(ROOT))) { res.writeHead(403).end(); return; }
-    const virtualBuildMeta = localBuildMeta && p === '/data/build-meta.json';
-    const data = virtualBuildMeta ? localBuildMeta : await readFile(file);
+    const virtualBuildMeta = localBuildMetaEnabled && p === '/data/build-meta.json';
+    const data = virtualBuildMeta ? currentLocalBuildMeta() : await readFile(file);
     res.writeHead(200, {
       'content-type': virtualBuildMeta ? MIME['.json'] : MIME[extname(file)] || 'application/octet-stream',
       'cache-control': 'no-store',
       'x-content-type-options': 'nosniff',
     });
     res.end(data);
-  } catch {
-    res.writeHead(404).end('not found');
+  } catch (error) {
+    if (error?.code === 'ENOENT') res.writeHead(404).end('not found');
+    else res.writeHead(500).end('preview server error');
   }
 });
 

@@ -79,6 +79,7 @@ const regressionTests = [
   'test-build-diagnostics.mjs',
   'test-catalog-loader.mjs',
   'test-catalog-engine.mjs',
+  'test-catalog-ui-contract.mjs',
   'test-catalog-performance.mjs',
   'test-menuconfig-scalar.mjs',
   'test-kconfig-serializer.mjs',
@@ -172,10 +173,11 @@ if (catalogOnly) pass('Source/Branch/build tools, Kconfig, applications and sche
 else fail('Catalog-only execution contract');
 
 const loadPolicy = project?.catalogLoadPolicy;
-if (loadPolicy?.startup?.join(',') === 'menu,menu:language' &&
-    loadPolicy?.idle?.join(',') === 'applications,hidden,help,compatibility,package-mirrors' &&
-    loadPolicy.startupConcurrency === 2 && loadPolicy.idleConcurrency === 1 &&
-    app.includes("'package-mirrors': ensurePackageMirrors") && app.includes('applications: ensureCatalogApplications')) {
+if (loadPolicy?.startup?.join(',') === 'menu,menu:language,package-mirrors' &&
+    loadPolicy?.idle?.join(',') === 'applications,hidden,help,compatibility' &&
+    loadPolicy.startupConcurrency === 3 && loadPolicy.idleConcurrency === 1 &&
+    (app.match(/'package-mirrors': ensurePackageMirrors/g) || []).length === 1 &&
+    app.includes('applications: ensureCatalogApplications')) {
   pass('startup/idle Catalog download order is controlled by project.json');
 } else fail('Catalog load policy');
 

@@ -16,16 +16,24 @@
 ```json
 {
   "catalogLoadPolicy": {
-    "startup": ["menu", "menu:language"],
-    "idle": ["applications", "hidden", "help", "compatibility", "package-mirrors"],
-    "startupConcurrency": 2,
+    "startup": ["menu", "menu:language", "package-mirrors"],
+    "idle": ["applications", "hidden", "help", "compatibility"],
+    "startupConcurrency": 3,
     "idleConcurrency": 1,
     "idleDelayMs": 15000
   }
 }
 ```
 
-菜单随页面启动加载；其余资产按空闲队列串行加载，不抢占当前 Source/Branch。缓存的 ref、bytes、SHA-256 一致时直接复用。提交与自检必须等待实际所需资产，不能因后台尚未完成而跳过兼容性检查。
+菜单、当前语言分片和软件包镜像投影在首帧后以受限并发共同加载；其余资产按空闲队列串行加载，不抢占当前 Source/Branch。缓存的 ref、bytes、SHA-256 一致时直接复用。提交与自检必须等待实际所需资产，不能因后台尚未完成而跳过兼容性检查。
+
+精选插件仍属于空闲资产；插件区域进入视口或获得交互时提升为用户需求加载，但继续复用同一个 Promise、缓存和执行器。数据未到达时必须显示加载状态，失败时显示通用错误与重试入口，禁止用空白区域冒充“没有插件”。
+
+本地预览的虚拟 `build-meta.json` 必须在每次请求时根据当前 VERSION、站点 SHA、Git 分支和提交重新生成，长期开着服务再运行 Prepare 也不能保留启动时身份。部署元数据只有真正不存在的 HTTP 404 可以按主线缺省处理；网络失败、非法 JSON 或与 `site-version.json` 不一致都必须停止加载，禁止静默退回 `main/catalog-data`。
+
+软件包镜像默认值只看所选固件时区，不看浏览器时区：`Asia/Shanghai` 默认自动选择，其他时区默认跟随源码，缺失时按可用项安全回退。时区变化只重算未显式选择的镜像；用户手动或导入的显式选择保持不变，导入校验前等待同一个共享镜像 Promise。
+
+顶部构建概览在桌面把弹性宽度留给 Source/Branch/Target Profile 搜索；折叠契约头只显示标题和箭头，完整 Catalog commit 保留在展开内容和无障碍提示。641–960 px 时搜索独占第一行、契约与控件位于第二行、展开内容位于第三行；手机依次全宽堆叠。此布局不得改变独立的 Advanced menuconfig 搜索契约，也不得缩小展开区字号。
 
 公开 `site/wrt/data/` 仅允许部署身份、UI i18n、时区、项目参数和软件包镜像投影。AutoBuild 已删除机型注册表、种子配置、公共 base config、插件元数据、体积快照和静态软件包说明页。
 
@@ -97,3 +105,23 @@ node tools/serve.mjs
 ## 10. 交接
 
 `docs-private/复制给下个ai.txt` 只保留长期硬规则和模板；`docs-private/AI交接指南.txt` 保留精简当前状态、提交 SHA、线上 Run 与未完成事项。不得继续累积聊天流水账。
+
+## 11. Catalog 选择与最终配置
+
+`site/wrt/data/project.json` 只保存很小的选择策略：Source 优先级、开发分支优先级，以及首选 Target selector 值。Source/Branch/Target/Profile 的真实清单仍完全来自 Catalog；首选 Target 不存在时必须退回 Catalog 中首个完整有效路径。默认策略只用于首次选择或新 Source/Branch，绝不能覆盖当前控件、有效状态或显式请求。
+
+menu 与 applications shard 无论先后到达，都必须进入同一个 Catalog-ready reconciliation，统一刷新精选应用、Advanced、构建契约、统计和提交门禁。menu 未完成时精选项只能显示为 loading 并禁用，不能永久判为 unavailable。
+
+Advanced 标题按钮、程序定位和搜索框共用一个异步展开协调器；搜索框出现首个非空字符时必须在搜索防抖前立即展开，且不能丢失输入焦点、重复下载或被较早的异步请求反向覆盖。清空搜索不自动折叠。
+
+导入配置时，`Selected options` 语义按钮位于导入统计卡左侧，整个按钮区域都可展开；恢复上传值仍是统计卡内的独立操作。选项工作区位于概览行下方并始终占满整行，折叠时整体隐藏，手机端概览改为上下单列。没有导入统计或没有 Selected-only 状态时，剩余卡片自动占满一行。
+
+最终 `.config` 的主题由 Catalog/Kconfig effective resolver 统一解析：用户显式值优先，否则解析当前 Target/Profile 包、default、dependency/select 与 choice；若仍为空，则按 Catalog 稳定顺序通过同一 `applyUserIntent` 依赖闭包选择首个合法候选，并跳过用户显式关闭项。解析结果及其依赖闭包必须显式写入生成配置。配置下载、自检、提交和固件设置快照共用该结果；无记录或全部候选被显式关闭时才失败，禁止写具体主题名兜底。
+
+## 12. 精选插件选择状态
+
+精选插件的复选框、分组徽标、底部统计、已选清单与构建契约必须共用同一选择状态。Catalog Target 以 `catalogUserOverrides` 为用户意图权威，旧入口才使用本地 selected/removed 集合；`removed` 表示真实排除，禁止计入任何“已选”数字。
+
+用户把值切回 `catalogInheritedValue()` 时，必须通过通用归一器删除多余覆盖并按 restore 状态同步精选插件。默认 `n` 的插件执行“勾选→取消”后不得留下显式 `n`；默认 `y` 的插件取消后仍保留真实排除，重新勾选后再恢复继承状态。依赖与冲突仍只通过 Catalog/Kconfig 的 `applyUserIntent` 执行。
+
+插件复选框具有统一视觉契约：可选未勾选为白色、可选已勾选为强调色、禁用或锁定为灰色，并保留清晰的键盘焦点。样式只依据标准 checked/disabled 状态，不允许按插件名或规则 ID 特判。

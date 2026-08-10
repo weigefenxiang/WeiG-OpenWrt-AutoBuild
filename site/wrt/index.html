@@ -49,14 +49,12 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
   pointerUrl.searchParams.set('refresh', nonce);
   metaUrl.searchParams.set('refresh', nonce);
   const readJson = async (url, optional = false) => {
-    try {
-      const response = await fetch(url, { cache: 'no-store' });
-      if (!response.ok) { if (optional) return null; throw new Error(`HTTP ${response.status}`); }
-      return await response.json();
-    } catch (error) {
-      if (optional) return null;
-      throw error;
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) {
+      if (optional && response.status === 404) return null;
+      throw new Error(`HTTP ${response.status}`);
     }
+    return await response.json();
   };
   window.__WEIG_RELEASE_PROMISE__ = Promise.all([readJson(pointerUrl), readJson(metaUrl, true)]).then(([stamp, meta]) => {
     if (!/^v\d{10}$/.test(String(stamp?.version || '')) || stamp?.timezone !== 'Asia/Shanghai' ||
@@ -76,6 +74,7 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
     };
     const releaseMeta = meta && meta.version === stamp.version && meta.siteSha256 === stamp.siteSha256 &&
       meta.timezone === stamp.timezone && /^[a-f0-9]{40}$/.test(String(meta.commit || '')) ? meta : null;
+    if (meta && !releaseMeta) throw new Error('Site release metadata does not match its release pointer');
     window.__WEIG_RELEASE_URL__ = releaseUrl;
     window.__WEIG_RELEASE__ = Object.freeze({ stamp: Object.freeze(stamp), meta: releaseMeta ? Object.freeze(releaseMeta) : null, siteSha256: stamp.siteSha256 });
     document.querySelectorAll('[data-release-href]').forEach((node) => { node.href = releaseUrl(node.dataset.releaseHref); });
@@ -198,7 +197,6 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
               <button class="build-contract-toggle" id="buildContractToggle" type="button"
                 aria-expanded="false" aria-controls="buildContractBody">
                 <strong id="buildContractTitle">Current build contract</strong>
-                <span class="hint" id="buildContractCatalog"></span>
                 <span class="build-contract-chevron" aria-hidden="true">⌄</span>
               </button>
             </div>
@@ -232,38 +230,40 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
           </div>
         </div>
         <div class="menuconfig-box" id="menuconfigBox" hidden>
-          <div class="catalog-feature-row">
+          <div class="menuconfig-header">
             <button class="menuconfig-toggle" id="menuconfigToggle" type="button" aria-expanded="false" aria-controls="menuconfigBody">
               <strong>Advanced menuconfig</strong>
               <span class="hint" id="menuconfigStatus"></span>
               <span class="menuconfig-chevron" aria-hidden="true">⌄</span>
             </button>
+            <div class="menuconfig-search-group">
+              <input type="search" id="menuconfigSearch" placeholder="Search option name / CONFIG symbol">
+              <button class="menuconfig-state-help" id="menuconfigStateHelp" type="button">N/M/Y</button>
+            </div>
           </div>
           <div id="menuconfigBody" hidden>
-            <div class="import-workspace" id="importWorkspace" hidden>
-              <div class="import-summary">
+            <div class="menuconfig-overview-row" id="menuconfigOverviewRow" hidden>
+              <button class="menuconfig-selected-toggle" id="menuconfigSelectedToggle" type="button"
+                aria-expanded="false" aria-controls="menuconfigWorkspace" hidden>
+                <span><strong>Selected options</strong> <small id="menuconfigSelectedCount">0</small></span>
+                <span class="menuconfig-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <div class="import-summary" id="importSummary" hidden>
                 <strong id="importSummaryText"></strong>
                 <button class="text-btn" id="importReset" type="button">Restore uploaded values</button>
               </div>
+            </div>
+            <div class="import-workspace" id="importWorkspace" hidden>
               <div class="import-target-card" id="importTargetCard" hidden></div>
             </div>
-            <div class="menuconfig-workspace">
+            <div class="menuconfig-workspace" id="menuconfigWorkspace">
               <div class="menuconfig-workspace-head">
                 <div class="menuconfig-toolbar">
                   <div class="menuconfig-path-row">
                     <button class="menuconfig-back" id="menuconfigBack" type="button" hidden>←</button>
                     <nav class="menuconfig-breadcrumb" id="menuconfigPanelTitle" aria-label="Menu path"></nav>
-                    <div class="menuconfig-search-group">
-                      <input type="search" id="menuconfigSearch" placeholder="Search option name / CONFIG symbol">
-                      <button class="menuconfig-state-help" id="menuconfigStateHelp" type="button">N/M/Y</button>
-                    </div>
                   </div>
                 </div>
-                <button class="menuconfig-selected-toggle" id="menuconfigSelectedToggle" type="button"
-                  aria-expanded="false" aria-controls="menuconfigContent" hidden>
-                  <span><strong>Selected options</strong> <small id="menuconfigSelectedCount">0</small></span>
-                  <span class="menuconfig-chevron" aria-hidden="true">⌄</span>
-                </button>
               </div>
               <div class="menuconfig-scroll" id="menuconfigScroll">
                 <div id="menuconfigContent">
@@ -305,7 +305,7 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
       <div class="pill-row" id="variantRow"></div>
     </section>
 
-    <section class="step">
+    <section class="step" id="pluginStep">
       <h2><span class="stepnum">②</span> <span data-i18n="step.plugins">勾选插件</span> <span class="hint" data-i18n="step.plugins.hint"></span></h2>
       <div class="legend">
         <span class="lg-item"><span class="lg-box"></span><span data-i18n="legend.ok"></span></span>
