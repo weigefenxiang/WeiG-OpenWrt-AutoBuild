@@ -77,8 +77,8 @@ An enabled Defconfig runs upstream `make defconfig` once. Otherwise the browser 
 
 - Run: `staging-time/tag#Issue/Target/Source/Branch/Profile`
 - Artifact: `staging-time-tag#Issue-BUILD-LOGS`
-- Repository owner: `OWNER_BUILD_CONCURRENCY`, 1–20, default 6.
-- Other users: at most 3 active builds.
+- The repository owner has no project-level build concurrency limit; actual parallel execution remains bounded by GitHub-hosted runner quotas.
+- Other users have at most three queued or running builds, admitted by Issue creation time and Run ID. Builds no longer use modulo slots, so collisions cannot strand otherwise free capacity.
 - Admission and `/cancel` parse `#Issue`, then verify the Issue author through the API; old titles remain recognized during rolling upgrades.
 - CONFIG, firmware, BUILD-LOGS, OPTIONAL-PACKAGES, and FIRMWARE-OTHER retain 60 days; RAW-BRIDGE retains one day.
 
@@ -86,7 +86,9 @@ GitHub's native Run-log retention is a repository Setting rather than Workflow Y
 
 ## 8. Package probes
 
-Catalog's manual **Package probe controller** accepts one to eight IDs, Source/Branch globs, `compile` or `co-install`, concurrency, and dry-run. It reads the current Catalog data-branch index and dispatches one child Run per matched Source/Branch.
+Catalog's manual **Package probe controller** remains development-only for now. It is not registered on the default branch or exposed to ordinary users. Its planned entry is the bottom-right web **检** control: clicking it must first explain purpose, authority, cost, and confirmation before an owner or another authorized user can dispatch anything. Implementation requires fresh user approval.
+
+The probe accepts one to eight IDs, Source/Branch globs, `compile` or `co-install`, concurrency, and dry-run. It reads the current Catalog data-branch index and dispatches one child Run per matched Source/Branch.
 
 `compile` selects packages as `m` and runs `package/compile`. `co-install` selects them as `y` and also runs `package/install`, exposing shared-dependency, ownership, and co-install failures. No firmware image is built, though initial feeds/toolchain preparation still costs time.
 

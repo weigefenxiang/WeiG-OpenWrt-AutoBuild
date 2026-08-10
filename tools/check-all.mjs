@@ -73,6 +73,7 @@ const regressionTests = [
   'test-site-release.mjs',
   'test-theme-bootstrap.mjs',
   'test-build-identity.mjs',
+  'test-build-admission.mjs',
   'test-preview-server.mjs',
   'test-build-request-identity.mjs',
   'test-request-audit.mjs',
@@ -209,12 +210,15 @@ if (retention.length >= 5 && retention.filter((days) => days === 1).length === 1
 } else fail('Artifact retention contract', retention.join(','));
 
 const namingAndConcurrency =
-  buildWorkflow.includes("OWNER_BUILD_CONCURRENCY: ${{ vars.OWNER_BUILD_CONCURRENCY || '6' }}") &&
-  buildWorkflow.includes('const limit = isRepositoryOwner ? ownerLimit : 3') &&
+  buildWorkflow.includes('decideBuildAdmission') &&
+  buildWorkflow.includes('repository owner; no project limit') &&
+  !buildWorkflow.includes('OWNER_BUILD_CONCURRENCY') &&
+  !buildWorkflow.includes('needs.admission.outputs.slot') &&
+  !buildWorkflow.includes('group: custom-build-user-') &&
   buildWorkflow.includes("value.match(/#[0-9]+\\//)") &&
   cancelWorkflow.includes('const issueMarker = `#${issue.number}/`') &&
   parser.includes('artifactBuildRef(buildRef, sourceEnv, Number(process.env.ISSUE_NUMBER || 0))');
-if (namingAndConcurrency) pass('Run/Artifact #Issue identity, owner setting, public limit 3 and /cancel share one issue identity');
+if (namingAndConcurrency) pass('Run/Artifact #Issue identity, unlimited owner, public limit 3 and /cancel share one issue identity');
 else fail('Actions naming/concurrency/cancel contract');
 
 const specialWorkflowPackages = ['passwall', 'openclash', 'v2ray-geoip', 'luci-app-openvpn', 'oscam'];

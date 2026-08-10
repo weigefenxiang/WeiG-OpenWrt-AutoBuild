@@ -123,11 +123,11 @@ staging-260810_0857/匿名#161/Generic_x86/64/lede/master/generic
 staging-260810_0857-匿名#161-BUILD-LOGS
 ```
 
-`/cancel` and admission parse the same `#Issue` identity and query the Issue author. Non-owner users are limited to three active builds. The repository owner uses `OWNER_BUILD_CONCURRENCY` (1–20, default 6). All downloadable build artifacts retain 60 days; the internal raw bridge retains one day only.
+`/cancel` and admission parse the same `#Issue` identity and query the Issue author. Non-owner users are limited to three queued or running builds by one chronological admission policy. The repository owner has no project-level limit, and build jobs use no modulo concurrency slots; GitHub-hosted runner quotas remain external. All downloadable build artifacts retain 60 days; the internal raw bridge retains one day only.
 
 ## 7. Package probes / 包级探测
 
-Catalog's manual controller reads the active data-branch index, applies Source/Branch globs, and dispatches one child Run per matched pair with bounded concurrency. Each child:
+Catalog's manual controller remains development-only until its bottom-right web **检** prompt, authorization, and cost disclosure are approved. Its engine reads the active data-branch index, applies Source/Branch globs, and dispatches one child Run per matched pair with bounded concurrency. Each child:
 
 1. shallow/filtered clones one Source/Branch;
 2. installs feeds;

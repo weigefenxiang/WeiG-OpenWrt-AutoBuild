@@ -77,8 +77,8 @@ Defconfig 开启时上游只运行一次 `make defconfig`；关闭时保持网�
 
 - Run：`staging-时间/标签#Issue/Target/Source/Branch/Profile`
 - Artifact：`staging-时间-标签#Issue-BUILD-LOGS`
-- `OWNER_BUILD_CONCURRENCY`：仓库所有者并发 1–20，默认 6。
-- 非所有者固定最多 3 个活动构建。
+- 仓库所有者不受项目级构建并发限制；实际同时运行数仍受 GitHub 托管 Runner 配额约束。
+- 非所有者固定最多 3 个排队或运行中的活动构建，按 Issue 创建时间和 Run ID 决定准入；构建不再使用取模槽位，避免空闲容量被碰撞浪费。
 - Admission 与 `/cancel` 从新标题解析 `#Issue`，再从 Issue API 核对作者；滚动升级期仍识别旧标题。
 - CONFIG、固件、BUILD-LOGS、OPTIONAL-PACKAGES、FIRMWARE-OTHER 全部保留 60 天；内部 RAW-BRIDGE 保留 1 天。
 
@@ -86,7 +86,9 @@ GitHub Actions 原生 Run 日志的保留天数属于仓库 Settings，不由 Wo
 
 ## 8. 包级探测
 
-Catalog 的 `Package probe controller` 是手动工具。输入 1–8 个包 ID、Source/Branch glob、`compile` 或 `co-install`、并发数和 dry-run。Controller 从当前 Catalog 数据分支获取所有 Source/Branch，为每个组合派发独立 child Run。
+Catalog 的 `Package probe controller` 暂时只保留在开发分支，不注册到默认分支，也不向普通用户开放。未来入口预定为网页右下角“检”：点击后先显示用途、权限、成本和确认提示，再由仓库所有者或其他获准用户触发；实现前必须重新取得用户确认。
+
+探针输入 1–8 个包 ID、Source/Branch glob、`compile` 或 `co-install`、并发数和 dry-run。Controller 从当前 Catalog 数据分支获取所有 Source/Branch，为每个组合派发独立 child Run。
 
 `compile` 把包设为 `m` 后运行 `package/compile`；`co-install` 把包设为 `y`，编译后运行 `package/install`，可发现共同依赖、文件 ownership 或同装失败。它不会构建固件镜像，但 toolchain 和 feeds 首次准备仍需时间。
 

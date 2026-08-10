@@ -119,24 +119,36 @@ jobs:
     outputs:
       allowed: ${{ steps.limit.outputs.allowed }}
       requester: ${{ steps.limit.outputs.requester }}
-      slot: ${{ steps.limit.outputs.slot }}
     steps:
+      - name: Checkout exact admission policy / 检出精确准入策略
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.request_commit }}
       - name: Limit active builds per user / 限制每用户活跃构建数
         id: limit
         uses: actions/github-script@v8
         env:
-          OWNER_BUILD_CONCURRENCY: ${{ vars.OWNER_BUILD_CONCURRENCY || '6' }}
           REQUESTER: ${{ inputs.requester }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
           ISSUE_CREATED_AT: ${{ inputs.issue_created_at }}
         with:
           script: |
+            const { pathToFileURL } = require('node:url');
+            const { decideBuildAdmission } = await import(pathToFileURL(
+              `${process.env.GITHUB_WORKSPACE}/tools/build-admission.mjs`).href);
             const requester = process.env.REQUESTER;
             const isRepositoryOwner = requester.toLowerCase() === context.repo.owner.toLowerCase();
-            const configuredOwnerLimit = Number(process.env.OWNER_BUILD_CONCURRENCY || '6');
-            const ownerLimit = Number.isInteger(configuredOwnerLimit)
-              ? Math.max(1, Math.min(20, configuredOwnerLimit)) : 6;
-            const limit = isRepositoryOwner ? ownerLimit : 3;
+            if (isRepositoryOwner) {
+              const decision = decideBuildAdmission({
+                isRepositoryOwner: true,
+                currentRunId: context.runId,
+                currentCreatedAt: process.env.ISSUE_CREATED_AT,
+              });
+              core.setOutput('allowed', String(decision.allowed));
+              core.setOutput('requester', requester.toLowerCase());
+              core.notice(`Build admission granted: ${requester} (repository owner; no project limit).`);
+              return;
+            }
             const list = async (status) => (await github.rest.actions.listWorkflowRuns({
               owner: context.repo.owner, repo: context.repo.repo,
               workflow_id: 'custom-build.yml', status, per_page: 100,
@@ -152,42 +164,44 @@ jobs:
               if (String(run.id) === String(context.runId) || run.event !== 'workflow_dispatch') continue;
               const issueNumber = issueNumberFromTitle(run.display_title);
               if (!Number.isSafeInteger(issueNumber) || issueNumber <= 0) continue;
-              let author = authorCache.get(issueNumber);
-              if (!author) {
+              let identity = authorCache.get(issueNumber);
+              if (!identity) {
                 try {
                   const { data: issue } = await github.rest.issues.get({
                     owner: context.repo.owner, repo: context.repo.repo, issue_number: issueNumber,
                   });
-                  author = String(issue.user?.login || '').toLowerCase();
-                  authorCache.set(issueNumber, author);
+                  identity = {
+                    author: String(issue.user?.login || '').toLowerCase(),
+                    createdAt: String(issue.created_at || run.created_at),
+                  };
+                  authorCache.set(issueNumber, identity);
                 } catch (error) {
                   core.warning(`Cannot resolve build Issue #${issueNumber}: ${error.message}`);
                   continue;
                 }
               }
-              if (author === requester.toLowerCase()) active.push(run);
+              if (identity.author === requester.toLowerCase()) {
+                active.push({ id: run.id, created_at: identity.createdAt });
+              }
             }
-            active.push({
-              id: context.runId,
-              created_at: process.env.ISSUE_CREATED_AT,
+            const decision = decideBuildAdmission({
+              isRepositoryOwner: false,
+              currentRunId: context.runId,
+              currentCreatedAt: process.env.ISSUE_CREATED_AT,
+              activeRuns: active,
             });
-            const unique = [...new Map(active.map((run) => [String(run.id), run])).values()]
-              .sort((a, b) => a.created_at.localeCompare(b.created_at) || Number(a.id) - Number(b.id));
-            const rank = unique.findIndex((run) => String(run.id) === String(context.runId));
-            const allowed = rank >= 0 && rank < limit;
-            core.setOutput('allowed', String(allowed));
+            core.setOutput('allowed', String(decision.allowed));
             core.setOutput('requester', requester.toLowerCase());
-            core.setOutput('slot', String(Number(context.runId) % limit));
-            if (allowed) {
-              core.notice(`Build admission granted: ${requester} ${rank + 1}/${limit}${isRepositoryOwner ? ' (owner setting)' : ''}`);
+            if (decision.allowed) {
+              core.notice(`Build admission granted: ${requester} ${decision.rank + 1}/${decision.limit}.`);
               return;
             }
-            core.notice(`Build admission refused: ${requester} already has ${limit} active builds.`);
+            core.notice(`Build admission refused: ${requester} already has ${decision.limit} active builds.`);
             {
               await github.rest.issues.createComment({
                 owner: context.repo.owner, repo: context.repo.repo,
                 issue_number: Number(process.env.ISSUE_NUMBER),
-                body: `@${requester}\n\n⏳ 当前你已有 ${limit} 个排队中或运行中的构建，本次未开始。请等待其中一个完成，或在自己的构建 Issue 回复 \`/cancel\` 后再提交。`,
+                body: `@${requester}\n\n⏳ 当前你已有 ${decision.limit} 个排队中或运行中的构建，本次未开始。请等待其中一个完成，或在自己的构建 Issue 回复 \`/cancel\` 后再提交。`,
               });
               await github.rest.issues.update({
                 owner: context.repo.owner, repo: context.repo.repo,
@@ -201,9 +215,6 @@ jobs:
     if: needs.admission.outputs.allowed == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 350
-    concurrency:
-      group: custom-build-user-${{ needs.admission.outputs.requester }}-${{ needs.admission.outputs.slot }}
-      cancel-in-progress: false
     outputs:
       firmware_matrix: ${{ steps.firmware_manifest.outputs.matrix }}
       bridge_artifact_id: ${{ steps.raw_bridge.outputs.artifact-id }}
