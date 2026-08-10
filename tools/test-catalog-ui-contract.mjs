@@ -27,18 +27,21 @@ expect(!app.includes('syncThemeFromMenu') && app.includes('syncFirmwareThemeFrom
 const modalHeader = html.match(/<div class="modal-head">([\s\S]*?)<\/div>\s*<div class="modal-body"/)?.[1] || '';
 expect(modalHeader.includes('id="modalProbe"') && modalHeader.includes('id="modalClose"') &&
   modalHeader.indexOf('id="modalProbe"') < modalHeader.indexOf('id="modalClose"') &&
-  modalHeader.includes('target="_blank"') && modalHeader.includes('rel="noopener noreferrer"') &&
-  modalHeader.includes('hidden'),
-  'self-test modal probe link is not safely positioned before close');
+  modalHeader.includes('<button type="button" class="modal-probe-link"') && modalHeader.includes('hidden'),
+  'self-test modal probe button is not safely positioned before close');
 const selfTestContract = app.match(/async function runSelfTest\(\) \{([\s\S]*?)\n\}\n\$\('selfTestBtn'/)?.[1] || '';
 expect(selfTestContract.indexOf("openModal(t('st.title'))") >= 0 &&
   selfTestContract.indexOf("openModal(t('st.title'))") < selfTestContract.indexOf('await Promise.all') &&
-  selfTestContract.includes('PROJECT.catalogRepository') &&
-  selfTestContract.includes('/actions/workflows/package-probe.yml') &&
   selfTestContract.includes('probe.hidden = false') &&
   selfTestContract.includes('CATALOG_LOADER.fetchCompatibility()') &&
   !selfTestContract.includes('ensureCompatibilityRules()'),
   'self-test does not open immediately or its generic Catalog probe entry is gated by compatibility UI');
+const probeContract = app.match(/async function openPackageProbeModal\(\) \{([\s\S]*?)\n\}\n\$\('modalProbe'/)?.[1] || '';
+expect(probeContract.includes('ensureCatalogApplications()') && probeContract.includes('probePackageChoices') &&
+  probeContract.includes("'probeDepth'") && probeContract.includes("'probeScope'") &&
+  probeContract.includes("'probeTargets'") && probeContract.includes('probeIssueUrl(request)') &&
+  probeContract.includes('packages: [...selected.keys()]') && !probeContract.includes('luci-app-'),
+  'in-page probe does not use generic Catalog data, depth/scope/target options, or the validated Issue request');
 expect(app.includes("$('modalProbe').hidden = true") &&
   css.includes('.modal-head-actions') && css.includes('.modal-probe-link'),
   'ordinary modals can retain the probe entry or its responsive header styling is missing');

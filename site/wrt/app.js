@@ -1,4 +1,7 @@
 /*
+ * SPDX-FileCopyrightText: 2026 weigefenxiang <weigefenxiang@gmail.com>
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
  * OpenWrt 固件在线定制器前端脚本,由 site/wrt/index.html 直接加载 / Front-end script of the online firmware customizer, loaded directly by site/wrt/index.html.
  * Catalog/插件/文案数据来自 data/ 下的 JSON,带多级 CDN 回退与 localStorage 缓存 / Catalog/plugin/i18n data comes from JSON under data/, with tiered CDN fallback and localStorage caching.
  * 无构建步骤、无第三方依赖,以原生 ES 语法直接在浏览器运行 / No build step, no third-party deps; runs as plain native ES in the browser.
@@ -131,6 +134,7 @@ let catalogStateRevision = 0, catalogContextCache = new Map(), catalogContextCac
 let compatibilityPrefetchTimer = null, compatibilityAcknowledgement = null;
 let catalogApplicationsPromise = null, catalogApplicationsDocument = null;
 let catalogApplicationsLoadState = 'loading', catalogApplicationsError = '';
+let selfTestViewToken = 0;
 let catalogStartupPromise = null, catalogApplicationsDemanded = false, catalogApplicationsObserver = null;
 let menuVisibilityRevision = -1, menuVisibilityCache = new Map(), menuSelectableStatesCache = new Map();
 let MENU_CATALOG_REPO = 'weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog';
@@ -5984,11 +5988,12 @@ function openModal(title) {
 }
 function closeModal() {
   if ($('modal').hidden) return;
+  selfTestViewToken += 1;
   const cancel = modalCancelHandler;
   modalCancelHandler = null;
   $('modal').hidden = true;
   $('modalProbe').hidden = true;
-  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'profile-package-config', 'generation-error', 'catalog-conflict', 'compatibility-warning', 'rootfs-guidance');
+  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'profile-package-config', 'generation-error', 'catalog-conflict', 'compatibility-warning', 'rootfs-guidance', 'package-probe');
   document.body.classList.remove('modal-open');
   if (lastFocus && lastFocus.focus) lastFocus.focus();
   if (cancel) cancel();
@@ -6154,10 +6159,269 @@ async function timedFetch(url, timeout) {
     return { ok: false, ms: Math.round(performance.now() - start), msg: e.name === 'AbortError' ? t('st.timeout') : t('st.connFail') };
   } finally { clearTimeout(timer); }
 }
+
+function probeUiText(key) {
+  const strings = catalogApplicationsDocument?.probeUi?.strings || {};
+  const row = strings[key] || {};
+  return String(row[state.lang] || row.en || row['zh-CN'] || key);
+}
+function probeUiLanguageText(key, language) {
+  return String(catalogApplicationsDocument?.probeUi?.strings?.[key]?.[language] || key);
+}
+function probeCodeChannel() {
+  const branch = String(state.buildMeta?.branch || 'main');
+  if (branch.startsWith('fix/')) return branch;
+  return ['dev', 'staging', 'main'].includes(branch) ? branch : 'main';
+}
+function probePackageChoices(applications) {
+  const byPackage = new Map();
+  for (const item of applications?.items || []) {
+    const packageName = String(item.package || '').trim();
+    if (!packageName) continue;
+    const localizedTitle = state.lang === 'en' ? '' : item.titleI18n?.[state.lang] ||
+      (state.lang === 'zh-CN' ? item.titleZh : '');
+    const localizedUsage = state.lang === 'en' ? '' : item.usageI18n?.[state.lang] ||
+      (state.lang === 'zh-CN' ? item.usageZh : '');
+    byPackage.set(packageName, {
+      id: String(item.id || packageName), package: packageName,
+      title: localizedTitle || item.titleEn || item.titleZh || item.id || packageName,
+      usage: localizedUsage || item.usageEn || item.usageZh || '',
+    });
+  }
+  for (const option of menuOptionBySymbol.values()) {
+    if (!String(option?.symbol || '').startsWith('PACKAGE_')) continue;
+    const packageName = option.symbol.slice(8);
+    if (byPackage.has(packageName)) continue;
+    const translation = menuOptionTranslation(option);
+    byPackage.set(packageName, {
+      id: packageName, package: packageName,
+      title: translation.title || menuOptionLabel(option) || packageName,
+      usage: translation.usage || option.usageEn || '',
+    });
+  }
+  return [...byPackage.values()].sort((left, right) =>
+    left.title.localeCompare(right.title, state.lang || 'en', { sensitivity: 'base' }) || left.package.localeCompare(right.package));
+}
+function probeCurrentTarget() {
+  const target = (MENU_CATALOG?.targets || []).find((item) =>
+    item.board === targetSelectorValues.system && item.subtarget === targetSelectorValues.subtarget);
+  const profile = target?.profiles?.find((item) => item.id === targetSelectorValues.profile);
+  return target ? { target: String(target.id || ''), profile: String(profile?.id || '') } : null;
+}
+function probeRequestToken(request) {
+  const bytes = new TextEncoder().encode(JSON.stringify(request));
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 0x4000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x4000));
+  }
+  return `WEIG_PACKAGE_PROBE_V1:${btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')}`;
+}
+function probeIssueBody(request) {
+  const token = probeRequestToken(request);
+  return [
+    `## ${probeUiLanguageText('issueTitle', 'en')} / ${probeUiLanguageText('issueTitle', 'zh-CN')}`,
+    '',
+    probeUiLanguageText('issueRequestNotice', 'en'),
+    '',
+    probeUiLanguageText('issueRequestNotice', 'zh-CN'),
+    '',
+    '<!-- WEIG_PACKAGE_PROBE_REQUEST_V1',
+    token,
+    '-->',
+  ].join('\n');
+}
+function probeIssueUrl(request) {
+  const title = `[probe] ${request.packages.join(', ')} · ${request.mode}`.slice(0, 200);
+  const params = new URLSearchParams({ title, body: probeIssueBody(request) });
+  return `https://github.com/${PROJECT.catalogRepository}/issues/new?${params}`;
+}
+function probeCopyText(text) {
+  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+  const input = document.createElement('textarea');
+  input.value = text; input.hidden = false; input.style.position = 'fixed'; input.style.opacity = '0';
+  document.body.appendChild(input); input.select(); document.execCommand('copy'); input.remove();
+  return Promise.resolve();
+}
+async function openPackageProbeModal() {
+  selfTestViewToken += 1;
+  openModal(uiText('插件兼容探针', '套件相容性探針', 'Package Compatibility Probe'));
+  const modal = $('modal').querySelector('.modal');
+  modal.classList.add('package-probe');
+  const body = $('modalBody');
+  body.textContent = '';
+  const loading = document.createElement('p');
+  loading.className = 'probe-loading'; loading.textContent = uiText('正在加载 Catalog 探针数据…', '正在載入 Catalog 探針資料…', 'Loading Catalog probe data…');
+  body.appendChild(loading);
+  try {
+    const applications = await ensureCatalogApplications();
+    if ($('modal').hidden || !modal.classList.contains('package-probe')) return;
+    const choices = probePackageChoices(applications);
+    const selected = new Map();
+    body.textContent = '';
+
+    const intro = document.createElement('section');
+    intro.className = 'probe-intro';
+    const introTitle = document.createElement('h4'); introTitle.textContent = probeUiText('title');
+    const introText = document.createElement('p'); introText.textContent = probeUiText('intro');
+    const howTo = document.createElement('p'); howTo.textContent = probeUiText('howTo');
+    intro.append(introTitle, introText, howTo); body.appendChild(intro);
+
+    const layout = document.createElement('div'); layout.className = 'probe-layout'; body.appendChild(layout);
+    const picker = document.createElement('section'); picker.className = 'probe-panel probe-picker';
+    const settings = document.createElement('section'); settings.className = 'probe-panel probe-settings';
+    layout.append(picker, settings);
+
+    const search = document.createElement('input'); search.className = 'probe-search'; search.type = 'search';
+    search.placeholder = probeUiText('search'); search.setAttribute('aria-label', probeUiText('search'));
+    const selectedBox = document.createElement('div'); selectedBox.className = 'probe-selected';
+    const results = document.createElement('div'); results.className = 'probe-results';
+    picker.append(search, selectedBox, results);
+
+    const renderSelected = () => {
+      selectedBox.textContent = '';
+      const label = document.createElement('strong'); label.textContent = `${probeUiText('selected')} ${selected.size}/8`;
+      selectedBox.appendChild(label);
+      for (const choice of selected.values()) {
+        const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'probe-chip';
+        chip.textContent = `${choice.title} ×`; chip.title = choice.package;
+        chip.addEventListener('click', () => { selected.delete(choice.id); renderSelected(); renderResults(); renderPreview(); });
+        selectedBox.appendChild(chip);
+      }
+    };
+    const renderResults = () => {
+      const query = search.value.trim().toLocaleLowerCase();
+      const matches = choices.filter((choice) =>
+        !query || `${choice.id} ${choice.package} ${choice.title} ${choice.usage}`.toLocaleLowerCase().includes(query)).slice(0, 80);
+      results.textContent = '';
+      if (!matches.length) {
+        const empty = document.createElement('p'); empty.className = 'probe-empty'; empty.textContent = probeUiText('empty'); results.appendChild(empty); return;
+      }
+      for (const choice of matches) {
+        const row = document.createElement('button'); row.type = 'button'; row.className = 'probe-package';
+        row.classList.toggle('is-selected', selected.has(choice.id));
+        const mark = document.createElement('span'); mark.className = 'probe-package-mark'; mark.textContent = selected.has(choice.id) ? '✓' : '+';
+        const copy = document.createElement('span'); copy.className = 'probe-package-copy';
+        const title = document.createElement('strong'); title.textContent = choice.title;
+        const code = document.createElement('code'); code.textContent = choice.package;
+        copy.append(title, code);
+        if (choice.usage) { const usage = document.createElement('small'); usage.textContent = choice.usage; copy.appendChild(usage); }
+        row.append(mark, copy);
+        row.addEventListener('click', () => {
+          if (selected.has(choice.id)) selected.delete(choice.id);
+          else if (selected.size < 8) selected.set(choice.id, choice);
+          else { showToast(uiText('最多选择 8 个软件包', '最多選擇 8 個套件', 'Select up to 8 packages')); return; }
+          renderSelected(); renderResults(); renderPreview();
+        });
+        results.appendChild(row);
+      }
+    };
+
+    const fieldset = (legendText, className = '') => {
+      const field = document.createElement('fieldset'); field.className = `probe-field ${className}`.trim();
+      const legend = document.createElement('legend'); legend.textContent = legendText; field.appendChild(legend); settings.appendChild(field); return field;
+    };
+    const radio = (field, name, value, labelText, help = '', checked = false) => {
+      const label = document.createElement('label'); label.className = 'probe-radio';
+      const input = document.createElement('input'); input.type = 'radio'; input.name = name; input.value = value; input.checked = checked;
+      const copy = document.createElement('span'); const strong = document.createElement('strong'); strong.textContent = labelText; copy.appendChild(strong);
+      if (help) { const small = document.createElement('small'); small.textContent = help; copy.appendChild(small); }
+      label.append(input, copy); field.appendChild(label); input.addEventListener('change', renderPreview); return input;
+    };
+    const depth = fieldset(probeUiText('depth'), 'probe-depth');
+    radio(depth, 'probeDepth', 'package-compile', probeUiText('packageCompile'), probeUiText('packageCompileHelp'), true);
+    radio(depth, 'probeDepth', 'rootfs-integration', probeUiText('rootfsIntegration'), probeUiText('rootfsIntegrationHelp'));
+    radio(depth, 'probeDepth', 'firmware-integration', probeUiText('firmwareIntegration'), probeUiText('firmwareIntegrationHelp'));
+    radio(depth, 'probeDepth', 'boot-smoke', probeUiText('bootSmoke'), probeUiText('bootSmokeHelp'));
+
+    const scope = fieldset(probeUiText('scope'));
+    radio(scope, 'probeScope', 'all', probeUiText('allSources'), '', true);
+    radio(scope, 'probeScope', 'current', probeUiText('currentSource'));
+    radio(scope, 'probeScope', 'custom', probeUiText('customScope'));
+    const branchList = document.createElement('div'); branchList.className = 'probe-branches'; scope.appendChild(branchList);
+    for (const source of MENU_INDEX?.sources || []) for (const branch of source.branches || []) {
+      if (branch.state === 'unavailable') continue;
+      const label = document.createElement('label');
+      const input = document.createElement('input'); input.type = 'checkbox'; input.value = `${source.id}\0${branch.branch}`;
+      input.addEventListener('change', renderPreview); label.append(input, document.createTextNode(`${source.label || source.id} / ${branch.branch}`)); branchList.appendChild(label);
+    }
+    scope.addEventListener('change', () => {
+      branchList.hidden = scope.querySelector('input[name=probeScope]:checked')?.value !== 'custom';
+      renderPreview();
+    });
+    branchList.hidden = true;
+
+    const targets = fieldset(probeUiText('targets'));
+    radio(targets, 'probeTargets', 'auto', probeUiText('autoTarget'), '', true);
+    const currentTarget = probeCurrentTarget();
+    const currentTargetInput = radio(targets, 'probeTargets', 'current', probeUiText('currentTarget'),
+      currentTarget ? `${currentTarget.target} / ${currentTarget.profile || '-'}` : '');
+    currentTargetInput.disabled = !currentTarget;
+    radio(targets, 'probeTargets', 'all', probeUiText('allTargets'));
+
+    const preview = document.createElement('pre'); preview.className = 'probe-preview'; settings.appendChild(preview);
+    const actions = document.createElement('div'); actions.className = 'modal-actions probe-actions';
+    const previewButton = document.createElement('button'); previewButton.type = 'button'; previewButton.className = 'btn'; previewButton.textContent = probeUiText('preview');
+    const copyButton = document.createElement('button'); copyButton.type = 'button'; copyButton.className = 'btn'; copyButton.textContent = probeUiText('copy');
+    const submitButton = document.createElement('button'); submitButton.type = 'button'; submitButton.className = 'btn btn-primary'; submitButton.textContent = probeUiText('submit');
+    actions.append(previewButton, copyButton, submitButton); settings.appendChild(actions);
+    const policy = document.createElement('p'); policy.className = 'probe-policy'; policy.textContent = `${probeUiText('permission')} ${probeUiText('retention')}`; settings.appendChild(policy);
+
+    const requestValue = () => {
+      const scopeMode = scope.querySelector('input[name=probeScope]:checked')?.value || 'all';
+      let requestScope = { mode: 'all' };
+      if (scopeMode === 'current') {
+        const source = selectedCatalogSource(), branch = selectedCatalogBranch(source);
+        requestScope = { mode: 'pairs', pairs: [[String(source?.id || ''), String(branch?.branch || '')]] };
+      } else if (scopeMode === 'custom') {
+        requestScope = { mode: 'pairs', pairs: [...branchList.querySelectorAll('input:checked')].map((input) => input.value.split('\0')) };
+      }
+      const targetMode = targets.querySelector('input[name=probeTargets]:checked')?.value || 'auto';
+      const targetPolicy = targetMode === 'current'
+        ? { mode: 'selected', selections: [currentTarget] }
+        : { mode: targetMode };
+      return {
+        schema: 1, channel: probeCodeChannel(),
+        mode: depth.querySelector('input[name=probeDepth]:checked')?.value || 'package-compile',
+        packages: [...selected.keys()], scope: requestScope, targetPolicy, maxParallel: 0, execute: true,
+      };
+    };
+    function renderPreview() {
+      const request = requestValue();
+      const valid = request.packages.length > 0 && (request.scope.mode !== 'pairs' || request.scope.pairs.every((row) => row[0] && row[1]) && request.scope.pairs.length > 0);
+      preview.textContent = valid ? JSON.stringify(request, null, 2) : probeUiText('invalid');
+      copyButton.disabled = !valid; submitButton.disabled = !valid;
+      return valid ? request : null;
+    }
+    previewButton.addEventListener('click', renderPreview);
+    copyButton.addEventListener('click', async () => {
+      const request = renderPreview(); if (!request) return;
+      await probeCopyText(probeIssueBody(request)); showToast(probeUiText('copy'));
+    });
+    submitButton.addEventListener('click', async () => {
+      const request = renderPreview(); if (!request) return;
+      let issueUrl = probeIssueUrl(request);
+      if (issueUrl.length > 7500) {
+        await probeCopyText(probeIssueBody(request));
+        showToast(probeUiText('copiedLargeRequest'));
+        const title = `[probe] ${request.packages.join(', ')} · ${request.mode}`.slice(0, 200);
+        issueUrl = `https://github.com/${PROJECT.catalogRepository}/issues/new?${new URLSearchParams({ title })}`;
+      }
+      const issueWindow = window.open(issueUrl, '_blank');
+      if (issueWindow) issueWindow.opener = null; else window.location.assign(issueUrl);
+    });
+    search.addEventListener('input', renderResults);
+    renderSelected(); renderResults(); renderPreview(); search.focus();
+  } catch (error) {
+    body.textContent = '';
+    const failure = document.createElement('p'); failure.className = 'import-error'; failure.textContent = String(error?.message || error); body.appendChild(failure);
+  }
+}
+$('modalProbe').addEventListener('click', openPackageProbeModal);
+
 async function runSelfTest() {
+  const viewToken = ++selfTestViewToken;
   openModal(t('st.title'));
   const probe = $('modalProbe');
-  probe.href = `https://github.com/${PROJECT.catalogRepository}/actions/workflows/package-probe.yml`;
   probe.textContent = uiText('插件兼容探针', '外掛相容性探針', 'Package compatibility probe');
   probe.title = uiText(
     '按 Catalog Source/Branch 探测软件包编译与同装兼容性',
@@ -6204,6 +6468,7 @@ async function runSelfTest() {
       CATALOG_LOADER.fetchCompatibility(),
       ensurePackageMirrors(),
     ]);
+    if (viewToken !== selfTestViewToken) return;
     d2(applications.items.length ? 'ok' : 'fail',
       `${MENU_CATALOG_DATA_REF} · ${applications.items.length} curated applications · ${compatibility.compatibility.rules.length} compatibility rules`);
   } catch (error) {
@@ -6255,6 +6520,7 @@ async function runSelfTest() {
 
   const d5 = addRow(t('st.github'));
   const gh = await timedFetch('https://api.github.com/', 6000);
+  if (viewToken !== selfTestViewToken) return;
   d5(gh.ok ? 'ok' : 'warn', gh.ok ? t('st.github.ok', { ms: gh.ms }) : t('st.github.fail', { msg: gh.msg }));
 }
 $('selfTestBtn').addEventListener('click', () => { runSelfTest().catch((e) => showToast(t('toast.selfTestError', { msg: e.message }))); });

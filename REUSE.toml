@@ -1,0 +1,10 @@
+version = 1
+SPDX-PackageName = "WeiG-OpenWrt-AutoBuild"
+SPDX-PackageSupplier = "weigefenxiang <weigefenxiang@gmail.com>"
+SPDX-PackageDownloadLocation = "https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild"
+
+[[annotations]]
+path = ["**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 weigefenxiang <weigefenxiang@gmail.com>"
+SPDX-License-Identifier = "GPL-3.0-or-later"

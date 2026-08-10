@@ -1,3 +1,6 @@
+/* SPDX-FileCopyrightText: 2026 weigefenxiang <weigefenxiang@gmail.com> */
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+
 :root {
   --menuconfig-title-size: 18px;
   --menuconfig-body-size: max(14px, calc(var(--menuconfig-title-size) - 1px));
@@ -925,6 +928,59 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
 .st-ok .st-ic { color: var(--ok); }
 .st-warn .st-ic { color: var(--warn); }
 .st-fail .st-ic { color: var(--danger); }
+
+/* Catalog 驱动的软件包兼容探针 / Catalog-driven package compatibility probe */
+.modal.package-probe { max-width: 1040px; overflow: hidden; box-shadow: 0 26px 80px rgba(0, 0, 0, .38); }
+.modal.package-probe .modal-body { max-height: calc(90vh - 58px); overflow: auto; padding: 14px; }
+.probe-loading { min-height: 180px; display: grid; place-items: center; }
+.probe-intro { margin-bottom: 12px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); border-left: 4px solid var(--accent); border-radius: 10px; background: color-mix(in srgb, var(--accent) 7%, var(--card2)); }
+.probe-intro h4 { color: var(--text); }
+.probe-layout { display: grid; grid-template-columns: minmax(300px, .86fr) minmax(380px, 1.14fr); gap: 12px; align-items: start; }
+.probe-panel { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--card2); }
+.probe-search { width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); color: var(--text); font: inherit; font-size: var(--menuconfig-title-size); outline: none; }
+.probe-search:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.probe-selected { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 43px; padding: 8px 0; color: var(--text2); font-size: var(--menuconfig-body-size); }
+.probe-selected > strong { margin-right: 3px; }
+.probe-chip { max-width: 100%; padding: 5px 8px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); border-radius: 999px; background: var(--accent-bg); color: var(--accent-text); font: inherit; font-size: var(--menuconfig-body-size); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.probe-results { display: grid; gap: 6px; max-height: min(50vh, 520px); overflow: auto; overscroll-behavior: contain; padding-right: 2px; }
+.probe-package { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; gap: 9px; width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.probe-package:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.probe-package.is-selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, var(--card)); }
+.probe-package-mark { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 7px; background: var(--card2); color: var(--accent); font-weight: 800; }
+.probe-package.is-selected .probe-package-mark { background: var(--accent); color: #fff; }
+.probe-package-copy { display: grid; min-width: 0; gap: 2px; }
+.probe-package-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--menuconfig-title-size); }
+.probe-package-copy code { overflow: hidden; color: var(--text2); font-size: var(--menuconfig-body-size); text-overflow: ellipsis; white-space: nowrap; }
+.probe-package-copy small { display: -webkit-box; overflow: hidden; color: var(--text2); font-size: var(--menuconfig-body-size); line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.probe-empty { padding: 24px 8px; text-align: center; }
+.probe-settings { display: grid; gap: 10px; }
+.probe-field { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; min-width: 0; margin: 0; padding: 10px; border: 1px solid var(--border); border-radius: 9px; }
+.probe-field legend { padding: 0 5px; color: var(--text); font-size: var(--menuconfig-title-size); font-weight: 700; }
+.probe-radio { display: flex; min-width: 0; gap: 8px; padding: 8px; border-radius: 8px; background: var(--card); color: var(--text); cursor: pointer; }
+.probe-radio:has(input:checked) { background: color-mix(in srgb, var(--accent) 10%, var(--card)); outline: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.probe-radio:has(input:disabled) { opacity: .48; cursor: not-allowed; }
+.probe-radio input { flex: none; margin-top: 3px; accent-color: var(--accent); }
+.probe-radio span { display: grid; min-width: 0; gap: 3px; }
+.probe-radio strong { font-size: var(--menuconfig-title-size); line-height: 1.35; }
+.probe-radio small { color: var(--text2); font-size: var(--menuconfig-body-size); line-height: 1.45; }
+.probe-branches { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; max-height: 180px; overflow: auto; padding: 8px; border: 1px dashed var(--border); border-radius: 8px; background: var(--card); }
+.probe-branches[hidden] { display: none; }
+.probe-branches label { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 5px; font-size: var(--menuconfig-body-size); overflow-wrap: anywhere; }
+.probe-branches input { accent-color: var(--accent); }
+.probe-preview { min-height: 94px; max-height: 190px; overflow: auto; margin: 0; padding: 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); color: var(--text2); font: 500 12.5px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.probe-actions { justify-content: flex-end; margin: 0; }
+.probe-policy { margin: 0 !important; padding-top: 2px; }
+@media (max-width: 760px) {
+  .modal.package-probe { max-height: 94vh; }
+  .probe-layout { grid-template-columns: 1fr; }
+  .probe-results { max-height: 34vh; }
+}
+@media (max-width: 560px) {
+  .modal.package-probe .modal-body { padding: 10px; }
+  .probe-panel { padding: 9px; }
+  .probe-field, .probe-branches { grid-template-columns: 1fr; }
+  .probe-actions .btn { flex: 1 1 42%; margin: 0; white-space: normal; }
+}
 
 /* 轻提示 */
 .toast {

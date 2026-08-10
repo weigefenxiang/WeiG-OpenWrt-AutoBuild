@@ -19,6 +19,9 @@
 *.conf text eol=lf
 *.txt text eol=lf
 VERSION text eol=lf
+LICENSE text eol=lf
+NOTICE text eol=lf
+REUSE.toml text eol=lf
 .gitignore text eol=lf
 .gitattributes text eol=lf
 

@@ -88,13 +88,17 @@ GitHub Actions 原生 Run 日志的保留天数属于仓库 Settings，不由 Wo
 
 ## 8. 包级探测
 
-网页右下角“检”立即打开原自检界面；自检标题栏在关闭按钮左侧显示“插件兼容探针”，跳转到 Catalog 的手动 Workflow。入口对所有访客可见，Run 页面公开；GitHub 只允许有仓库写权限的用户手动运行，普通访客不能执行。
+网页右下角“检”立即打开原自检界面；自检标题栏在关闭按钮左侧显示“插件兼容探针”，点击后打开响应式网页内工作区。工作区的文案、应用映射和 Source/Branch 清单全部来自 Catalog；用户可搜索并选择最多 8 个应用，设置深度、范围、Target 覆盖，预览精确请求、复制请求或打开自动填好的 GitHub Issue。
 
-探针输入 1–8 个 Catalog 应用 ID 或 package ID、Source/Branch glob、`compile` 或 `co-install`、并发数和 dry-run。Controller 从当前代码频道对应的数据分支获取 `index.json`、`applications.json.gz` 与匹配 Branch 的 `core` 分片，用应用 ID 解析真实包，并从 Catalog 选择合法 Target/Profile（有 x86/64 时优先，否则取首个可构建路径），再生成一个动态 Matrix；不得维护 Source/Branch 或 Target 版本表。
+探针请求为 schema 1，可输入 1–8 个 Catalog 应用 ID 或 package ID，选择全部/当前/指定 Source/Branch，以及自动目标、当前 Target/Profile 或全部代表目标。Controller 从当前代码频道对应的数据分支获取并校验 `index.json`、`applications.json.gz` 与匹配 Branch 的 `core` 分片，用应用 ID 解析真实包，再生成动态 Matrix；不得维护 Source/Branch 或 Target 版本表。
 
-`compile` 把包设为 `m` 后逐个运行 `package/<id>/compile`；`co-install` 把包设为 `y`，编译后运行 `package/install`，可发现共同依赖、文件 ownership 或同装失败。它不会构建固件镜像，但 toolchain 和 feeds 首次准备仍需时间。Matrix 最多 256 项；仓库所有者 `0` 表示全部计划并发，其他写协作者强制最多 3。规范化证据保留 60 天，完整日志保留 30 天；证据只供审查，不自动修改规则。
+四个深度依次是：`package-compile` 编译包与依赖闭包；`rootfs-integration` 安装进 RootFS 发现 ownership/同装问题；`firmware-integration` 在同一环境构建基础固件与加入软件包的固件作 A/B 对照；实验性的 `boot-smoke`（界面中文固定为“启动自检”）只检查 Catalog 允许目标的通用启动标志。自动目标可在一个 Job 内顺序尝试合法后备目标。Matrix 最多 256 项；仓库所有者使用完整计划并发，其他写协作者强制最多 3，普通访客不能启动 Matrix。规范化证据保留 60 天，完整日志保留 30 天；只有所有合法环境都因软件包原因失败才能判为完全不兼容，证据只供审查，不自动修改规则。
 
-新增插件或规则必须先复用 Catalog 现有数据，横向审计同类型、同执行路径和同风险，再运行探针取得证据；AutoBuild `app.js` 不得新增插件名或专用执行器。参数统一记录在两仓 `.github/automation-policy.json`，测试负责阻止 YAML/JSON 漂移。
+多包共同失败只在全部已计划目标都属于软件包阶段失败后执行有限预算的通用 delta 缩减；它只输出候选最小失败集合。依赖安装、克隆、feeds、构建和启动输出共同组成 30 天完整日志；基础设施、下载、超时和基线固件失败不得进入兼容性结论。
+
+网页只在 Issue 隐藏块中提交短 Base64URL 请求；Catalog Workflow 在创建 Matrix 前重新验证权限、schema、资产合约、包映射、Source/Branch 与 Target/Profile。`workflow_dispatch` 是管理员回退入口。Issue 触发只在默认分支上的 Workflow 生效，因此 dev/staging 验证先使用手动派发，待 main 晋级后再验证网页 Issue 全链路。
+
+新增插件或规则必须先复用 Catalog 现有数据，横向审计同类型、同执行路径和同风险，再运行探针取得证据；AutoBuild `app.js` 不得新增插件名或专用执行器。探针并发、覆盖、超时和保留期只记录在 Catalog `.github/automation-policy.json`；AutoBuild 只保留通道映射，测试负责阻止数据重复与 YAML/JSON 漂移。
 
 ## 9. 测试与发布
 
@@ -106,7 +110,7 @@ node tools/serve.mjs
 
 `check-all` 运行独立回归、JSON/目录 allowlist、Catalog-only 静态门禁、Actions 命名/并发/取消和 60 天保留期检查。它不维护具体机型或插件清单。
 
-发布顺序：先推 Catalog `dev`，等待 `catalog-dev` 完整发布并验证 root asset 契约；再推 AutoBuild `dev`，等待 CI/Pages，最后在线验证 `index.json`、`applications.json.gz`、`compatibility.json.gz` 与网页实际加载。不要在本轮自动晋级 staging/main。
+发布顺序：同一频道总是先推 Catalog，等待数据分支发布并验证 root asset 契约，再推 AutoBuild，等待 CI/Pages，最后在线验证 `index.json`、`applications.json.gz`、`compatibility.json.gz` 与网页实际加载。正常晋级为 `dev → staging → main`。
 
 ## 10. 交接
 

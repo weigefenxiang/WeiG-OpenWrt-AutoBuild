@@ -88,6 +88,18 @@ const regressionTests = [
 ];
 for (const name of regressionTests) run(name, process.execPath, [join(ROOT, 'tools', name)]);
 
+const license = readFileSync(join(ROOT, 'LICENSE'), 'utf8');
+const notice = readFileSync(join(ROOT, 'NOTICE'), 'utf8');
+const reuse = readFileSync(join(ROOT, 'REUSE.toml'), 'utf8');
+const licenseZh = readFileSync(join(ROOT, 'LICENSE.zh-CN.md'), 'utf8');
+if (license.includes('GNU GENERAL PUBLIC LICENSE') && license.includes('Version 3, 29 June 2007') &&
+    license.includes('END OF TERMS AND CONDITIONS') && notice.includes('GPL-3.0-or-later') &&
+    notice.includes('weigefenxiang@gmail.com') &&
+    reuse.includes('SPDX-License-Identifier = "GPL-3.0-or-later"') &&
+    licenseZh.includes('非官方中文说明') && licenseZh.includes('LICENSE')) {
+  pass('GPL-3.0-or-later, public contact, REUSE metadata, and Chinese reference are consistent');
+} else fail('project license contract');
+
 console.log('[2/4] Canonical local data / 本地权威数据');
 const dataFiles = [
   'site/wrt/data/i18n.json',
@@ -166,6 +178,7 @@ if (!concreteInApp.length && !/["'`]PACKAGE_[A-Za-z0-9_.+@-]+["'`]/.test(engine)
 
 const catalogOnly =
   loader.includes('fetchApplications') && loader.includes('applications.json.gz') &&
+  loader.includes('data.probeUi?.schema') && loader.includes("typeof row['zh-CN'] !== 'string'") &&
   loader.includes('Number(contract.schema) !== 2') && loader.includes('Number(data.schema) !== 2') &&
   engine.includes('compatibility document requires schema 2') && engine.includes('compatibilityPatternMatches') &&
   app.includes('ensureCatalogApplications') && app.includes('CATALOG_ENGINE.evaluateCompatibilityRules') &&
@@ -174,6 +187,13 @@ const catalogOnly =
   !parser.includes('devices.json') && !parser.includes('config-manifest.json');
 if (catalogOnly) pass('Source/Branch/build tools, Kconfig, applications and schema-2 compatibility are Catalog-driven');
 else fail('Catalog-only execution contract');
+
+if (html.includes('id="modalProbe"') && html.includes('<button type="button" class="modal-probe-link"') &&
+    app.includes('function openPackageProbeModal()') && app.includes('WEIG_PACKAGE_PROBE_REQUEST_V1') &&
+    app.includes('probeUiText') && app.includes("'boot-smoke'") &&
+    app.includes("packages: [...selected.keys()]") && !app.includes('probe.href =')) {
+  pass('in-page package probe is Catalog-translated and emits a generic validated request');
+} else fail('in-page package probe contract');
 
 const loadPolicy = project?.catalogLoadPolicy;
 if (loadPolicy?.startup?.join(',') === 'menu,menu:language,package-mirrors' &&

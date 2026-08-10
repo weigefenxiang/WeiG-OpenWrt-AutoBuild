@@ -341,6 +341,17 @@ assert(compatibilityAssetCalls() === 1,
 const applicationsDocument = {
   schema: 1,
   groups: ['Network'],
+  probeUi: {
+    schema: 1,
+    languages: ['en', 'zh-CN'],
+    strings: Object.fromEntries([
+      'title', 'intro', 'howTo', 'search', 'selected', 'depth', 'scope', 'targets',
+      'allSources', 'currentSource', 'customScope', 'autoTarget', 'currentTarget', 'allTargets',
+      'packageCompile', 'packageCompileHelp', 'rootfsIntegration', 'rootfsIntegrationHelp',
+      'firmwareIntegration', 'firmwareIntegrationHelp', 'bootSmoke', 'bootSmokeHelp',
+      'preview', 'submit', 'copy', 'copiedLargeRequest', 'permission', 'retention', 'issueTitle', 'issueRequestNotice', 'loading', 'empty', 'invalid',
+    ].map((key, index) => [key, { en: `English ${index}`, 'zh-CN': `中文 ${index}` }])),
+  },
   items: [{ id: 'demo', package: 'luci-app-demo', group: 'Network', titleEn: 'Demo', titleZh: '示例' }],
 };
 const applicationsPayload = compressedDocument(applicationsDocument);
@@ -370,6 +381,21 @@ await applicationsLoader.fetchApplications();
 await applicationsLoader.fetchApplications({ forceRefresh: true });
 assert(applicationsCalls.filter((url) => url.includes('applications.json.gz')).length === 1,
   'applications cache downloaded an unchanged SHA twice');
+const invalidApplicationsDocument = structuredClone(applicationsDocument);
+delete invalidApplicationsDocument.probeUi.strings.title.en;
+const invalidApplicationsPayload = compressedDocument(invalidApplicationsDocument);
+const invalidApplicationsIndex = structuredClone(applicationsIndex);
+invalidApplicationsIndex.assets.applications.hash = invalidApplicationsPayload.hash;
+invalidApplicationsIndex.assets.applications.bytes = invalidApplicationsPayload.bytes.length;
+invalidApplicationsIndex.assets.applications.jsonBytes = new TextEncoder().encode(JSON.stringify(invalidApplicationsDocument)).byteLength;
+const invalidApplicationsLoader = createCatalogLoader({
+  repository: 'owner/catalog', engine: { createCatalogModel }, cacheStorage: fakeCaches(), subtle: null,
+  fetchImpl: async (url) => url.includes('index.json')
+    ? new Response(JSON.stringify(invalidApplicationsIndex), { status: 200 })
+    : new Response(invalidApplicationsPayload.bytes, { status: 200 }),
+});
+await assertRejects(() => invalidApplicationsLoader.fetchApplications(), /applications document/,
+  'applications probe UI without bilingual strings was accepted');
 for (const mutate of [
   (value) => { value.assets.applications.schema = 2; },
   (value) => { value.assets.applications.items = -1; },

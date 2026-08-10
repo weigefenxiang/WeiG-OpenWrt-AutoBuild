@@ -88,13 +88,17 @@ GitHub's native Run-log retention is a repository Setting rather than Workflow Y
 
 ## 8. Package probes
 
-The bottom-right web **检** control opens the existing self-test immediately. Its header shows **Package compatibility probe** before Close and links to Catalog's manual workflow. Every visitor sees the entry and Run page; GitHub permits manual dispatch only for repository users with write access.
+The bottom-right web **检** control opens the existing self-test immediately. Its header shows **Package compatibility probe** before Close; clicking it opens a responsive in-page workspace. Catalog supplies the strings, application mappings, and Source/Branch inventory. A user can search and select up to eight applications, choose depth, scope, and Target coverage, preview or copy the exact request, or open a prefilled GitHub Issue.
 
-The probe accepts one to eight Catalog application or package IDs, Source/Branch globs, `compile` or `co-install`, concurrency, and dry-run. The controller reads `index.json`, `applications.json.gz`, and each matched Branch's `core` shard from the data branch paired with the current code channel. It maps application IDs to real packages and selects a legal Catalog Target/Profile (x86/64 when available, otherwise the first buildable path) before creating one dynamic Matrix. It keeps no Source/Branch or Target version list.
+The schema-1 request accepts one to eight Catalog application or package IDs; all, current, or explicit Source/Branch entries; and automatic, current Target/Profile, or all representative Target coverage. The controller reads and verifies `index.json`, `applications.json.gz`, and each matched Branch's `core` shard from the data branch paired with the code channel. It maps application IDs to real packages before creating the dynamic Matrix and keeps no Source/Branch or Target version list.
 
-`compile` selects packages as `m` and runs each `package/<id>/compile` target. `co-install` selects them as `y` and also runs `package/install`, exposing shared-dependency, ownership, and co-install failures. No firmware image is built, though initial feeds/toolchain preparation still costs time. The Matrix is capped at 256 jobs. Owner value `0` means all planned concurrency; other write collaborators are capped at 3. Normalized evidence retains 60 days and full logs 30 days; evidence is review input and never changes rules automatically.
+The four depths are `package-compile` for the package/dependency closure, `rootfs-integration` for RootFS ownership and co-install failures, `firmware-integration` for baseline versus package-enabled firmware A/B, and experimental `boot-smoke` (Chinese UI: “启动自检”) for generic boot-ready markers on Catalog-approved targets. Automatic coverage can try valid fallback targets sequentially inside one Job. The Matrix is capped at 256 jobs. The owner uses full planned concurrency, other write collaborators are capped at three, and visitors cannot start the Matrix. Normalized evidence retains 60 days and full logs 30 days. Only package-caused failure across every legal environment is fully incompatible; evidence never edits rules automatically.
 
-For a new plugin or rule, first reuse existing Catalog data, audit the same type, execution path, and risk, then run the probe for evidence. AutoBuild `app.js` cannot gain package names or dedicated executors. Shared parameters live in each repository's `.github/automation-policy.json`, with tests preventing YAML/JSON drift.
+A multi-package failure enters bounded generic delta reduction only after every planned target fails at a package stage, and produces only a candidate minimal failing set. Dependency installation, clone, feeds, build, and boot output make up the 30-day complete log. Infrastructure, download, timeout, and baseline-firmware failures cannot become compatibility conclusions.
+
+The browser places only a short Base64URL request in a hidden Issue block. Before creating a Matrix, the Catalog Workflow revalidates permission, schema, asset contracts, package mappings, Source/Branch, and Target/Profile. `workflow_dispatch` is the administrator fallback. Issue-trigger execution uses the Workflow on the default branch, so dev/staging validation uses manual dispatch first and the browser Issue route is tested after promotion to main.
+
+For a new plugin or rule, first reuse existing Catalog data, audit the same type, execution path, and risk, then run the probe for evidence. AutoBuild `app.js` cannot gain package names or dedicated executors. Probe concurrency, coverage, timeouts, and retention live only in Catalog's `.github/automation-policy.json`; AutoBuild keeps only channel mapping, with tests preventing duplicated data and YAML/JSON drift.
 
 ## 9. Test and publish
 
@@ -106,7 +110,7 @@ node tools/serve.mjs
 
 `check-all` runs executable regressions, JSON/directory allowlists, Catalog-only architecture gates, Actions naming/concurrency/cancel checks, and 60-day retention checks. It carries no device or package case list.
 
-Publish Catalog `dev` first, wait for a complete `catalog-dev` publication and root-asset verification, then push AutoBuild `dev`, wait for CI/Pages, and online-test `index.json`, `applications.json.gz`, `compatibility.json.gz`, and actual browser loading. Do not promote staging/main in this task.
+For every channel, publish Catalog first, wait for its data branch and root-asset contracts, then publish AutoBuild, wait for CI/Pages, and online-test `index.json`, `applications.json.gz`, `compatibility.json.gz`, and browser loading. Normal promotion is `dev → staging → main`.
 
 ## 10. Handoff
 

@@ -127,21 +127,21 @@ staging-260810_0857-匿名#161-BUILD-LOGS
 
 ## 7. Package probes / 包级探测
 
-The bottom-right web **检** control opens self-test immediately. The self-test header places **Package compatibility probe** before Close and links to Catalog's manually dispatched workflow. GitHub exposes the Run page publicly, but only repository users with write permission can dispatch it.
+The bottom-right web **检** control opens self-test immediately. The self-test header places **Package compatibility probe** before Close; it opens a responsive in-page workspace whose strings, application mappings, and Source/Branch inventory come from Catalog. Visitors can search and select up to eight applications, choose depth, scope, and Target coverage, preview the exact request, copy it, or open a prefilled GitHub Issue.
 
 The controller reads the code channel's matching data-branch `index.json` and `applications.json.gz`, maps Catalog application IDs to packages, applies Source/Branch globs, and builds one dynamic Matrix. Each Matrix job:
 
 1. shallow/filtered clones one Source/Branch;
 2. installs feeds;
-3. selects one to eight packages on the Branch's Catalog-derived Target/Profile, preferring x86/64 when available;
-4. builds tools/toolchain and each selected `package/<id>/compile` target, not firmware images;
-5. optionally selects packages as `y` and runs `package/install` to expose co-install/file-ownership failures;
+3. selects one to eight packages on a Catalog-derived legal Target/Profile, preferring x86/64 for automatic coverage;
+4. runs one of four generic depths: package compile, RootFS integration, firmware A/B integration, or experimental **Boot smoke / 启动自检**;
+5. tries configured fallback targets sequentially inside an automatic-target Job and records coverage without treating infrastructure failures as package failures;
 6. uploads normalized evidence for 60 days and full logs for 30 days.
 
-The Matrix is capped at 256 jobs. The owner can set `0` to use the complete planned concurrency without a project cap; other write collaborators are capped at 3. Source/Branch rows come only from Catalog index, including future `openwrt-*` entries. Evidence never edits compatibility rules automatically.
+The Issue carries a Base64URL schema-1 request only; Catalog revalidates permissions, assets, package mappings, scope, and targets before a Matrix exists. The Matrix is capped at 256 jobs. The owner can use the complete planned concurrency without a project cap, other write collaborators are capped at 3, and visitors cannot start it. Source/Branch rows come only from Catalog index, including future `openwrt-*` entries. Evidence never edits compatibility rules automatically, and only 100% package-caused failure across all legal environments may become a global incompatibility conclusion.
 
 ## 8. Release identity and promotion / 发布身份与晋级
 
 Every AutoBuild change runs `node tools/dev-assistant.mjs prepare`. It canonicalizes site bytes, writes an Asia/Shanghai `VERSION`, synchronizes `site-version.json`, calculates the full-site SHA-256, and runs generic checks. `verify` is read-only.
 
-Normal promotion remains `dev → staging → main`; Catalog and AutoBuild advance independently but each AutoBuild channel reads its matching Catalog data channel. The current task publishes only `dev` until later user acceptance.
+Normal promotion remains `dev → staging → main`; Catalog and AutoBuild advance independently but each AutoBuild channel reads its matching Catalog data channel. Publish Catalog before the matching AutoBuild channel whenever an asset contract changes.

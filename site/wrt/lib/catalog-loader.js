@@ -274,9 +274,24 @@ function validateCompatibilityDocument(data, expected) {
   return data;
 }
 
+const PROBE_UI_KEYS = [
+  'title', 'intro', 'howTo', 'search', 'selected', 'depth', 'scope', 'targets',
+  'allSources', 'currentSource', 'customScope', 'autoTarget', 'currentTarget', 'allTargets',
+  'packageCompile', 'packageCompileHelp', 'rootfsIntegration', 'rootfsIntegrationHelp',
+  'firmwareIntegration', 'firmwareIntegrationHelp', 'bootSmoke', 'bootSmokeHelp',
+  'preview', 'submit', 'copy', 'copiedLargeRequest', 'permission', 'retention', 'issueTitle', 'issueRequestNotice', 'loading', 'empty', 'invalid',
+];
+
 function validateApplicationsDocument(data, expected) {
   const actualJsonBytes = new TextEncoder().encode(JSON.stringify(data)).byteLength;
+  const probeStrings = data?.probeUi?.strings;
   if (!data || Number(data.schema) !== 1 || !Array.isArray(data.groups) || !Array.isArray(data.items) ||
+      Number(data.probeUi?.schema) !== 1 || !Array.isArray(data.probeUi?.languages) ||
+      !probeStrings || typeof probeStrings !== 'object' || Array.isArray(probeStrings) ||
+      Object.keys(probeStrings).length < 10 || Object.keys(probeStrings).length > 128 ||
+      PROBE_UI_KEYS.some((key) => !Object.hasOwn(probeStrings, key)) ||
+      Object.values(probeStrings).some((row) => !row || typeof row !== 'object' ||
+        typeof row.en !== 'string' || typeof row['zh-CN'] !== 'string') ||
       data.items.length !== expected.items || actualJsonBytes !== expected.jsonBytes ||
       data.items.some((item) => !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$/.test(String(item.id || '')) ||
         !/^luci-app-[A-Za-z0-9_.+@-]+$/.test(String(item.package || '')))) {
