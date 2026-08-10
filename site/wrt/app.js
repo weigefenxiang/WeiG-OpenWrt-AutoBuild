@@ -5976,6 +5976,7 @@ async function mobileIssuePayload(payload) {
 }
 function openModal(title) {
   $('modalTitle').textContent = title;
+  $('modalProbe').hidden = true;
   lastFocus = document.activeElement;
   $('modal').hidden = false;
   document.body.classList.add('modal-open');
@@ -5986,6 +5987,7 @@ function closeModal() {
   const cancel = modalCancelHandler;
   modalCancelHandler = null;
   $('modal').hidden = true;
+  $('modalProbe').hidden = true;
   $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'profile-package-config', 'generation-error', 'catalog-conflict', 'compatibility-warning', 'rootfs-guidance');
   document.body.classList.remove('modal-open');
   if (lastFocus && lastFocus.focus) lastFocus.focus();
@@ -6153,15 +6155,15 @@ async function timedFetch(url, timeout) {
   } finally { clearTimeout(timer); }
 }
 async function runSelfTest() {
-  try {
-    await ensurePackageMirrors();
-    await ensureCompatibilityRules();
-  } catch (error) {
-    if (error?.name === 'CompatibilityCancelledError') return;
-    showGenerationError(error);
-    return;
-  }
   openModal(t('st.title'));
+  const probe = $('modalProbe');
+  probe.href = `https://github.com/${PROJECT.catalogRepository}/actions/workflows/package-probe.yml`;
+  probe.textContent = uiText('插件兼容探针', '外掛相容性探針', 'Package compatibility probe');
+  probe.title = uiText(
+    '按 Catalog Source/Branch 探测软件包编译与同装兼容性',
+    '依 Catalog Source/Branch 探測套件編譯與共裝相容性',
+    'Probe package compilation and co-install compatibility across Catalog Source/Branch entries');
+  probe.hidden = false;
   const mb = $('modalBody');
   mb.textContent = '';
   const intro = document.createElement('p');
@@ -6197,9 +6199,13 @@ async function runSelfTest() {
 
   const d2 = addRow(t('st.data'));
   try {
-    const applications = await ensureCatalogApplications();
+    const [applications, compatibility] = await Promise.all([
+      ensureCatalogApplications(),
+      CATALOG_LOADER.fetchCompatibility(),
+      ensurePackageMirrors(),
+    ]);
     d2(applications.items.length ? 'ok' : 'fail',
-      `${MENU_CATALOG_DATA_REF} · ${applications.items.length} curated applications`);
+      `${MENU_CATALOG_DATA_REF} · ${applications.items.length} curated applications · ${compatibility.compatibility.rules.length} compatibility rules`);
   } catch (error) {
     d2('fail', error.message);
   }

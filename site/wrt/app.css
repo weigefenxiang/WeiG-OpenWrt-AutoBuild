@@ -739,7 +739,14 @@ button.catalog-applications-state{cursor:pointer}
 @keyframes pop { from { transform: scale(.96); opacity: 0; } }
 .modal-head { display: flex; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--card); }
 .modal-head h3 { margin: 0; font-size: 16px; }
-.modal-head .icon-btn { margin-left: auto; border: none; }
+.modal-head-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.modal-head .icon-btn { border: none; }
+.modal-probe-link {
+  padding: 7px 11px; border: 1px solid var(--accent); border-radius: 8px;
+  color: var(--accent); background: var(--accent-bg); text-decoration: none;
+  font-size: var(--menuconfig-body-size); font-weight: 650; line-height: 1.25; white-space: nowrap;
+}
+.modal-probe-link:hover { color: var(--accent-text); background: color-mix(in srgb, var(--accent) 16%, var(--card)); }
 .modal-body { padding: 16px 18px; font-size: 15.5px; }
 .modal-body h4 { margin: 0 0 6px; font-size: var(--menuconfig-title-size); }
 .modal-body p { margin: 6px 0; color: var(--text2); font-size: var(--menuconfig-body-size); line-height: 1.6; }
@@ -831,6 +838,10 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
 .generation-error-hint { margin-top: 13px !important; color: var(--text2); font-size: var(--menuconfig-body-size); line-height: 1.6; }
 .modal.generation-error .modal-actions { justify-content: flex-end; }
 @media (max-width: 560px) {
+  .modal-head { gap: 8px; padding: 10px 12px; }
+  .modal-head h3 { min-width: 0; flex: 1 1 auto; }
+  .modal-head-actions { flex: 0 1 auto; min-width: 0; gap: 5px; }
+  .modal-probe-link { max-width: 150px; padding: 6px 8px; white-space: normal; text-align: center; }
   .modal.generation-error { align-self: flex-end; max-height: 82vh; border-radius: 16px 16px 10px 10px; }
   .generation-error-list { max-height: 44vh; }
 }
@@ -1006,6 +1017,7 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
   .plugin { padding: 10px 12px; }
   .group-head { padding: 10px 12px; }
   .text-btn { padding: 6px 10px; font-size: 12.5px; }
+  .modal-probe-link { max-width: 120px; }
   .target-picker .target-field { flex-basis: 100%; }
   .menuconfig-option:has(input[type=text]),.menuconfig-option:has(input[type=number]){grid-template-columns:1fr}
   .menuconfig-option:has(input) .menuconfig-option-actions{justify-content:stretch}

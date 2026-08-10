@@ -43,6 +43,8 @@
 
 Catalog 发布 `applications.json.gz`，包含分组、中文/英文介绍和可选 `sizeBytes`。页面不得额外映射包名。体积由官方 OPKG `Packages` 与 OpenWrt/ImmortalWrt APK `packages.adb` 样本计算依赖闭包后跨源取保守值；原始单位为 bytes，页面按 B/KiB/MiB/GiB 动态显示三位有效数字。无可靠样本时显示未知，不得伪造 1MB 或机型回退值。
 
+Advanced 的菜单说明由 Catalog 每日翻译任务维护。翻译器按数据分支 `index.json` 精确枚举旧单体和 schema 6 `menu:<lang>` 分片，只稀疏读取这些文件，并同步两类资产；不得扫描或改写 `core/graph/applications/compatibility`。默认上海时间 04:37、每次 5 批。未来 Source/Branch 经 index 自动进入翻译，不在 Workflow 写版本清单。
+
 ## 4. Kconfig 状态与序列化
 
 普通精选入口和 Advanced menuconfig 必须进入同一 Catalog intent：
@@ -86,11 +88,13 @@ GitHub Actions 原生 Run 日志的保留天数属于仓库 Settings，不由 Wo
 
 ## 8. 包级探测
 
-Catalog 的 `Package probe controller` 暂时只保留在开发分支，不注册到默认分支，也不向普通用户开放。未来入口预定为网页右下角“检”：点击后先显示用途、权限、成本和确认提示，再由仓库所有者或其他获准用户触发；实现前必须重新取得用户确认。
+网页右下角“检”立即打开原自检界面；自检标题栏在关闭按钮左侧显示“插件兼容探针”，跳转到 Catalog 的手动 Workflow。入口对所有访客可见，Run 页面公开；GitHub 只允许有仓库写权限的用户手动运行，普通访客不能执行。
 
-探针输入 1–8 个包 ID、Source/Branch glob、`compile` 或 `co-install`、并发数和 dry-run。Controller 从当前 Catalog 数据分支获取所有 Source/Branch，为每个组合派发独立 child Run。
+探针输入 1–8 个 Catalog 应用 ID 或 package ID、Source/Branch glob、`compile` 或 `co-install`、并发数和 dry-run。Controller 从当前代码频道对应的数据分支获取 `index.json`、`applications.json.gz` 与匹配 Branch 的 `core` 分片，用应用 ID 解析真实包，并从 Catalog 选择合法 Target/Profile（有 x86/64 时优先，否则取首个可构建路径），再生成一个动态 Matrix；不得维护 Source/Branch 或 Target 版本表。
 
-`compile` 把包设为 `m` 后运行 `package/compile`；`co-install` 把包设为 `y`，编译后运行 `package/install`，可发现共同依赖、文件 ownership 或同装失败。它不会构建固件镜像，但 toolchain 和 feeds 首次准备仍需时间。
+`compile` 把包设为 `m` 后逐个运行 `package/<id>/compile`；`co-install` 把包设为 `y`，编译后运行 `package/install`，可发现共同依赖、文件 ownership 或同装失败。它不会构建固件镜像，但 toolchain 和 feeds 首次准备仍需时间。Matrix 最多 256 项；仓库所有者 `0` 表示全部计划并发，其他写协作者强制最多 3。规范化证据保留 60 天，完整日志保留 30 天；证据只供审查，不自动修改规则。
+
+新增插件或规则必须先复用 Catalog 现有数据，横向审计同类型、同执行路径和同风险，再运行探针取得证据；AutoBuild `app.js` 不得新增插件名或专用执行器。参数统一记录在两仓 `.github/automation-policy.json`，测试负责阻止 YAML/JSON 漂移。
 
 ## 9. 测试与发布
 

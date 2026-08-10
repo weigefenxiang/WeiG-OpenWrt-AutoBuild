@@ -43,6 +43,8 @@ The manually invoked Catalog refresh tool audits LuCI application IDs across Ope
 
 Catalog publishes `applications.json.gz` with groups, Chinese/English descriptions, and optional `sizeBytes`. The browser must not add package mappings. Official OPKG `Packages` and APK `packages.adb` samples produce dependency-closure observations; Catalog keeps a conservative cross-source value in bytes. The UI formats three significant digits in B/KiB/MiB/GiB and explicitly reports unknown observations.
 
+Catalog's daily translation workflow owns Advanced menu descriptions. It enumerates legacy bundles and schema-6 `menu:<lang>` shards precisely from the data-branch `index.json`, sparse-fetches only those files, and updates both representations. It must not scan or rewrite `core/graph/applications/compatibility`. The default schedule is 04:37 Asia/Shanghai with five batches. Future Source/Branch entries join through the index without a workflow version list.
+
 ## 4. Kconfig state and serialization
 
 Curated and Advanced inputs share one intent path:
@@ -86,11 +88,13 @@ GitHub's native Run-log retention is a repository Setting rather than Workflow Y
 
 ## 8. Package probes
 
-Catalog's manual **Package probe controller** remains development-only for now. It is not registered on the default branch or exposed to ordinary users. Its planned entry is the bottom-right web **检** control: clicking it must first explain purpose, authority, cost, and confirmation before an owner or another authorized user can dispatch anything. Implementation requires fresh user approval.
+The bottom-right web **检** control opens the existing self-test immediately. Its header shows **Package compatibility probe** before Close and links to Catalog's manual workflow. Every visitor sees the entry and Run page; GitHub permits manual dispatch only for repository users with write access.
 
-The probe accepts one to eight IDs, Source/Branch globs, `compile` or `co-install`, concurrency, and dry-run. It reads the current Catalog data-branch index and dispatches one child Run per matched Source/Branch.
+The probe accepts one to eight Catalog application or package IDs, Source/Branch globs, `compile` or `co-install`, concurrency, and dry-run. The controller reads `index.json`, `applications.json.gz`, and each matched Branch's `core` shard from the data branch paired with the current code channel. It maps application IDs to real packages and selects a legal Catalog Target/Profile (x86/64 when available, otherwise the first buildable path) before creating one dynamic Matrix. It keeps no Source/Branch or Target version list.
 
-`compile` selects packages as `m` and runs `package/compile`. `co-install` selects them as `y` and also runs `package/install`, exposing shared-dependency, ownership, and co-install failures. No firmware image is built, though initial feeds/toolchain preparation still costs time.
+`compile` selects packages as `m` and runs each `package/<id>/compile` target. `co-install` selects them as `y` and also runs `package/install`, exposing shared-dependency, ownership, and co-install failures. No firmware image is built, though initial feeds/toolchain preparation still costs time. The Matrix is capped at 256 jobs. Owner value `0` means all planned concurrency; other write collaborators are capped at 3. Normalized evidence retains 60 days and full logs 30 days; evidence is review input and never changes rules automatically.
+
+For a new plugin or rule, first reuse existing Catalog data, audit the same type, execution path, and risk, then run the probe for evidence. AutoBuild `app.js` cannot gain package names or dedicated executors. Shared parameters live in each repository's `.github/automation-policy.json`, with tests preventing YAML/JSON drift.
 
 ## 9. Test and publish
 

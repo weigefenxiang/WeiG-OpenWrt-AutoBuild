@@ -96,6 +96,7 @@ const dataFiles = [
   'site/wrt/data/site-version.json',
   'site/wrt/data/timezones.json',
   'config/policies/package-mirrors.json',
+  '.github/automation-policy.json',
   'tools/i18n-source.json',
   'tools/i18n-translations.json',
 ];
@@ -142,6 +143,7 @@ const engine = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.js'
 const parser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
 const requestAudit = readFileSync(join(ROOT, 'tools', 'request-audit.mjs'), 'utf8');
 const project = parsed.get('site/wrt/data/project.json');
+const automationPolicy = parsed.get('.github/automation-policy.json');
 const architecture = readFileSync(join(ROOT, 'ARCHITECTURE.md'), 'utf8');
 const developerZh = readFileSync(join(ROOT, 'docs', 'DEVELOPER.md'), 'utf8');
 const developerEn = readFileSync(join(ROOT, 'docs', 'DEVELOPER.en.md'), 'utf8');
@@ -205,7 +207,16 @@ const cancelWorkflow = readFileSync(join(workflowDir, 'cancel-build.yml'), 'utf8
 const retention = [...buildWorkflow.matchAll(/^\s*retention-days:\s*(\d+)\s*$/gm)].map((match) => Number(match[1]));
 if (retention.length >= 5 && retention.filter((days) => days === 1).length === 1 &&
     retention.filter((days) => days === 60).length === retention.length - 1 &&
-    !/保留\s*(?:14|30)\s*天|(?:14|30) days/i.test(buildWorkflow)) {
+    !/保留\s*(?:14|30)\s*天|(?:14|30) days/i.test(buildWorkflow) &&
+    automationPolicy?.buildArtifacts?.firmwareDays === 60 &&
+    automationPolicy?.buildArtifacts?.configurationDays === 60 &&
+    automationPolicy?.buildArtifacts?.summaryDays === 60 &&
+    automationPolicy?.buildArtifacts?.buildLogsDays === 60 &&
+    automationPolicy?.buildArtifacts?.internalRawBridgeDays === 1 &&
+    automationPolicy?.catalogProbe?.normalizedEvidenceDays === 60 &&
+    automationPolicy?.catalogProbe?.fullLogDays === 30 &&
+    automationPolicy?.catalogProbe?.collaboratorMaxParallel === 3 &&
+    automationPolicy?.catalogProbe?.maxMatrixJobs === 256) {
   pass('all user build artifacts retain 60 days; the internal raw bridge alone retains 1 day');
 } else fail('Artifact retention contract', retention.join(','));
 

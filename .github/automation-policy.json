@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "buildArtifacts": {
+    "firmwareDays": 60,
+    "configurationDays": 60,
+    "summaryDays": 60,
+    "buildLogsDays": 60,
+    "internalRawBridgeDays": 1
+  },
+  "catalogProbe": {
+    "normalizedEvidenceDays": 60,
+    "fullLogDays": 30,
+    "collaboratorMaxParallel": 3,
+    "maxMatrixJobs": 256
+  }
+}

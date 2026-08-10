@@ -24,6 +24,24 @@ expect(html.includes('if (optional && response.status === 404) return null') &&
 
 expect(!app.includes('syncThemeFromMenu') && app.includes('syncFirmwareThemeFromMenu'),
   'Catalog intent still calls a missing theme coordinator');
+const modalHeader = html.match(/<div class="modal-head">([\s\S]*?)<\/div>\s*<div class="modal-body"/)?.[1] || '';
+expect(modalHeader.includes('id="modalProbe"') && modalHeader.includes('id="modalClose"') &&
+  modalHeader.indexOf('id="modalProbe"') < modalHeader.indexOf('id="modalClose"') &&
+  modalHeader.includes('target="_blank"') && modalHeader.includes('rel="noopener noreferrer"') &&
+  modalHeader.includes('hidden'),
+  'self-test modal probe link is not safely positioned before close');
+const selfTestContract = app.match(/async function runSelfTest\(\) \{([\s\S]*?)\n\}\n\$\('selfTestBtn'/)?.[1] || '';
+expect(selfTestContract.indexOf("openModal(t('st.title'))") >= 0 &&
+  selfTestContract.indexOf("openModal(t('st.title'))") < selfTestContract.indexOf('await Promise.all') &&
+  selfTestContract.includes('PROJECT.catalogRepository') &&
+  selfTestContract.includes('/actions/workflows/package-probe.yml') &&
+  selfTestContract.includes('probe.hidden = false') &&
+  selfTestContract.includes('CATALOG_LOADER.fetchCompatibility()') &&
+  !selfTestContract.includes('ensureCompatibilityRules()'),
+  'self-test does not open immediately or its generic Catalog probe entry is gated by compatibility UI');
+expect(app.includes("$('modalProbe').hidden = true") &&
+  css.includes('.modal-head-actions') && css.includes('.modal-probe-link'),
+  'ordinary modals can retain the probe entry or its responsive header styling is missing');
 expect(app.includes('function curatedPluginIntent(plugin, catalogOption = null)') &&
   app.includes('function curatedPluginChecked(plugin, pluginStatus, catalogOption = null)'),
   'curated checkbox rendering and selection summaries do not share one state contract');

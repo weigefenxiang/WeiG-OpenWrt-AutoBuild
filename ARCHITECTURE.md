@@ -62,16 +62,16 @@ AutoBuild code channels bind to data branches:
 | `staging` | `catalog-staging` |
 | `main` | `catalog-data` |
 
-The browser first loads the current menu and language. `site/wrt/data/project.json` then controls a low-priority queue for applications, hidden options, help, compatibility, and package mirrors. Every asset is checked against its index byte length and SHA-256 contract. A matching immutable cache entry is reused; submit and self-check still force the required assets to finish before continuing.
+The browser loads the current menu, language shard, and package-mirror projection together with bounded startup concurrency. `site/wrt/data/project.json` then controls a low-priority queue for applications, hidden options, help, and compatibility. Every asset is checked against its index byte length and SHA-256 contract. A matching immutable cache entry is reused; submit and self-check still await the assets they actually validate.
 
 Catalog 自动发现由 Catalog 配置决定。当前策略覆盖：
 
 - OpenWrt：`main` 与 `openwrt-*`；
 - ImmortalWrt：`master` 与 `openwrt-*`；
-- LEDE：`master`；
+- LEDE：`master` 与 `openwrt-*`；
 - 其他登记源：按各自配置。
 
-未来 `openwrt-26.xx` 由 Catalog 每周发现和发布，AutoBuild 无需每周提交源码。
+未来 `openwrt-26.xx`、`27.xx` 及后续分支由 Catalog 自动发现和发布，AutoBuild 无需每周提交源码。Catalog 的每日翻译也从 `index.json` 枚举 Branch 与 schema 6 语言分片，因此新分支不要求修改翻译代码。
 
 ## 4. Selection and serialization / 选择与序列化
 
@@ -127,16 +127,18 @@ staging-260810_0857-匿名#161-BUILD-LOGS
 
 ## 7. Package probes / 包级探测
 
-Catalog's manual controller remains development-only until its bottom-right web **检** prompt, authorization, and cost disclosure are approved. Its engine reads the active data-branch index, applies Source/Branch globs, and dispatches one child Run per matched pair with bounded concurrency. Each child:
+The bottom-right web **检** control opens self-test immediately. The self-test header places **Package compatibility probe** before Close and links to Catalog's manually dispatched workflow. GitHub exposes the Run page publicly, but only repository users with write permission can dispatch it.
+
+The controller reads the code channel's matching data-branch `index.json` and `applications.json.gz`, maps Catalog application IDs to packages, applies Source/Branch globs, and builds one dynamic Matrix. Each Matrix job:
 
 1. shallow/filtered clones one Source/Branch;
 2. installs feeds;
-3. selects one to eight packages on x86;
-4. builds tools/toolchain and `package/compile`, not firmware images;
+3. selects one to eight packages on the Branch's Catalog-derived Target/Profile, preferring x86/64 when available;
+4. builds tools/toolchain and each selected `package/<id>/compile` target, not firmware images;
 5. optionally selects packages as `y` and runs `package/install` to expose co-install/file-ownership failures;
-6. uploads normalized evidence and full logs for 60 days.
+6. uploads normalized evidence for 60 days and full logs for 30 days.
 
-The owner can request 1–20 parallel child Runs; other collaborators are capped at 3. Workflow dispatch itself already requires repository write access.
+The Matrix is capped at 256 jobs. The owner can set `0` to use the complete planned concurrency without a project cap; other write collaborators are capped at 3. Source/Branch rows come only from Catalog index, including future `openwrt-*` entries. Evidence never edits compatibility rules automatically.
 
 ## 8. Release identity and promotion / 发布身份与晋级
 
