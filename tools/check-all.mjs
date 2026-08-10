@@ -88,7 +88,6 @@ for (const name of regressionTests) run(name, process.execPath, [join(ROOT, 'too
 
 console.log('[2/4] Canonical local data / 本地权威数据');
 const dataFiles = [
-  'site/wrt/data/build-meta.json',
   'site/wrt/data/i18n.json',
   'site/wrt/data/package-mirrors.json',
   'site/wrt/data/project.json',
@@ -103,9 +102,16 @@ const expectedDataFiles = new Set(dataFiles.filter((name) => name.startsWith('si
   .map((name) => name.slice('site/wrt/data/'.length)));
 const actualDataFiles = filesUnder(join(ROOT, 'site', 'wrt', 'data'))
   .map((path) => relative(join(ROOT, 'site', 'wrt', 'data'), path).replaceAll('\\', '/'));
-const unexpectedData = actualDataFiles.filter((name) => !expectedDataFiles.has(name));
-if (!unexpectedData.length && actualDataFiles.length === expectedDataFiles.size) pass('public data contains only runtime identity, i18n, timezone, mirror and project files');
-else fail('public data allowlist', `unexpected=${unexpectedData.join(',') || '(none)'}`);
+const generatedDataFiles = new Set(['build-meta.json']);
+const unexpectedData = actualDataFiles.filter((name) =>
+  !expectedDataFiles.has(name) && !generatedDataFiles.has(name));
+const missingData = [...expectedDataFiles].filter((name) => !actualDataFiles.includes(name));
+if (!unexpectedData.length && !missingData.length) {
+  pass('public data contains canonical runtime data plus optional generated deployment identity');
+} else {
+  fail('public data allowlist',
+    `unexpected=${unexpectedData.join(',') || '(none)'} missing=${missingData.join(',') || '(none)'}`);
+}
 
 const configEntries = filesUnder(join(ROOT, 'config')).map((path) => relative(ROOT, path).replaceAll('\\', '/'));
 if (configEntries.length === 1 && configEntries[0] === 'config/policies/package-mirrors.json') {
