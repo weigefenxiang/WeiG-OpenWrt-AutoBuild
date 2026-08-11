@@ -941,14 +941,18 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
 .probe-guide summary::-webkit-details-marker { display: none; }
 .probe-guide summary:hover, .probe-guide summary:focus-visible, .probe-guide[open] summary { background: var(--accent-bg); outline: none; }
 .probe-guide-copy { position: absolute; top: calc(100% + 7px); right: 0; z-index: 7; display: grid; width: min(580px, calc(100vw - 52px)); gap: 7px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border)); border-radius: 9px; background: var(--card2); box-shadow: var(--shadow); color: var(--text); font-size: var(--menuconfig-body-size); line-height: 1.5; }
-.probe-layout { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto auto; min-height: 0; flex: 1; gap: 8px; align-items: stretch; }
+.probe-layout { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto; min-height: 0; flex: 1; gap: 8px; align-items: stretch; }
 .probe-panel { min-width: 0; padding: 9px 10px; border: 1px solid var(--border); border-radius: 11px; background: var(--card2); }
 .probe-picker { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; }
 .probe-search { width: 100%; min-height: 40px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); color: var(--text); font: inherit; font-size: var(--menuconfig-title-size); outline: none; }
 .probe-search:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
-.probe-selected { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 34px; padding: 5px 0; color: var(--text2); font-size: var(--menuconfig-body-size); }
-.probe-selected > strong { margin-right: 3px; }
-.probe-chip { max-width: 100%; padding: 5px 8px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); border-radius: 999px; background: var(--accent-bg); color: var(--accent-text); font: inherit; font-size: var(--menuconfig-body-size); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.probe-selected { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; min-height: 34px; max-height: 34px; padding: 4px 0; overflow: hidden; color: var(--text2); font-size: var(--menuconfig-body-size); white-space: nowrap; }
+.probe-selected[hidden] { display: none; }
+.probe-selected > strong { flex: none; margin-right: 3px; }
+.probe-selected-chips { display: flex; min-width: 0; flex: 1; gap: 6px; overflow: hidden; }
+.probe-chip { min-width: 0; max-width: min(180px, 28vw); flex: 0 1 auto; padding: 5px 8px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); border-radius: 999px; background: var(--accent-bg); color: var(--accent-text); font: inherit; font-size: var(--menuconfig-body-size); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.probe-selected-more { flex: none; padding: 4px 6px; border: 0; background: transparent; color: var(--text2); font: inherit; cursor: pointer; }
+.probe-selected-more:hover, .probe-selected-more:focus-visible { color: var(--accent-text); outline: none; }
 .probe-results { display: grid; min-height: 0; gap: 5px; overflow: auto; overscroll-behavior: contain; padding-right: 2px; }
 .probe-package { display: grid; grid-template-columns: 30px minmax(190px, .9fr) minmax(140px, .7fr) minmax(260px, 1.5fr); align-items: center; gap: 10px; width: 100%; min-height: 42px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .probe-package:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
@@ -1002,7 +1006,17 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
 .probe-preview { min-height: 94px; max-height: 190px; overflow: auto; margin: 0; padding: 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); color: var(--text2); font: 500 12.5px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .probe-preview[hidden] { display: none; }
 .probe-actions { align-items: center; justify-content: flex-end; margin: 0; }
-.modal-body .probe-policy { margin: 0 !important; padding-top: 0; line-height: 1.4; }
+.probe-actions-spacer { flex: 1; }
+.probe-overlay { position: absolute; inset: 0; z-index: 12; display: grid; place-items: center; padding: 14px; background: color-mix(in srgb, #000 42%, transparent); border-radius: 11px; }
+.probe-overlay[hidden] { display: none; }
+.probe-overlay-card { display: grid; grid-template-rows: auto minmax(0, 1fr); width: min(640px, 100%); max-height: min(72vh, 560px); overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--card2); box-shadow: var(--shadow); }
+.probe-overlay-head { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.probe-overlay-head > strong { flex: 1; }
+.probe-overlay-close { width: 30px; height: 30px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--text2); font: 700 22px/1 sans-serif; cursor: pointer; }
+.probe-overlay-close:hover, .probe-overlay-close:focus-visible { background: var(--card); color: var(--text); outline: none; }
+.probe-overlay-body { min-height: 0; overflow: auto; padding: 10px 12px; }
+.modal-body .probe-overlay-body > p { margin: 0 0 9px !important; line-height: 1.55; overflow-wrap: anywhere; }
+.modal-body .probe-overlay-body > p:last-child { margin-bottom: 0 !important; }
 @media (max-width: 900px) {
   .probe-package { grid-template-columns: 30px minmax(0, 1fr) minmax(180px, .8fr); }
   .probe-package-usage { grid-column: 2 / 4; }
@@ -1023,7 +1037,7 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
   .probe-depth-title { font-size: 0; }
   .probe-depth-title::after { content: attr(data-short); font-size: 13px; }
   .probe-level { padding: 2px 3px; font-size: 10.5px; }
-  .probe-selected { min-height: 48px; max-height: 92px; align-content: flex-start; overflow-y: auto; }
+  .probe-chip { max-width: min(150px, 42vw); }
   .probe-package { grid-template-columns: 30px minmax(0, 1fr) 26px; min-height: 38px; padding: 5px 7px; gap: 7px; }
   .probe-package-title, .probe-package-usage { display: none; }
   .probe-package-info { display: grid; }

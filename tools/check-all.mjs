@@ -194,9 +194,13 @@ if (html.includes('id="modalProbe"') && html.includes('<button type="button" cla
     app.includes('probeUiText') && app.includes("'boot-smoke'") && app.includes('const depthOptions = [') &&
     app.includes('function rankMenuSearchOptions(options, query)') &&
     app.includes('function searchMenuOptionsSync(query)') &&
-    app.includes('function resolvePackageSelectionOption(option)') &&
-    app.includes('const intentOption = resolvePackageSelectionOption(option)') &&
-    app.includes('applyMenuValue(intentOption, value, false)') &&
+    !app.includes('function resolvePackageSelectionOption(option)') &&
+    !app.includes('resolvePackageSelectionOption(option)') &&
+    app.includes('applyMenuValue(option, value, false)') &&
+    app.includes('function probePackageBaselineState(option)') &&
+    app.includes('function changedProbePackageOptions()') &&
+    app.includes("helpButton.textContent = probeUiText('help')") &&
+    !app.includes("policy.className = 'probe-policy'") &&
     !app.includes('const selected = new Map()') && !app.includes('probeBaseState') &&
     !app.includes('probeActiveSymbols') && app.includes('setMenuValue(option, nextValue)') &&
     app.includes('const selectable = choice.isPackage') &&

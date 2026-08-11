@@ -1375,13 +1375,6 @@ function menuSearchRank(option, query) {
 function rankMenuSearchOptions(options, query) {
   return [...options].sort((left, right) => menuSearchRank(left, query) - menuSearchRank(right, query));
 }
-function resolvePackageSelectionOption(option) {
-  const symbol = String(option?.symbol || '');
-  if (!symbol.startsWith('PACKAGE_')) return option;
-  const packageName = symbol.slice('PACKAGE_'.length);
-  if (!packageName || packageName.startsWith('luci-app-')) return option;
-  return menuOptionBySymbol.get(`PACKAGE_luci-app-${packageName}`) || option;
-}
 function searchMenuOptionsSync(query) {
   const normalized = normalizeMenuSearchQuery(query);
   if (normalized.length < 2) return [];
@@ -3213,13 +3206,12 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
 }
 
 function setMenuValue(option, value, openChildren = false) {
-  const intentOption = resolvePackageSelectionOption(option);
   try {
-    applyMenuValue(intentOption, value, false);
+    applyMenuValue(option, value, false);
   } catch (error) {
     const violations = Array.isArray(error?.violations) ? error.violations : [];
     if (violations.some((item) => item.code === 'package-conflict' || item.code === 'choice-conflict') &&
-        openCatalogConflictModal(intentOption, value, violations, false)) return false;
+        openCatalogConflictModal(option, value, violations, false)) return false;
     const first = String(error?.message || error).split(';')[0];
     showToast(first.length > 240 ? `${first.slice(0, 237)}…` : first);
     return false;
@@ -6252,6 +6244,7 @@ const PROBE_UI_TEXT = Object.freeze({
   bootSmoke: ['启动自检', '啟動自檢', 'Boot smoke'],
   bootSmokeShort: ['启动', '啟動', 'Boot'],
   bootSmokeHelp: ['对 Catalog 认可的可启动目标执行实验性通用启动验证，不包含插件专属运行检查。', '對 Catalog 認可的可啟動目標執行實驗性通用啟動驗證，不包含套件專屬執行檢查。', 'Experimental generic boot validation for Catalog-approved bootable targets; no package-specific runtime checks.'],
+  help: ['说明', '說明', 'Info'],
   preview: ['预览计划', '預覽計畫', 'Preview plan'],
   submit: ['提交探针', '提交探針', 'Submit probe'],
   submittedState: ['当前 Advanced menuconfig 软件包状态已带入 GitHub Issue。', '目前 Advanced menuconfig 套件狀態已帶入 GitHub Issue。', 'The current Advanced menuconfig package state was carried into the GitHub Issue.'],
@@ -6320,9 +6313,24 @@ function probeMenuOptionState(option) {
   return option.type === 'bool' || option.type === 'tristate'
     ? CATALOG_ENGINE.normalizeKconfigStateValue(option, raw) : raw;
 }
-function activeProbePackageOptions() {
-  return menuSearchOptions.filter((option) => String(option?.symbol || '').startsWith('PACKAGE_') &&
-    probeMenuOptionState(option) !== 'n');
+function probePackageBaselineState(option) {
+  if (!option) return 'n';
+  let raw;
+  if (catalogBaselineValues.has(option.symbol)) raw = catalogBaselineValues.get(option.symbol);
+  else {
+    const changedAfterBaseline = menuTouched.has(option.symbol) || catalogUserOverrides.has(option.symbol) ||
+      catalogDependencySymbols.has(option.symbol) || catalogImportedSymbols.has(option.symbol);
+    raw = changedAfterBaseline ? 'n' : probeMenuOptionState(option);
+  }
+  return option.type === 'bool' || option.type === 'tristate'
+    ? CATALOG_ENGINE.normalizeKconfigStateValue(option, raw) : raw;
+}
+function changedProbePackageOptions() {
+  return menuSearchOptions
+    .filter((option) => String(option?.symbol || '').startsWith('PACKAGE_') &&
+      probeMenuOptionState(option) !== probePackageBaselineState(option))
+    .sort((left, right) => Number(catalogUserOverrides.has(right.symbol)) -
+      Number(catalogUserOverrides.has(left.symbol)));
 }
 function probePackageConfigFromText(text) {
   const rows = new Map();
@@ -6396,6 +6404,26 @@ async function openPackageProbeModal() {
     const results = document.createElement('div'); results.className = 'probe-results';
     picker.append(search, selectedBox, results);
 
+    const overlay = document.createElement('div'); overlay.className = 'probe-overlay'; overlay.hidden = true;
+    const overlayCard = document.createElement('section'); overlayCard.className = 'probe-overlay-card';
+    const overlayHead = document.createElement('div'); overlayHead.className = 'probe-overlay-head';
+    const overlayTitle = document.createElement('strong');
+    const overlayClose = document.createElement('button'); overlayClose.type = 'button'; overlayClose.className = 'probe-overlay-close'; overlayClose.textContent = '×';
+    const overlayBody = document.createElement('div'); overlayBody.className = 'probe-overlay-body';
+    overlayHead.append(overlayTitle, overlayClose); overlayCard.append(overlayHead, overlayBody); overlay.appendChild(overlayCard);
+    layout.appendChild(overlay);
+    const closeProbeOverlay = () => { overlay.hidden = true; overlayBody.textContent = ''; };
+    const showProbeOverlay = (title, lines) => {
+      overlayTitle.textContent = title;
+      overlayBody.textContent = '';
+      for (const line of lines) {
+        const paragraph = document.createElement('p'); paragraph.textContent = line; overlayBody.appendChild(paragraph);
+      }
+      overlay.hidden = false; overlayClose.focus();
+    };
+    overlayClose.addEventListener('click', closeProbeOverlay);
+    overlay.addEventListener('click', (event) => { if (event.target === overlay) closeProbeOverlay(); });
+
     const probeTextIsTruncated = (element) => element.scrollWidth > element.clientWidth + 1;
     const bindProbeTextTooltip = (element, text) => {
       if (!text) return;
@@ -6407,11 +6435,14 @@ async function openPackageProbeModal() {
 
     const renderSelected = () => {
       selectedBox.textContent = '';
-      const active = activeProbePackageOptions();
+      const changed = changedProbePackageOptions();
+      selectedBox.hidden = changed.length === 0;
+      if (!changed.length) return;
       const label = document.createElement('strong');
-      label.textContent = `${probeUiText('selected')} ${active.length}`;
-      selectedBox.appendChild(label);
-      for (const option of active.slice(0, 16)) {
+      label.textContent = `${probeUiText('selected')} ${changed.length}`;
+      const chips = document.createElement('div'); chips.className = 'probe-selected-chips';
+      const visibleLimit = 3;
+      for (const option of changed.slice(0, visibleLimit)) {
         const chip = document.createElement('button');
         chip.type = 'button'; chip.className = 'probe-chip';
         const packageName = option.symbol.slice('PACKAGE_'.length);
@@ -6419,16 +6450,25 @@ async function openPackageProbeModal() {
         chip.textContent = `${packageName}=${String(value).toUpperCase()} ×`;
         chip.title = `CONFIG_${option.symbol}`;
         chip.addEventListener('click', () => {
-          if (setMenuValue(option, 'n')) {
+          const baselineValue = probePackageBaselineState(option);
+          if (setMenuValue(option, baselineValue)) {
             renderSelected(); renderResults(); void renderPreview();
           }
         });
-        selectedBox.appendChild(chip);
+        chips.appendChild(chip);
       }
-      if (active.length > 16) {
-        const more = document.createElement('span');
-        more.className = 'probe-selected-more';
-        more.textContent = `+${active.length - 16}`;
+      selectedBox.append(label, chips);
+      if (changed.length > visibleLimit) {
+        const more = document.createElement('button');
+        more.type = 'button'; more.className = 'probe-selected-more';
+        more.textContent = `+${changed.length - visibleLimit}`;
+        more.addEventListener('click', () => showProbeOverlay(
+          `${probeUiText('selected')} ${changed.length}`,
+          changed.map((option) => {
+            const packageName = option.symbol.slice('PACKAGE_'.length);
+            return `${packageName}: ${String(probePackageBaselineState(option)).toUpperCase()} → ${String(probeMenuOptionState(option)).toUpperCase()}`;
+          }),
+        ));
         selectedBox.appendChild(more);
       }
     };
@@ -6577,17 +6617,20 @@ async function openPackageProbeModal() {
       for (const label of branchList.querySelectorAll('label')) label.hidden = !!query && !label.dataset.search.includes(query);
     });
     layout.addEventListener('click', (event) => { if (!event.target.closest('.probe-info')) closeDepthHelp(); });
-    layout.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeDepthHelp(); });
+    layout.addEventListener('keydown', (event) => { if (event.key === 'Escape') { closeDepthHelp(); closeProbeOverlay(); } });
 
     const preview = document.createElement('pre'); preview.className = 'probe-preview'; preview.hidden = true; layout.appendChild(preview);
-    const policy = document.createElement('p'); policy.className = 'probe-policy';
-    policy.textContent = `${probeUiText('stateInstruction')} ${probeUiText('cancelInstruction')} ${probeUiText('permission')} ${probeUiText('retention')}`;
-    layout.appendChild(policy);
     const actions = document.createElement('div'); actions.className = 'modal-actions probe-actions';
+    const helpButton = document.createElement('button'); helpButton.type = 'button'; helpButton.className = 'btn probe-help-button'; helpButton.textContent = probeUiText('help');
+    helpButton.addEventListener('click', () => showProbeOverlay(probeUiText('help'), [
+      probeUiText('stateInstruction'), probeUiText('howTo'), probeUiText('cancelInstruction'),
+      probeUiText('permission'), probeUiText('retention'),
+    ]));
+    const actionsSpacer = document.createElement('span'); actionsSpacer.className = 'probe-actions-spacer'; actionsSpacer.setAttribute('aria-hidden', 'true');
     const previewButton = document.createElement('button'); previewButton.type = 'button'; previewButton.className = 'btn'; previewButton.textContent = probeUiText('preview');
     previewButton.setAttribute('aria-expanded', 'false');
     const submitButton = document.createElement('button'); submitButton.type = 'button'; submitButton.className = 'btn btn-primary'; submitButton.textContent = probeUiText('submit');
-    actions.append(previewButton, submitButton); layout.appendChild(actions);
+    actions.append(helpButton, actionsSpacer, previewButton, submitButton); layout.appendChild(actions);
 
     const requestValue = async () => {
       const scopeMode = scopeSelect.value || 'all';

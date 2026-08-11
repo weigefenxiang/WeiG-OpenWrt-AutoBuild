@@ -45,10 +45,13 @@ expect(!probeContract.includes('ensureCatalogApplications()') && probeContract.i
 expect(probeContract.includes('const depthOptions = [') && probeContract.includes('`L${index + 1}`') &&
   probeContract.includes("'packageCompileShort'") && probeContract.includes('title.dataset.short = probeUiText(shortKey)') &&
   probeContract.includes("popup.setAttribute('role', 'tooltip')") &&
-  probeContract.includes("if (event.key === 'Escape') closeDepthHelp()") &&
+  probeContract.includes("if (event.key === 'Escape') { closeDepthHelp(); closeProbeOverlay(); }") &&
   probeContract.includes('branchSearch.addEventListener') && probeContract.includes('customScope.hidden') &&
   probeContract.includes("customScope = document.createElement('details')") && probeContract.includes('updateCustomScopeSummary') &&
   probeContract.includes('preview.hidden = true') && probeContract.includes("previewButton.setAttribute('aria-expanded'") &&
+  probeContract.includes("helpButton.textContent = probeUiText('help')") &&
+  probeContract.includes('actions.append(helpButton, actionsSpacer, previewButton, submitButton)') &&
+  !probeContract.includes("policy.className = 'probe-policy'") &&
   probeContract.indexOf('layout.append(settings, picker)') < probeContract.indexOf('layout.appendChild(actions)'),
   'probe depth help, searchable custom scope, collapsed preview, or bottom action order regressed');
 const probeChoices = app.match(/function probePackageChoices\(query = ''\) \{([\s\S]*?)\n\}\nfunction probeCurrentTarget/)?.[0] || '';
@@ -88,34 +91,16 @@ for (const query of ['oscam', 'luci-app-oscam', 'PACKAGE_luci-app-oscam', 'CONFI
 expect(JSON.stringify(sharedSearch.rankMenuSearchOptions(oscamSearchRows, 'oscam').map((row) => row.symbol)) ===
   JSON.stringify(expectedOscamOrder),
   'shared Advanced/Probe search ranking is not luci-app -> exact package -> other package -> Kconfig');
-const resolvePackageSelectionContract = app.match(/function resolvePackageSelectionOption\(option\) \{[\s\S]*?\n\}/)?.[0] || '';
-expect(resolvePackageSelectionContract.includes("symbol.startsWith('PACKAGE_')") &&
-  resolvePackageSelectionContract.includes("packageName.startsWith('luci-app-')") &&
-  resolvePackageSelectionContract.includes('`PACKAGE_luci-app-${packageName}`'),
-  'shared package selection relation is missing or no longer generic');
-const relationFixtures = new Map([
-  ['PACKAGE_luci-app-oscam', { symbol: 'PACKAGE_luci-app-oscam' }],
-  ['PACKAGE_luci-app-aria2', { symbol: 'PACKAGE_luci-app-aria2' }],
-]);
-const resolvePackageSelectionOption = Function('menuOptionBySymbol', `${resolvePackageSelectionContract}; return resolvePackageSelectionOption;`)(relationFixtures);
-for (const [source, expected] of [
-  ['PACKAGE_oscam', 'PACKAGE_luci-app-oscam'],
-  ['PACKAGE_aria2', 'PACKAGE_luci-app-aria2'],
-  ['PACKAGE_luci-app-oscam', 'PACKAGE_luci-app-oscam'],
-  ['PACKAGE_busybox', 'PACKAGE_busybox'],
-  ['OSCAM_WITH_SSL', 'OSCAM_WITH_SSL'],
-]) {
-  const option = { symbol: source };
-  expect(resolvePackageSelectionOption(option).symbol === expected,
-    `shared package selection relation failed: ${source} -> ${expected}`);
-}
+expect(!app.includes('function resolvePackageSelectionOption(') &&
+  !app.includes('resolvePackageSelectionOption(option)'),
+  'package selection must not reverse-map a dependency to a luci-app package');
 const setMenuValueContract = app.match(/function setMenuValue\(option, value, openChildren = false\) \{[\s\S]*?\n\}/)?.[0] || '';
-expect(setMenuValueContract.includes('const intentOption = resolvePackageSelectionOption(option)') &&
-  setMenuValueContract.includes('applyMenuValue(intentOption, value, false)') &&
-  setMenuValueContract.includes('openCatalogConflictModal(intentOption, value, violations, false)') &&
+expect(setMenuValueContract.includes('applyMenuValue(option, value, false)') &&
+  setMenuValueContract.includes('openCatalogConflictModal(option, value, violations, false)') &&
+  !setMenuValueContract.includes('resolvePackageSelectionOption') &&
   setMenuValueContract.includes('const renderedValue = menuValues.get(option.symbol)') &&
   setMenuValueContract.includes("renderCatalogUiAfterIntent(openChildren && renderedValue !== 'n', option, renderedValue)"),
-  'Advanced menuconfig no longer resolves package selections through the shared canonical relation');
+  'Advanced menuconfig must apply the clicked Kconfig symbol directly and keep dependency direction native');
 const probeChoiceContract = app.match(/function probeChoiceFromMenuOption\(option\) \{[\s\S]*?\n\}/)?.[0] || '';
 expect(probeChoiceContract.includes("const symbol = String(option?.symbol || '')") &&
   probeChoiceContract.includes("symbol.startsWith('PACKAGE_') ? symbol.slice('PACKAGE_'.length) : ''") &&
@@ -141,14 +126,17 @@ expect(probeContract.includes('const selectable = choice.isPackage && choice.use
 expect(!probeContract.includes('const selected = new Map()') &&
   !probeContract.includes('probeBaseState') && !probeContract.includes('probeActiveSymbols') &&
   probeContract.includes('setMenuValue(option, nextValue)') &&
-  probeContract.includes('activeProbePackageOptions()') &&
+  probeContract.includes('changedProbePackageOptions()') &&
   probeContract.includes('generateResolvedConfigText()'),
   'Probe maintains private package state instead of sharing Advanced menuconfig state');
-expect(probeContract.includes('probeMenuOptionState(option)') &&
-  probeContract.includes("setMenuValue(option, 'n')") &&
+expect(app.includes('function probePackageBaselineState(option)') &&
+  app.includes('function changedProbePackageOptions()') &&
+  probeContract.includes('const changed = changedProbePackageOptions()') &&
+  probeContract.includes('selectedBox.hidden = changed.length === 0') &&
+  probeContract.includes('const baselineValue = probePackageBaselineState(option)') &&
   probeContract.includes("chip.textContent = `${packageName}=${String(value).toUpperCase()} ×`") &&
-  !probeContract.includes('selected.set('),
-  'Probe selected summary is not derived from the shared Kconfig state');
+  !probeContract.includes('activeProbePackageOptions()') && !probeContract.includes('selected.set('),
+  'Probe selected summary must hide baseline defaults and show only shared Kconfig changes');
 expect(probeContract.includes("guide.className = 'probe-guide'") &&
   probeContract.includes("code.className = 'probe-package-id'") &&
   probeContract.includes("title.className = 'probe-package-title'") &&
@@ -168,7 +156,12 @@ expect(css.includes('.probe-depth { grid-template-columns: repeat(4, minmax(0, 1
   css.includes('.probe-package-info { display: none;') && css.includes('.probe-package-info { display: grid;') &&
   css.includes('.probe-depth { grid-template-columns: repeat(2, minmax(0, 1fr));') &&
   css.includes('.probe-depth-title::after { content: attr(data-short);') &&
-  css.includes('.probe-selected { min-height: 48px; max-height: 92px;') &&
+  css.includes('.probe-selected { display: flex; flex-wrap: nowrap;') &&
+  css.includes('max-height: 34px; padding: 4px 0; overflow: hidden;') &&
+  css.includes('.probe-selected-chips { display: flex; min-width: 0; flex: 1;') &&
+  css.includes('.probe-overlay { position: absolute; inset: 0;') &&
+  css.includes('.probe-actions-spacer { flex: 1; }') &&
+  !css.includes('.probe-selected { min-height: 48px; max-height: 92px;') &&
   css.includes('.probe-package-title, .probe-package-usage { display: none; }') &&
   css.includes('.probe-preview[hidden] { display: none; }') &&
   css.includes('.probe-custom-scope-summary { display: flex;') && css.includes('.probe-custom-scope-body { display: grid;') &&
