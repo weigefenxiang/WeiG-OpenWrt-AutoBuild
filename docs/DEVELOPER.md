@@ -112,7 +112,7 @@ node tools/serve.mjs
 
 `check-all` 运行独立回归、JSON/目录 allowlist、Catalog-only 静态门禁、Actions 命名/并发/取消和 60 天保留期检查。它不维护具体机型或插件清单。
 
-发布顺序：同一频道总是先推 Catalog，等待数据分支发布并验证 root asset 契约，再推 AutoBuild，等待 CI/Pages，最后在线验证 `index.json`、`applications.json.gz`、`compatibility.json.gz` 与网页实际加载。正常晋级为 `dev → staging → main`。
+发布顺序：同一频道总是先推 Catalog，等待数据分支发布并验证 root asset 契约，再推 AutoBuild，等待 CI/Pages，最后在线验证 `index.json`、`applications.json.gz`、`compatibility.json.gz` 与网页实际加载。正常代码晋级为 `dev → staging → main`。Catalog 的代码生命周期与正式数据生命周期必须分离：Catalog `main` 只生成 `catalog-candidate`，只有 Catalog 的手动 Production Gate 可以把已验证候选精确晋级到 `catalog-data`；AutoBuild 的运行时映射仍保持 `main → catalog-data`，不得读取 `catalog-candidate`。因此 Catalog 代码进入 `main` 不等于正式用户数据已发布。
 
 ## 10. 交接
 

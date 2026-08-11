@@ -3,11 +3,21 @@ import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { createCatalogModel } from '../site/wrt/lib/catalog-engine.js';
 import {
-  createCatalogLoader, formatCatalogDiagnostics, legacyCatalogContract, sha256Hex,
+  createCatalogLoader, formatCatalogDiagnostics, legacyCatalogContract, sha256Hex, validateCatalogProvenance,
 } from '../site/wrt/lib/catalog-loader.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function assertThrows(run, pattern, message = 'expected operation to throw') {
+  try {
+    run();
+  } catch (error) {
+    if (pattern.test(String(error?.message || error))) return;
+    throw new Error(`${message}: unexpected error: ${error?.message || error}`);
+  }
+  throw new Error(message);
 }
 
 async function assertRejects(run, pattern, message) {
@@ -86,6 +96,25 @@ assert(legacyCatalogContract({
   schema: 5, asset: 'old.json.gz', hash: 'c'.repeat(64), bytes: 42,
 })?.relationsSchema === 2, 'legacy-only schema-5 index compatibility was lost');
 
+const provenanceSha = 'f'.repeat(40);
+const provenanceBase = {
+  provenance: { repository: 'owner/catalog', codeRef: 'dev', codeSha: provenanceSha, complete: true },
+};
+assert(validateCatalogProvenance(provenanceBase, 'catalog-dev', 'owner/catalog')?.codeRef === 'dev',
+  'catalog-dev provenance did not validate');
+assert(validateCatalogProvenance({}, 'catalog-dev', 'owner/catalog') === null,
+  'legacy index without provenance lost backward compatibility');
+assert(validateCatalogProvenance({ provenance: { ...provenanceBase.provenance, codeRef: 'fix/demo' } },
+  'catalog-fix', 'owner/catalog')?.codeRef === 'fix/demo', 'catalog-fix provenance did not validate');
+assertThrows(() => validateCatalogProvenance({ provenance: { ...provenanceBase.provenance, codeRef: 'main' } },
+  'catalog-dev', 'owner/catalog'), /does not match catalog-dev/);
+assertThrows(() => validateCatalogProvenance({ provenance: { ...provenanceBase.provenance, repository: 'other/catalog' } },
+  'catalog-dev', 'owner/catalog'), /repository mismatch/);
+assertThrows(() => validateCatalogProvenance({ provenance: { ...provenanceBase.provenance, codeRef: 'main', complete: false } },
+  'catalog-data', 'owner/catalog'), /must be complete/);
+assertThrows(() => validateCatalogProvenance({ provenance: { ...provenanceBase.provenance, codeSha: 'short' } },
+  'catalog-dev', 'owner/catalog'), /full codeSha/);
+
 const abc = new TextEncoder().encode('abc').buffer;
 assert(await sha256Hex(abc, null) ===
   'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
@@ -95,6 +124,7 @@ const commit = '2'.repeat(40);
 const asset = 'immortalwrt--openwrt-25.12.json.gz';
 const valid = compressedDocument(catalog(commit));
 const index = indexFor(asset, valid, commit);
+index.provenance = { repository: 'owner/catalog', codeRef: 'main', codeSha: provenanceSha, complete: true };
 const wrong = Buffer.from('not-the-catalog');
 let catalogDecodeCount = 0;
 function CountingDecompressionStream(format) {
@@ -415,6 +445,8 @@ for (const mutate of [
 }
 
 const previewCalls = [];
+const previewIndex = structuredClone(index);
+previewIndex.provenance = { repository: 'owner/catalog', codeRef: 'fix/test', codeSha: provenanceSha, complete: false };
 const previewLoader = createCatalogLoader({
   repository: 'owner/catalog', dataRef: 'catalog-fix',
   engine: { createCatalogModel }, cacheStorage: fakeCaches(), subtle: null,
@@ -422,7 +454,7 @@ const previewLoader = createCatalogLoader({
     previewCalls.push(url);
     if (url.includes('raw.githubusercontent.com')) return new Response('offline', { status: 503 });
     if (url.includes('cdn.jsdelivr.net') && url.includes('index.json')) {
-      return new Response(JSON.stringify(index), { status: 200 });
+      return new Response(JSON.stringify(previewIndex), { status: 200 });
     }
     return new Response('unexpected', { status: 404 });
   },

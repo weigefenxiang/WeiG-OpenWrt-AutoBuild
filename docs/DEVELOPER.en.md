@@ -112,7 +112,7 @@ node tools/serve.mjs
 
 `check-all` runs executable regressions, JSON/directory allowlists, Catalog-only architecture gates, Actions naming/concurrency/cancel checks, and 60-day retention checks. It carries no device or package case list.
 
-For every channel, publish Catalog first, wait for its data branch and root-asset contracts, then publish AutoBuild, wait for CI/Pages, and online-test `index.json`, `applications.json.gz`, `compatibility.json.gz`, and browser loading. Normal promotion is `dev → staging → main`.
+For every channel, publish Catalog first, wait for its data branch and root-asset contracts, then publish AutoBuild, wait for CI/Pages, and online-test `index.json`, `applications.json.gz`, `compatibility.json.gz`, and browser loading. Normal code promotion is `dev → staging → main`. Catalog code and production data have separate lifecycles: Catalog `main` writes only `catalog-candidate`, and only the Catalog manual Production Gate may promote that verified snapshot to `catalog-data`. AutoBuild keeps its runtime mapping `main → catalog-data` and must never read `catalog-candidate`, so promoting Catalog code to `main` does not itself publish production user data.
 
 ## 10. Handoff
 

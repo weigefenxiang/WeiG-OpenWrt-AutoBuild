@@ -62,6 +62,8 @@ AutoBuild code channels bind to data branches:
 | `staging` | `catalog-staging` |
 | `main` | `catalog-data` |
 
+These are **runtime consumption channels**, not Catalog build destinations. Catalog code and production data have independent lifecycles: Catalog `main` builds only `catalog-candidate`; only the Catalog Production Gate may promote that verified snapshot to `catalog-data`. AutoBuild therefore keeps `main → catalog-data` and never reads `catalog-candidate` at runtime. This separation lets Catalog code reach `main` without implicitly changing production users, while `dev` and `staging` continue to consume their matching data branches.
+
 The browser loads the current menu, language shard, and package-mirror projection together with bounded startup concurrency. `site/wrt/data/project.json` then controls a low-priority queue for applications, hidden options, help, and compatibility. Every asset is checked against its index byte length and SHA-256 contract. A matching immutable cache entry is reused; submit and self-check still await the assets they actually validate.
 
 Catalog 自动发现由 Catalog 配置决定。当前策略覆盖：
