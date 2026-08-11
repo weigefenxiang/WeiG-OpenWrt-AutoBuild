@@ -194,6 +194,9 @@ if (html.includes('id="modalProbe"') && html.includes('<button type="button" cla
     app.includes('probeUiText') && app.includes("'boot-smoke'") && app.includes('const depthOptions = [') &&
     app.includes('function rankMenuSearchOptions(options, query)') &&
     app.includes('function searchMenuOptionsSync(query)') &&
+    app.includes('function resolvePackageSelectionOption(option)') &&
+    app.includes('const intentOption = resolvePackageSelectionOption(option)') &&
+    app.includes('const intentOption = sourcePackage ? resolvePackageSelectionOption(option) : option') &&
     app.includes('const selectable = choice.isPackage') &&
     app.includes("row.classList.toggle('is-reference', !selectable)") &&
     !app.includes('function normalizeProbeSearch(') && !app.includes('function probeChoiceMatches(') &&

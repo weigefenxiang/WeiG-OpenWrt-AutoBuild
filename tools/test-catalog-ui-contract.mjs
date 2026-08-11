@@ -87,6 +87,33 @@ for (const query of ['oscam', 'luci-app-oscam', 'PACKAGE_luci-app-oscam', 'CONFI
 expect(JSON.stringify(sharedSearch.rankMenuSearchOptions(oscamSearchRows, 'oscam').map((row) => row.symbol)) ===
   JSON.stringify(expectedOscamOrder),
   'shared Advanced/Probe search ranking is not luci-app -> exact package -> other package -> Kconfig');
+const packageRelationContract = app.match(/function resolvePackageSelectionOption\(option\) \{[\s\S]*?\n\}/)?.[0] || '';
+const packageRelationOptions = new Map([
+  ['PACKAGE_luci-app-oscam', { symbol: 'PACKAGE_luci-app-oscam' }],
+  ['PACKAGE_oscam', { symbol: 'PACKAGE_oscam' }],
+  ['PACKAGE_luci-app-aria2', { symbol: 'PACKAGE_luci-app-aria2' }],
+  ['PACKAGE_aria2', { symbol: 'PACKAGE_aria2' }],
+  ['PACKAGE_standalone', { symbol: 'PACKAGE_standalone' }],
+]);
+const packageRelation = Function('menuOptionBySymbol', `${packageRelationContract}\nreturn resolvePackageSelectionOption;`)(packageRelationOptions);
+for (const [input, expected] of [
+  ['PACKAGE_oscam', 'PACKAGE_luci-app-oscam'],
+  ['PACKAGE_luci-app-oscam', 'PACKAGE_luci-app-oscam'],
+  ['PACKAGE_aria2', 'PACKAGE_luci-app-aria2'],
+  ['PACKAGE_standalone', 'PACKAGE_standalone'],
+  ['OSCAM_WITH_SSL', 'OSCAM_WITH_SSL'],
+]) {
+  expect(packageRelation({ symbol: input }).symbol === expected, `shared package selection relation failed: ${input}`);
+}
+const setMenuValueContract = app.match(/function setMenuValue\(option, value, openChildren = false\) \{[\s\S]*?\n\}/)?.[0] || '';
+expect(setMenuValueContract.includes('const intentOption = resolvePackageSelectionOption(option)') &&
+  setMenuValueContract.includes('applyMenuValue(intentOption, value, false)') &&
+  setMenuValueContract.includes("renderCatalogUiAfterIntent(openChildren && renderedValue !== 'n', option, renderedValue)"),
+  'Advanced menuconfig no longer applies the shared canonical package-selection relation');
+const probeChoiceContract = app.match(/function probeChoiceFromMenuOption\(option\) \{[\s\S]*?\n\}/)?.[0] || '';
+expect(probeChoiceContract.includes('const intentOption = sourcePackage ? resolvePackageSelectionOption(option) : option') &&
+  probeChoiceContract.includes('displayId: sourcePackage || sourceSymbol') && probeChoiceContract.includes('sourceSymbol,'),
+  'Probe no longer shares Advanced menuconfig canonical package selection while preserving source-row display');
 const searchMenuOptionsContract = app.match(/function searchMenuOptions\(query\) \{([\s\S]*?)\n\}/)?.[1] || '';
 expect(searchMenuOptionsContract.includes('rankMenuSearchOptions') &&
   app.includes('function searchMenuOptionsSync(query)') &&
