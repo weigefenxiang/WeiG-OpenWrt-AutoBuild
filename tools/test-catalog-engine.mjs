@@ -374,6 +374,22 @@ const offload = applyUserIntent(model, full.values, {
 assert(offload.values.get('PACKAGE_flow-core') === 'y' && offload.values.get('PACKAGE_flow-offload') === 'y',
   'generic forward dependency closure failed');
 
+const directionalBase = parseConfigDocument([
+  '# CONFIG_PACKAGE_core-service is not set',
+  '# CONFIG_PACKAGE_ui-service is not set',
+  '# CONFIG_PACKAGE_i18n-service is not set',
+].join('\n'));
+const upperPackage = applyUserIntent(model, directionalBase, { symbol: 'PACKAGE_ui-service', value: 'y' });
+assert(upperPackage.values.get('PACKAGE_ui-service') === 'y' &&
+  upperPackage.values.get('PACKAGE_core-service') === 'y' &&
+  upperPackage.values.get('PACKAGE_i18n-service') === 'n',
+  'enabling an upper package did not enable only its forward dependency closure');
+const dependencyOnly = applyUserIntent(model, directionalBase, { symbol: 'PACKAGE_core-service', value: 'y' });
+assert(dependencyOnly.values.get('PACKAGE_core-service') === 'y' &&
+  dependencyOnly.values.get('PACKAGE_ui-service') === 'n' &&
+  dependencyOnly.values.get('PACKAGE_i18n-service') === 'n',
+  'enabling a dependency incorrectly reverse-selected packages that depend on it');
+
 const chain = parseConfigDocument([
   'CONFIG_PACKAGE_core-service=y',
   'CONFIG_PACKAGE_ui-service=y',
