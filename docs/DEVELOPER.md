@@ -90,7 +90,7 @@ GitHub Actions 原生 Run 日志的保留天数属于仓库 Settings，不由 Wo
 
 ## 8. 包级探测
 
-网页右下角“检”立即打开原自检界面；自检标题栏在关闭按钮左侧显示“插件兼容探针”，点击后打开响应式网页内工作区。工作区的文案、应用映射和 Source/Branch 清单全部来自 Catalog。四个深度以 `L1–L4` 单行显示，说明只在悬浮、键盘聚焦或点击 ⓘ 后出现；Source/Branch 范围与 Target 覆盖使用同一行下拉框，自定义范围提供可搜索多选。弹窗采用受限高度，正常桌面只让软件包结果区滚动；低高度窗口才启用外层应急滚动。软件包结果按 `package ID｜当前语言译名｜说明` 横向展示，译名/说明依次回退中文和英文，截断内容复用全站菜单浮层显示完整文本；完整 ID 不截断，窄屏按两至三行响应式重排。Catalog 精选应用优先、其余 LuCI 应用其次、普通包最后，纯标点不是有效文案。计划默认折叠，预览、复制与提交固定为内容末尾操作。
+网页右下角“检”立即打开原自检界面；自检标题栏在关闭按钮左侧显示“插件兼容探针”，点击后打开响应式网页内工作区。工作区的文案、应用映射和 Source/Branch 清单全部来自 Catalog。四个深度以 `L1–L4` 单行显示，说明只在悬浮、键盘聚焦或点击 ⓘ 后出现；Source/Branch 范围与 Target 覆盖使用同一行下拉框，自定义范围提供可搜索多选。弹窗采用受限高度，正常桌面只让软件包结果区滚动；低高度窗口才启用外层应急滚动。软件包结果按 `package ID｜当前语言译名｜说明` 横向展示，译名/说明依次回退中文和英文，截断内容复用全站菜单浮层显示完整文本；完整 ID 不截断，窄屏按两至三行响应式重排。Catalog 精选应用优先、其余 LuCI 应用其次、普通包最后，纯标点不是有效文案。计划默认折叠，预览与提交固定为内容末尾操作；提交会下载唯一的 `probe-request.json`，并打开 Catalog 专用 Issue 表单。
 
 探针请求为 schema 1，可输入 1–8 个 Catalog 应用 ID 或 package ID，选择全部/当前/指定 Source/Branch，以及自动目标、当前 Target/Profile 或全部代表目标。Controller 从当前代码频道对应的数据分支获取并校验 `index.json`、`applications.json.gz` 与匹配 Branch 的 `core` 分片，用应用 ID 解析真实包，再生成动态 Matrix；不得维护 Source/Branch 或 Target 版本表。
 
@@ -98,7 +98,7 @@ Catalog 资产契约校验是隐含 `L0`，不是用户可选深度。四个可�
 
 多包共同失败只在全部已计划目标都属于软件包阶段失败后执行有限预算的通用 delta 缩减；它只输出候选最小失败集合。依赖安装、克隆、feeds、构建和启动输出共同组成 30 天完整日志；基础设施、下载、超时和基线固件失败不得进入兼容性结论。
 
-网页只在 Issue 隐藏块中提交短 Base64URL 请求；Catalog Workflow 在创建 Matrix 前重新验证权限、schema、资产合约、包映射、Source/Branch 与 Target/Profile。`workflow_dispatch` 是管理员回退入口。Issue 触发只在默认分支上的 Workflow 生效，因此 dev/staging 验证先使用手动派发，待 main 晋级后再验证网页 Issue 全链路。
+网页下载公开、可审计的 `probe-request.json`，用户把它拖入 Catalog 专用 Issue 表单的唯一必填上传框。默认分支上的轻量 Issue 网关验证唯一附件、UTF-8/JSON/schema、SHA-256、权限和 Issue 身份，再把 worker 派发到请求中的精确代码通道；worker 会重新下载同一附件并核对哈希，然后才验证资产合约、包映射、Source/Branch 与 Target/Profile 并创建 Matrix。网关由 Issue 事件触发，不轮询；它本身必须先晋级到默认分支，之后才能从网页验证 dev/staging/main 全链路。`workflow_dispatch` 仍是管理员回退入口。请求者或具有 write/maintain/admin 权限的协作者可在同一 Issue 准确回复 `/cancel`；先普通取消，Run 仍活动时才强制取消。
 
 新增插件或规则必须先复用 Catalog 现有数据，横向审计同类型、同执行路径和同风险，再运行探针取得证据；AutoBuild `app.js` 不得新增插件名或专用执行器。探针并发、覆盖、超时和保留期只记录在 Catalog `.github/automation-policy.json`；AutoBuild 只保留通道映射，测试负责阻止数据重复与 YAML/JSON 漂移。
 

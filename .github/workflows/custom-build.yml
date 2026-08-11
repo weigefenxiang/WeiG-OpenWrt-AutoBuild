@@ -201,7 +201,7 @@ jobs:
               await github.rest.issues.createComment({
                 owner: context.repo.owner, repo: context.repo.repo,
                 issue_number: Number(process.env.ISSUE_NUMBER),
-                body: `@${requester}\n\n⏳ 当前你已有 ${decision.limit} 个排队中或运行中的构建，本次未开始。请等待其中一个完成，或在自己的构建 Issue 回复 \`/cancel\` 后再提交。`,
+                body: `@${requester}\n\nBuild not started / 构建未开始\n\nYou already have ${decision.limit} queued or running builds. Wait for one to finish, or reply with exactly \`/cancel\` in your own build Issue before submitting again. / 你已有 ${decision.limit} 个排队中或运行中的构建。请等待其中一个完成，或在自己的构建 Issue 准确回复 \`/cancel\` 后再提交。`,
               });
               await github.rest.issues.update({
                 owner: context.repo.owner, repo: context.repo.repo,
@@ -267,7 +267,7 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: Number(process.env.ISSUE_NUMBER),
-              body: `@${process.env.REQUESTER}\n\n🚀 构建已开始:${{ steps.req.outputs.summary }}\n\n进度与产物:${url}\n\n如需取消，请在本 Issue 回复 \`/cancel\`（仅提交者本人可取消）。\n\n完成后固件在该页面底部 Artifacts(需登录 GitHub 才能下载),整机编译预计 2~3 小时,请耐心等待。失败时也会上传错误日志供自查。`,
+              body: `@${process.env.REQUESTER}\n\nBuild started / 构建已开始: ${{ steps.req.outputs.summary }}\n\nProgress and artifacts / 进度与产物: ${url}\n\nTo cancel, reply with exactly \`/cancel\` in this Issue. The requester or a collaborator with write access may cancel. / 如需取消，请在本 Issue 准确回复 \`/cancel\`。请求提交者或具有写权限的协作者可以取消。\n\nArtifacts appear at the bottom of the Run after completion (GitHub login required). A complete build usually takes 2–3 hours; failure logs are uploaded for diagnosis. / 完成后产物位于 Run 页面底部（需登录 GitHub）；整机编译通常需要 2–3 小时，失败时也会上传诊断日志。`,
             });
 
       - name: Comment & close issue on invalid request / 校验失败时回评并关闭 issue

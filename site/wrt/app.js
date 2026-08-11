@@ -6183,9 +6183,6 @@ function probeUiText(key) {
   const row = strings[key] || {};
   return String(row[state.lang] || row.en || row['zh-CN'] || key);
 }
-function probeUiLanguageText(key, language) {
-  return String(catalogApplicationsDocument?.probeUi?.strings?.[key]?.[language] || key);
-}
 function probeCodeChannel() {
   const branch = String(state.buildMeta?.branch || 'main');
   if (branch.startsWith('fix/')) return branch;
@@ -6241,39 +6238,10 @@ function probeCurrentTarget() {
   const profile = target?.profiles?.find((item) => item.id === targetSelectorValues.profile);
   return target ? { target: String(target.id || ''), profile: String(profile?.id || '') } : null;
 }
-function probeRequestToken(request) {
-  const bytes = new TextEncoder().encode(JSON.stringify(request));
-  let binary = '';
-  for (let offset = 0; offset < bytes.length; offset += 0x4000) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x4000));
-  }
-  return `WEIG_PACKAGE_PROBE_V1:${btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')}`;
-}
-function probeIssueBody(request) {
-  const token = probeRequestToken(request);
-  return [
-    `## ${probeUiLanguageText('issueTitle', 'en')} / ${probeUiLanguageText('issueTitle', 'zh-CN')}`,
-    '',
-    probeUiLanguageText('issueRequestNotice', 'en'),
-    '',
-    probeUiLanguageText('issueRequestNotice', 'zh-CN'),
-    '',
-    '<!-- WEIG_PACKAGE_PROBE_REQUEST_V1',
-    token,
-    '-->',
-  ].join('\n');
-}
 function probeIssueUrl(request) {
   const title = `[probe] ${request.packages.join(', ')} · ${request.mode}`.slice(0, 200);
-  const params = new URLSearchParams({ title, body: probeIssueBody(request) });
+  const params = new URLSearchParams({ template: 'package-probe.yml', title });
   return `https://github.com/${PROJECT.catalogRepository}/issues/new?${params}`;
-}
-function probeCopyText(text) {
-  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
-  const input = document.createElement('textarea');
-  input.value = text; input.hidden = false; input.style.position = 'fixed'; input.style.opacity = '0';
-  document.body.appendChild(input); input.select(); document.execCommand('copy'); input.remove();
-  return Promise.resolve();
 }
 async function openPackageProbeModal() {
   selfTestViewToken += 1;
@@ -6457,13 +6425,14 @@ async function openPackageProbeModal() {
     layout.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeDepthHelp(); });
 
     const preview = document.createElement('pre'); preview.className = 'probe-preview'; preview.hidden = true; layout.appendChild(preview);
-    const policy = document.createElement('p'); policy.className = 'probe-policy'; policy.textContent = `${probeUiText('permission')} ${probeUiText('retention')}`; layout.appendChild(policy);
+    const policy = document.createElement('p'); policy.className = 'probe-policy';
+    policy.textContent = `${probeUiText('uploadInstruction')} ${probeUiText('cancelInstruction')} ${probeUiText('permission')} ${probeUiText('retention')}`;
+    layout.appendChild(policy);
     const actions = document.createElement('div'); actions.className = 'modal-actions probe-actions';
     const previewButton = document.createElement('button'); previewButton.type = 'button'; previewButton.className = 'btn'; previewButton.textContent = probeUiText('preview');
     previewButton.setAttribute('aria-expanded', 'false');
-    const copyButton = document.createElement('button'); copyButton.type = 'button'; copyButton.className = 'btn'; copyButton.textContent = probeUiText('copy');
     const submitButton = document.createElement('button'); submitButton.type = 'button'; submitButton.className = 'btn btn-primary'; submitButton.textContent = probeUiText('submit');
-    actions.append(previewButton, copyButton, submitButton); layout.appendChild(actions);
+    actions.append(previewButton, submitButton); layout.appendChild(actions);
 
     const requestValue = () => {
       const scopeMode = scopeSelect.value || 'all';
@@ -6488,7 +6457,7 @@ async function openPackageProbeModal() {
       const request = requestValue();
       const valid = request.packages.length > 0 && (request.scope.mode !== 'pairs' || request.scope.pairs.every((row) => row[0] && row[1]) && request.scope.pairs.length > 0);
       preview.textContent = valid ? JSON.stringify(request, null, 2) : probeUiText('invalid');
-      copyButton.disabled = !valid; submitButton.disabled = !valid;
+      submitButton.disabled = !valid;
       return valid ? request : null;
     }
     previewButton.addEventListener('click', () => {
@@ -6496,19 +6465,11 @@ async function openPackageProbeModal() {
       preview.hidden = !opening; previewButton.setAttribute('aria-expanded', String(opening));
       if (opening) renderPreview();
     });
-    copyButton.addEventListener('click', async () => {
+    submitButton.addEventListener('click', () => {
       const request = renderPreview(); if (!request) return;
-      await probeCopyText(probeIssueBody(request)); showToast(probeUiText('copy'));
-    });
-    submitButton.addEventListener('click', async () => {
-      const request = renderPreview(); if (!request) return;
-      let issueUrl = probeIssueUrl(request);
-      if (issueUrl.length > 7500) {
-        await probeCopyText(probeIssueBody(request));
-        showToast(probeUiText('copiedLargeRequest'));
-        const title = `[probe] ${request.packages.join(', ')} · ${request.mode}`.slice(0, 200);
-        issueUrl = `https://github.com/${PROJECT.catalogRepository}/issues/new?${new URLSearchParams({ title })}`;
-      }
+      const issueUrl = probeIssueUrl(request);
+      downloadBlob(JSON.stringify(request, null, 2) + '\n', 'application/json;charset=utf-8', 'probe-request.json');
+      showToast(probeUiText('downloadedRequest'));
       const issueWindow = window.open(issueUrl, '_blank');
       if (issueWindow) issueWindow.opener = null; else window.location.assign(issueUrl);
     });

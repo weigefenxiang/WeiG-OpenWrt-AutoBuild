@@ -189,12 +189,14 @@ if (catalogOnly) pass('Source/Branch/build tools, Kconfig, applications and sche
 else fail('Catalog-only execution contract');
 
 if (html.includes('id="modalProbe"') && html.includes('<button type="button" class="modal-probe-link"') &&
-    app.includes('function openPackageProbeModal()') && app.includes('WEIG_PACKAGE_PROBE_REQUEST_V1') &&
+    app.includes('function openPackageProbeModal()') && app.includes("template: 'package-probe.yml'") &&
+    app.includes("'probe-request.json'") && !app.includes('WEIG_PACKAGE_PROBE_REQUEST_V1') &&
     app.includes('probeUiText') && app.includes("'boot-smoke'") && app.includes('const depthOptions = [') &&
     app.includes("packageName.startsWith('luci-app-') ? 1 : 2") && app.includes('scopeSelect.value') &&
     app.includes('targetSelect.value') && app.includes('preview.hidden = true') &&
-    app.includes("packages: [...selected.keys()]") && !app.includes('probe.href =')) {
-  pass('in-page package probe has generic ranked choices, compact controls and a validated request');
+    app.includes("packages: [...selected.keys()]") && !app.includes('probe.href =') &&
+    !app.includes('probeCopyText') && !app.includes('copyButton')) {
+  pass('in-page package probe downloads one JSON request and opens the dedicated Catalog Issue form');
 } else fail('in-page package probe contract');
 
 if (app.includes("label: 'Root Kconfig options', uiKey: 'rootOptions', usageUiKey: 'rootOptionsHelp'") &&
@@ -258,6 +260,11 @@ const namingAndConcurrency =
   !buildWorkflow.includes('group: custom-build-user-') &&
   buildWorkflow.includes("value.match(/#[0-9]+\\//)") &&
   cancelWorkflow.includes('const issueMarker = `#${issue.number}/`') &&
+  cancelWorkflow.includes("command !== '/cancel'") &&
+  !cancelWorkflow.includes('/cancel-build') &&
+  cancelWorkflow.includes("['write', 'maintain', 'admin']") &&
+  cancelWorkflow.includes('cancelWorkflowRun') && cancelWorkflow.includes('force-cancel') &&
+  cancelWorkflow.includes('runs-on: ubuntu-24.04') &&
   parser.includes('artifactBuildRef(buildRef, sourceEnv, Number(process.env.ISSUE_NUMBER || 0))');
 if (namingAndConcurrency) pass('Run/Artifact #Issue identity, unlimited owner, public limit 3 and /cancel share one issue identity');
 else fail('Actions naming/concurrency/cancel contract');

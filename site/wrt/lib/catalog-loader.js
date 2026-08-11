@@ -279,7 +279,8 @@ const PROBE_UI_KEYS = [
   'allSources', 'currentSource', 'customScope', 'autoTarget', 'currentTarget', 'allTargets',
   'packageCompile', 'packageCompileHelp', 'rootfsIntegration', 'rootfsIntegrationHelp',
   'firmwareIntegration', 'firmwareIntegrationHelp', 'bootSmoke', 'bootSmokeHelp',
-  'preview', 'submit', 'copy', 'copiedLargeRequest', 'permission', 'retention', 'issueTitle', 'issueRequestNotice', 'loading', 'empty', 'invalid',
+  'preview', 'submit', 'downloadedRequest', 'uploadInstruction', 'cancelInstruction',
+  'permission', 'retention', 'issueTitle', 'loading', 'empty', 'invalid',
 ];
 
 function validateApplicationsDocument(data, expected) {
