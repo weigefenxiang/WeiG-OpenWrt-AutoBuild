@@ -952,6 +952,9 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
 .probe-results { display: grid; min-height: 0; gap: 5px; overflow: auto; overscroll-behavior: contain; padding-right: 2px; }
 .probe-package { display: grid; grid-template-columns: 30px minmax(190px, .9fr) minmax(140px, .7fr) minmax(260px, 1.5fr); align-items: center; gap: 10px; width: 100%; min-height: 42px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .probe-package:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.probe-package.is-reference { cursor: default; }
+.probe-package.is-reference:hover { border-color: var(--border); }
+.probe-package.is-reference .probe-package-mark { color: var(--muted); }
 .probe-package.is-selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, var(--card)); }
 .probe-package-mark { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 7px; background: var(--card2); color: var(--accent); font-weight: 800; }
 .probe-package.is-selected .probe-package-mark { background: var(--accent); color: #fff; }

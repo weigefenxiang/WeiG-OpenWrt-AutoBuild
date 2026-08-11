@@ -1347,15 +1347,53 @@ function requestCatalogSearch(query) {
     requestId: ++catalogSearchRequestId, query: normalized,
   });
 }
+function normalizeMenuSearchQuery(value) {
+  return String(value || '').trim().toLowerCase();
+}
+function normalizeMenuSearchIdentity(value) {
+  return normalizeMenuSearchQuery(value)
+    .replace(/^config_/, '')
+    .replace(/^package_/, '');
+}
+function menuSearchRank(option, query) {
+  const normalized = normalizeMenuSearchIdentity(query);
+  const symbol = String(option?.symbol || '').toLowerCase();
+  const packageName = symbol.startsWith('package_') ? symbol.slice('package_'.length) : '';
+  const shortPackage = packageName.startsWith('luci-app-')
+    ? packageName.slice('luci-app-'.length)
+    : packageName;
+  const identities = [symbol, packageName, shortPackage].filter(Boolean);
+  const exact = Boolean(normalized) && identities.some((value) => value === normalized);
+  const prefix = Boolean(normalized) && identities.some((value) => value.startsWith(normalized));
+  let group = 3;
+  if (packageName.startsWith('luci-app-')) group = 0;
+  else if (packageName && exact) group = 1;
+  else if (packageName) group = 2;
+  const match = exact ? 0 : prefix ? 1 : 2;
+  return group * 10 + match;
+}
+function rankMenuSearchOptions(options, query) {
+  return [...options].sort((left, right) => menuSearchRank(left, query) - menuSearchRank(right, query));
+}
+function searchMenuOptionsSync(query) {
+  const normalized = normalizeMenuSearchQuery(query);
+  if (normalized.length < 2) return [];
+  return rankMenuSearchOptions(
+    menuSearchOptions.filter((option) => menuSearchText.get(option.symbol)?.includes(normalized)),
+    normalized,
+  );
+}
 function searchMenuOptions(query) {
-  const normalized = String(query || '').trim().toLowerCase();
+  const normalized = normalizeMenuSearchQuery(query);
   if (normalized.length < 2) return [];
   if (catalogSearchWorker) {
     requestCatalogSearch(normalized);
     const symbols = catalogSearchResults.get(normalized);
-    return symbols ? symbols.map((symbol) => menuOptionBySymbol.get(symbol)).filter(Boolean) : null;
+    return symbols
+      ? rankMenuSearchOptions(symbols.map((symbol) => menuOptionBySymbol.get(symbol)).filter(Boolean), normalized)
+      : null;
   }
-  return menuSearchOptions.filter((option) => menuSearchText.get(option.symbol)?.includes(normalized));
+  return searchMenuOptionsSync(normalized);
 }
 async function ensureCatalogMenuLoaded(includeHidden = false) {
   if (!MENU_CATALOG?.splitAssets) return true;
@@ -6180,9 +6218,9 @@ async function timedFetch(url, timeout) {
 
 const PROBE_UI_TEXT = Object.freeze({
   title: ['插件兼容探针', '套件相容性探針', 'Package Compatibility Probe'],
-  intro: ['检查当前源码中的 LuCI 插件在 Catalog 各源码分支中的编译、RootFS 安装、固件集成和可选启动行为。', '檢查目前原始碼中的 LuCI 套件在 Catalog 各原始碼分支中的編譯、RootFS 安裝、韌體整合及可選啟動行為。', 'Check LuCI applications from the current source across Catalog Source/Branch environments for compilation, RootFS installation, firmware integration, and optional boot behavior.'],
-  howTo: ['从当前 Source/Branch 的 Advanced menuconfig 中选择 1–8 个 luci-app-* 插件 ID，设置探测深度和范围，并在本地预览计划。提交时会下载 probe-request.json 并打开 Catalog Issue 表单。', '從目前 Source/Branch 的 Advanced menuconfig 中選擇 1–8 個 luci-app-* 套件 ID，設定探測深度和範圍，並在本機預覽計畫。提交時會下載 probe-request.json 並開啟 Catalog Issue 表單。', 'Choose 1–8 luci-app-* package IDs from the current Source/Branch Advanced menuconfig, select depth and scope, and preview the plan locally. Submit downloads probe-request.json and opens the Catalog Issue form.'],
-  search: ['搜索 luci-app-* 插件 ID', '搜尋 luci-app-* 套件 ID', 'Search luci-app-* package IDs'],
+  intro: ['复用当前 Source/Branch 的 Advanced menuconfig 搜索结果，选择软件包并检查其在 Catalog 各源码分支中的编译、RootFS 安装、固件集成和可选启动行为。', '複用目前 Source/Branch 的 Advanced menuconfig 搜尋結果，選擇套件並檢查其在 Catalog 各原始碼分支中的編譯、RootFS 安裝、韌體整合及可選啟動行為。', 'Reuse the current Source/Branch Advanced menuconfig search results, select packages, and check compilation, RootFS installation, firmware integration, and optional boot behavior across Catalog Source/Branch environments.'],
+  howTo: ['搜索结果与 Advanced menuconfig 使用同一匹配与排序；`PACKAGE_*` 软件包可选择，普通 Kconfig 选项仅供参考。选择 1–8 个软件包后设置探测深度和范围并预览计划。', '搜尋結果與 Advanced menuconfig 使用同一匹配與排序；`PACKAGE_*` 套件可選擇，一般 Kconfig 選項僅供參考。選擇 1–8 個套件後設定探測深度和範圍並預覽計畫。', 'Search results share the same matching and ranking as Advanced menuconfig. `PACKAGE_*` rows are selectable packages; ordinary Kconfig options are reference-only. Choose 1–8 packages, then set depth and scope and preview the plan.'],
+  search: ['搜索软件包 / Kconfig ID', '搜尋套件 / Kconfig ID', 'Search package / Kconfig IDs'],
   selected: ['已选择', '已選擇', 'Selected'],
   depth: ['探测深度', '探測深度', 'Probe depth'],
   scope: ['源码分支范围', '原始碼分支範圍', 'Source/Branch scope'],
@@ -6208,8 +6246,8 @@ const PROBE_UI_TEXT = Object.freeze({
   cancelInstruction: ['提交后如需取消，请在同一个 Issue 中准确回复 /cancel。', '提交後如需取消，請在同一個 Issue 中準確回覆 /cancel。', 'To cancel after submission, reply with exactly /cancel in the same Issue.'],
   permission: ['仓库所有者可以运行完整计划；有写权限的协作者最多并发 3；普通访客不能启动探针 Matrix。', '儲存庫擁有者可以執行完整計畫；具寫入權限的協作者最多同時執行 3 個工作；一般訪客不能啟動探針 Matrix。', 'Repository owners may run the full plan; write collaborators are capped at three concurrent jobs; visitors cannot start the probe Matrix.'],
   retention: ['规范化证据保留 60 天，完整探针日志保留 30 天。', '正規化證據保留 60 天，完整探針日誌保留 30 天。', 'Normalized evidence is retained for 60 days; complete probe logs are retained for 30 days.'],
-  empty: ['没有找到匹配的 luci-app-* 插件。', '找不到相符的 luci-app-* 套件。', 'No matching luci-app-* package was found.'],
-  invalid: ['请至少选择一个 luci-app-* 插件和一个 Source/Branch。', '請至少選擇一個 luci-app-* 套件和一個 Source/Branch。', 'Select at least one luci-app-* package and one Source/Branch entry.'],
+  empty: ['没有找到匹配的 Advanced menuconfig 项。', '找不到相符的 Advanced menuconfig 項目。', 'No matching Advanced menuconfig option was found.'],
+  invalid: ['请至少选择一个软件包和一个 Source/Branch。', '請至少選擇一個套件和一個 Source/Branch。', 'Select at least one package and one Source/Branch entry.'],
 });
 function probeUiText(key) {
   const row = PROBE_UI_TEXT[key];
@@ -6231,35 +6269,30 @@ function firstMeaningfulProbeText(...values) {
   }
   return '';
 }
-function probePackageChoices() {
-  const choices = [];
-  for (const option of menuOptionBySymbol.values()) {
-    const symbol = String(option?.symbol || '');
-    if (!symbol.startsWith('PACKAGE_luci-app-')) continue;
-    const packageName = symbol.slice('PACKAGE_'.length);
-    const translation = menuOptionTranslation(option);
-    choices.push({
-      symbol,
-      package: packageName,
-      title: firstMeaningfulProbeText(translation.title, option.promptZh, option.promptEn),
-      usage: firstMeaningfulProbeText(translation.usage, option.usageZh, option.usageEn),
-    });
-  }
-  return choices.sort((left, right) => left.package.localeCompare(right.package, undefined, { sensitivity: 'base' }));
+function probeChoiceFromMenuOption(option) {
+  const symbol = String(option?.symbol || '');
+  const packageName = symbol.startsWith('PACKAGE_') ? symbol.slice('PACKAGE_'.length) : '';
+  const translation = menuOptionTranslation(option);
+  return {
+    symbol,
+    package: packageName,
+    displayId: packageName || symbol,
+    isPackage: Boolean(packageName),
+    title: firstMeaningfulProbeText(translation.title, option.promptZh, option.promptEn),
+    usage: firstMeaningfulProbeText(translation.usage, option.usageZh, option.usageEn),
+  };
 }
-function normalizeProbeSearch(value) {
-  return String(value || '').trim().toLocaleLowerCase()
-    .replace(/^config_/, '')
-    .replace(/^package_/, '')
-    .replace(/^luci-app-/, '');
-}
-function probeChoiceMatches(choice, value) {
-  const query = normalizeProbeSearch(value);
-  if (!query) return true;
-  const symbol = choice.symbol.toLocaleLowerCase();
-  const packageName = choice.package.toLocaleLowerCase();
-  const shortId = packageName.startsWith('luci-app-') ? packageName.slice('luci-app-'.length) : packageName;
-  return symbol.includes(query) || packageName.includes(query) || shortId.includes(query);
+function probePackageChoices(query = '') {
+  const normalized = normalizeMenuSearchQuery(query);
+  const options = normalized.length >= 2
+    ? searchMenuOptionsSync(normalized)
+    : rankMenuSearchOptions(
+      menuSearchOptions.filter((option) => String(option?.symbol || '').startsWith('PACKAGE_')),
+      normalized,
+    );
+  return options
+    .filter((option) => optionVisible(option) && catalogOriginMatches(option))
+    .map(probeChoiceFromMenuOption);
 }
 function probeCurrentTarget() {
   const target = (MENU_CATALOG?.targets || []).find((item) =>
@@ -6285,7 +6318,6 @@ async function openPackageProbeModal() {
   try {
     await ensureCatalogMenuLoaded(true);
     if ($('modal').hidden || !modal.classList.contains('package-probe')) return;
-    const choices = probePackageChoices();
     const selected = new Map();
     body.textContent = '';
 
@@ -6334,28 +6366,32 @@ async function openPackageProbeModal() {
       }
     };
     const renderResults = () => {
-      const matches = choices.filter((choice) => probeChoiceMatches(choice, search.value)).slice(0, 80);
+      const matches = probePackageChoices(search.value).slice(0, 80);
       results.textContent = '';
       if (!matches.length) {
         const empty = document.createElement('p'); empty.className = 'probe-empty'; empty.textContent = probeUiText('empty'); results.appendChild(empty); return;
       }
       for (const choice of matches) {
+        const selectable = choice.isPackage;
         const row = document.createElement('button'); row.type = 'button'; row.className = 'probe-package';
-        row.classList.toggle('is-selected', selected.has(choice.symbol));
-        const mark = document.createElement('span'); mark.className = 'probe-package-mark'; mark.textContent = selected.has(choice.symbol) ? '✓' : '+';
-        const code = document.createElement('code'); code.className = 'probe-package-id'; code.textContent = choice.package;
+        row.classList.toggle('is-selected', selectable && selected.has(choice.symbol));
+        row.classList.toggle('is-reference', !selectable);
+        if (!selectable) row.setAttribute('aria-disabled', 'true');
+        const mark = document.createElement('span'); mark.className = 'probe-package-mark';
+        mark.textContent = selectable ? (selected.has(choice.symbol) ? '✓' : '+') : '·';
+        const code = document.createElement('code'); code.className = 'probe-package-id'; code.textContent = choice.displayId;
         const title = document.createElement('span'); title.className = 'probe-package-title'; title.textContent = choice.title || '—';
         const usage = document.createElement('span'); usage.className = 'probe-package-usage'; usage.textContent = choice.usage || '—';
         bindProbeTextTooltip(title, choice.title);
         bindProbeTextTooltip(usage, choice.usage);
         row.append(mark, code, title, usage);
-        const rowDetails = [choice.package, choice.title, choice.usage].filter(Boolean).join('\n');
+        const rowDetails = [choice.displayId, choice.title, choice.usage].filter(Boolean).join('\n');
         row.setAttribute('aria-label', rowDetails);
         row.addEventListener('focus', () => {
           if (probeTextIsTruncated(title) || probeTextIsTruncated(usage)) showMenuPopup(row, rowDetails);
         });
         row.addEventListener('blur', hideMenuTooltip);
-        row.addEventListener('click', () => {
+        if (selectable) row.addEventListener('click', () => {
           if (selected.has(choice.symbol)) selected.delete(choice.symbol);
           else if (selected.size < 8) selected.set(choice.symbol, choice);
           else { showToast(uiText('最多选择 8 个软件包', '最多選擇 8 個套件', 'Select up to 8 packages')); return; }

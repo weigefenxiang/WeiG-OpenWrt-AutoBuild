@@ -38,7 +38,7 @@ expect(selfTestContract.indexOf("openModal(t('st.title'))") >= 0 &&
   'self-test does not open immediately or its generic Catalog probe entry is gated by compatibility UI');
 const probeContract = app.match(/async function openPackageProbeModal\(\) \{([\s\S]*?)\n\}\n\$\('modalProbe'/)?.[1] || '';
 expect(!probeContract.includes('ensureCatalogApplications()') && probeContract.includes('await ensureCatalogMenuLoaded(true)') &&
-  probeContract.includes('probePackageChoices()') && probeContract.includes("'probeDepth'") && probeContract.includes('scopeSelect.value') &&
+  probeContract.includes('probePackageChoices(search.value)') && probeContract.includes("'probeDepth'") && probeContract.includes('scopeSelect.value') &&
   probeContract.includes('targetSelect.value') && probeContract.includes('probeIssueUrl(request)') &&
   probeContract.includes('packages: [...selected.values()].map((choice) => choice.package)'),
   'in-page probe is still gated by applications.json.gz or no longer reuses the current Catalog/Kconfig package model');
@@ -50,26 +50,53 @@ expect(probeContract.includes('const depthOptions = [') && probeContract.include
   probeContract.includes('preview.hidden = true') && probeContract.includes("previewButton.setAttribute('aria-expanded'") &&
   probeContract.indexOf('layout.append(settings, picker)') < probeContract.indexOf('layout.appendChild(actions)'),
   'probe depth help, searchable custom scope, collapsed preview, or bottom action order regressed');
-const probeChoices = app.match(/function probePackageChoices\(\) \{([\s\S]*?)\n\}\nfunction probeCurrentTarget/)?.[0] || '';
-expect(probeChoices.includes("symbol.startsWith('PACKAGE_luci-app-')") &&
-  probeChoices.includes("packageName = symbol.slice('PACKAGE_'.length)") &&
-  probeChoices.includes('symbol,') && probeChoices.includes('package: packageName') &&
+const probeChoices = app.match(/function probePackageChoices\(query = ''\) \{([\s\S]*?)\n\}\nfunction probeCurrentTarget/)?.[0] || '';
+expect(probeChoices.includes('searchMenuOptionsSync(normalized)') &&
+  probeChoices.includes("startsWith('PACKAGE_')") &&
+  probeChoices.includes('optionVisible(option) && catalogOriginMatches(option)') &&
+  probeChoices.includes('.map(probeChoiceFromMenuOption)') &&
   !probeChoices.includes('applications?.items') && !probeChoices.includes('item.id') &&
   app.includes('const PROBE_UI_TEXT = Object.freeze({') &&
   !app.match(/function probeUiText\(key\) \{[\s\S]*?catalogApplicationsDocument/),
-  'probe package projection/UI is not independent from applications.json.gz or not a luci-app-only Advanced menuconfig view');
-const normalizeProbeSearchContract = app.match(/function normalizeProbeSearch\(value\) \{[\s\S]*?\n\}/)?.[0] || '';
-const probeChoiceMatchesContract = app.match(/function probeChoiceMatches\(choice, value\) \{[\s\S]*?\n\}/)?.[0] || '';
-const probeSearch = Function(`${normalizeProbeSearchContract}\n${probeChoiceMatchesContract}\nreturn { normalizeProbeSearch, probeChoiceMatches };`)();
-const oscamProbeChoice = { symbol: 'PACKAGE_luci-app-oscam', package: 'luci-app-oscam' };
+  'probe no longer projects directly from the shared Advanced menuconfig search model');
+const normalizeMenuSearchQueryContract = app.match(/function normalizeMenuSearchQuery\(value\) \{[\s\S]*?\n\}/)?.[0] || '';
+const normalizeMenuSearchIdentityContract = app.match(/function normalizeMenuSearchIdentity\(value\) \{[\s\S]*?\n\}/)?.[0] || '';
+const menuSearchRankContract = app.match(/function menuSearchRank\(option, query\) \{[\s\S]*?\n\}/)?.[0] || '';
+const rankMenuSearchOptionsContract = app.match(/function rankMenuSearchOptions\(options, query\) \{[\s\S]*?\n\}/)?.[0] || '';
+const sharedSearch = Function(`${normalizeMenuSearchQueryContract}\n${normalizeMenuSearchIdentityContract}\n${menuSearchRankContract}\n${rankMenuSearchOptionsContract}\nreturn { normalizeMenuSearchQuery, normalizeMenuSearchIdentity, menuSearchRank, rankMenuSearchOptions };`)();
+const oscamSearchRows = [
+  { symbol: 'OSCAM_WITH_DEBUG' },
+  { symbol: 'PACKAGE_oscam' },
+  { symbol: 'PACKAGE_luci-i18n-oscam-zh-cn' },
+  { symbol: 'PACKAGE_luci-app-oscam' },
+  { symbol: 'OSCAM_WITH_SSL' },
+];
+const expectedOscamOrder = [
+  'PACKAGE_luci-app-oscam',
+  'PACKAGE_oscam',
+  'PACKAGE_luci-i18n-oscam-zh-cn',
+  'OSCAM_WITH_DEBUG',
+  'OSCAM_WITH_SSL',
+];
 for (const query of ['oscam', 'luci-app-oscam', 'PACKAGE_luci-app-oscam', 'CONFIG_PACKAGE_luci-app-oscam']) {
-  expect(probeSearch.probeChoiceMatches(oscamProbeChoice, query), `probe search alias failed: ${query}`);
+  const sorted = sharedSearch.rankMenuSearchOptions(oscamSearchRows, query).map((row) => row.symbol);
+  expect(sorted[0] === 'PACKAGE_luci-app-oscam', `shared menu/probe search alias ranking failed: ${query}`);
 }
-expect(!probeSearch.probeChoiceMatches(oscamProbeChoice, 'openvpn') &&
-  !probeContract.includes('choice.title} ${choice.usage}') &&
-  app.includes(".replace(/^config_/, '')") && app.includes(".replace(/^package_/, '')") &&
-  app.includes(".replace(/^luci-app-/, '')"),
-  'probe search no longer uses ID-only CONFIG_/PACKAGE_/luci-app/short-ID normalization');
+expect(JSON.stringify(sharedSearch.rankMenuSearchOptions(oscamSearchRows, 'oscam').map((row) => row.symbol)) ===
+  JSON.stringify(expectedOscamOrder),
+  'shared Advanced/Probe search ranking is not luci-app -> exact package -> other package -> Kconfig');
+const searchMenuOptionsContract = app.match(/function searchMenuOptions\(query\) \{([\s\S]*?)\n\}/)?.[1] || '';
+expect(searchMenuOptionsContract.includes('rankMenuSearchOptions') &&
+  app.includes('function searchMenuOptionsSync(query)') &&
+  probeChoices.includes('searchMenuOptionsSync(normalized)') &&
+  !app.includes('function normalizeProbeSearch(') && !app.includes('function probeChoiceMatches('),
+  'Advanced and Probe still maintain separate search ranking/matching implementations');
+expect(probeContract.includes('const selectable = choice.isPackage') &&
+  probeContract.includes("row.classList.toggle('is-reference', !selectable)") &&
+  probeContract.includes("if (!selectable) row.setAttribute('aria-disabled', 'true')") &&
+  probeContract.includes('mark.textContent = selectable ?') &&
+  probeContract.includes("if (selectable) row.addEventListener('click'"),
+  'Probe does not keep PACKAGE_* selectable while ordinary Kconfig results stay reference-only');
 expect(probeContract.includes("selected.has(choice.symbol)") && probeContract.includes("selected.set(choice.symbol, choice)") &&
   probeContract.includes('chip.textContent = `${choice.package} ×`') &&
   probeContract.includes('chip.title = `CONFIG_${choice.symbol}`'),
@@ -90,7 +117,8 @@ expect(css.includes('.probe-depth { grid-template-columns: repeat(4, minmax(0, 1
   css.includes('.probe-package-id { min-width: 0;') && css.includes('overflow-wrap: anywhere; white-space: normal') &&
   css.includes('.probe-package-title, .probe-package-usage { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap') &&
   css.includes('.probe-preview[hidden] { display: none; }') &&
-  css.includes('.probe-custom-scope-summary { display: flex;') && css.includes('.probe-custom-scope-body { display: grid;'),
+  css.includes('.probe-custom-scope-summary { display: flex;') && css.includes('.probe-custom-scope-body { display: grid;') &&
+  css.includes('.probe-package.is-reference { cursor: default;'),
   'probe single-scroll height, horizontal rows, full IDs, truncated translations, or collapsed preview styling regressed');
 expect(app.includes("label: 'Root Kconfig options', uiKey: 'rootOptions', usageUiKey: 'rootOptionsHelp'") &&
   !app.includes("label: 'General settings', usage: 'Root configuration options'"),
