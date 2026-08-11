@@ -190,10 +190,17 @@ else fail('Catalog-only execution contract');
 
 if (html.includes('id="modalProbe"') && html.includes('<button type="button" class="modal-probe-link"') &&
     app.includes('function openPackageProbeModal()') && app.includes('WEIG_PACKAGE_PROBE_REQUEST_V1') &&
-    app.includes('probeUiText') && app.includes("'boot-smoke'") &&
+    app.includes('probeUiText') && app.includes("'boot-smoke'") && app.includes('const depthOptions = [') &&
+    app.includes("packageName.startsWith('luci-app-') ? 1 : 2") && app.includes('scopeSelect.value') &&
+    app.includes('targetSelect.value') && app.includes('preview.hidden = true') &&
     app.includes("packages: [...selected.keys()]") && !app.includes('probe.href =')) {
-  pass('in-page package probe is Catalog-translated and emits a generic validated request');
+  pass('in-page package probe has generic ranked choices, compact controls and a validated request');
 } else fail('in-page package probe contract');
+
+if (app.includes("label: 'Root Kconfig options', uiKey: 'rootOptions', usageUiKey: 'rootOptionsHelp'") &&
+    !app.includes("label: 'General settings', usage: 'Root configuration options'")) {
+  pass('parentless Catalog options remain reachable under an explicit root Kconfig label');
+} else fail('root Kconfig menu contract');
 
 const loadPolicy = project?.catalogLoadPolicy;
 if (loadPolicy?.startup?.join(',') === 'menu,menu:language,package-mirrors' &&

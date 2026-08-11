@@ -38,10 +38,44 @@ expect(selfTestContract.indexOf("openModal(t('st.title'))") >= 0 &&
   'self-test does not open immediately or its generic Catalog probe entry is gated by compatibility UI');
 const probeContract = app.match(/async function openPackageProbeModal\(\) \{([\s\S]*?)\n\}\n\$\('modalProbe'/)?.[1] || '';
 expect(probeContract.includes('ensureCatalogApplications()') && probeContract.includes('probePackageChoices') &&
-  probeContract.includes("'probeDepth'") && probeContract.includes("'probeScope'") &&
-  probeContract.includes("'probeTargets'") && probeContract.includes('probeIssueUrl(request)') &&
+  probeContract.includes("'probeDepth'") && probeContract.includes('scopeSelect.value') &&
+  probeContract.includes('targetSelect.value') && probeContract.includes('probeIssueUrl(request)') &&
   probeContract.includes('packages: [...selected.keys()]') && !probeContract.includes('luci-app-'),
   'in-page probe does not use generic Catalog data, depth/scope/target options, or the validated Issue request');
+expect(probeContract.includes('const depthOptions = [') && probeContract.includes('`L${index + 1}`') &&
+  probeContract.includes("popup.setAttribute('role', 'tooltip')") &&
+  probeContract.includes("if (event.key === 'Escape') closeDepthHelp()") &&
+  probeContract.includes('branchSearch.addEventListener') && probeContract.includes('customScope.hidden') &&
+  probeContract.includes('preview.hidden = true') && probeContract.includes("previewButton.setAttribute('aria-expanded'") &&
+  probeContract.indexOf('layout.append(settings, picker)') < probeContract.indexOf('layout.appendChild(actions)'),
+  'probe depth help, searchable custom scope, collapsed preview, or bottom action order regressed');
+const probeChoices = app.match(/function meaningfulProbeText\(value\) \{([\s\S]*?)\n\}\nfunction probeCurrentTarget/)?.[0] || '';
+expect(probeChoices.includes('/[\\p{L}\\p{N}]/u') && probeChoices.includes('priority: 0') &&
+  probeChoices.includes("packageName.startsWith('luci-app-') ? 1 : 2") &&
+  probeChoices.includes('left.priority - right.priority') &&
+  probeChoices.includes('firstMeaningfulProbeText(localizedTitle, item.titleZh, item.titleEn)') &&
+  probeChoices.includes('firstMeaningfulProbeText(localizedUsage, item.usageZh, item.usageEn)'),
+  'probe package projection no longer rejects punctuation-only text or keeps Catalog/LuCI packages first');
+expect(probeContract.includes("guide.className = 'probe-guide'") &&
+  probeContract.includes("code.className = 'probe-package-id'") &&
+  probeContract.includes("title.className = 'probe-package-title'") &&
+  probeContract.includes("usage.className = 'probe-package-usage'") &&
+  probeContract.includes('bindProbeTextTooltip(title, choice.title)') &&
+  probeContract.includes('showMenuPopup(row, rowDetails)'),
+  'compact probe guide or shared full-text tooltip contract regressed');
+expect(css.includes('.probe-depth { grid-template-columns: repeat(4, minmax(0, 1fr))') &&
+  css.includes('.probe-filter-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))') &&
+  css.includes('height: min(86vh, 820px)') &&
+  css.includes('.modal.package-probe .modal-body { display: flex; min-height: 0;') &&
+  css.includes('.probe-picker { display: grid; grid-template-rows: auto auto minmax(0, 1fr)') &&
+  css.includes('.probe-package { display: grid; grid-template-columns: 30px minmax(190px, .9fr)') &&
+  css.includes('.probe-package-id { min-width: 0;') && css.includes('overflow-wrap: anywhere; white-space: normal') &&
+  css.includes('.probe-package-title, .probe-package-usage { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap') &&
+  css.includes('.probe-preview[hidden] { display: none; }'),
+  'probe single-scroll height, horizontal rows, full IDs, truncated translations, or collapsed preview styling regressed');
+expect(app.includes("label: 'Root Kconfig options', uiKey: 'rootOptions', usageUiKey: 'rootOptionsHelp'") &&
+  !app.includes("label: 'General settings', usage: 'Root configuration options'"),
+  'root Catalog options are mislabeled as an upstream General settings menu');
 expect(app.includes("$('modalProbe').hidden = true") &&
   css.includes('.modal-head-actions') && css.includes('.modal-probe-link'),
   'ordinary modals can retain the probe entry or its responsive header styling is missing');

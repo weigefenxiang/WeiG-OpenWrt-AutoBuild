@@ -31,7 +31,7 @@
 
 本地预览的虚拟 `build-meta.json` 必须在每次请求时根据当前 VERSION、站点 SHA、Git 分支和提交重新生成，长期开着服务再运行 Prepare 也不能保留启动时身份。部署元数据只有真正不存在的 HTTP 404 可以按主线缺省处理；网络失败、非法 JSON 或与 `site-version.json` 不一致都必须停止加载，禁止静默退回 `main/catalog-data`。
 
-软件包镜像默认值只看所选固件时区，不看浏览器时区：`Asia/Shanghai` 默认自动选择，其他时区默认跟随源码，缺失时按可用项安全回退。时区变化只重算未显式选择的镜像；用户手动或导入的显式选择保持不变，导入校验前等待同一个共享镜像 Promise。
+软件包镜像默认值只看所选固件时区，不看浏览器时区：`Asia/Shanghai` 默认自动选择，其他时区默认跟随源码，缺失时按可用项安全回退。时区变化只重算未显式选择的镜像；用户手动或导入的显式选择保持不变，导入校验前等待同一个共享镜像 Promise。镜像下线只从 `config/policies/package-mirrors.json` 这一权威策略删除并重新生成公开投影；历史导入 ID 继续走通用可用项回退。TUNA 已在[官方镜像站源码变更](https://github.com/tuna/mirror-web/commit/9d31d4b34471ca68037993541af8437d866fc885)中宣布于 2026-08-09 停止 OpenWrt 同步，故不再作为可选预设。
 
 顶部构建概览在桌面把弹性宽度留给 Source/Branch/Target Profile 搜索；折叠契约头只显示标题和箭头，完整 Catalog commit 保留在展开内容和无障碍提示。641–960 px 时搜索独占第一行、契约与控件位于第二行、展开内容位于第三行；手机依次全宽堆叠。此布局不得改变独立的 Advanced menuconfig 搜索契约，也不得缩小展开区字号。
 
@@ -52,6 +52,8 @@ Advanced 的菜单说明由 Catalog 每日翻译任务维护。翻译器按数�
 ```text
 applyMenuValue → catalog-engine.applyUserIntent → menuValues
 ```
+
+Advanced menuconfig 的 `Root Kconfig options / 根级 Kconfig 选项` 是 `path: []` 的通用展示容器，承载没有父菜单的 Catalog 顶层选项；它不等于上游 `Global build settings`，不得合并或删除。菜单文字属于 UI，选项、类型、状态、依赖和层级仍全部来自 Catalog。
 
 兼容性推荐也只能调用 `applyUserIntent`。N/M/Y 由 option 类型、可见性、依赖和合法 states 判断；不可选状态在 UI 灰化/隐藏，不能仅在点击后报错。
 
@@ -88,11 +90,11 @@ GitHub Actions 原生 Run 日志的保留天数属于仓库 Settings，不由 Wo
 
 ## 8. 包级探测
 
-网页右下角“检”立即打开原自检界面；自检标题栏在关闭按钮左侧显示“插件兼容探针”，点击后打开响应式网页内工作区。工作区的文案、应用映射和 Source/Branch 清单全部来自 Catalog；用户可搜索并选择最多 8 个应用，设置深度、范围、Target 覆盖，预览精确请求、复制请求或打开自动填好的 GitHub Issue。
+网页右下角“检”立即打开原自检界面；自检标题栏在关闭按钮左侧显示“插件兼容探针”，点击后打开响应式网页内工作区。工作区的文案、应用映射和 Source/Branch 清单全部来自 Catalog。四个深度以 `L1–L4` 单行显示，说明只在悬浮、键盘聚焦或点击 ⓘ 后出现；Source/Branch 范围与 Target 覆盖使用同一行下拉框，自定义范围提供可搜索多选。弹窗采用受限高度，正常桌面只让软件包结果区滚动；低高度窗口才启用外层应急滚动。软件包结果按 `package ID｜当前语言译名｜说明` 横向展示，译名/说明依次回退中文和英文，截断内容复用全站菜单浮层显示完整文本；完整 ID 不截断，窄屏按两至三行响应式重排。Catalog 精选应用优先、其余 LuCI 应用其次、普通包最后，纯标点不是有效文案。计划默认折叠，预览、复制与提交固定为内容末尾操作。
 
 探针请求为 schema 1，可输入 1–8 个 Catalog 应用 ID 或 package ID，选择全部/当前/指定 Source/Branch，以及自动目标、当前 Target/Profile 或全部代表目标。Controller 从当前代码频道对应的数据分支获取并校验 `index.json`、`applications.json.gz` 与匹配 Branch 的 `core` 分片，用应用 ID 解析真实包，再生成动态 Matrix；不得维护 Source/Branch 或 Target 版本表。
 
-四个深度依次是：`package-compile` 编译包与依赖闭包；`rootfs-integration` 安装进 RootFS 发现 ownership/同装问题；`firmware-integration` 在同一环境构建基础固件与加入软件包的固件作 A/B 对照；实验性的 `boot-smoke`（界面中文固定为“启动自检”）只检查 Catalog 允许目标的通用启动标志。自动目标可在一个 Job 内顺序尝试合法后备目标。Matrix 最多 256 项；仓库所有者使用完整计划并发，其他写协作者强制最多 3，普通访客不能启动 Matrix。规范化证据保留 60 天，完整日志保留 30 天；只有所有合法环境都因软件包原因失败才能判为完全不兼容，证据只供审查，不自动修改规则。
+Catalog 资产契约校验是隐含 `L0`，不是用户可选深度。四个可选深度依次是：`L1 package-compile` 编译包与依赖闭包；`L2 rootfs-integration` 安装进 RootFS 发现 ownership/同装问题；`L3 firmware-integration` 在同一环境构建基础固件与加入软件包的固件作 A/B 对照；实验性的 `L4 boot-smoke`（界面中文固定为“启动自检”）只检查 Catalog 允许目标的通用启动标志。自动目标可在一个 Job 内顺序尝试合法后备目标。Matrix 最多 256 项；仓库所有者使用完整计划并发，其他写协作者强制最多 3，普通访客不能启动 Matrix。规范化证据保留 60 天，完整日志保留 30 天；只有所有合法环境都因软件包原因失败才能判为完全不兼容，证据只供审查，不自动修改规则。
 
 多包共同失败只在全部已计划目标都属于软件包阶段失败后执行有限预算的通用 delta 缩减；它只输出候选最小失败集合。依赖安装、克隆、feeds、构建和启动输出共同组成 30 天完整日志；基础设施、下载、超时和基线固件失败不得进入兼容性结论。
 

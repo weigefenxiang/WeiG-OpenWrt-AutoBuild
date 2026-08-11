@@ -106,17 +106,6 @@
       }
     },
     {
-      "id": "tuna",
-      "kind": "mirror",
-      "label": {
-        "zh-CN": "清华 TUNA",
-        "en": "TUNA"
-      },
-      "roots": {
-        "openwrt": "https://mirrors.tuna.tsinghua.edu.cn/openwrt"
-      }
-    },
-    {
       "id": "bfsu",
       "kind": "mirror",
       "label": {

@@ -168,6 +168,24 @@ const MENU_UI_I18N = {
     ja: '2文字以上入力してください', ko: '2자 이상 입력하세요', de: 'Mindestens 2 Zeichen eingeben',
     fr: 'Saisissez au moins 2 caractères', vi: 'Nhập ít nhất 2 ký tự',
   },
+  rootOptions: {
+    'zh-CN': '根级 Kconfig 选项', 'zh-TW': '根級 Kconfig 選項', en: 'Root Kconfig options',
+    ru: 'Корневые параметры Kconfig', es: 'Opciones Kconfig raíz', pt: 'Opções Kconfig raiz',
+    ja: 'ルート Kconfig オプション', ko: '루트 Kconfig 옵션', de: 'Kconfig-Wurzeloptionen',
+    fr: 'Options Kconfig racine', vi: 'Tùy chọn Kconfig gốc',
+  },
+  rootOptionsHelp: {
+    'zh-CN': 'Catalog 中没有父菜单的顶层配置项', 'zh-TW': 'Catalog 中沒有父選單的頂層設定項',
+    en: 'Top-level Catalog options without a parent menu',
+    ru: 'Параметры верхнего уровня Catalog без родительского меню',
+    es: 'Opciones superiores de Catalog sin menú principal',
+    pt: 'Opções de nível superior do Catalog sem menu pai',
+    ja: '親メニューを持たない Catalog のトップレベル設定',
+    ko: '상위 메뉴가 없는 Catalog 최상위 설정',
+    de: 'Catalog-Optionen der obersten Ebene ohne übergeordnetes Menü',
+    fr: 'Options Catalog de premier niveau sans menu parent',
+    vi: 'Tùy chọn Catalog cấp cao nhất không có menu cha',
+  },
 };
 const menuUi = (key) => MENU_UI_I18N[key]?.[state.lang] || MENU_UI_I18N[key]?.en || key;
 const TARGET_FIELD_I18N = {
@@ -3654,8 +3672,8 @@ function renderMenuconfig() {
     if (menuPath === null) {
       const rootOptions = exact.filter((option) => eligible(option) && (option.parent || '') === menuParent);
       if (rootOptions.length) nodes.push({
-        label: 'General settings', usage: 'Root configuration options',
-        translation: '常规设置', usageZh: '根级配置选项', path: [], count: rootOptions.length,
+        label: 'Root Kconfig options', uiKey: 'rootOptions', usageUiKey: 'rootOptionsHelp',
+        path: [], count: rootOptions.length,
       });
     } else {
       options = exact.filter((option) => eligible(option) && (option.parent || '') === menuParent);
@@ -3691,11 +3709,11 @@ function renderMenuconfig() {
     count.className = 'menuconfig-category-count';
     count.textContent = `${node.count} ›`;
     button.append(text, count);
-    const localized = meta.i18n?.[state.lang] ||
+    const localized = (node.uiKey ? menuUi(node.uiKey) : '') || meta.i18n?.[state.lang] ||
       (state.lang === 'zh-CN' ? (node.translation || meta.zhCN) : '');
     applyMenuTranslation(button,
       localized,
-      meta.usageI18n?.[state.lang] ||
+      (node.usageUiKey ? menuUi(node.usageUiKey) : '') || meta.usageI18n?.[state.lang] ||
         (state.lang === 'zh-CN' ? (node.usageZh || meta.usageZh) : ''),
       true);
     button.onclick = () => {
@@ -6173,19 +6191,31 @@ function probeCodeChannel() {
   if (branch.startsWith('fix/')) return branch;
   return ['dev', 'staging', 'main'].includes(branch) ? branch : 'main';
 }
+function meaningfulProbeText(value) {
+  const text = String(value || '').trim();
+  return /[\p{L}\p{N}]/u.test(text) ? text : '';
+}
+function firstMeaningfulProbeText(...values) {
+  for (const value of values) {
+    const text = meaningfulProbeText(value);
+    if (text) return text;
+  }
+  return '';
+}
 function probePackageChoices(applications) {
   const byPackage = new Map();
   for (const item of applications?.items || []) {
     const packageName = String(item.package || '').trim();
     if (!packageName) continue;
-    const localizedTitle = state.lang === 'en' ? '' : item.titleI18n?.[state.lang] ||
-      (state.lang === 'zh-CN' ? item.titleZh : '');
-    const localizedUsage = state.lang === 'en' ? '' : item.usageI18n?.[state.lang] ||
-      (state.lang === 'zh-CN' ? item.usageZh : '');
+    const localizedTitle = item.titleI18n?.[state.lang] ||
+      (state.lang === 'zh-CN' ? item.titleZh : state.lang === 'en' ? item.titleEn : '');
+    const localizedUsage = item.usageI18n?.[state.lang] ||
+      (state.lang === 'zh-CN' ? item.usageZh : state.lang === 'en' ? item.usageEn : '');
     byPackage.set(packageName, {
       id: String(item.id || packageName), package: packageName,
-      title: localizedTitle || item.titleEn || item.titleZh || item.id || packageName,
-      usage: localizedUsage || item.usageEn || item.usageZh || '',
+      title: firstMeaningfulProbeText(localizedTitle, item.titleZh, item.titleEn),
+      usage: firstMeaningfulProbeText(localizedUsage, item.usageZh, item.usageEn),
+      priority: 0,
     });
   }
   for (const option of menuOptionBySymbol.values()) {
@@ -6195,12 +6225,15 @@ function probePackageChoices(applications) {
     const translation = menuOptionTranslation(option);
     byPackage.set(packageName, {
       id: packageName, package: packageName,
-      title: translation.title || menuOptionLabel(option) || packageName,
-      usage: translation.usage || option.usageEn || '',
+      title: firstMeaningfulProbeText(translation.title, option.promptZh, option.promptEn),
+      usage: firstMeaningfulProbeText(translation.usage, option.usageZh, option.usageEn),
+      priority: packageName.startsWith('luci-app-') ? 1 : 2,
     });
   }
   return [...byPackage.values()].sort((left, right) =>
-    left.title.localeCompare(right.title, state.lang || 'en', { sensitivity: 'base' }) || left.package.localeCompare(right.package));
+    left.priority - right.priority ||
+    (left.title || left.package).localeCompare(right.title || right.package, state.lang || 'en', { sensitivity: 'base' }) ||
+    left.package.localeCompare(right.package));
 }
 function probeCurrentTarget() {
   const target = (MENU_CATALOG?.targets || []).find((item) =>
@@ -6262,14 +6295,20 @@ async function openPackageProbeModal() {
     const intro = document.createElement('section');
     intro.className = 'probe-intro';
     const introTitle = document.createElement('h4'); introTitle.textContent = probeUiText('title');
-    const introText = document.createElement('p'); introText.textContent = probeUiText('intro');
-    const howTo = document.createElement('p'); howTo.textContent = probeUiText('howTo');
-    intro.append(introTitle, introText, howTo); body.appendChild(intro);
+    const introText = document.createElement('p'); introText.textContent = probeUiText('intro'); introText.title = introText.textContent;
+    const guide = document.createElement('details'); guide.className = 'probe-guide';
+    const guideButton = document.createElement('summary'); guideButton.textContent = 'ⓘ';
+    guideButton.setAttribute('aria-label', probeUiText('howTo'));
+    const guideCopy = document.createElement('span'); guideCopy.className = 'probe-guide-copy';
+    const guideIntro = document.createElement('span'); guideIntro.textContent = probeUiText('intro');
+    const howTo = document.createElement('span'); howTo.textContent = probeUiText('howTo');
+    guideCopy.append(guideIntro, howTo); guide.append(guideButton, guideCopy);
+    intro.append(introTitle, introText, guide); body.appendChild(intro);
 
     const layout = document.createElement('div'); layout.className = 'probe-layout'; body.appendChild(layout);
-    const picker = document.createElement('section'); picker.className = 'probe-panel probe-picker';
     const settings = document.createElement('section'); settings.className = 'probe-panel probe-settings';
-    layout.append(picker, settings);
+    const picker = document.createElement('section'); picker.className = 'probe-panel probe-picker';
+    layout.append(settings, picker);
 
     const search = document.createElement('input'); search.className = 'probe-search'; search.type = 'search';
     search.placeholder = probeUiText('search'); search.setAttribute('aria-label', probeUiText('search'));
@@ -6277,13 +6316,22 @@ async function openPackageProbeModal() {
     const results = document.createElement('div'); results.className = 'probe-results';
     picker.append(search, selectedBox, results);
 
+    const probeTextIsTruncated = (element) => element.scrollWidth > element.clientWidth + 1;
+    const bindProbeTextTooltip = (element, text) => {
+      if (!text) return;
+      element.addEventListener('mouseenter', () => {
+        if (probeTextIsTruncated(element)) showMenuPopup(element, text);
+      });
+      element.addEventListener('mouseleave', hideMenuTooltip);
+    };
+
     const renderSelected = () => {
       selectedBox.textContent = '';
       const label = document.createElement('strong'); label.textContent = `${probeUiText('selected')} ${selected.size}/8`;
       selectedBox.appendChild(label);
       for (const choice of selected.values()) {
         const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'probe-chip';
-        chip.textContent = `${choice.title} ×`; chip.title = choice.package;
+        chip.textContent = `${choice.title || choice.package} ×`; chip.title = choice.package;
         chip.addEventListener('click', () => { selected.delete(choice.id); renderSelected(); renderResults(); renderPreview(); });
         selectedBox.appendChild(chip);
       }
@@ -6300,12 +6348,18 @@ async function openPackageProbeModal() {
         const row = document.createElement('button'); row.type = 'button'; row.className = 'probe-package';
         row.classList.toggle('is-selected', selected.has(choice.id));
         const mark = document.createElement('span'); mark.className = 'probe-package-mark'; mark.textContent = selected.has(choice.id) ? '✓' : '+';
-        const copy = document.createElement('span'); copy.className = 'probe-package-copy';
-        const title = document.createElement('strong'); title.textContent = choice.title;
-        const code = document.createElement('code'); code.textContent = choice.package;
-        copy.append(title, code);
-        if (choice.usage) { const usage = document.createElement('small'); usage.textContent = choice.usage; copy.appendChild(usage); }
-        row.append(mark, copy);
+        const code = document.createElement('code'); code.className = 'probe-package-id'; code.textContent = choice.package;
+        const title = document.createElement('span'); title.className = 'probe-package-title'; title.textContent = choice.title || '—';
+        const usage = document.createElement('span'); usage.className = 'probe-package-usage'; usage.textContent = choice.usage || '—';
+        bindProbeTextTooltip(title, choice.title);
+        bindProbeTextTooltip(usage, choice.usage);
+        row.append(mark, code, title, usage);
+        const rowDetails = [choice.package, choice.title, choice.usage].filter(Boolean).join('\n');
+        row.setAttribute('aria-label', rowDetails);
+        row.addEventListener('focus', () => {
+          if (probeTextIsTruncated(title) || probeTextIsTruncated(usage)) showMenuPopup(row, rowDetails);
+        });
+        row.addEventListener('blur', hideMenuTooltip);
         row.addEventListener('click', () => {
           if (selected.has(choice.id)) selected.delete(choice.id);
           else if (selected.size < 8) selected.set(choice.id, choice);
@@ -6320,54 +6374,99 @@ async function openPackageProbeModal() {
       const field = document.createElement('fieldset'); field.className = `probe-field ${className}`.trim();
       const legend = document.createElement('legend'); legend.textContent = legendText; field.appendChild(legend); settings.appendChild(field); return field;
     };
-    const radio = (field, name, value, labelText, help = '', checked = false) => {
-      const label = document.createElement('label'); label.className = 'probe-radio';
-      const input = document.createElement('input'); input.type = 'radio'; input.name = name; input.value = value; input.checked = checked;
-      const copy = document.createElement('span'); const strong = document.createElement('strong'); strong.textContent = labelText; copy.appendChild(strong);
-      if (help) { const small = document.createElement('small'); small.textContent = help; copy.appendChild(small); }
-      label.append(input, copy); field.appendChild(label); input.addEventListener('change', renderPreview); return input;
-    };
     const depth = fieldset(probeUiText('depth'), 'probe-depth');
-    radio(depth, 'probeDepth', 'package-compile', probeUiText('packageCompile'), probeUiText('packageCompileHelp'), true);
-    radio(depth, 'probeDepth', 'rootfs-integration', probeUiText('rootfsIntegration'), probeUiText('rootfsIntegrationHelp'));
-    radio(depth, 'probeDepth', 'firmware-integration', probeUiText('firmwareIntegration'), probeUiText('firmwareIntegrationHelp'));
-    radio(depth, 'probeDepth', 'boot-smoke', probeUiText('bootSmoke'), probeUiText('bootSmokeHelp'));
+    const depthOptions = [
+      ['package-compile', 'packageCompile', 'packageCompileHelp'],
+      ['rootfs-integration', 'rootfsIntegration', 'rootfsIntegrationHelp'],
+      ['firmware-integration', 'firmwareIntegration', 'firmwareIntegrationHelp'],
+      ['boot-smoke', 'bootSmoke', 'bootSmokeHelp'],
+    ];
+    const closeDepthHelp = (except = null) => {
+      for (const info of depth.querySelectorAll('.probe-info.is-open')) {
+        if (info === except) continue;
+        info.classList.remove('is-open');
+        info.querySelector('button')?.setAttribute('aria-expanded', 'false');
+      }
+    };
+    for (const [index, [value, labelKey, helpKey]] of depthOptions.entries()) {
+      const option = document.createElement('div'); option.className = 'probe-depth-option';
+      const label = document.createElement('label'); label.className = 'probe-depth-choice';
+      const input = document.createElement('input'); input.type = 'radio'; input.name = 'probeDepth'; input.value = value; input.checked = index === 0;
+      const level = document.createElement('span'); level.className = 'probe-level'; level.textContent = `L${index + 1}`;
+      const title = document.createElement('strong'); title.textContent = probeUiText(labelKey);
+      label.append(input, level, title);
+      const info = document.createElement('span'); info.className = 'probe-info';
+      const infoButton = document.createElement('button'); infoButton.type = 'button'; infoButton.className = 'probe-info-button';
+      infoButton.textContent = 'ⓘ'; infoButton.setAttribute('aria-expanded', 'false');
+      infoButton.setAttribute('aria-label', `${probeUiText(labelKey)}: ${probeUiText(helpKey)}`);
+      const popup = document.createElement('span'); popup.className = 'probe-info-popup'; popup.setAttribute('role', 'tooltip'); popup.textContent = probeUiText(helpKey);
+      info.append(infoButton, popup); option.append(label, info); depth.appendChild(option);
+      input.addEventListener('change', () => { closeDepthHelp(); renderPreview(); });
+      infoButton.addEventListener('click', (event) => {
+        event.preventDefault(); event.stopPropagation();
+        const opening = !info.classList.contains('is-open'); closeDepthHelp(info);
+        info.classList.toggle('is-open', opening); infoButton.setAttribute('aria-expanded', String(opening));
+      });
+    }
 
-    const scope = fieldset(probeUiText('scope'));
-    radio(scope, 'probeScope', 'all', probeUiText('allSources'), '', true);
-    radio(scope, 'probeScope', 'current', probeUiText('currentSource'));
-    radio(scope, 'probeScope', 'custom', probeUiText('customScope'));
-    const branchList = document.createElement('div'); branchList.className = 'probe-branches'; scope.appendChild(branchList);
+    const filterRow = document.createElement('div'); filterRow.className = 'probe-filter-row'; settings.appendChild(filterRow);
+    const selectField = (labelText, className) => {
+      const label = document.createElement('label'); label.className = `probe-select-field ${className}`;
+      const title = document.createElement('strong'); title.textContent = labelText;
+      const select = document.createElement('select'); select.className = 'probe-select';
+      label.append(title, select); filterRow.appendChild(label); return select;
+    };
+    const addSelectOption = (select, value, text, disabled = false) => {
+      const option = document.createElement('option'); option.value = value; option.textContent = text; option.disabled = disabled; select.appendChild(option);
+    };
+    const scopeSelect = selectField(probeUiText('scope'), 'probe-scope-field');
+    addSelectOption(scopeSelect, 'all', probeUiText('allSources'));
+    addSelectOption(scopeSelect, 'current', probeUiText('currentSource'));
+    addSelectOption(scopeSelect, 'custom', probeUiText('customScope'));
+    const currentTarget = probeCurrentTarget();
+    const targetSelect = selectField(probeUiText('targets'), 'probe-target-field');
+    addSelectOption(targetSelect, 'auto', probeUiText('autoTarget'));
+    addSelectOption(targetSelect, 'current', currentTarget
+      ? `${probeUiText('currentTarget')} · ${currentTarget.target} / ${currentTarget.profile || '-'}`
+      : probeUiText('currentTarget'), !currentTarget);
+    addSelectOption(targetSelect, 'all', probeUiText('allTargets'));
+
+    const customScope = document.createElement('section'); customScope.className = 'probe-custom-scope'; customScope.hidden = true; settings.appendChild(customScope);
+    const branchSearch = document.createElement('input'); branchSearch.type = 'search'; branchSearch.className = 'probe-branch-search';
+    branchSearch.placeholder = `${probeUiText('customScope')} · Source/Branch`;
+    branchSearch.setAttribute('aria-label', branchSearch.placeholder);
+    const branchList = document.createElement('div'); branchList.className = 'probe-branches'; customScope.append(branchSearch, branchList);
     for (const source of MENU_INDEX?.sources || []) for (const branch of source.branches || []) {
       if (branch.state === 'unavailable') continue;
       const label = document.createElement('label');
       const input = document.createElement('input'); input.type = 'checkbox'; input.value = `${source.id}\0${branch.branch}`;
-      input.addEventListener('change', renderPreview); label.append(input, document.createTextNode(`${source.label || source.id} / ${branch.branch}`)); branchList.appendChild(label);
+      const text = `${source.label || source.id} / ${branch.branch}`;
+      label.dataset.search = text.toLocaleLowerCase();
+      input.addEventListener('change', renderPreview); label.append(input, document.createTextNode(text)); branchList.appendChild(label);
     }
-    scope.addEventListener('change', () => {
-      branchList.hidden = scope.querySelector('input[name=probeScope]:checked')?.value !== 'custom';
+    scopeSelect.addEventListener('change', () => {
+      customScope.hidden = scopeSelect.value !== 'custom';
       renderPreview();
     });
-    branchList.hidden = true;
+    targetSelect.addEventListener('change', renderPreview);
+    branchSearch.addEventListener('input', () => {
+      const query = branchSearch.value.trim().toLocaleLowerCase();
+      for (const label of branchList.querySelectorAll('label')) label.hidden = !!query && !label.dataset.search.includes(query);
+    });
+    layout.addEventListener('click', (event) => { if (!event.target.closest('.probe-info')) closeDepthHelp(); });
+    layout.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeDepthHelp(); });
 
-    const targets = fieldset(probeUiText('targets'));
-    radio(targets, 'probeTargets', 'auto', probeUiText('autoTarget'), '', true);
-    const currentTarget = probeCurrentTarget();
-    const currentTargetInput = radio(targets, 'probeTargets', 'current', probeUiText('currentTarget'),
-      currentTarget ? `${currentTarget.target} / ${currentTarget.profile || '-'}` : '');
-    currentTargetInput.disabled = !currentTarget;
-    radio(targets, 'probeTargets', 'all', probeUiText('allTargets'));
-
-    const preview = document.createElement('pre'); preview.className = 'probe-preview'; settings.appendChild(preview);
+    const preview = document.createElement('pre'); preview.className = 'probe-preview'; preview.hidden = true; layout.appendChild(preview);
+    const policy = document.createElement('p'); policy.className = 'probe-policy'; policy.textContent = `${probeUiText('permission')} ${probeUiText('retention')}`; layout.appendChild(policy);
     const actions = document.createElement('div'); actions.className = 'modal-actions probe-actions';
     const previewButton = document.createElement('button'); previewButton.type = 'button'; previewButton.className = 'btn'; previewButton.textContent = probeUiText('preview');
+    previewButton.setAttribute('aria-expanded', 'false');
     const copyButton = document.createElement('button'); copyButton.type = 'button'; copyButton.className = 'btn'; copyButton.textContent = probeUiText('copy');
     const submitButton = document.createElement('button'); submitButton.type = 'button'; submitButton.className = 'btn btn-primary'; submitButton.textContent = probeUiText('submit');
-    actions.append(previewButton, copyButton, submitButton); settings.appendChild(actions);
-    const policy = document.createElement('p'); policy.className = 'probe-policy'; policy.textContent = `${probeUiText('permission')} ${probeUiText('retention')}`; settings.appendChild(policy);
+    actions.append(previewButton, copyButton, submitButton); layout.appendChild(actions);
 
     const requestValue = () => {
-      const scopeMode = scope.querySelector('input[name=probeScope]:checked')?.value || 'all';
+      const scopeMode = scopeSelect.value || 'all';
       let requestScope = { mode: 'all' };
       if (scopeMode === 'current') {
         const source = selectedCatalogSource(), branch = selectedCatalogBranch(source);
@@ -6375,7 +6474,7 @@ async function openPackageProbeModal() {
       } else if (scopeMode === 'custom') {
         requestScope = { mode: 'pairs', pairs: [...branchList.querySelectorAll('input:checked')].map((input) => input.value.split('\0')) };
       }
-      const targetMode = targets.querySelector('input[name=probeTargets]:checked')?.value || 'auto';
+      const targetMode = targetSelect.value || 'auto';
       const targetPolicy = targetMode === 'current'
         ? { mode: 'selected', selections: [currentTarget] }
         : { mode: targetMode };
@@ -6392,7 +6491,11 @@ async function openPackageProbeModal() {
       copyButton.disabled = !valid; submitButton.disabled = !valid;
       return valid ? request : null;
     }
-    previewButton.addEventListener('click', renderPreview);
+    previewButton.addEventListener('click', () => {
+      const opening = preview.hidden;
+      preview.hidden = !opening; previewButton.setAttribute('aria-expanded', String(opening));
+      if (opening) renderPreview();
+    });
     copyButton.addEventListener('click', async () => {
       const request = renderPreview(); if (!request) return;
       await probeCopyText(probeIssueBody(request)); showToast(probeUiText('copy'));

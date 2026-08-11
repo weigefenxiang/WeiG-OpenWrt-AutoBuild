@@ -58,18 +58,6 @@
       ]
     },
     {
-      "id": "tuna",
-      "kind": "mirror",
-      "label": {
-        "zh-CN": "清华 TUNA",
-        "en": "TUNA"
-      },
-      "sources": [
-        "OpenWrt",
-        "lede"
-      ]
-    },
-    {
       "id": "bfsu",
       "kind": "mirror",
       "label": {

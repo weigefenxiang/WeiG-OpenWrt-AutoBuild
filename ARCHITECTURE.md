@@ -87,6 +87,8 @@ user intent → catalog-engine dependency/select cascade → state map → Kconf
 - the page never carries a second dependency JSON;
 - concrete package/rule names are forbidden in `app.js`.
 
+Advanced menuconfig preserves parentless Catalog `path: []` records under the synthetic UI label **Root Kconfig options / 根级 Kconfig 选项**. This container is distinct from upstream **Global build settings**; removing or merging it would make top-level Kconfig records unreachable. Only the label is local UI text, while the records and their semantics remain Catalog-owned.
+
 ## 5. Compatibility evidence / 兼容性证据
 
 `compatibility.json.gz` accepts schema 2 only. Rules use generic fields:
@@ -127,14 +129,14 @@ staging-260810_0857-匿名#161-BUILD-LOGS
 
 ## 7. Package probes / 包级探测
 
-The bottom-right web **检** control opens self-test immediately. The self-test header places **Package compatibility probe** before Close; it opens a responsive in-page workspace whose strings, application mappings, and Source/Branch inventory come from Catalog. Visitors can search and select up to eight applications, choose depth, scope, and Target coverage, preview the exact request, copy it, or open a prefilled GitHub Issue.
+The bottom-right web **检** control opens self-test immediately. The self-test header places **Package compatibility probe** before Close; it opens a responsive in-page workspace whose strings, application mappings, and Source/Branch inventory come from Catalog. Its one-row `L1–L4` depth controls expose help on hover/focus/click, Source/Branch scope and Target coverage share a select row, and custom pairs are searchable. A bounded-height modal keeps ordinary scrolling inside the result list. Results use `package ID | localized Catalog title | Catalog description`, preserve complete IDs, and reuse the global tooltip for truncated text; narrow screens reflow rather than add a second data representation. Catalog-curated applications rank before other LuCI packages and ordinary packages, and punctuation-only text is invalid. The plan is collapsed initially; Preview, Copy, and Submit remain at the bottom.
 
 The controller reads the code channel's matching data-branch `index.json` and `applications.json.gz`, maps Catalog application IDs to packages, applies Source/Branch globs, and builds one dynamic Matrix. Each Matrix job:
 
 1. shallow/filtered clones one Source/Branch;
 2. installs feeds;
 3. selects one to eight packages on a Catalog-derived legal Target/Profile, preferring x86/64 for automatic coverage;
-4. runs one of four generic depths: package compile, RootFS integration, firmware A/B integration, or experimental **Boot smoke / 启动自检**;
+4. after implicit `L0` asset validation, runs one of four generic selectable depths: `L1` package compile, `L2` RootFS integration, `L3` firmware A/B integration, or experimental `L4` **Boot smoke / 启动自检**;
 5. tries configured fallback targets sequentially inside an automatic-target Job and records coverage without treating infrastructure failures as package failures;
 6. uploads normalized evidence for 60 days and full logs for 30 days.
 
