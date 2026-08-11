@@ -194,8 +194,9 @@ if (html.includes('id="modalProbe"') && html.includes('<button type="button" cla
     app.includes('probeUiText') && app.includes("'boot-smoke'") && app.includes('const depthOptions = [') &&
     app.includes('function rankMenuSearchOptions(options, query)') &&
     app.includes('function searchMenuOptionsSync(query)') &&
-    !app.includes('function resolvePackageSelectionOption(option)') &&
-    app.includes('applyMenuValue(option, value, false)') &&
+    app.includes('function resolvePackageSelectionOption(option)') &&
+    app.includes('const intentOption = resolvePackageSelectionOption(option)') &&
+    app.includes('applyMenuValue(intentOption, value, false)') &&
     app.includes('const probeBaseState = snapshotCatalogUiState()') &&
     app.includes("const result = applyMenuValue(option, 'y', false, 'user')") &&
     app.includes('const probeActiveSymbols = new Set()') &&

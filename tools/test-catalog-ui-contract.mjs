@@ -88,19 +88,41 @@ for (const query of ['oscam', 'luci-app-oscam', 'PACKAGE_luci-app-oscam', 'CONFI
 expect(JSON.stringify(sharedSearch.rankMenuSearchOptions(oscamSearchRows, 'oscam').map((row) => row.symbol)) ===
   JSON.stringify(expectedOscamOrder),
   'shared Advanced/Probe search ranking is not luci-app -> exact package -> other package -> Kconfig');
-expect(!app.includes('function resolvePackageSelectionOption(option)'),
-  'frontend still guesses reverse package relationships instead of following Kconfig direction');
+const resolvePackageSelectionContract = app.match(/function resolvePackageSelectionOption\(option\) \{[\s\S]*?\n\}/)?.[0] || '';
+expect(resolvePackageSelectionContract.includes("symbol.startsWith('PACKAGE_')") &&
+  resolvePackageSelectionContract.includes("packageName.startsWith('luci-app-')") &&
+  resolvePackageSelectionContract.includes('`PACKAGE_luci-app-${packageName}`'),
+  'shared package selection relation is missing or no longer generic');
+const relationFixtures = new Map([
+  ['PACKAGE_luci-app-oscam', { symbol: 'PACKAGE_luci-app-oscam' }],
+  ['PACKAGE_luci-app-aria2', { symbol: 'PACKAGE_luci-app-aria2' }],
+]);
+const resolvePackageSelectionOption = Function('menuOptionBySymbol', `${resolvePackageSelectionContract}; return resolvePackageSelectionOption;`)(relationFixtures);
+for (const [source, expected] of [
+  ['PACKAGE_oscam', 'PACKAGE_luci-app-oscam'],
+  ['PACKAGE_aria2', 'PACKAGE_luci-app-aria2'],
+  ['PACKAGE_luci-app-oscam', 'PACKAGE_luci-app-oscam'],
+  ['PACKAGE_busybox', 'PACKAGE_busybox'],
+  ['OSCAM_WITH_SSL', 'OSCAM_WITH_SSL'],
+]) {
+  const option = { symbol: source };
+  expect(resolvePackageSelectionOption(option).symbol === expected,
+    `shared package selection relation failed: ${source} -> ${expected}`);
+}
 const setMenuValueContract = app.match(/function setMenuValue\(option, value, openChildren = false\) \{[\s\S]*?\n\}/)?.[0] || '';
-expect(setMenuValueContract.includes('applyMenuValue(option, value, false)') &&
-  setMenuValueContract.includes('openCatalogConflictModal(option, value, violations, openChildren)') &&
-  setMenuValueContract.includes('renderCatalogUiAfterIntent(openChildren, option, value)'),
-  'Advanced menuconfig no longer sends the exact user-selected option into native Kconfig intent handling');
+expect(setMenuValueContract.includes('const intentOption = resolvePackageSelectionOption(option)') &&
+  setMenuValueContract.includes('applyMenuValue(intentOption, value, false)') &&
+  setMenuValueContract.includes('openCatalogConflictModal(intentOption, value, violations, false)') &&
+  setMenuValueContract.includes('const renderedValue = menuValues.get(option.symbol)') &&
+  setMenuValueContract.includes("renderCatalogUiAfterIntent(openChildren && renderedValue !== 'n', option, renderedValue)"),
+  'Advanced menuconfig no longer resolves package selections through the shared canonical relation');
 const probeChoiceContract = app.match(/function probeChoiceFromMenuOption\(option\) \{[\s\S]*?\n\}/)?.[0] || '';
-expect(probeChoiceContract.includes("const symbol = String(option?.symbol || '')") &&
-  probeChoiceContract.includes("symbol.startsWith('PACKAGE_') ? symbol.slice('PACKAGE_'.length) : ''") &&
-  probeChoiceContract.includes('displayId: packageName || symbol') &&
-  !probeChoiceContract.includes('intentOption') && !probeChoiceContract.includes('sourceSymbol'),
-  'Probe rewrites an explicit package root instead of preserving the selected Kconfig package identity');
+expect(probeChoiceContract.includes("const sourceSymbol = String(option?.symbol || '')") &&
+  probeChoiceContract.includes('const intentOption = sourcePackage ? resolvePackageSelectionOption(option) : option') &&
+  probeChoiceContract.includes('const symbol = String(intentOption?.symbol || sourceSymbol)') &&
+  probeChoiceContract.includes('displayId: sourcePackage || sourceSymbol') &&
+  probeChoiceContract.includes('isPackage: Boolean(sourcePackage)'),
+  'Probe no longer resolves package rows through the same canonical relation as Advanced menuconfig');
 const searchMenuOptionsContract = app.match(/function searchMenuOptions\(query\) \{([\s\S]*?)\n\}/)?.[1] || '';
 expect(searchMenuOptionsContract.includes('rankMenuSearchOptions') &&
   app.includes('function searchMenuOptionsSync(query)') &&

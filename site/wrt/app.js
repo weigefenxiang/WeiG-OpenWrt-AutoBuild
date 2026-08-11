@@ -1375,6 +1375,13 @@ function menuSearchRank(option, query) {
 function rankMenuSearchOptions(options, query) {
   return [...options].sort((left, right) => menuSearchRank(left, query) - menuSearchRank(right, query));
 }
+function resolvePackageSelectionOption(option) {
+  const symbol = String(option?.symbol || '');
+  if (!symbol.startsWith('PACKAGE_')) return option;
+  const packageName = symbol.slice('PACKAGE_'.length);
+  if (!packageName || packageName.startsWith('luci-app-')) return option;
+  return menuOptionBySymbol.get(`PACKAGE_luci-app-${packageName}`) || option;
+}
 function searchMenuOptionsSync(query) {
   const normalized = normalizeMenuSearchQuery(query);
   if (normalized.length < 2) return [];
@@ -3206,17 +3213,19 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
 }
 
 function setMenuValue(option, value, openChildren = false) {
+  const intentOption = resolvePackageSelectionOption(option);
   try {
-    applyMenuValue(option, value, false);
+    applyMenuValue(intentOption, value, false);
   } catch (error) {
     const violations = Array.isArray(error?.violations) ? error.violations : [];
     if (violations.some((item) => item.code === 'package-conflict' || item.code === 'choice-conflict') &&
-        openCatalogConflictModal(option, value, violations, openChildren)) return false;
+        openCatalogConflictModal(intentOption, value, violations, false)) return false;
     const first = String(error?.message || error).split(';')[0];
     showToast(first.length > 240 ? `${first.slice(0, 237)}…` : first);
     return false;
   }
-  renderCatalogUiAfterIntent(openChildren, option, value);
+  const renderedValue = menuValues.get(option.symbol) ?? simpleKconfigDefault(option);
+  renderCatalogUiAfterIntent(openChildren && renderedValue !== 'n', option, renderedValue);
   return true;
 }
 function initDefconfig() {
@@ -6274,14 +6283,18 @@ function firstMeaningfulProbeText(...values) {
   return '';
 }
 function probeChoiceFromMenuOption(option) {
-  const symbol = String(option?.symbol || '');
+  const sourceSymbol = String(option?.symbol || '');
+  const sourcePackage = sourceSymbol.startsWith('PACKAGE_') ? sourceSymbol.slice('PACKAGE_'.length) : '';
+  const intentOption = sourcePackage ? resolvePackageSelectionOption(option) : option;
+  const symbol = String(intentOption?.symbol || sourceSymbol);
   const packageName = symbol.startsWith('PACKAGE_') ? symbol.slice('PACKAGE_'.length) : '';
   const translation = menuOptionTranslation(option);
   return {
+    sourceSymbol,
     symbol,
     package: packageName,
-    displayId: packageName || symbol,
-    isPackage: Boolean(packageName),
+    displayId: sourcePackage || sourceSymbol,
+    isPackage: Boolean(sourcePackage),
     title: firstMeaningfulProbeText(translation.title, option.promptZh, option.promptEn),
     usage: firstMeaningfulProbeText(translation.usage, option.usageZh, option.usageEn),
   };
