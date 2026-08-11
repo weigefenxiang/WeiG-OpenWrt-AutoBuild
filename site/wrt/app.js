@@ -6232,12 +6232,16 @@ const PROBE_UI_TEXT = Object.freeze({
   currentTarget: ['当前目标', '目前目標', 'Current target'],
   allTargets: ['全部代表目标', '全部代表目標', 'All representative targets'],
   packageCompile: ['软件包编译', '套件編譯', 'Package compile'],
+  packageCompileShort: ['编译', '編譯', 'Compile'],
   packageCompileHelp: ['使用目标工具链编译所选软件包及其依赖闭包。', '使用目標工具鏈編譯所選套件及其相依閉包。', 'Build the selected package and dependency closure with the target toolchain.'],
   rootfsIntegration: ['根文件系统集成', '根檔案系統整合', 'RootFS integration'],
+  rootfsIntegrationShort: ['RootFS', 'RootFS', 'RootFS'],
   rootfsIntegrationHelp: ['把所选软件包安装进 RootFS，用于发现 APK/OPKG 文件归属和共同安装冲突。', '把所選套件安裝進 RootFS，用於發現 APK/OPKG 檔案歸屬及共同安裝衝突。', 'Install selected packages into RootFS to expose APK/OPKG ownership and co-install conflicts.'],
   firmwareIntegration: ['固件集成', '韌體整合', 'Firmware integration'],
+  firmwareIntegrationShort: ['固件', '韌體', 'Firmware'],
   firmwareIntegrationHelp: ['在相同 Source/Branch/Target 环境中分别构建基础固件和加入所选软件包的固件。', '在相同 Source/Branch/Target 環境中分別建置基礎韌體及加入所選套件的韌體。', 'Build a baseline image and an image with the selected packages in the same Source/Branch/Target environment.'],
   bootSmoke: ['启动自检', '啟動自檢', 'Boot smoke'],
+  bootSmokeShort: ['启动', '啟動', 'Boot'],
   bootSmokeHelp: ['对 Catalog 认可的可启动目标执行实验性通用启动验证，不包含插件专属运行检查。', '對 Catalog 認可的可啟動目標執行實驗性通用啟動驗證，不包含套件專屬執行檢查。', 'Experimental generic boot validation for Catalog-approved bootable targets; no package-specific runtime checks.'],
   preview: ['预览计划', '預覽計畫', 'Preview plan'],
   submit: ['提交探针', '提交探針', 'Submit probe'],
@@ -6319,6 +6323,9 @@ async function openPackageProbeModal() {
     await ensureCatalogMenuLoaded(true);
     if ($('modal').hidden || !modal.classList.contains('package-probe')) return;
     const selected = new Map();
+    const probeBaseState = snapshotCatalogUiState();
+    const probeActiveSymbols = new Set();
+    modalCancelHandler = () => restoreCatalogUiState(probeBaseState);
     body.textContent = '';
 
     const intro = document.createElement('section');
@@ -6354,6 +6361,22 @@ async function openPackageProbeModal() {
       element.addEventListener('mouseleave', hideMenuTooltip);
     };
 
+    const rebuildProbeSelection = () => {
+      restoreCatalogUiState(probeBaseState);
+      probeActiveSymbols.clear();
+      for (const choice of selected.values()) {
+        const option = menuOptionBySymbol.get(choice.symbol);
+        if (!option) continue;
+        const result = applyMenuValue(option, 'y', false, 'user');
+        probeActiveSymbols.add(choice.symbol);
+        for (const change of result.changes || []) {
+          if (change.to !== 'n' && String(change.symbol || '').startsWith('PACKAGE_')) {
+            probeActiveSymbols.add(change.symbol);
+          }
+        }
+      }
+    };
+
     const renderSelected = () => {
       selectedBox.textContent = '';
       const label = document.createElement('strong'); label.textContent = `${probeUiText('selected')} ${selected.size}/8`;
@@ -6361,7 +6384,11 @@ async function openPackageProbeModal() {
       for (const choice of selected.values()) {
         const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'probe-chip';
         chip.textContent = `${choice.package} ×`; chip.title = `CONFIG_${choice.symbol}`;
-        chip.addEventListener('click', () => { selected.delete(choice.symbol); renderSelected(); renderResults(); renderPreview(); });
+        chip.addEventListener('click', () => {
+          selected.delete(choice.symbol);
+          rebuildProbeSelection();
+          renderSelected(); renderResults(); renderPreview();
+        });
         selectedBox.appendChild(chip);
       }
     };
@@ -6374,27 +6401,45 @@ async function openPackageProbeModal() {
       for (const choice of matches) {
         const selectable = choice.isPackage;
         const row = document.createElement('button'); row.type = 'button'; row.className = 'probe-package';
-        row.classList.toggle('is-selected', selectable && selected.has(choice.symbol));
+        const rootSelected = selectable && selected.has(choice.symbol);
+        const activeSelected = selectable && probeActiveSymbols.has(choice.symbol);
+        row.classList.toggle('is-selected', activeSelected);
+        row.classList.toggle('is-dependency', activeSelected && !rootSelected);
         row.classList.toggle('is-reference', !selectable);
         if (!selectable) row.setAttribute('aria-disabled', 'true');
         const mark = document.createElement('span'); mark.className = 'probe-package-mark';
-        mark.textContent = selectable ? (selected.has(choice.symbol) ? '✓' : '+') : '·';
+        mark.textContent = selectable ? (activeSelected ? '✓' : '+') : '·';
         const code = document.createElement('code'); code.className = 'probe-package-id'; code.textContent = choice.displayId;
         const title = document.createElement('span'); title.className = 'probe-package-title'; title.textContent = choice.title || '—';
         const usage = document.createElement('span'); usage.className = 'probe-package-usage'; usage.textContent = choice.usage || '—';
         bindProbeTextTooltip(title, choice.title);
         bindProbeTextTooltip(usage, choice.usage);
-        row.append(mark, code, title, usage);
-        const rowDetails = [choice.displayId, choice.title, choice.usage].filter(Boolean).join('\n');
+        const rowDetails = [choice.displayId, `CONFIG_${choice.symbol}`, choice.title, choice.usage].filter(Boolean).join('\n');
+        const info = document.createElement('span'); info.className = 'probe-package-info'; info.textContent = '!';
+        info.setAttribute('aria-hidden', 'true');
+        info.addEventListener('click', (event) => {
+          event.preventDefault(); event.stopPropagation(); showMenuPopup(row, rowDetails);
+        });
+        row.append(mark, code, title, usage, info);
         row.setAttribute('aria-label', rowDetails);
         row.addEventListener('focus', () => {
           if (probeTextIsTruncated(title) || probeTextIsTruncated(usage)) showMenuPopup(row, rowDetails);
         });
         row.addEventListener('blur', hideMenuTooltip);
         if (selectable) row.addEventListener('click', () => {
+          const previous = new Map(selected);
           if (selected.has(choice.symbol)) selected.delete(choice.symbol);
           else if (selected.size < 8) selected.set(choice.symbol, choice);
           else { showToast(uiText('最多选择 8 个软件包', '最多選擇 8 個套件', 'Select up to 8 packages')); return; }
+          try {
+            rebuildProbeSelection();
+          } catch (error) {
+            selected.clear();
+            for (const [symbol, previousChoice] of previous) selected.set(symbol, previousChoice);
+            rebuildProbeSelection();
+            showToast(String(error?.message || error).split(';')[0]);
+            return;
+          }
           renderSelected(); renderResults(); renderPreview();
         });
         results.appendChild(row);
@@ -6407,10 +6452,10 @@ async function openPackageProbeModal() {
     };
     const depth = fieldset(probeUiText('depth'), 'probe-depth');
     const depthOptions = [
-      ['package-compile', 'packageCompile', 'packageCompileHelp'],
-      ['rootfs-integration', 'rootfsIntegration', 'rootfsIntegrationHelp'],
-      ['firmware-integration', 'firmwareIntegration', 'firmwareIntegrationHelp'],
-      ['boot-smoke', 'bootSmoke', 'bootSmokeHelp'],
+      ['package-compile', 'packageCompile', 'packageCompileShort', 'packageCompileHelp'],
+      ['rootfs-integration', 'rootfsIntegration', 'rootfsIntegrationShort', 'rootfsIntegrationHelp'],
+      ['firmware-integration', 'firmwareIntegration', 'firmwareIntegrationShort', 'firmwareIntegrationHelp'],
+      ['boot-smoke', 'bootSmoke', 'bootSmokeShort', 'bootSmokeHelp'],
     ];
     const closeDepthHelp = (except = null) => {
       for (const info of depth.querySelectorAll('.probe-info.is-open')) {
@@ -6419,12 +6464,13 @@ async function openPackageProbeModal() {
         info.querySelector('button')?.setAttribute('aria-expanded', 'false');
       }
     };
-    for (const [index, [value, labelKey, helpKey]] of depthOptions.entries()) {
+    for (const [index, [value, labelKey, shortKey, helpKey]] of depthOptions.entries()) {
       const option = document.createElement('div'); option.className = 'probe-depth-option';
       const label = document.createElement('label'); label.className = 'probe-depth-choice';
       const input = document.createElement('input'); input.type = 'radio'; input.name = 'probeDepth'; input.value = value; input.checked = index === 0;
       const level = document.createElement('span'); level.className = 'probe-level'; level.textContent = `L${index + 1}`;
-      const title = document.createElement('strong'); title.textContent = probeUiText(labelKey);
+      const title = document.createElement('strong'); title.className = 'probe-depth-title';
+      title.textContent = probeUiText(labelKey); title.dataset.short = probeUiText(shortKey);
       label.append(input, level, title);
       const info = document.createElement('span'); info.className = 'probe-info';
       const infoButton = document.createElement('button'); infoButton.type = 'button'; infoButton.className = 'probe-info-button';

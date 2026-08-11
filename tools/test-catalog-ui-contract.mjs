@@ -43,6 +43,7 @@ expect(!probeContract.includes('ensureCatalogApplications()') && probeContract.i
   probeContract.includes('packages: [...selected.values()].map((choice) => choice.package)'),
   'in-page probe is still gated by applications.json.gz or no longer reuses the current Catalog/Kconfig package model');
 expect(probeContract.includes('const depthOptions = [') && probeContract.includes('`L${index + 1}`') &&
+  probeContract.includes("'packageCompileShort'") && probeContract.includes('title.dataset.short = probeUiText(shortKey)') &&
   probeContract.includes("popup.setAttribute('role', 'tooltip')") &&
   probeContract.includes("if (event.key === 'Escape') closeDepthHelp()") &&
   probeContract.includes('branchSearch.addEventListener') && probeContract.includes('customScope.hidden') &&
@@ -109,9 +110,17 @@ expect(searchMenuOptionsContract.includes('rankMenuSearchOptions') &&
 expect(probeContract.includes('const selectable = choice.isPackage') &&
   probeContract.includes("row.classList.toggle('is-reference', !selectable)") &&
   probeContract.includes("if (!selectable) row.setAttribute('aria-disabled', 'true')") &&
+  probeContract.includes('const activeSelected = selectable && probeActiveSymbols.has(choice.symbol)') &&
+  probeContract.includes("row.classList.toggle('is-dependency', activeSelected && !rootSelected)") &&
   probeContract.includes('mark.textContent = selectable ?') &&
   probeContract.includes("if (selectable) row.addEventListener('click'"),
-  'Probe does not keep PACKAGE_* selectable while ordinary Kconfig results stay reference-only');
+  'Probe does not keep PACKAGE_* selectable while shared Kconfig dependencies and reference rows stay distinct');
+expect(probeContract.includes('const probeBaseState = snapshotCatalogUiState()') &&
+  probeContract.includes('const probeActiveSymbols = new Set()') &&
+  probeContract.includes("const result = applyMenuValue(option, 'y', false, 'user')") &&
+  probeContract.includes('restoreCatalogUiState(probeBaseState)') &&
+  !probeContract.includes('CATALOG_ENGINE.applyUserIntent'),
+  'Probe created a second dependency engine instead of reusing Advanced menuconfig intent');
 expect(probeContract.includes("selected.has(choice.symbol)") && probeContract.includes("selected.set(choice.symbol, choice)") &&
   probeContract.includes('chip.textContent = `${choice.package} ×`') &&
   probeContract.includes('chip.title = `CONFIG_${choice.symbol}`'),
@@ -120,6 +129,7 @@ expect(probeContract.includes("guide.className = 'probe-guide'") &&
   probeContract.includes("code.className = 'probe-package-id'") &&
   probeContract.includes("title.className = 'probe-package-title'") &&
   probeContract.includes("usage.className = 'probe-package-usage'") &&
+  probeContract.includes("info.className = 'probe-package-info'") && probeContract.includes("info.textContent = '!'") &&
   probeContract.includes('bindProbeTextTooltip(title, choice.title)') &&
   probeContract.includes('showMenuPopup(row, rowDetails)'),
   'compact probe guide or shared full-text tooltip contract regressed');
@@ -131,6 +141,11 @@ expect(css.includes('.probe-depth { grid-template-columns: repeat(4, minmax(0, 1
   css.includes('.probe-package { display: grid; grid-template-columns: 30px minmax(190px, .9fr)') &&
   css.includes('.probe-package-id { min-width: 0;') && css.includes('overflow-wrap: anywhere; white-space: normal') &&
   css.includes('.probe-package-title, .probe-package-usage { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap') &&
+  css.includes('.probe-package-info { display: none;') && css.includes('.probe-package-info { display: grid;') &&
+  css.includes('.probe-depth { grid-template-columns: repeat(2, minmax(0, 1fr));') &&
+  css.includes('.probe-depth-title::after { content: attr(data-short);') &&
+  css.includes('.probe-selected { min-height: 48px; max-height: 92px;') &&
+  css.includes('.probe-package-title, .probe-package-usage { display: none; }') &&
   css.includes('.probe-preview[hidden] { display: none; }') &&
   css.includes('.probe-custom-scope-summary { display: flex;') && css.includes('.probe-custom-scope-body { display: grid;') &&
   css.includes('.probe-package.is-reference { cursor: default;'),
