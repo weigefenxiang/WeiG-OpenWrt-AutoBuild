@@ -192,9 +192,10 @@ if (html.includes('id="modalProbe"') && html.includes('<button type="button" cla
     app.includes('function openPackageProbeModal()') && app.includes("template: 'package-probe.yml'") &&
     app.includes("'probe-request.json'") && !app.includes('WEIG_PACKAGE_PROBE_REQUEST_V1') &&
     app.includes('probeUiText') && app.includes("'boot-smoke'") && app.includes('const depthOptions = [') &&
-    app.includes("packageName.startsWith('luci-app-') ? 1 : 2") && app.includes('scopeSelect.value') &&
+    app.includes("symbol.startsWith('PACKAGE_luci-app-')") && app.includes('scopeSelect.value') &&
     app.includes('targetSelect.value') && app.includes('preview.hidden = true') &&
-    app.includes("packages: [...selected.keys()]") && !app.includes('probe.href =') &&
+    app.includes("packages: [...selected.values()].map((choice) => choice.package)") &&
+    app.includes("customScope = document.createElement('details')") && !app.includes('probe.href =') &&
     !app.includes('probeCopyText') && !app.includes('copyButton')) {
   pass('in-page package probe downloads one JSON request and opens the dedicated Catalog Issue form');
 } else fail('in-page package probe contract');

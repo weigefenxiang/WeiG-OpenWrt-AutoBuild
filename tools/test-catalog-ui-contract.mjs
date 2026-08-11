@@ -37,25 +37,34 @@ expect(selfTestContract.indexOf("openModal(t('st.title'))") >= 0 &&
   !selfTestContract.includes('ensureCompatibilityRules()'),
   'self-test does not open immediately or its generic Catalog probe entry is gated by compatibility UI');
 const probeContract = app.match(/async function openPackageProbeModal\(\) \{([\s\S]*?)\n\}\n\$\('modalProbe'/)?.[1] || '';
-expect(probeContract.includes('ensureCatalogApplications()') && probeContract.includes('probePackageChoices') &&
-  probeContract.includes("'probeDepth'") && probeContract.includes('scopeSelect.value') &&
+expect(probeContract.includes('ensureCatalogApplications()') && probeContract.includes('ensureCatalogMenuLoaded(true)') &&
+  probeContract.includes('probePackageChoices()') && probeContract.includes("'probeDepth'") && probeContract.includes('scopeSelect.value') &&
   probeContract.includes('targetSelect.value') && probeContract.includes('probeIssueUrl(request)') &&
-  probeContract.includes('packages: [...selected.keys()]') && !probeContract.includes('luci-app-'),
-  'in-page probe does not use generic Catalog data, depth/scope/target options, or the validated Issue request');
+  probeContract.includes('packages: [...selected.values()].map((choice) => choice.package)'),
+  'in-page probe does not reuse the current Catalog/Kconfig package model or serialize short package names');
 expect(probeContract.includes('const depthOptions = [') && probeContract.includes('`L${index + 1}`') &&
   probeContract.includes("popup.setAttribute('role', 'tooltip')") &&
   probeContract.includes("if (event.key === 'Escape') closeDepthHelp()") &&
   probeContract.includes('branchSearch.addEventListener') && probeContract.includes('customScope.hidden') &&
+  probeContract.includes("customScope = document.createElement('details')") && probeContract.includes('updateCustomScopeSummary') &&
   probeContract.includes('preview.hidden = true') && probeContract.includes("previewButton.setAttribute('aria-expanded'") &&
   probeContract.indexOf('layout.append(settings, picker)') < probeContract.indexOf('layout.appendChild(actions)'),
   'probe depth help, searchable custom scope, collapsed preview, or bottom action order regressed');
-const probeChoices = app.match(/function meaningfulProbeText\(value\) \{([\s\S]*?)\n\}\nfunction probeCurrentTarget/)?.[0] || '';
-expect(probeChoices.includes('/[\\p{L}\\p{N}]/u') && probeChoices.includes('priority: 0') &&
-  probeChoices.includes("packageName.startsWith('luci-app-') ? 1 : 2") &&
-  probeChoices.includes('left.priority - right.priority') &&
-  probeChoices.includes('firstMeaningfulProbeText(localizedTitle, item.titleZh, item.titleEn)') &&
-  probeChoices.includes('firstMeaningfulProbeText(localizedUsage, item.usageZh, item.usageEn)'),
-  'probe package projection no longer rejects punctuation-only text or keeps Catalog/LuCI packages first');
+const probeChoices = app.match(/function probePackageChoices\(\) \{([\s\S]*?)\n\}\nfunction probeCurrentTarget/)?.[0] || '';
+expect(probeChoices.includes("symbol.startsWith('PACKAGE_luci-app-')") &&
+  probeChoices.includes("packageName = symbol.slice('PACKAGE_'.length)") &&
+  probeChoices.includes('symbol,') && probeChoices.includes('package: packageName') &&
+  !probeChoices.includes('applications?.items') && !probeChoices.includes('item.id'),
+  'probe package projection is not a luci-app-only view of the current Advanced menuconfig Kconfig symbols');
+expect(app.includes('function normalizeProbeSearch(value)') &&
+  app.includes("query.startsWith('config_') ? query.slice('config_'.length) : query") &&
+  app.includes('return symbol.includes(query) || packageName.includes(query)') &&
+  !probeContract.includes('choice.title} ${choice.usage}'),
+  'probe search no longer uses ID-only CONFIG_/PACKAGE_/package normalization');
+expect(probeContract.includes("selected.has(choice.symbol)") && probeContract.includes("selected.set(choice.symbol, choice)") &&
+  probeContract.includes('chip.textContent = `${choice.package} ×`') &&
+  probeContract.includes('chip.title = `CONFIG_${choice.symbol}`'),
+  'probe selection identity or short package chip display regressed');
 expect(probeContract.includes("guide.className = 'probe-guide'") &&
   probeContract.includes("code.className = 'probe-package-id'") &&
   probeContract.includes("title.className = 'probe-package-title'") &&
@@ -71,7 +80,8 @@ expect(css.includes('.probe-depth { grid-template-columns: repeat(4, minmax(0, 1
   css.includes('.probe-package { display: grid; grid-template-columns: 30px minmax(190px, .9fr)') &&
   css.includes('.probe-package-id { min-width: 0;') && css.includes('overflow-wrap: anywhere; white-space: normal') &&
   css.includes('.probe-package-title, .probe-package-usage { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap') &&
-  css.includes('.probe-preview[hidden] { display: none; }'),
+  css.includes('.probe-preview[hidden] { display: none; }') &&
+  css.includes('.probe-custom-scope-summary { display: flex;') && css.includes('.probe-custom-scope-body { display: grid;'),
   'probe single-scroll height, horizontal rows, full IDs, truncated translations, or collapsed preview styling regressed');
 expect(app.includes("label: 'Root Kconfig options', uiKey: 'rootOptions', usageUiKey: 'rootOptionsHelp'") &&
   !app.includes("label: 'General settings', usage: 'Root configuration options'"),

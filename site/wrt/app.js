@@ -6199,38 +6199,32 @@ function firstMeaningfulProbeText(...values) {
   }
   return '';
 }
-function probePackageChoices(applications) {
-  const byPackage = new Map();
-  for (const item of applications?.items || []) {
-    const packageName = String(item.package || '').trim();
-    if (!packageName) continue;
-    const localizedTitle = item.titleI18n?.[state.lang] ||
-      (state.lang === 'zh-CN' ? item.titleZh : state.lang === 'en' ? item.titleEn : '');
-    const localizedUsage = item.usageI18n?.[state.lang] ||
-      (state.lang === 'zh-CN' ? item.usageZh : state.lang === 'en' ? item.usageEn : '');
-    byPackage.set(packageName, {
-      id: String(item.id || packageName), package: packageName,
-      title: firstMeaningfulProbeText(localizedTitle, item.titleZh, item.titleEn),
-      usage: firstMeaningfulProbeText(localizedUsage, item.usageZh, item.usageEn),
-      priority: 0,
-    });
-  }
+function probePackageChoices() {
+  const choices = [];
   for (const option of menuOptionBySymbol.values()) {
-    if (!String(option?.symbol || '').startsWith('PACKAGE_')) continue;
-    const packageName = option.symbol.slice(8);
-    if (byPackage.has(packageName)) continue;
+    const symbol = String(option?.symbol || '');
+    if (!symbol.startsWith('PACKAGE_luci-app-')) continue;
+    const packageName = symbol.slice('PACKAGE_'.length);
     const translation = menuOptionTranslation(option);
-    byPackage.set(packageName, {
-      id: packageName, package: packageName,
+    choices.push({
+      symbol,
+      package: packageName,
       title: firstMeaningfulProbeText(translation.title, option.promptZh, option.promptEn),
       usage: firstMeaningfulProbeText(translation.usage, option.usageZh, option.usageEn),
-      priority: packageName.startsWith('luci-app-') ? 1 : 2,
     });
   }
-  return [...byPackage.values()].sort((left, right) =>
-    left.priority - right.priority ||
-    (left.title || left.package).localeCompare(right.title || right.package, state.lang || 'en', { sensitivity: 'base' }) ||
-    left.package.localeCompare(right.package));
+  return choices.sort((left, right) => left.package.localeCompare(right.package, undefined, { sensitivity: 'base' }));
+}
+function normalizeProbeSearch(value) {
+  const query = String(value || '').trim().toLocaleLowerCase();
+  return query.startsWith('config_') ? query.slice('config_'.length) : query;
+}
+function probeChoiceMatches(choice, value) {
+  const query = normalizeProbeSearch(value);
+  if (!query) return true;
+  const symbol = choice.symbol.toLocaleLowerCase();
+  const packageName = choice.package.toLocaleLowerCase();
+  return symbol.includes(query) || packageName.includes(query);
 }
 function probeCurrentTarget() {
   const target = (MENU_CATALOG?.targets || []).find((item) =>
@@ -6254,9 +6248,9 @@ async function openPackageProbeModal() {
   loading.className = 'probe-loading'; loading.textContent = uiText('正在加载 Catalog 探针数据…', '正在載入 Catalog 探針資料…', 'Loading Catalog probe data…');
   body.appendChild(loading);
   try {
-    const applications = await ensureCatalogApplications();
+    await Promise.all([ensureCatalogApplications(), ensureCatalogMenuLoaded(true)]);
     if ($('modal').hidden || !modal.classList.contains('package-probe')) return;
-    const choices = probePackageChoices(applications);
+    const choices = probePackageChoices();
     const selected = new Map();
     body.textContent = '';
 
@@ -6299,23 +6293,21 @@ async function openPackageProbeModal() {
       selectedBox.appendChild(label);
       for (const choice of selected.values()) {
         const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'probe-chip';
-        chip.textContent = `${choice.title || choice.package} ×`; chip.title = choice.package;
-        chip.addEventListener('click', () => { selected.delete(choice.id); renderSelected(); renderResults(); renderPreview(); });
+        chip.textContent = `${choice.package} ×`; chip.title = `CONFIG_${choice.symbol}`;
+        chip.addEventListener('click', () => { selected.delete(choice.symbol); renderSelected(); renderResults(); renderPreview(); });
         selectedBox.appendChild(chip);
       }
     };
     const renderResults = () => {
-      const query = search.value.trim().toLocaleLowerCase();
-      const matches = choices.filter((choice) =>
-        !query || `${choice.id} ${choice.package} ${choice.title} ${choice.usage}`.toLocaleLowerCase().includes(query)).slice(0, 80);
+      const matches = choices.filter((choice) => probeChoiceMatches(choice, search.value)).slice(0, 80);
       results.textContent = '';
       if (!matches.length) {
         const empty = document.createElement('p'); empty.className = 'probe-empty'; empty.textContent = probeUiText('empty'); results.appendChild(empty); return;
       }
       for (const choice of matches) {
         const row = document.createElement('button'); row.type = 'button'; row.className = 'probe-package';
-        row.classList.toggle('is-selected', selected.has(choice.id));
-        const mark = document.createElement('span'); mark.className = 'probe-package-mark'; mark.textContent = selected.has(choice.id) ? '✓' : '+';
+        row.classList.toggle('is-selected', selected.has(choice.symbol));
+        const mark = document.createElement('span'); mark.className = 'probe-package-mark'; mark.textContent = selected.has(choice.symbol) ? '✓' : '+';
         const code = document.createElement('code'); code.className = 'probe-package-id'; code.textContent = choice.package;
         const title = document.createElement('span'); title.className = 'probe-package-title'; title.textContent = choice.title || '—';
         const usage = document.createElement('span'); usage.className = 'probe-package-usage'; usage.textContent = choice.usage || '—';
@@ -6329,8 +6321,8 @@ async function openPackageProbeModal() {
         });
         row.addEventListener('blur', hideMenuTooltip);
         row.addEventListener('click', () => {
-          if (selected.has(choice.id)) selected.delete(choice.id);
-          else if (selected.size < 8) selected.set(choice.id, choice);
+          if (selected.has(choice.symbol)) selected.delete(choice.symbol);
+          else if (selected.size < 8) selected.set(choice.symbol, choice);
           else { showToast(uiText('最多选择 8 个软件包', '最多選擇 8 個套件', 'Select up to 8 packages')); return; }
           renderSelected(); renderResults(); renderPreview();
         });
@@ -6399,21 +6391,35 @@ async function openPackageProbeModal() {
       : probeUiText('currentTarget'), !currentTarget);
     addSelectOption(targetSelect, 'all', probeUiText('allTargets'));
 
-    const customScope = document.createElement('section'); customScope.className = 'probe-custom-scope'; customScope.hidden = true; settings.appendChild(customScope);
+    const customScope = document.createElement('details'); customScope.className = 'probe-custom-scope'; customScope.hidden = true; customScope.open = true; settings.appendChild(customScope);
+    const customScopeSummary = document.createElement('summary'); customScopeSummary.className = 'probe-custom-scope-summary';
+    const customScopeTitle = document.createElement('strong');
+    const customScopeToggle = document.createElement('span'); customScopeToggle.className = 'probe-custom-scope-toggle';
+    customScopeSummary.append(customScopeTitle, customScopeToggle); customScope.appendChild(customScopeSummary);
+    const customScopeBody = document.createElement('div'); customScopeBody.className = 'probe-custom-scope-body'; customScope.appendChild(customScopeBody);
     const branchSearch = document.createElement('input'); branchSearch.type = 'search'; branchSearch.className = 'probe-branch-search';
     branchSearch.placeholder = `${probeUiText('customScope')} · Source/Branch`;
     branchSearch.setAttribute('aria-label', branchSearch.placeholder);
-    const branchList = document.createElement('div'); branchList.className = 'probe-branches'; customScope.append(branchSearch, branchList);
+    const branchList = document.createElement('div'); branchList.className = 'probe-branches'; customScopeBody.append(branchSearch, branchList);
+    const updateCustomScopeSummary = () => {
+      const count = branchList.querySelectorAll('input:checked').length;
+      customScopeTitle.textContent = `${probeUiText('customScope')} · ${uiText('已选', '已選', 'Selected')} ${count}`;
+      customScopeToggle.textContent = customScope.open ? uiText('收起', '收起', 'Collapse') : uiText('展开', '展開', 'Expand');
+    };
     for (const source of MENU_INDEX?.sources || []) for (const branch of source.branches || []) {
       if (branch.state === 'unavailable') continue;
       const label = document.createElement('label');
       const input = document.createElement('input'); input.type = 'checkbox'; input.value = `${source.id}\0${branch.branch}`;
       const text = `${source.label || source.id} / ${branch.branch}`;
       label.dataset.search = text.toLocaleLowerCase();
-      input.addEventListener('change', renderPreview); label.append(input, document.createTextNode(text)); branchList.appendChild(label);
+      input.addEventListener('change', () => { updateCustomScopeSummary(); renderPreview(); }); label.append(input, document.createTextNode(text)); branchList.appendChild(label);
     }
+    updateCustomScopeSummary();
+    customScope.addEventListener('toggle', updateCustomScopeSummary);
     scopeSelect.addEventListener('change', () => {
       customScope.hidden = scopeSelect.value !== 'custom';
+      if (!customScope.hidden) customScope.open = true;
+      updateCustomScopeSummary();
       renderPreview();
     });
     targetSelect.addEventListener('change', renderPreview);
@@ -6450,7 +6456,7 @@ async function openPackageProbeModal() {
       return {
         schema: 1, channel: probeCodeChannel(),
         mode: depth.querySelector('input[name=probeDepth]:checked')?.value || 'package-compile',
-        packages: [...selected.keys()], scope: requestScope, targetPolicy, maxParallel: 0, execute: true,
+        packages: [...selected.values()].map((choice) => choice.package), scope: requestScope, targetPolicy, maxParallel: 0, execute: true,
       };
     };
     function renderPreview() {
