@@ -1348,7 +1348,7 @@ function requestCatalogSearch(query) {
   });
 }
 function normalizeMenuSearchQuery(value) {
-  return String(value || '').trim().toLowerCase();
+  return String(value || '').trim().toLowerCase().replace(/^config_/, '');
 }
 function normalizeMenuSearchIdentity(value) {
   return normalizeMenuSearchQuery(value)

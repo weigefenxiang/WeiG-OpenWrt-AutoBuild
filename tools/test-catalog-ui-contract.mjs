@@ -60,6 +60,8 @@ expect(probeChoices.includes('searchMenuOptionsSync(normalized)') &&
   !app.match(/function probeUiText\(key\) \{[\s\S]*?catalogApplicationsDocument/),
   'probe no longer projects directly from the shared Advanced menuconfig search model');
 const normalizeMenuSearchQueryContract = app.match(/function normalizeMenuSearchQuery\(value\) \{[\s\S]*?\n\}/)?.[0] || '';
+expect(normalizeMenuSearchQueryContract.includes("replace(/^config_/, '')"),
+  'shared Advanced/Probe search does not normalize CONFIG_ before candidate lookup');
 const normalizeMenuSearchIdentityContract = app.match(/function normalizeMenuSearchIdentity\(value\) \{[\s\S]*?\n\}/)?.[0] || '';
 const menuSearchRankContract = app.match(/function menuSearchRank\(option, query\) \{[\s\S]*?\n\}/)?.[0] || '';
 const rankMenuSearchOptionsContract = app.match(/function rankMenuSearchOptions\(options, query\) \{[\s\S]*?\n\}/)?.[0] || '';
