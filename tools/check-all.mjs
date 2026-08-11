@@ -224,6 +224,9 @@ else fail('Workflow run-name YAML', runNameIssues.join('; '));
 
 const buildWorkflow = readFileSync(join(workflowDir, 'custom-build.yml'), 'utf8');
 const cancelWorkflow = readFileSync(join(workflowDir, 'cancel-build.yml'), 'utf8');
+if (buildWorkflow.includes('python3 python3-setuptools') && !buildWorkflow.includes('python3-distutils')) {
+  pass('Ubuntu 24.04 Python build dependencies are current');
+} else fail('Build dependency contract', 'use python3 + python3-setuptools; python3-distutils is unavailable');
 const retention = [...buildWorkflow.matchAll(/^\s*retention-days:\s*(\d+)\s*$/gm)].map((match) => Number(match[1]));
 if (retention.length >= 5 && retention.filter((days) => days === 1).length === 1 &&
     retention.filter((days) => days === 60).length === retention.length - 1 &&
