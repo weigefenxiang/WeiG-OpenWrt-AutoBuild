@@ -379,7 +379,7 @@ const applicationsDocument = {
       'allSources', 'currentSource', 'customScope', 'autoTarget', 'currentTarget', 'allTargets',
       'packageCompile', 'packageCompileHelp', 'rootfsIntegration', 'rootfsIntegrationHelp',
       'firmwareIntegration', 'firmwareIntegrationHelp', 'bootSmoke', 'bootSmokeHelp',
-      'preview', 'submit', 'downloadedRequest', 'uploadInstruction', 'cancelInstruction',
+      'preview', 'submit', 'submittedState', 'stateInstruction', 'cancelInstruction',
       'permission', 'retention', 'issueTitle', 'loading', 'empty', 'invalid',
     ].map((key, index) => [key, { en: `English ${index}`, 'zh-CN': `中文 ${index}` }])),
   },

@@ -190,24 +190,23 @@ else fail('Catalog-only execution contract');
 
 if (html.includes('id="modalProbe"') && html.includes('<button type="button" class="modal-probe-link"') &&
     app.includes('function openPackageProbeModal()') && app.includes("template: 'package-probe.yml'") &&
-    app.includes("'probe-request.json'") && !app.includes('WEIG_PACKAGE_PROBE_REQUEST_V1') &&
+    !app.includes('probe-request.json') && app.includes('WEIG_PACKAGE_PROBE_STATE_V2:') &&
     app.includes('probeUiText') && app.includes("'boot-smoke'") && app.includes('const depthOptions = [') &&
     app.includes('function rankMenuSearchOptions(options, query)') &&
     app.includes('function searchMenuOptionsSync(query)') &&
     app.includes('function resolvePackageSelectionOption(option)') &&
     app.includes('const intentOption = resolvePackageSelectionOption(option)') &&
     app.includes('applyMenuValue(intentOption, value, false)') &&
-    app.includes('const probeBaseState = snapshotCatalogUiState()') &&
-    app.includes("const result = applyMenuValue(option, 'y', false, 'user')") &&
-    app.includes('const probeActiveSymbols = new Set()') &&
+    !app.includes('const selected = new Map()') && !app.includes('probeBaseState') &&
+    !app.includes('probeActiveSymbols') && app.includes('setMenuValue(option, nextValue)') &&
     app.includes('const selectable = choice.isPackage') &&
     app.includes("row.classList.toggle('is-reference', !selectable)") &&
     !app.includes('function normalizeProbeSearch(') && !app.includes('function probeChoiceMatches(') &&
     app.includes('scopeSelect.value') && app.includes('targetSelect.value') && app.includes('preview.hidden = true') &&
-    app.includes("packages: [...selected.values()].map((choice) => choice.package)") &&
+    app.includes('packageConfig: probePackageConfigFromText(resolvedConfig)') &&
     app.includes("customScope = document.createElement('details')") && !app.includes('probe.href =') &&
     !app.includes('probeCopyText') && !app.includes('copyButton')) {
-  pass('in-page package probe downloads one JSON request and opens the dedicated Catalog Issue form');
+  pass('in-page package probe shares Advanced menuconfig state and opens the dedicated Catalog Issue form');
 } else fail('in-page package probe contract');
 
 if (app.includes("label: 'Root Kconfig options', uiKey: 'rootOptions', usageUiKey: 'rootOptionsHelp'") &&

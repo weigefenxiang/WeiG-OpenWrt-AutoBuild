@@ -39,8 +39,8 @@ expect(selfTestContract.indexOf("openModal(t('st.title'))") >= 0 &&
 const probeContract = app.match(/async function openPackageProbeModal\(\) \{([\s\S]*?)\n\}\n\$\('modalProbe'/)?.[1] || '';
 expect(!probeContract.includes('ensureCatalogApplications()') && probeContract.includes('await ensureCatalogMenuLoaded(true)') &&
   probeContract.includes('probePackageChoices(search.value)') && probeContract.includes("'probeDepth'") && probeContract.includes('scopeSelect.value') &&
-  probeContract.includes('targetSelect.value') && probeContract.includes('probeIssueUrl(request)') &&
-  probeContract.includes('packages: [...selected.values()].map((choice) => choice.package)'),
+  probeContract.includes('targetSelect.value') && probeContract.includes('probeIssueUrl(request, token)') &&
+  probeContract.includes('packageConfig: probePackageConfigFromText(resolvedConfig)'),
   'in-page probe is still gated by applications.json.gz or no longer reuses the current Catalog/Kconfig package model');
 expect(probeContract.includes('const depthOptions = [') && probeContract.includes('`L${index + 1}`') &&
   probeContract.includes("'packageCompileShort'") && probeContract.includes('title.dataset.short = probeUiText(shortKey)') &&
@@ -117,36 +117,38 @@ expect(setMenuValueContract.includes('const intentOption = resolvePackageSelecti
   setMenuValueContract.includes("renderCatalogUiAfterIntent(openChildren && renderedValue !== 'n', option, renderedValue)"),
   'Advanced menuconfig no longer resolves package selections through the shared canonical relation');
 const probeChoiceContract = app.match(/function probeChoiceFromMenuOption\(option\) \{[\s\S]*?\n\}/)?.[0] || '';
-expect(probeChoiceContract.includes("const sourceSymbol = String(option?.symbol || '')") &&
-  probeChoiceContract.includes('const intentOption = sourcePackage ? resolvePackageSelectionOption(option) : option') &&
-  probeChoiceContract.includes('const symbol = String(intentOption?.symbol || sourceSymbol)') &&
-  probeChoiceContract.includes('displayId: sourcePackage || sourceSymbol') &&
-  probeChoiceContract.includes('isPackage: Boolean(sourcePackage)'),
-  'Probe no longer resolves package rows through the same canonical relation as Advanced menuconfig');
+expect(probeChoiceContract.includes("const symbol = String(option?.symbol || '')") &&
+  probeChoiceContract.includes("symbol.startsWith('PACKAGE_') ? symbol.slice('PACKAGE_'.length) : ''") &&
+  probeChoiceContract.includes('displayId: packageName || symbol') &&
+  probeChoiceContract.includes('userSettable: option?.userSettable !== false') &&
+  !probeChoiceContract.includes('resolvePackageSelectionOption(option)'),
+  'Probe rows must preserve the real Kconfig symbol and let shared setMenuValue resolve user intent');
 const searchMenuOptionsContract = app.match(/function searchMenuOptions\(query\) \{([\s\S]*?)\n\}/)?.[1] || '';
 expect(searchMenuOptionsContract.includes('rankMenuSearchOptions') &&
   app.includes('function searchMenuOptionsSync(query)') &&
   probeChoices.includes('searchMenuOptionsSync(normalized)') &&
   !app.includes('function normalizeProbeSearch(') && !app.includes('function probeChoiceMatches('),
   'Advanced and Probe still maintain separate search ranking/matching implementations');
-expect(probeContract.includes('const selectable = choice.isPackage') &&
+expect(probeContract.includes('const selectable = choice.isPackage && choice.userSettable') &&
   probeContract.includes("row.classList.toggle('is-reference', !selectable)") &&
   probeContract.includes("if (!selectable) row.setAttribute('aria-disabled', 'true')") &&
-  probeContract.includes('const activeSelected = selectable && probeActiveSymbols.has(choice.symbol)') &&
-  probeContract.includes("row.classList.toggle('is-dependency', activeSelected && !rootSelected)") &&
-  probeContract.includes('mark.textContent = selectable ?') &&
-  probeContract.includes("if (selectable) row.addEventListener('click'"),
-  'Probe does not keep PACKAGE_* selectable while shared Kconfig dependencies and reference rows stay distinct');
-expect(probeContract.includes('const probeBaseState = snapshotCatalogUiState()') &&
-  probeContract.includes('const probeActiveSymbols = new Set()') &&
-  probeContract.includes("const result = applyMenuValue(option, 'y', false, 'user')") &&
-  probeContract.includes('restoreCatalogUiState(probeBaseState)') &&
-  !probeContract.includes('CATALOG_ENGINE.applyUserIntent'),
-  'Probe created a second dependency engine instead of reusing Advanced menuconfig intent');
-expect(probeContract.includes("selected.has(choice.symbol)") && probeContract.includes("selected.set(choice.symbol, choice)") &&
-  probeContract.includes('chip.textContent = `${choice.package} ×`') &&
-  probeContract.includes('chip.title = `CONFIG_${choice.symbol}`'),
-  'probe selection identity or short package chip display regressed');
+  probeContract.includes("const currentValue = choice.isPackage ? probeMenuOptionState(option) : 'n'") &&
+  probeContract.includes("const activeSelected = choice.isPackage && currentValue !== 'n'") &&
+  probeContract.includes('mark.textContent = choice.isPackage ?') &&
+  probeContract.includes("if (selectable) row.addEventListener('click'") &&
+  probeContract.includes('setMenuValue(option, nextValue)'),
+  'Probe rows do not read/write the shared Advanced Kconfig state');
+expect(!probeContract.includes('const selected = new Map()') &&
+  !probeContract.includes('probeBaseState') && !probeContract.includes('probeActiveSymbols') &&
+  probeContract.includes('setMenuValue(option, nextValue)') &&
+  probeContract.includes('activeProbePackageOptions()') &&
+  probeContract.includes('generateResolvedConfigText()'),
+  'Probe maintains private package state instead of sharing Advanced menuconfig state');
+expect(probeContract.includes('probeMenuOptionState(option)') &&
+  probeContract.includes("setMenuValue(option, 'n')") &&
+  probeContract.includes("chip.textContent = `${packageName}=${String(value).toUpperCase()} ×`") &&
+  !probeContract.includes('selected.set('),
+  'Probe selected summary is not derived from the shared Kconfig state');
 expect(probeContract.includes("guide.className = 'probe-guide'") &&
   probeContract.includes("code.className = 'probe-package-id'") &&
   probeContract.includes("title.className = 'probe-package-title'") &&
@@ -366,3 +368,9 @@ expect(catalogFileNameTokenMatch('release-27.4', 'firmware-27.4-device.config', 
   'numeric branch alias was not detected');
 
 console.log('Catalog UI state and responsive DOM contracts passed');
+
+expect(!app.includes('probe-request.json'), 'removed Probe request file protocol returned');
+expect(app.includes('WEIG_PACKAGE_PROBE_STATE_V2:') &&
+  app.includes("new URLSearchParams({ template: 'package-probe.yml', title, state: token })") &&
+  app.includes('packageConfig: probePackageConfigFromText(resolvedConfig)'),
+  'Probe does not submit the shared Advanced package state directly');

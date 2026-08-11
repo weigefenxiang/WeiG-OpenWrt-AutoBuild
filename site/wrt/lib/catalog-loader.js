@@ -310,7 +310,7 @@ const PROBE_UI_KEYS = [
   'allSources', 'currentSource', 'customScope', 'autoTarget', 'currentTarget', 'allTargets',
   'packageCompile', 'packageCompileHelp', 'rootfsIntegration', 'rootfsIntegrationHelp',
   'firmwareIntegration', 'firmwareIntegrationHelp', 'bootSmoke', 'bootSmokeHelp',
-  'preview', 'submit', 'downloadedRequest', 'uploadInstruction', 'cancelInstruction',
+  'preview', 'submit', 'submittedState', 'stateInstruction', 'cancelInstruction',
   'permission', 'retention', 'issueTitle', 'loading', 'empty', 'invalid',
 ];
 

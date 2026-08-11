@@ -6228,7 +6228,7 @@ async function timedFetch(url, timeout) {
 const PROBE_UI_TEXT = Object.freeze({
   title: ['插件兼容探针', '套件相容性探針', 'Package Compatibility Probe'],
   intro: ['复用当前 Source/Branch 的 Advanced menuconfig 搜索结果，选择软件包并检查其在 Catalog 各源码分支中的编译、RootFS 安装、固件集成和可选启动行为。', '複用目前 Source/Branch 的 Advanced menuconfig 搜尋結果，選擇套件並檢查其在 Catalog 各原始碼分支中的編譯、RootFS 安裝、韌體整合及可選啟動行為。', 'Reuse the current Source/Branch Advanced menuconfig search results, select packages, and check compilation, RootFS installation, firmware integration, and optional boot behavior across Catalog Source/Branch environments.'],
-  howTo: ['搜索结果与 Advanced menuconfig 使用同一匹配与排序；`PACKAGE_*` 软件包可选择，普通 Kconfig 选项仅供参考。选择 1–8 个软件包后设置探测深度和范围并预览计划。', '搜尋結果與 Advanced menuconfig 使用同一匹配與排序；`PACKAGE_*` 套件可選擇，一般 Kconfig 選項僅供參考。選擇 1–8 個套件後設定探測深度和範圍並預覽計畫。', 'Search results share the same matching and ranking as Advanced menuconfig. `PACKAGE_*` rows are selectable packages; ordinary Kconfig options are reference-only. Choose 1–8 packages, then set depth and scope and preview the plan.'],
+  howTo: ['Probe 与 Advanced menuconfig 直接共用同一份 Kconfig 状态。修改 `PACKAGE_*` 会立即走相同的 setMenuValue/Kconfig 依赖计算；所有被启用的依赖软件包都会成为同一份真实状态，普通 Kconfig 选项仅供参考。', 'Probe 與 Advanced menuconfig 直接共用同一份 Kconfig 狀態。修改 `PACKAGE_*` 會立即走相同的 setMenuValue/Kconfig 相依計算；所有被啟用的相依套件都會成為同一份真實狀態，一般 Kconfig 選項僅供參考。', 'Probe and Advanced menuconfig share one Kconfig state. Changing a `PACKAGE_*` row immediately uses the same setMenuValue/Kconfig dependency calculation; every enabled dependency package is part of that same state, while ordinary Kconfig options remain reference-only.'],
   search: ['搜索软件包 / Kconfig ID', '搜尋套件 / Kconfig ID', 'Search package / Kconfig IDs'],
   selected: ['已选择', '已選擇', 'Selected'],
   depth: ['探测深度', '探測深度', 'Probe depth'],
@@ -6254,13 +6254,13 @@ const PROBE_UI_TEXT = Object.freeze({
   bootSmokeHelp: ['对 Catalog 认可的可启动目标执行实验性通用启动验证，不包含插件专属运行检查。', '對 Catalog 認可的可啟動目標執行實驗性通用啟動驗證，不包含套件專屬執行檢查。', 'Experimental generic boot validation for Catalog-approved bootable targets; no package-specific runtime checks.'],
   preview: ['预览计划', '預覽計畫', 'Preview plan'],
   submit: ['提交探针', '提交探針', 'Submit probe'],
-  downloadedRequest: ['probe-request.json 已下载。请把它拖入 GitHub Issue 的必填上传框。', 'probe-request.json 已下載。請把它拖入 GitHub Issue 的必填上傳框。', 'probe-request.json was downloaded. Drag it into the required upload field in the GitHub Issue.'],
-  uploadInstruction: ['只上传一个未经修改的 probe-request.json。附件和 Issue 公开可见，请勿加入秘密信息。', '只上傳一個未經修改的 probe-request.json。附件和 Issue 公開可見，請勿加入秘密資訊。', 'Upload exactly one unmodified probe-request.json. The attachment and Issue are public; never add secrets.'],
+  submittedState: ['当前 Advanced menuconfig 软件包状态已带入 GitHub Issue。', '目前 Advanced menuconfig 套件狀態已帶入 GitHub Issue。', 'The current Advanced menuconfig package state was carried into the GitHub Issue.'],
+  stateInstruction: ['Probe 只传递当前 Advanced menuconfig 已解析的 PACKAGE_* 状态和探测参数，不维护第二套软件包选择，也不上传配置文件。', 'Probe 只傳遞目前 Advanced menuconfig 已解析的 PACKAGE_* 狀態與探測參數，不維護第二套套件選擇，也不上傳設定檔。', 'Probe transports only the PACKAGE_* state already resolved by Advanced menuconfig plus probe controls; it maintains no second package selection and uploads no config file.'],
   cancelInstruction: ['提交后如需取消，请在同一个 Issue 中准确回复 /cancel。', '提交後如需取消，請在同一個 Issue 中準確回覆 /cancel。', 'To cancel after submission, reply with exactly /cancel in the same Issue.'],
   permission: ['仓库所有者可以运行完整计划；有写权限的协作者最多并发 3；普通访客不能启动探针 Matrix。', '儲存庫擁有者可以執行完整計畫；具寫入權限的協作者最多同時執行 3 個工作；一般訪客不能啟動探針 Matrix。', 'Repository owners may run the full plan; write collaborators are capped at three concurrent jobs; visitors cannot start the probe Matrix.'],
   retention: ['规范化证据保留 60 天，完整探针日志保留 30 天。', '正規化證據保留 60 天，完整探針日誌保留 30 天。', 'Normalized evidence is retained for 60 days; complete probe logs are retained for 30 days.'],
   empty: ['没有找到匹配的 Advanced menuconfig 项。', '找不到相符的 Advanced menuconfig 項目。', 'No matching Advanced menuconfig option was found.'],
-  invalid: ['请至少选择一个软件包和一个 Source/Branch。', '請至少選擇一個套件和一個 Source/Branch。', 'Select at least one package and one Source/Branch entry.'],
+  invalid: ['当前 Advanced menuconfig 至少需要一个启用的软件包和一个 Source/Branch。', '目前 Advanced menuconfig 至少需要一個啟用的套件與一個 Source/Branch。', 'The current Advanced menuconfig state needs at least one enabled package and one Source/Branch entry.'],
 });
 function probeUiText(key) {
   const row = PROBE_UI_TEXT[key];
@@ -6283,18 +6283,15 @@ function firstMeaningfulProbeText(...values) {
   return '';
 }
 function probeChoiceFromMenuOption(option) {
-  const sourceSymbol = String(option?.symbol || '');
-  const sourcePackage = sourceSymbol.startsWith('PACKAGE_') ? sourceSymbol.slice('PACKAGE_'.length) : '';
-  const intentOption = sourcePackage ? resolvePackageSelectionOption(option) : option;
-  const symbol = String(intentOption?.symbol || sourceSymbol);
+  const symbol = String(option?.symbol || '');
   const packageName = symbol.startsWith('PACKAGE_') ? symbol.slice('PACKAGE_'.length) : '';
   const translation = menuOptionTranslation(option);
   return {
-    sourceSymbol,
     symbol,
     package: packageName,
-    displayId: sourcePackage || sourceSymbol,
-    isPackage: Boolean(sourcePackage),
+    displayId: packageName || symbol,
+    isPackage: Boolean(packageName),
+    userSettable: option?.userSettable !== false,
     title: firstMeaningfulProbeText(translation.title, option.promptZh, option.promptEn),
     usage: firstMeaningfulProbeText(translation.usage, option.usageZh, option.usageEn),
   };
@@ -6317,9 +6314,46 @@ function probeCurrentTarget() {
   const profile = target?.profiles?.find((item) => item.id === targetSelectorValues.profile);
   return target ? { target: String(target.id || ''), profile: String(profile?.id || '') } : null;
 }
-function probeIssueUrl(request) {
-  const title = `[probe] ${request.packages.join(', ')} · ${request.mode}`.slice(0, 200);
-  const params = new URLSearchParams({ template: 'package-probe.yml', title });
+function probeMenuOptionState(option) {
+  if (!option) return 'n';
+  const raw = menuValues.get(option.symbol) ?? simpleKconfigDefault(option);
+  return option.type === 'bool' || option.type === 'tristate'
+    ? CATALOG_ENGINE.normalizeKconfigStateValue(option, raw) : raw;
+}
+function activeProbePackageOptions() {
+  return menuSearchOptions.filter((option) => String(option?.symbol || '').startsWith('PACKAGE_') &&
+    probeMenuOptionState(option) !== 'n');
+}
+function probePackageConfigFromText(text) {
+  const rows = new Map();
+  for (const line of String(text || '').replace(/\r\n/g, '\n').split('\n')) {
+    const match = line.match(/^CONFIG_PACKAGE_([A-Za-z0-9][A-Za-z0-9+_.@-]{0,95})=([my])$/);
+    if (match) rows.set(match[1], `CONFIG_PACKAGE_${match[1]}=${match[2]}`);
+  }
+  return [...rows.values()].join('\n') + (rows.size ? '\n' : '');
+}
+async function gzipBase64Url(text) {
+  if (!('CompressionStream' in window)) {
+    throw new Error(uiText('当前浏览器不支持探针状态压缩，请更新浏览器后重试。',
+      '目前瀏覽器不支援探針狀態壓縮，請更新瀏覽器後重試。',
+      'This browser cannot compress probe state. Update the browser and try again.'));
+  }
+  const compressed = new Uint8Array(await new Response(
+    new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < compressed.length; i += 0x4000) {
+    binary += String.fromCharCode(...compressed.subarray(i, i + 0x4000));
+  }
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+}
+async function probeStateToken(request) {
+  return `WEIG_PACKAGE_PROBE_STATE_V2:${await gzipBase64Url(JSON.stringify(request))}`;
+}
+function probeIssueUrl(request, token) {
+  const packages = request.packageConfig.trim().split('\n').filter(Boolean).map((line) => line.slice('CONFIG_PACKAGE_'.length, line.lastIndexOf('=')));
+  const titlePackages = packages.slice(0, 3).join(', ') + (packages.length > 3 ? ` +${packages.length - 3}` : '');
+  const title = `[probe] ${titlePackages || 'menuconfig'} · ${request.mode}`.slice(0, 200);
+  const params = new URLSearchParams({ template: 'package-probe.yml', title, state: token });
   return `https://github.com/${PROJECT.catalogRepository}/issues/new?${params}`;
 }
 async function openPackageProbeModal() {
@@ -6335,10 +6369,7 @@ async function openPackageProbeModal() {
   try {
     await ensureCatalogMenuLoaded(true);
     if ($('modal').hidden || !modal.classList.contains('package-probe')) return;
-    const selected = new Map();
-    const probeBaseState = snapshotCatalogUiState();
-    const probeActiveSymbols = new Set();
-    modalCancelHandler = () => restoreCatalogUiState(probeBaseState);
+    modalCancelHandler = null;
     body.textContent = '';
 
     const intro = document.createElement('section');
@@ -6374,35 +6405,31 @@ async function openPackageProbeModal() {
       element.addEventListener('mouseleave', hideMenuTooltip);
     };
 
-    const rebuildProbeSelection = () => {
-      restoreCatalogUiState(probeBaseState);
-      probeActiveSymbols.clear();
-      for (const choice of selected.values()) {
-        const option = menuOptionBySymbol.get(choice.symbol);
-        if (!option) continue;
-        const result = applyMenuValue(option, 'y', false, 'user');
-        probeActiveSymbols.add(choice.symbol);
-        for (const change of result.changes || []) {
-          if (change.to !== 'n' && String(change.symbol || '').startsWith('PACKAGE_')) {
-            probeActiveSymbols.add(change.symbol);
-          }
-        }
-      }
-    };
-
     const renderSelected = () => {
       selectedBox.textContent = '';
-      const label = document.createElement('strong'); label.textContent = `${probeUiText('selected')} ${selected.size}/8`;
+      const active = activeProbePackageOptions();
+      const label = document.createElement('strong');
+      label.textContent = `${probeUiText('selected')} ${active.length}`;
       selectedBox.appendChild(label);
-      for (const choice of selected.values()) {
-        const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'probe-chip';
-        chip.textContent = `${choice.package} ×`; chip.title = `CONFIG_${choice.symbol}`;
+      for (const option of active.slice(0, 16)) {
+        const chip = document.createElement('button');
+        chip.type = 'button'; chip.className = 'probe-chip';
+        const packageName = option.symbol.slice('PACKAGE_'.length);
+        const value = probeMenuOptionState(option);
+        chip.textContent = `${packageName}=${String(value).toUpperCase()} ×`;
+        chip.title = `CONFIG_${option.symbol}`;
         chip.addEventListener('click', () => {
-          selected.delete(choice.symbol);
-          rebuildProbeSelection();
-          renderSelected(); renderResults(); renderPreview();
+          if (setMenuValue(option, 'n')) {
+            renderSelected(); renderResults(); void renderPreview();
+          }
         });
         selectedBox.appendChild(chip);
+      }
+      if (active.length > 16) {
+        const more = document.createElement('span');
+        more.className = 'probe-selected-more';
+        more.textContent = `+${active.length - 16}`;
+        selectedBox.appendChild(more);
       }
     };
     const renderResults = () => {
@@ -6412,16 +6439,16 @@ async function openPackageProbeModal() {
         const empty = document.createElement('p'); empty.className = 'probe-empty'; empty.textContent = probeUiText('empty'); results.appendChild(empty); return;
       }
       for (const choice of matches) {
-        const selectable = choice.isPackage;
+        const option = menuOptionBySymbol.get(choice.symbol);
+        const selectable = choice.isPackage && choice.userSettable;
+        const currentValue = choice.isPackage ? probeMenuOptionState(option) : 'n';
+        const activeSelected = choice.isPackage && currentValue !== 'n';
         const row = document.createElement('button'); row.type = 'button'; row.className = 'probe-package';
-        const rootSelected = selectable && selected.has(choice.symbol);
-        const activeSelected = selectable && probeActiveSymbols.has(choice.symbol);
         row.classList.toggle('is-selected', activeSelected);
-        row.classList.toggle('is-dependency', activeSelected && !rootSelected);
         row.classList.toggle('is-reference', !selectable);
         if (!selectable) row.setAttribute('aria-disabled', 'true');
         const mark = document.createElement('span'); mark.className = 'probe-package-mark';
-        mark.textContent = selectable ? (activeSelected ? '✓' : '+') : '·';
+        mark.textContent = choice.isPackage ? (activeSelected ? String(currentValue).toUpperCase() : '+') : '·';
         const code = document.createElement('code'); code.className = 'probe-package-id'; code.textContent = choice.displayId;
         const title = document.createElement('span'); title.className = 'probe-package-title'; title.textContent = choice.title || '—';
         const usage = document.createElement('span'); usage.className = 'probe-package-usage'; usage.textContent = choice.usage || '—';
@@ -6440,20 +6467,12 @@ async function openPackageProbeModal() {
         });
         row.addEventListener('blur', hideMenuTooltip);
         if (selectable) row.addEventListener('click', () => {
-          const previous = new Map(selected);
-          if (selected.has(choice.symbol)) selected.delete(choice.symbol);
-          else if (selected.size < 8) selected.set(choice.symbol, choice);
-          else { showToast(uiText('最多选择 8 个软件包', '最多選擇 8 個套件', 'Select up to 8 packages')); return; }
-          try {
-            rebuildProbeSelection();
-          } catch (error) {
-            selected.clear();
-            for (const [symbol, previousChoice] of previous) selected.set(symbol, previousChoice);
-            rebuildProbeSelection();
-            showToast(String(error?.message || error).split(';')[0]);
-            return;
+          const states = optionSelectableStates(option);
+          const enableValue = states.includes('y') ? 'y' : states.find((value) => value !== 'n') || 'y';
+          const nextValue = activeSelected ? 'n' : enableValue;
+          if (setMenuValue(option, nextValue)) {
+            renderSelected(); renderResults(); void renderPreview();
           }
-          renderSelected(); renderResults(); renderPreview();
         });
         results.appendChild(row);
       }
@@ -6562,7 +6581,7 @@ async function openPackageProbeModal() {
 
     const preview = document.createElement('pre'); preview.className = 'probe-preview'; preview.hidden = true; layout.appendChild(preview);
     const policy = document.createElement('p'); policy.className = 'probe-policy';
-    policy.textContent = `${probeUiText('uploadInstruction')} ${probeUiText('cancelInstruction')} ${probeUiText('permission')} ${probeUiText('retention')}`;
+    policy.textContent = `${probeUiText('stateInstruction')} ${probeUiText('cancelInstruction')} ${probeUiText('permission')} ${probeUiText('retention')}`;
     layout.appendChild(policy);
     const actions = document.createElement('div'); actions.className = 'modal-actions probe-actions';
     const previewButton = document.createElement('button'); previewButton.type = 'button'; previewButton.className = 'btn'; previewButton.textContent = probeUiText('preview');
@@ -6570,7 +6589,7 @@ async function openPackageProbeModal() {
     const submitButton = document.createElement('button'); submitButton.type = 'button'; submitButton.className = 'btn btn-primary'; submitButton.textContent = probeUiText('submit');
     actions.append(previewButton, submitButton); layout.appendChild(actions);
 
-    const requestValue = () => {
+    const requestValue = async () => {
       const scopeMode = scopeSelect.value || 'all';
       let requestScope = { mode: 'all' };
       if (scopeMode === 'current') {
@@ -6583,34 +6602,59 @@ async function openPackageProbeModal() {
       const targetPolicy = targetMode === 'current'
         ? { mode: 'selected', selections: [currentTarget] }
         : { mode: targetMode };
+      const resolvedConfig = await generateResolvedConfigText();
       return {
-        schema: 1, channel: probeCodeChannel(),
+        schema: 2, channel: probeCodeChannel(),
         mode: depth.querySelector('input[name=probeDepth]:checked')?.value || 'package-compile',
-        packages: [...selected.values()].map((choice) => choice.package), scope: requestScope, targetPolicy, maxParallel: 0, execute: true,
+        packageConfig: probePackageConfigFromText(resolvedConfig),
+        scope: requestScope, targetPolicy, maxParallel: 0, execute: true,
       };
     };
-    function renderPreview() {
-      const request = requestValue();
-      const valid = request.packages.length > 0 && (request.scope.mode !== 'pairs' || request.scope.pairs.every((row) => row[0] && row[1]) && request.scope.pairs.length > 0);
-      preview.textContent = valid ? JSON.stringify(request, null, 2) : probeUiText('invalid');
-      submitButton.disabled = !valid;
-      return valid ? request : null;
+    let previewRequest = 0;
+    async function renderPreview() {
+      const sequence = ++previewRequest;
+      submitButton.disabled = true;
+      try {
+        const request = await requestValue();
+        if (sequence !== previewRequest) return null;
+        const valid = Boolean(request.packageConfig.trim()) &&
+          (request.scope.mode !== 'pairs' || request.scope.pairs.every((row) => row[0] && row[1]) && request.scope.pairs.length > 0);
+        preview.textContent = valid ? JSON.stringify(request, null, 2) : probeUiText('invalid');
+        submitButton.disabled = !valid;
+        return valid ? request : null;
+      } catch (error) {
+        if (sequence === previewRequest) {
+          preview.textContent = String(error?.message || error);
+          submitButton.disabled = true;
+        }
+        return null;
+      }
     }
     previewButton.addEventListener('click', () => {
       const opening = preview.hidden;
       preview.hidden = !opening; previewButton.setAttribute('aria-expanded', String(opening));
-      if (opening) renderPreview();
+      if (opening) void renderPreview();
     });
-    submitButton.addEventListener('click', () => {
-      const request = renderPreview(); if (!request) return;
-      const issueUrl = probeIssueUrl(request);
-      downloadBlob(JSON.stringify(request, null, 2) + '\n', 'application/json;charset=utf-8', 'probe-request.json');
-      showToast(probeUiText('downloadedRequest'));
-      const issueWindow = window.open(issueUrl, '_blank');
-      if (issueWindow) issueWindow.opener = null; else window.location.assign(issueUrl);
+    submitButton.addEventListener('click', async () => {
+      submitButton.disabled = true;
+      try {
+        const request = await requestValue();
+        const valid = Boolean(request.packageConfig.trim()) &&
+          (request.scope.mode !== 'pairs' || request.scope.pairs.every((row) => row[0] && row[1]) && request.scope.pairs.length > 0);
+        if (!valid) { await renderPreview(); return; }
+        const token = await probeStateToken(request);
+        const issueUrl = probeIssueUrl(request, token);
+        showToast(probeUiText('submittedState'));
+        const issueWindow = window.open(issueUrl, '_blank');
+        if (issueWindow) issueWindow.opener = null; else window.location.assign(issueUrl);
+      } catch (error) {
+        showToast(String(error?.message || error).split(';')[0]);
+      } finally {
+        await renderPreview();
+      }
     });
     search.addEventListener('input', renderResults);
-    renderSelected(); renderResults(); renderPreview(); search.focus();
+    renderSelected(); renderResults(); void renderPreview(); search.focus();
   } catch (error) {
     body.textContent = '';
     const failure = document.createElement('p'); failure.className = 'import-error'; failure.textContent = String(error?.message || error); body.appendChild(failure);
