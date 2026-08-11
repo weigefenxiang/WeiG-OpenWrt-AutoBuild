@@ -6178,10 +6178,42 @@ async function timedFetch(url, timeout) {
   } finally { clearTimeout(timer); }
 }
 
+const PROBE_UI_TEXT = Object.freeze({
+  title: ['插件兼容探针', '套件相容性探針', 'Package Compatibility Probe'],
+  intro: ['检查当前源码中的 LuCI 插件在 Catalog 各源码分支中的编译、RootFS 安装、固件集成和可选启动行为。', '檢查目前原始碼中的 LuCI 套件在 Catalog 各原始碼分支中的編譯、RootFS 安裝、韌體整合及可選啟動行為。', 'Check LuCI applications from the current source across Catalog Source/Branch environments for compilation, RootFS installation, firmware integration, and optional boot behavior.'],
+  howTo: ['从当前 Source/Branch 的 Advanced menuconfig 中选择 1–8 个 luci-app-* 插件 ID，设置探测深度和范围，并在本地预览计划。提交时会下载 probe-request.json 并打开 Catalog Issue 表单。', '從目前 Source/Branch 的 Advanced menuconfig 中選擇 1–8 個 luci-app-* 套件 ID，設定探測深度和範圍，並在本機預覽計畫。提交時會下載 probe-request.json 並開啟 Catalog Issue 表單。', 'Choose 1–8 luci-app-* package IDs from the current Source/Branch Advanced menuconfig, select depth and scope, and preview the plan locally. Submit downloads probe-request.json and opens the Catalog Issue form.'],
+  search: ['搜索 luci-app-* 插件 ID', '搜尋 luci-app-* 套件 ID', 'Search luci-app-* package IDs'],
+  selected: ['已选择', '已選擇', 'Selected'],
+  depth: ['探测深度', '探測深度', 'Probe depth'],
+  scope: ['源码分支范围', '原始碼分支範圍', 'Source/Branch scope'],
+  targets: ['Target 覆盖', 'Target 覆蓋', 'Target coverage'],
+  allSources: ['全部可用 Source/Branch', '全部可用 Source/Branch', 'All available Source/Branch entries'],
+  currentSource: ['当前 Source/Branch', '目前 Source/Branch', 'Current Source/Branch'],
+  customScope: ['自定义选择', '自訂選擇', 'Custom selection'],
+  autoTarget: ['自动目标', '自動目標', 'Auto target'],
+  currentTarget: ['当前目标', '目前目標', 'Current target'],
+  allTargets: ['全部代表目标', '全部代表目標', 'All representative targets'],
+  packageCompile: ['软件包编译', '套件編譯', 'Package compile'],
+  packageCompileHelp: ['使用目标工具链编译所选软件包及其依赖闭包。', '使用目標工具鏈編譯所選套件及其相依閉包。', 'Build the selected package and dependency closure with the target toolchain.'],
+  rootfsIntegration: ['根文件系统集成', '根檔案系統整合', 'RootFS integration'],
+  rootfsIntegrationHelp: ['把所选软件包安装进 RootFS，用于发现 APK/OPKG 文件归属和共同安装冲突。', '把所選套件安裝進 RootFS，用於發現 APK/OPKG 檔案歸屬及共同安裝衝突。', 'Install selected packages into RootFS to expose APK/OPKG ownership and co-install conflicts.'],
+  firmwareIntegration: ['固件集成', '韌體整合', 'Firmware integration'],
+  firmwareIntegrationHelp: ['在相同 Source/Branch/Target 环境中分别构建基础固件和加入所选软件包的固件。', '在相同 Source/Branch/Target 環境中分別建置基礎韌體及加入所選套件的韌體。', 'Build a baseline image and an image with the selected packages in the same Source/Branch/Target environment.'],
+  bootSmoke: ['启动自检', '啟動自檢', 'Boot smoke'],
+  bootSmokeHelp: ['对 Catalog 认可的可启动目标执行实验性通用启动验证，不包含插件专属运行检查。', '對 Catalog 認可的可啟動目標執行實驗性通用啟動驗證，不包含套件專屬執行檢查。', 'Experimental generic boot validation for Catalog-approved bootable targets; no package-specific runtime checks.'],
+  preview: ['预览计划', '預覽計畫', 'Preview plan'],
+  submit: ['提交探针', '提交探針', 'Submit probe'],
+  downloadedRequest: ['probe-request.json 已下载。请把它拖入 GitHub Issue 的必填上传框。', 'probe-request.json 已下載。請把它拖入 GitHub Issue 的必填上傳框。', 'probe-request.json was downloaded. Drag it into the required upload field in the GitHub Issue.'],
+  uploadInstruction: ['只上传一个未经修改的 probe-request.json。附件和 Issue 公开可见，请勿加入秘密信息。', '只上傳一個未經修改的 probe-request.json。附件和 Issue 公開可見，請勿加入秘密資訊。', 'Upload exactly one unmodified probe-request.json. The attachment and Issue are public; never add secrets.'],
+  cancelInstruction: ['提交后如需取消，请在同一个 Issue 中准确回复 /cancel。', '提交後如需取消，請在同一個 Issue 中準確回覆 /cancel。', 'To cancel after submission, reply with exactly /cancel in the same Issue.'],
+  permission: ['仓库所有者可以运行完整计划；有写权限的协作者最多并发 3；普通访客不能启动探针 Matrix。', '儲存庫擁有者可以執行完整計畫；具寫入權限的協作者最多同時執行 3 個工作；一般訪客不能啟動探針 Matrix。', 'Repository owners may run the full plan; write collaborators are capped at three concurrent jobs; visitors cannot start the probe Matrix.'],
+  retention: ['规范化证据保留 60 天，完整探针日志保留 30 天。', '正規化證據保留 60 天，完整探針日誌保留 30 天。', 'Normalized evidence is retained for 60 days; complete probe logs are retained for 30 days.'],
+  empty: ['没有找到匹配的 luci-app-* 插件。', '找不到相符的 luci-app-* 套件。', 'No matching luci-app-* package was found.'],
+  invalid: ['请至少选择一个 luci-app-* 插件和一个 Source/Branch。', '請至少選擇一個 luci-app-* 套件和一個 Source/Branch。', 'Select at least one luci-app-* package and one Source/Branch entry.'],
+});
 function probeUiText(key) {
-  const strings = catalogApplicationsDocument?.probeUi?.strings || {};
-  const row = strings[key] || {};
-  return String(row[state.lang] || row.en || row['zh-CN'] || key);
+  const row = PROBE_UI_TEXT[key];
+  return row ? uiText(row[0], row[1], row[2]) : key;
 }
 function probeCodeChannel() {
   const branch = String(state.buildMeta?.branch || 'main');
@@ -6216,15 +6248,18 @@ function probePackageChoices() {
   return choices.sort((left, right) => left.package.localeCompare(right.package, undefined, { sensitivity: 'base' }));
 }
 function normalizeProbeSearch(value) {
-  const query = String(value || '').trim().toLocaleLowerCase();
-  return query.startsWith('config_') ? query.slice('config_'.length) : query;
+  return String(value || '').trim().toLocaleLowerCase()
+    .replace(/^config_/, '')
+    .replace(/^package_/, '')
+    .replace(/^luci-app-/, '');
 }
 function probeChoiceMatches(choice, value) {
   const query = normalizeProbeSearch(value);
   if (!query) return true;
   const symbol = choice.symbol.toLocaleLowerCase();
   const packageName = choice.package.toLocaleLowerCase();
-  return symbol.includes(query) || packageName.includes(query);
+  const shortId = packageName.startsWith('luci-app-') ? packageName.slice('luci-app-'.length) : packageName;
+  return symbol.includes(query) || packageName.includes(query) || shortId.includes(query);
 }
 function probeCurrentTarget() {
   const target = (MENU_CATALOG?.targets || []).find((item) =>
@@ -6248,7 +6283,7 @@ async function openPackageProbeModal() {
   loading.className = 'probe-loading'; loading.textContent = uiText('正在加载 Catalog 探针数据…', '正在載入 Catalog 探針資料…', 'Loading Catalog probe data…');
   body.appendChild(loading);
   try {
-    await Promise.all([ensureCatalogApplications(), ensureCatalogMenuLoaded(true)]);
+    await ensureCatalogMenuLoaded(true);
     if ($('modal').hidden || !modal.classList.contains('package-probe')) return;
     const choices = probePackageChoices();
     const selected = new Map();

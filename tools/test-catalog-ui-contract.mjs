@@ -37,11 +37,11 @@ expect(selfTestContract.indexOf("openModal(t('st.title'))") >= 0 &&
   !selfTestContract.includes('ensureCompatibilityRules()'),
   'self-test does not open immediately or its generic Catalog probe entry is gated by compatibility UI');
 const probeContract = app.match(/async function openPackageProbeModal\(\) \{([\s\S]*?)\n\}\n\$\('modalProbe'/)?.[1] || '';
-expect(probeContract.includes('ensureCatalogApplications()') && probeContract.includes('ensureCatalogMenuLoaded(true)') &&
+expect(!probeContract.includes('ensureCatalogApplications()') && probeContract.includes('await ensureCatalogMenuLoaded(true)') &&
   probeContract.includes('probePackageChoices()') && probeContract.includes("'probeDepth'") && probeContract.includes('scopeSelect.value') &&
   probeContract.includes('targetSelect.value') && probeContract.includes('probeIssueUrl(request)') &&
   probeContract.includes('packages: [...selected.values()].map((choice) => choice.package)'),
-  'in-page probe does not reuse the current Catalog/Kconfig package model or serialize short package names');
+  'in-page probe is still gated by applications.json.gz or no longer reuses the current Catalog/Kconfig package model');
 expect(probeContract.includes('const depthOptions = [') && probeContract.includes('`L${index + 1}`') &&
   probeContract.includes("popup.setAttribute('role', 'tooltip')") &&
   probeContract.includes("if (event.key === 'Escape') closeDepthHelp()") &&
@@ -54,13 +54,22 @@ const probeChoices = app.match(/function probePackageChoices\(\) \{([\s\S]*?)\n\
 expect(probeChoices.includes("symbol.startsWith('PACKAGE_luci-app-')") &&
   probeChoices.includes("packageName = symbol.slice('PACKAGE_'.length)") &&
   probeChoices.includes('symbol,') && probeChoices.includes('package: packageName') &&
-  !probeChoices.includes('applications?.items') && !probeChoices.includes('item.id'),
-  'probe package projection is not a luci-app-only view of the current Advanced menuconfig Kconfig symbols');
-expect(app.includes('function normalizeProbeSearch(value)') &&
-  app.includes("query.startsWith('config_') ? query.slice('config_'.length) : query") &&
-  app.includes('return symbol.includes(query) || packageName.includes(query)') &&
-  !probeContract.includes('choice.title} ${choice.usage}'),
-  'probe search no longer uses ID-only CONFIG_/PACKAGE_/package normalization');
+  !probeChoices.includes('applications?.items') && !probeChoices.includes('item.id') &&
+  app.includes('const PROBE_UI_TEXT = Object.freeze({') &&
+  !app.match(/function probeUiText\(key\) \{[\s\S]*?catalogApplicationsDocument/),
+  'probe package projection/UI is not independent from applications.json.gz or not a luci-app-only Advanced menuconfig view');
+const normalizeProbeSearchContract = app.match(/function normalizeProbeSearch\(value\) \{[\s\S]*?\n\}/)?.[0] || '';
+const probeChoiceMatchesContract = app.match(/function probeChoiceMatches\(choice, value\) \{[\s\S]*?\n\}/)?.[0] || '';
+const probeSearch = Function(`${normalizeProbeSearchContract}\n${probeChoiceMatchesContract}\nreturn { normalizeProbeSearch, probeChoiceMatches };`)();
+const oscamProbeChoice = { symbol: 'PACKAGE_luci-app-oscam', package: 'luci-app-oscam' };
+for (const query of ['oscam', 'luci-app-oscam', 'PACKAGE_luci-app-oscam', 'CONFIG_PACKAGE_luci-app-oscam']) {
+  expect(probeSearch.probeChoiceMatches(oscamProbeChoice, query), `probe search alias failed: ${query}`);
+}
+expect(!probeSearch.probeChoiceMatches(oscamProbeChoice, 'openvpn') &&
+  !probeContract.includes('choice.title} ${choice.usage}') &&
+  app.includes(".replace(/^config_/, '')") && app.includes(".replace(/^package_/, '')") &&
+  app.includes(".replace(/^luci-app-/, '')"),
+  'probe search no longer uses ID-only CONFIG_/PACKAGE_/luci-app/short-ID normalization');
 expect(probeContract.includes("selected.has(choice.symbol)") && probeContract.includes("selected.set(choice.symbol, choice)") &&
   probeContract.includes('chip.textContent = `${choice.package} ×`') &&
   probeContract.includes('chip.title = `CONFIG_${choice.symbol}`'),

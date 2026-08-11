@@ -90,9 +90,9 @@ GitHub Actions 原生 Run 日志的保留天数属于仓库 Settings，不由 Wo
 
 ## 8. 包级探测
 
-网页右下角“检”立即打开原自检界面；自检标题栏在关闭按钮左侧显示“插件兼容探针”，点击后打开响应式网页内工作区。工作区的文案、应用映射和 Source/Branch 清单全部来自 Catalog。四个深度以 `L1–L4` 单行显示，说明只在悬浮、键盘聚焦或点击 ⓘ 后出现；Source/Branch 范围与 Target 覆盖使用同一行下拉框，自定义范围提供可搜索多选。弹窗采用受限高度，正常桌面只让软件包结果区滚动；低高度窗口才启用外层应急滚动。软件包结果按 `package ID｜当前语言译名｜说明` 横向展示，译名/说明依次回退中文和英文，截断内容复用全站菜单浮层显示完整文本；完整 ID 不截断，窄屏按两至三行响应式重排。Catalog 精选应用优先、其余 LuCI 应用其次、普通包最后，纯标点不是有效文案。计划默认折叠，预览与提交固定为内容末尾操作；提交会下载唯一的 `probe-request.json`，并打开 Catalog 专用 Issue 表单。
+网页右下角“检”立即打开原自检界面；自检标题栏在关闭按钮左侧显示“插件兼容探针”，点击后打开响应式网页内工作区。工作区的软件包候选直接复用当前 Source/Branch 的 Advanced menuconfig/Kconfig symbol 集合，只展示 `luci-app-*`；Source/Branch 清单仍来自 Catalog。Probe 的通用 UI 文案属于 AutoBuild，不依赖 `applications.json.gz`。四个深度以 `L1–L4` 单行显示，说明只在悬浮、键盘聚焦或点击 ⓘ 后出现；Source/Branch 范围与 Target 覆盖使用同一行下拉框，自定义范围提供可搜索多选。弹窗采用受限高度，正常桌面只让软件包结果区滚动；低高度窗口才启用外层应急滚动。软件包结果按 `package ID｜当前语言译名｜说明` 横向展示，译名/说明依次回退中文和英文，截断内容复用全站菜单浮层显示完整文本；完整 ID 不截断，窄屏按两至三行响应式重排。搜索只匹配 package/Kconfig ID：短插件 ID、`luci-app-*`、`PACKAGE_*` 和 `CONFIG_PACKAGE_*` 会归一到同一 Kconfig symbol；结果只展示 `luci-app-*`，纯标点不是有效文案。计划默认折叠，预览与提交固定为内容末尾操作；提交会下载唯一的 `probe-request.json`，并打开 Catalog 专用 Issue 表单。
 
-探针请求为 schema 1，可输入 1–8 个 Catalog 应用 ID 或 package ID，选择全部/当前/指定 Source/Branch，以及自动目标、当前 Target/Profile 或全部代表目标。Controller 从当前代码频道对应的数据分支获取并校验 `index.json`、`applications.json.gz` 与匹配 Branch 的 `core` 分片，用应用 ID 解析真实包，再生成动态 Matrix；不得维护 Source/Branch 或 Target 版本表。
+网页生成的探针请求为 schema 1，固定发送 1–8 个短 `luci-app-*` package name，并选择全部/当前/指定 Source/Branch，以及自动目标、当前 Target/Profile 或全部代表目标。Controller 从当前代码频道对应的数据分支获取并校验 `index.json`、`applications.json.gz` 与匹配 Branch 的 `core` 分片，用应用 ID 解析真实包，再生成动态 Matrix；不得维护 Source/Branch 或 Target 版本表。
 
 Catalog 资产契约校验是隐含 `L0`，不是用户可选深度。四个可选深度依次是：`L1 package-compile` 编译包与依赖闭包；`L2 rootfs-integration` 安装进 RootFS 发现 ownership/同装问题；`L3 firmware-integration` 在同一环境构建基础固件与加入软件包的固件作 A/B 对照；实验性的 `L4 boot-smoke`（界面中文固定为“启动自检”）只检查 Catalog 允许目标的通用启动标志。自动目标可在一个 Job 内顺序尝试合法后备目标。Matrix 最多 256 项；仓库所有者使用完整计划并发，其他写协作者强制最多 3，普通访客不能启动 Matrix。规范化证据保留 60 天，完整日志保留 30 天；只有所有合法环境都因软件包原因失败才能判为完全不兼容，证据只供审查，不自动修改规则。
 
