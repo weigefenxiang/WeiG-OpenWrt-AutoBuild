@@ -3,7 +3,15 @@
 const REQUEST_ID_RE = /^\d{6}_\d{4}$/;
 const BRANCH_RE = /^[A-Za-z0-9._/-]{1,160}$/;
 const DISPLAY_RE = /^[A-Za-z0-9._-]{1,160}$/;
-const BUILD_TAG_RE = /^[\p{L}\p{N}_-]{1,24}$/u;
+const BUILD_TAG_MAX_CODE_POINTS = 160;
+const BUILD_TAG_CONTROL_RE = /\p{Cc}/u;
+
+function isValidBuildTag(value) {
+  const tag = String(value ?? '');
+  return tag.trim().length > 0 &&
+    Array.from(tag).length <= BUILD_TAG_MAX_CODE_POINTS &&
+    !BUILD_TAG_CONTROL_RE.test(tag);
+}
 const SITE_SHA256_RE = /^[a-f0-9]{64}$/;
 const CATALOG_DATA_BRANCHES = Object.freeze({
   fix: 'catalog-fix',
@@ -88,7 +96,7 @@ export function buildActionRunTitle(requester, issueNumber, issueTitle, value) {
   if (identity) {
     if (parts.shift() !== identity) return '';
   }
-  if (!REQUEST_ID_RE.test(parts[0] || '') || !BUILD_TAG_RE.test(parts[1] || '')) return '';
+  if (!REQUEST_ID_RE.test(parts[0] || '') || !isValidBuildTag(parts[1])) return '';
   if (identity) parts[0] = `${identity}-${parts[0]}`;
   parts[1] = `${parts[1]}#${number}`;
   return parts.join('/');

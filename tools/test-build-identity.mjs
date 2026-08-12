@@ -128,6 +128,92 @@ assert.equal(
   buildActionRunTitle('weigefenxiang', 141, '[build] fix_e-v2-probe/260809_0741/匿名/Generic_x86/64/ImmortalWrt/25.12/generic', 'fix/e-v2-probe'),
   'fix_e-v2-probe-260809_0741/匿名#141/Generic_x86/64/ImmortalWrt/25.12/generic',
 );
+// Build tags intentionally accept broad visible Unicode.
+// "/" remains the Issue-title field delimiter, while control characters,
+// empty tags and excessive tag length remain invalid.
+const broadBuildTags = [
+  '?Defconfig',
+  '?Defconfig',
+  '? Defconfig',
+  '???Defconfig?',
+  'Android??',
+  'A+B (test)',
+  'v2.0@dev#1',
+  '???English?Emoji?',
+  '???????',
+  '?? !@#$%^&*()[]{}=+,.?:;',
+];
+
+for (const tag of broadBuildTags) {
+  const issueTitle =
+    '[build] dev/260812_1845/' + tag +
+    '/Generic_x86/64/ImmortalWrt/master/generic';
+  const expected =
+    'dev-260812_1845/' + tag +
+    '#171/Generic_x86/64/ImmortalWrt/master/generic';
+
+  assert.equal(
+    buildActionRunTitle('weigefenxiang', 171, issueTitle, 'dev'),
+    expected,
+  );
+}
+
+assert.equal(
+  buildActionRunTitle(
+    'weigefenxiang',
+    172,
+    '[build] staging/260812_1846/? Defconfig/Generic_x86/64/ImmortalWrt/24.10/generic',
+    'staging',
+  ),
+  'staging-260812_1846/? Defconfig#172/Generic_x86/64/ImmortalWrt/24.10/generic',
+);
+
+assert.equal(
+  buildActionRunTitle(
+    'weigefenxiang',
+    173,
+    '[build] fix_e-v2-probe/260812_1847/?????/Generic_x86/64/ImmortalWrt/24.10/generic',
+    'fix/e-v2-probe',
+  ),
+  'fix_e-v2-probe-260812_1847/?????#173/Generic_x86/64/ImmortalWrt/24.10/generic',
+);
+
+for (const tag of ['   ', 'bad\tTag', 'bad\nTag']) {
+  const issueTitle =
+    '[build] dev/260812_1848/' + tag +
+    '/Generic_x86/64/ImmortalWrt/master/generic';
+
+  assert.equal(
+    buildActionRunTitle('weigefenxiang', 174, issueTitle, 'dev'),
+    '',
+  );
+}
+
+const maxBuildTag = '?'.repeat(160);
+assert.notEqual(
+  buildActionRunTitle(
+    'weigefenxiang',
+    175,
+    '[build] dev/260812_1849/' + maxBuildTag +
+      '/Generic_x86/64/ImmortalWrt/master/generic',
+    'dev',
+  ),
+  '',
+);
+
+const oversizedBuildTag = '?'.repeat(161);
+assert.equal(
+  buildActionRunTitle(
+    'weigefenxiang',
+    176,
+    '[build] dev/260812_1850/' + oversizedBuildTag +
+      '/Generic_x86/64/ImmortalWrt/master/generic',
+    'dev',
+  ),
+  '',
+);
+
+
 assert.equal(
   buildActionRunTitle('weigefenxiang', 141, '[build] wrong/260809_0741/test', 'dev'),
   '',
