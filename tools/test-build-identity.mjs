@@ -128,20 +128,21 @@ assert.equal(
   buildActionRunTitle('weigefenxiang', 141, '[build] fix_e-v2-probe/260809_0741/匿名/Generic_x86/64/ImmortalWrt/25.12/generic', 'fix/e-v2-probe'),
   'fix_e-v2-probe-260809_0741/匿名#141/Generic_x86/64/ImmortalWrt/25.12/generic',
 );
+
 // Build tags intentionally accept broad visible Unicode.
 // "/" remains the Issue-title field delimiter, while control characters,
 // empty tags and excessive tag length remain invalid.
 const broadBuildTags = [
-  '?Defconfig',
-  '?Defconfig',
-  '? Defconfig',
-  '???Defconfig?',
-  'Android??',
+  '✔Defconfig',
+  '×Defconfig',
+  '✅ Defconfig',
+  '测试（Defconfig）',
+  'Android📱',
   'A+B (test)',
   'v2.0@dev#1',
-  '???English?Emoji?',
-  '???????',
-  '?? !@#$%^&*()[]{}=+,.?:;',
+  '中文＋English＋Emoji✅',
+  '全角斜杠／允许',
+  '符号 !@#$%^&*()[]{}=+,.?:;',
 ];
 
 for (const tag of broadBuildTags) {
@@ -162,20 +163,20 @@ assert.equal(
   buildActionRunTitle(
     'weigefenxiang',
     172,
-    '[build] staging/260812_1846/? Defconfig/Generic_x86/64/ImmortalWrt/24.10/generic',
+    '[build] staging/260812_1846/✅ Defconfig/Generic_x86/64/ImmortalWrt/24.10/generic',
     'staging',
   ),
-  'staging-260812_1846/? Defconfig#172/Generic_x86/64/ImmortalWrt/24.10/generic',
+  'staging-260812_1846/✅ Defconfig#172/Generic_x86/64/ImmortalWrt/24.10/generic',
 );
 
 assert.equal(
   buildActionRunTitle(
     'weigefenxiang',
     173,
-    '[build] fix_e-v2-probe/260812_1847/?????/Generic_x86/64/ImmortalWrt/24.10/generic',
+    '[build] fix_e-v2-probe/260812_1847/🧪实验版/Generic_x86/64/ImmortalWrt/24.10/generic',
     'fix/e-v2-probe',
   ),
-  'fix_e-v2-probe-260812_1847/?????#173/Generic_x86/64/ImmortalWrt/24.10/generic',
+  'fix_e-v2-probe-260812_1847/🧪实验版#173/Generic_x86/64/ImmortalWrt/24.10/generic',
 );
 
 for (const tag of ['   ', 'bad\tTag', 'bad\nTag']) {
@@ -189,7 +190,7 @@ for (const tag of ['   ', 'bad\tTag', 'bad\nTag']) {
   );
 }
 
-const maxBuildTag = '?'.repeat(160);
+const maxBuildTag = '界'.repeat(160);
 assert.notEqual(
   buildActionRunTitle(
     'weigefenxiang',
@@ -201,7 +202,7 @@ assert.notEqual(
   '',
 );
 
-const oversizedBuildTag = '?'.repeat(161);
+const oversizedBuildTag = '界'.repeat(161);
 assert.equal(
   buildActionRunTitle(
     'weigefenxiang',
@@ -212,7 +213,6 @@ assert.equal(
   ),
   '',
 );
-
 
 assert.equal(
   buildActionRunTitle('weigefenxiang', 141, '[build] wrong/260809_0741/test', 'dev'),

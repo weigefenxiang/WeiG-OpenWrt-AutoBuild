@@ -46,6 +46,21 @@ try {
   assert.match(result.stdout, /^request_id=260808_2242$/m);
   assert.match(result.stdout, /^run_title=dev-260808_2242\/test#141\/Generic_x86\/64\/ImmortalWrt\/25\.12\/generic$/m);
 
+  for (const tag of ['✔Defconfig', '×Defconfig', '✅ Defconfig', '测试🧪']) {
+    result = run(base, {
+      title: `[build] dev/260808_2242/${tag}/Generic_x86/64/ImmortalWrt/25.12/generic`,
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, new RegExp(`^run_title=dev-260808_2242/${tag}#141/Generic_x86/64/ImmortalWrt/25\\.12/generic$`, 'm'));
+  }
+
+  result = run(base, {
+    title: '[build] dev/260808_2242/   /Generic_x86/64/ImmortalWrt/25.12/generic',
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /^run_title=$/m);
+  assert.match(result.stderr, /routing continues without display metadata/);
+
   result = run({ ...base, sourceEnv: 'main' }, { title: '[build] 260808_2242/test/Generic_x86/64/ImmortalWrt/25.12/generic' });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /^request_branch=main$/m);
@@ -70,6 +85,10 @@ try {
     result = run(bad);
     assert.notEqual(result.status, 0, `unexpected pass: ${JSON.stringify(bad)}`);
   }
+
+  result = run(base, { issueNumber: '0' });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr + result.stdout, /positive safe integer/);
 
   result = run(base, { title: '[build] staging/260808_2242/test/Generic_x86/64/ImmortalWrt/25.12/generic' });
   assert.notEqual(result.status, 0);

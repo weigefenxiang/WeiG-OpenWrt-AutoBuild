@@ -48,6 +48,7 @@ const titleIdentity = parseBuildIssueTitleIdentity(issueTitle);
 const requester = String(process.env.REQUESTER || '').trim();
 const issueNumber = Number(process.env.ISSUE_NUMBER || '0');
 if (issueTitle.startsWith('[build]')) {
+  if (!Number.isSafeInteger(issueNumber) || issueNumber <= 0) fail('Issue number must be a positive safe integer');
   if (!titleIdentity.requestId) fail('Issue title does not contain a valid build request identity');
   const sourceIdentity = buildEnvironmentIdentity(sourceEnv);
   if (titleIdentity.sourceEnv !== sourceIdentity) {
@@ -61,7 +62,9 @@ if (issueTitle.startsWith('[build]')) {
 const runTitle = issueTitle.startsWith('[build]')
   ? buildActionRunTitle(requester, issueNumber, issueTitle, sourceEnv)
   : '';
-if (issueTitle.startsWith('[build]') && !runTitle) fail('cannot format build Actions run title');
+if (issueTitle.startsWith('[build]') && !runTitle) {
+  console.warn('Build Actions run title unavailable; routing continues without display metadata / Actions 展示标题不可用，将继续按权威路由身份派发');
+}
 
 const lines = [
   `request_branch=${sourceEnv}`,
