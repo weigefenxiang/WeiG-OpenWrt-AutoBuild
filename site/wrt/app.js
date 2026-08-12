@@ -1443,6 +1443,9 @@ async function ensureCatalogHiddenLoaded() {
       if (!shard || MENU_CATALOG !== catalog || CATALOG_MODEL !== model || menuCatalogKey !== catalogKey) return false;
       CATALOG_SCHEMA6_MODULE.mergeHiddenShard(catalog, model, shard);
       buildMenuIndexes(catalog);
+      // Hidden PACKAGE_* records can arrive after the visible-menu baseline snapshot.
+      // Backfill their upstream baseline from the baseline context, never from current user state.
+      backfillCatalogBaselineForLoadedOptions();
       catalogLocatorEntryCache = null;
       return true;
     })();
@@ -2202,6 +2205,51 @@ function snapshotCatalogBaseline() {
     const value = menuValues.get(option.symbol) ?? (option.type === 'string' ? '' : 'n');
     catalogBaselineValues.set(option.symbol, value);
     if (value !== 'n' && value !== '' && !catalogDependencySymbols.has(option.symbol)) {
+      catalogBaselineOrigins.set(option.symbol, {
+        kind: 'kconfig-default', detail: 'Kconfig default',
+      });
+    }
+  }
+}
+function normalizeCatalogBaselineValue(option, rawValue) {
+  const fallback = option?.type === 'string' ? '' : 'n';
+  const raw = rawValue ?? fallback;
+  return option?.type === 'bool' || option?.type === 'tristate'
+    ? CATALOG_ENGINE.normalizeKconfigStateValue(option, raw)
+    : String(raw);
+}
+function backfillCatalogBaselineForLoadedOptions() {
+  const missing = menuSearchOptions.filter((option) =>
+    option?.symbol && !catalogBaselineValues.has(option.symbol));
+  if (!missing.length) return;
+  const baselineValues = new Map(catalogBaselineValues);
+  // Resolve only from the upstream Target/Profile baseline. Current menuValues/user overrides
+  // are intentionally excluded so late hidden defaults never appear as user Probe changes.
+  for (let pass = 0; pass < 8; pass++) {
+    const context = catalogValidationContext(baselineValues, 'interactive');
+    let changed = false;
+    for (const option of missing) {
+      const contextual = context.values.get(option.symbol);
+      const resolved = contextual !== undefined
+        ? contextual
+        : CATALOG_ENGINE.resolveKconfigDefault(
+          option, context.values, context.validationOptions,
+        ).value;
+      const value = normalizeCatalogBaselineValue(option, resolved);
+      if (baselineValues.get(option.symbol) === value) continue;
+      baselineValues.set(option.symbol, value);
+      changed = true;
+    }
+    if (!changed) break;
+  }
+  const resolvedContext = catalogValidationContext(baselineValues, 'interactive');
+  for (const option of missing) {
+    const value = normalizeCatalogBaselineValue(
+      option,
+      resolvedContext.values.get(option.symbol) ?? baselineValues.get(option.symbol),
+    );
+    catalogBaselineValues.set(option.symbol, value);
+    if (value !== 'n' && value !== '') {
       catalogBaselineOrigins.set(option.symbol, {
         kind: 'kconfig-default', detail: 'Kconfig default',
       });
@@ -6357,11 +6405,21 @@ async function gzipBase64Url(text) {
 async function probeStateToken(request) {
   return `WEIG_PACKAGE_PROBE_STATE_V2:${await gzipBase64Url(JSON.stringify(request))}`;
 }
+function probeIssueTitle(request) {
+  const packages = request.packageConfig.trim().split('\n').filter(Boolean)
+    .map((line) => line.slice('CONFIG_PACKAGE_'.length, line.lastIndexOf('=')));
+  const channel = String(request.channel || 'main');
+  const prefix = channel === 'main' ? '' : `${channel}-`;
+  const titlePackages = packages.length
+    ? [`${prefix}${packages[0]}`, ...packages.slice(1, 3)].join(', ') +
+      (packages.length > 3 ? ` +${packages.length - 3}` : '')
+    : `${prefix}menuconfig`;
+  return `[probe] ${titlePackages} · ${request.mode}`.slice(0, 200);
+}
 function probeIssueUrl(request, token) {
-  const packages = request.packageConfig.trim().split('\n').filter(Boolean).map((line) => line.slice('CONFIG_PACKAGE_'.length, line.lastIndexOf('=')));
-  const titlePackages = packages.slice(0, 3).join(', ') + (packages.length > 3 ? ` +${packages.length - 3}` : '');
-  const title = `[probe] ${titlePackages || 'menuconfig'} · ${request.mode}`.slice(0, 200);
-  const params = new URLSearchParams({ template: 'package-probe.yml', title, state: token });
+  const params = new URLSearchParams({
+    template: 'package-probe.yml', title: probeIssueTitle(request), state: token,
+  });
   return `https://github.com/${PROJECT.catalogRepository}/issues/new?${params}`;
 }
 async function openPackageProbeModal() {

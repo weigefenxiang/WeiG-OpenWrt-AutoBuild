@@ -129,6 +129,34 @@ expect(!probeContract.includes('const selected = new Map()') &&
   probeContract.includes('changedProbePackageOptions()') &&
   probeContract.includes('generateResolvedConfigText()'),
   'Probe maintains private package state instead of sharing Advanced menuconfig state');
+const hiddenLoadContract = app.match(/async function ensureCatalogHiddenLoaded\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
+const lateBaselineContract = app.match(/function backfillCatalogBaselineForLoadedOptions\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
+expect(hiddenLoadContract.includes('buildMenuIndexes(catalog)') &&
+  hiddenLoadContract.includes('backfillCatalogBaselineForLoadedOptions()') &&
+  hiddenLoadContract.indexOf('buildMenuIndexes(catalog)') < hiddenLoadContract.indexOf('backfillCatalogBaselineForLoadedOptions()') &&
+  lateBaselineContract.includes('const baselineValues = new Map(catalogBaselineValues)') &&
+  lateBaselineContract.includes("catalogValidationContext(baselineValues, 'interactive')") &&
+  lateBaselineContract.includes('catalogBaselineValues.set(option.symbol, value)') &&
+  !lateBaselineContract.includes('new Map(menuValues)'),
+  'late hidden PACKAGE defaults can be misclassified as Probe user selections');
+const probeIssueTitleContract = app.match(/function probeIssueTitle\(request\) \{[\s\S]*?\n\}/)?.[0] || '';
+const probeIssueTitleForTest = Function(`${probeIssueTitleContract}\nreturn probeIssueTitle;`)();
+const titleRequest = {
+  packageConfig: 'CONFIG_PACKAGE_libc=y\nCONFIG_PACKAGE_libgcc=y\nCONFIG_PACKAGE_libopenssl=y\nCONFIG_PACKAGE_zlib=m\n',
+  mode: 'package-compile',
+};
+expect(probeIssueTitleForTest({ ...titleRequest, channel: 'main' }) ===
+  '[probe] libc, libgcc, libopenssl +1 · package-compile',
+  'main Probe title unexpectedly contains a code-channel prefix');
+expect(probeIssueTitleForTest({ ...titleRequest, channel: 'dev' }) ===
+  '[probe] dev-libc, libgcc, libopenssl +1 · package-compile',
+  'dev Probe title is missing its code-channel prefix');
+expect(probeIssueTitleForTest({ ...titleRequest, channel: 'staging' }) ===
+  '[probe] staging-libc, libgcc, libopenssl +1 · package-compile',
+  'staging Probe title is missing its code-channel prefix');
+expect(probeIssueTitleForTest({ ...titleRequest, channel: 'fix/example' }) ===
+  '[probe] fix/example-libc, libgcc, libopenssl +1 · package-compile',
+  'fix Probe title is missing its exact code-channel prefix');
 expect(app.includes('function probePackageBaselineState(option)') &&
   app.includes('function changedProbePackageOptions()') &&
   probeContract.includes('const changed = changedProbePackageOptions()') &&
@@ -364,6 +392,7 @@ console.log('Catalog UI state and responsive DOM contracts passed');
 
 expect(!app.includes('probe-request.json'), 'removed Probe request file protocol returned');
 expect(app.includes('WEIG_PACKAGE_PROBE_STATE_V2:') &&
-  app.includes("new URLSearchParams({ template: 'package-probe.yml', title, state: token })") &&
-  app.includes('packageConfig: probePackageConfigFromText(resolvedConfig)'),
+  app.includes("template: 'package-probe.yml', title: probeIssueTitle(request), state: token") &&
+  app.includes('packageConfig: probePackageConfigFromText(resolvedConfig)') &&
+  app.includes('function probeIssueTitle(request)'),
   'Probe does not submit the shared Advanced package state directly');
