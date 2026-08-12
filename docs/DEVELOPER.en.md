@@ -114,11 +114,7 @@ node tools/serve.mjs
 
 For every channel, publish Catalog first, wait for its data branch and root-asset contracts, then publish AutoBuild, wait for CI/Pages, and online-test `index.json`, `applications.json.gz`, `compatibility.json.gz`, and browser loading. Normal code promotion is `dev → staging → main`. Catalog code and production data have separate lifecycles: Catalog `main` writes only `catalog-candidate`, and only the Catalog manual Production Gate may promote that verified snapshot to `catalog-data`. AutoBuild keeps its runtime mapping `main → catalog-data` and must never read `catalog-candidate`, so promoting Catalog code to `main` does not itself publish production user data.
 
-## 10. Handoff
-
-`docs-private/复制给下个ai.txt` contains durable hard rules/templates only. `docs-private/AI交接指南.txt` contains the compact current status, commits, online Runs, and remaining work. Do not append chat history.
-
-## 11. Catalog selection and final configuration
+## 10. Catalog selection and final configuration
 
 `site/wrt/data/project.json` carries only a small selection policy: Source priority, development-branch priority, and preferred Target selector values. Catalog remains the sole inventory of real Sources, Branches, Targets, and Profiles. A missing preferred Target must fall back to the first complete valid Catalog path. Defaults apply only to first selection or a new Source/Branch; they must never overwrite the current control, valid state, or an explicit request.
 
@@ -130,7 +126,7 @@ In an imported workspace, the semantic `Selected options` button sits left of th
 
 One Catalog/Kconfig effective resolver selects the final `.config` theme. Explicit user state wins; otherwise it evaluates the active Target/Profile packages, defaults, dependencies/selects, and choices. If that remains empty, it walks stable Catalog order and uses the same `applyUserIntent` dependency closure to select the first legal candidate, skipping explicit user exclusions. The resolved symbol and its dependency closure are written explicitly into the generated config and shared by download, self-test, submit, and firmware-settings snapshots. No records or all candidates explicitly disabled are genuine failures; named fallback themes are forbidden.
 
-## 12. Curated-plugin selection state
+## 11. Curated-plugin selection state
 
 Curated checkboxes, group badges, bottom statistics, the selection drawer, and the build contract must share one selection state. Catalog Target uses `catalogUserOverrides` as the authority for user intent; only legacy paths use the local selected/removed sets. `removed` means a real exclusion and must never be counted by a label that says “selected.”
 

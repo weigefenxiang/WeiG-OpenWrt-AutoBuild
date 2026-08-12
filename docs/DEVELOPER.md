@@ -114,11 +114,7 @@ node tools/serve.mjs
 
 发布顺序：同一频道总是先推 Catalog，等待数据分支发布并验证 root asset 契约，再推 AutoBuild，等待 CI/Pages，最后在线验证 `index.json`、`applications.json.gz`、`compatibility.json.gz` 与网页实际加载。正常代码晋级为 `dev → staging → main`。Catalog 的代码生命周期与正式数据生命周期必须分离：Catalog `main` 只生成 `catalog-candidate`，只有 Catalog 的手动 Production Gate 可以把已验证候选精确晋级到 `catalog-data`；AutoBuild 的运行时映射仍保持 `main → catalog-data`，不得读取 `catalog-candidate`。因此 Catalog 代码进入 `main` 不等于正式用户数据已发布。
 
-## 10. 交接
-
-`docs-private/复制给下个ai.txt` 只保留长期硬规则和模板；`docs-private/AI交接指南.txt` 保留精简当前状态、提交 SHA、线上 Run 与未完成事项。不得继续累积聊天流水账。
-
-## 11. Catalog 选择与最终配置
+## 10. Catalog 选择与最终配置
 
 `site/wrt/data/project.json` 只保存很小的选择策略：Source 优先级、开发分支优先级，以及首选 Target selector 值。Source/Branch/Target/Profile 的真实清单仍完全来自 Catalog；首选 Target 不存在时必须退回 Catalog 中首个完整有效路径。默认策略只用于首次选择或新 Source/Branch，绝不能覆盖当前控件、有效状态或显式请求。
 
@@ -130,7 +126,7 @@ Advanced 标题按钮、程序定位和搜索框共用一个异步展开协调�
 
 最终 `.config` 的主题由 Catalog/Kconfig effective resolver 统一解析：用户显式值优先，否则解析当前 Target/Profile 包、default、dependency/select 与 choice；若仍为空，则按 Catalog 稳定顺序通过同一 `applyUserIntent` 依赖闭包选择首个合法候选，并跳过用户显式关闭项。解析结果及其依赖闭包必须显式写入生成配置。配置下载、自检、提交和固件设置快照共用该结果；无记录或全部候选被显式关闭时才失败，禁止写具体主题名兜底。
 
-## 12. 精选插件选择状态
+## 11. 精选插件选择状态
 
 精选插件的复选框、分组徽标、底部统计、已选清单与构建契约必须共用同一选择状态。Catalog Target 以 `catalogUserOverrides` 为用户意图权威，旧入口才使用本地 selected/removed 集合；`removed` 表示真实排除，禁止计入任何“已选”数字。
 

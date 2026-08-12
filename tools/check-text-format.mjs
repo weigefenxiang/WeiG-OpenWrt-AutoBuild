@@ -31,7 +31,6 @@ const CRITICAL_FILES = [
   'tools/check-text-format.mjs',
   'tools/sync-blog.mjs',
   'tools/verify-site-archive.mjs',
-  'docs-private/Sync_Deploy.bat',
 ];
 
 function slash(path) {
@@ -44,9 +43,7 @@ function isInside(root, path) {
 }
 
 function isExcluded(relativePath) {
-  return slash(relativePath).split('/').some((part, index, parts) =>
-    EXCLUDED_DIRECTORIES.has(part) ||
-    (part === 'temp' && index > 0 && parts[index - 1] === 'docs-private'));
+  return slash(relativePath).split('/').some((part) => EXCLUDED_DIRECTORIES.has(part));
 }
 
 export function expectedLineEnding(relativePath) {

@@ -34,7 +34,6 @@ WeiG-OpenWrt-AutoBuild/
 ├─ Shell/                      generic upstream/build adapters
 ├─ config/policies/            one small package-mirror policy
 ├─ docs/                       bilingual developer documentation
-├─ docs-private/               ignored handoff, backup and local tools
 ├─ site/wrt/
 │  ├─ index.html               static UI shell
 │  ├─ app.css                  shared responsive presentation

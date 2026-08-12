@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 合并 tools/i18n-source.json(zh-CN 源语言)+ tools/i18n-translations.json(其余语言) / Merges tools/i18n-source.json (zh-CN source) with tools/i18n-translations.json (other languages).
-// 产出 site/wrt/data/i18n.json(页面用)+ docs-private/翻译对照表.md(人工校对用,不上传) / Outputs site/wrt/data/i18n.json (used by the page) + docs-private/翻译对照表.md (human proofreading only, not deployed).
+// 产出 site/wrt/data/i18n.json(页面用) / Outputs site/wrt/data/i18n.json for the web app.
 // zh-CN 与 en 缺任何词条直接报错;其他语言缺条只警告,页面运行时回退英文 / Missing zh-CN/en entries are fatal; other languages only warn — the page falls back to English at runtime.
 // 用法 / Usage: node tools/gen-i18n.mjs
 
@@ -61,22 +61,6 @@ if (errors.length) {
 writeFileSync(join(ROOT, 'site', 'wrt', 'data', 'i18n.json'),
   JSON.stringify({ version: 1, fallback: 'en', languages: LANGS, strings }, null, 1) + '\n');
 
-// 对照表 md:每语言一节,避免所有语言挤成一张超宽表格 / review table md: one section per language to avoid one over-wide table
-const esc = (s) => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
-let md = '# UI 翻译对照表\n\n' +
-  '由 `node tools/gen-i18n.mjs` 自动生成,请勿手改本文件 —— 改 `tools/i18n-source.json`(中文源)或 `tools/i18n-translations.json`(其他语言)后重跑。\n\n' +
-  `词条数:${keys.length} · 语言数:${LANGS.length}\n\n` +
-  '语言:' + LANGS.map((l) => `${l.native}(${l.id})`).join(' · ') + '\n\n';
-
-for (const l of LANGS) {
-  if (l.id === 'zh-CN') continue;
-  const miss = keys.filter((k) => !strings[k][l.id]).length;
-  md += `## ${l.native} (${l.id})${miss ? ` — 缺 ${miss} 条,运行时回退英文` : ''}\n\n`;
-  md += '| 词条 key | 简体中文 | ' + l.native + ' |\n|---|---|---|\n';
-  for (const k of keys) md += `| \`${k}\` | ${esc(strings[k]['zh-CN'])} | ${esc(strings[k][l.id] || '(缺,回退英文)')} |\n`;
-  md += '\n';
-}
-writeFileSync(join(ROOT, 'docs-private', '翻译对照表.md'), md);
 
 console.log(`i18n.json: ${keys.length} 词条 × ${LANGS.length} 语言`);
 for (const l of LANGS) {
@@ -86,6 +70,5 @@ for (const l of LANGS) {
 if (warnings.length) {
   console.log(`\n警告 ${warnings.length} 条:`);
   for (const w of warnings.slice(0, 15)) console.log('  - ' + w);
-  if (warnings.length > 15) console.log(`  … 其余 ${warnings.length - 15} 条见对照表 md`);
+  if (warnings.length > 15) console.log(`  … 其余 ${warnings.length - 15} 条未显示`);
 }
-console.log('\n对照表: docs-private/翻译对照表.md');

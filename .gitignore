@@ -1,6 +1,3 @@
-# 私有文档目录,不上传;docs/ 里的全部公开 / private docs stay local; everything under docs/ ships
-docs-private/
-
 # 本地工具与依赖 / local tooling & deps
 node_modules/
 .vscode/
