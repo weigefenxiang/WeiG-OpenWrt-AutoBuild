@@ -81,6 +81,8 @@ const regressionTests = [
   'test-catalog-loader.mjs',
   'test-catalog-engine.mjs',
   'test-catalog-ui-contract.mjs',
+  'test-package-probe-v3.mjs',
+  'test-catalog-core-loader.mjs',
   'test-catalog-performance.mjs',
   'test-menuconfig-scalar.mjs',
   'test-kconfig-serializer.mjs',

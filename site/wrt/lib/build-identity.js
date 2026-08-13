@@ -3,9 +3,23 @@
 // The browser already imports this module during its mandatory startup gate. Keep the
 // presentation adapter release-scoped and await it before the application continues.
 if (typeof document !== 'undefined') {
+  const releaseSearch = new URL(import.meta.url).search;
   const feedbackUrl = new URL('./ui-feedback.js', import.meta.url);
-  feedbackUrl.search = new URL(import.meta.url).search;
+  feedbackUrl.search = releaseSearch;
   await import(feedbackUrl.href);
+
+  const loadClassic = (relativeUrl) => new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    const url = new URL(relativeUrl, import.meta.url);
+    url.search = releaseSearch;
+    script.src = url.href;
+    script.async = false;
+    script.addEventListener('load', resolve, { once: true });
+    script.addEventListener('error', () => reject(new Error(`Failed to load ${relativeUrl}`)), { once: true });
+    document.head.appendChild(script);
+  });
+  await loadClassic('./package-probe-v3-core.js');
+  await loadClassic('./package-probe-v3-ui.js');
 }
 
 const REQUEST_ID_RE = /^\d{6}_\d{4}$/;

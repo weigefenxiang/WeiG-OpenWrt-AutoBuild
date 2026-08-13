@@ -368,6 +368,8 @@ export function createCatalogLoader({
   const compatibilityPromises = new Map();
   const applicationsMemory = new Map();
   const applicationsPromises = new Map();
+  const coreMemory = new Map();
+  const corePromises = new Map();
 
   async function fetchIndex({ signal, forceRefresh = false, diagnostics = [] } = {}) {
     if (!forceRefresh && lastIndexResult) return { ...lastIndexResult, diagnostics };
@@ -478,6 +480,81 @@ export function createCatalogLoader({
       }
     }
     throw loaderError(`Catalog asset unavailable: ${safeAsset}\n${errors.join('\n')}`, diagnostics);
+  }
+
+  async function fetchCore({
+    sourceId,
+    branchName,
+    signal,
+    forceRefresh = false,
+    preferredAssetProvider = '',
+  } = {}) {
+    const diagnostics = [];
+    const indexResult = await fetchIndex({ signal, forceRefresh, diagnostics });
+    const index = indexResult.index;
+    const { source, branch } = branchFromIndex(index, sourceId, branchName);
+    if (!source || !branch || branch.state === 'unavailable') {
+      throw loaderError(`Catalog branch unavailable: ${sourceId}/${branchName}`, diagnostics);
+    }
+
+    const coreContract = branch.assets?.core;
+    if (!coreContract?.asset) {
+      const bundle = await fetchBundle({ sourceId, branchName, signal, forceRefresh, preferredAssetProvider });
+      return {
+        data: bundle.data,
+        index: bundle.index,
+        indexProvider: bundle.indexProvider,
+        provider: bundle.provider,
+        branch: bundle.branch,
+        source: bundle.source,
+        url: bundle.url,
+        diagnostics: bundle.diagnostics,
+        legacyBundle: true,
+      };
+    }
+
+    const key = `${sourceId}\0${branchName}\0${String(coreContract.hash || coreContract.asset)}`;
+    if (!forceRefresh && coreMemory.has(key)) {
+      const loaded = coreMemory.get(key);
+      diagnostic(diagnostics, 'core-memory', 'memory', true, `schema ${loaded.data?.schema || '-'}`, key);
+      return { ...loaded, diagnostics };
+    }
+    if (!forceRefresh && corePromises.has(key)) return corePromises.get(key);
+
+    const run = (async () => {
+      const result = await fetchAssetDocument({
+        asset: coreContract.asset,
+        contract: coreContract,
+        index,
+        signal,
+        diagnostics,
+        preferredAssetProvider: preferredAssetProvider || indexResult.provider,
+        forceRefresh,
+        stage: 'core-only',
+      });
+      if (Number(result.data?.schema || 0) < 6) {
+        throw loaderError(`Catalog core schema ${result.data?.schema || 0}; required 6`, diagnostics);
+      }
+      const expectedCommit = String(branch.commit || '');
+      const actualCommit = String(result.data?.source?.commit || '');
+      if (expectedCommit && actualCommit !== expectedCommit) {
+        throw loaderError(`Catalog source commit mismatch: ${actualCommit || '(missing)'} != ${expectedCommit}`, diagnostics);
+      }
+      const loaded = {
+        data: result.data,
+        index,
+        indexProvider: indexResult.provider,
+        provider: result.provider,
+        branch,
+        source,
+        url: result.url,
+        legacyBundle: false,
+      };
+      coreMemory.set(key, loaded);
+      return { ...loaded, diagnostics };
+    })().finally(() => corePromises.delete(key));
+    corePromises.set(key, run);
+    return run;
   }
 
   async function fetchBundle({
@@ -665,8 +742,10 @@ export function createCatalogLoader({
     compatibilityPromises.clear();
     applicationsMemory.clear();
     applicationsPromises.clear();
+    coreMemory.clear();
+    corePromises.clear();
     if (cacheStorage?.delete) await cacheStorage.delete(CATALOG_CACHE_NAME).catch(() => false);
   }
 
-  return { fetchIndex, fetchBundle, fetchCompatibility, fetchApplications, clearCache, dataRef: exactDataRef };
+  return { fetchIndex, fetchCore, fetchBundle, fetchCompatibility, fetchApplications, clearCache, dataRef: exactDataRef };
 }
