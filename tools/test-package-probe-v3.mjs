@@ -7,6 +7,7 @@ const buildIdentityText = fs.readFileSync(path.join(root, 'site/wrt/lib/build-id
 const probeText = fs.readFileSync(path.join(root, 'site/wrt/lib/package-probe-v3-core.js'), 'utf8') + '\n' +
   fs.readFileSync(path.join(root, 'site/wrt/lib/package-probe-v3-ui.js'), 'utf8');
 const probeCss = fs.readFileSync(path.join(root, 'site/wrt/package-probe-v3.css'), 'utf8');
+const feedbackText = fs.readFileSync(path.join(root, 'site/wrt/lib/ui-feedback.js'), 'utf8');
 const appText = fs.readFileSync(path.join(root, 'site/wrt/app.js'), 'utf8');
 
 assert.match(buildIdentityText, /package-probe-v3-core\.js/, 'startup gate must load Probe V3 core');
@@ -31,8 +32,20 @@ assert.match(probeCss, /\.probe-accordion-triggers\s*\{[^}]*repeat\(3/,
   'the three optional detail entry points must remain on one row');
 assert.match(probeCss, /\.probe-depth\s*\{[^}]*repeat\(4/,
   'L1-L4 must remain on one row on desktop');
-assert.match(probeCss, /\.probe-filter-grid\s*\{[^}]*repeat\(2/,
-  'environment selectors should use a spacious two-column desktop layout');
+assert.match(probeCss, /\.probe-environment-row\s*\{[^}]*grid-template-columns:\s*auto\s+minmax\(0,\s*1fr\)/,
+  'environment heading and five dimensions should share one desktop row');
+assert.match(probeCss, /\.probe-filter-grid\s*\{[^}]*repeat\(5/,
+  'the five environment dimensions must remain on one desktop row');
+assert.match(probeText, /createFloatingLayerController\(summary, panel/,
+  'Probe dropdowns must reuse the shared floating-layer controller');
+assert.match(feedbackText, /globalThis\.createFloatingLayerController/,
+  'shared UI layer must expose one reusable floating-layer controller');
+assert.match(feedbackText, /MutationObserver/,
+  'floating layers must close when their owner modal is dismissed');
+assert.match(feedbackText, /modalMask\.addEventListener\('dblclick'/,
+  'shared UI adapter must require a backdrop double-click for pointer dismissal');
+assert.match(feedbackText, /stopImmediatePropagation\(\)/,
+  'shared UI adapter must suppress the legacy single-click backdrop fallback');
 assert.match(appText, /addEventListener\('click', openPackageProbeModal\)/,
   'base app.js must retain the legacy launcher that the V3 adapter replaces');
 

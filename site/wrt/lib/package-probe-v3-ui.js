@@ -166,9 +166,10 @@ async function openPackageProbeV3Modal() {
     defconfig.append(defconfigInput, defconfigText); depthRow.appendChild(defconfig);
     defconfigInput.addEventListener('change', () => void renderPreview());
 
+    const environmentRow = document.createElement('div'); environmentRow.className = 'probe-environment-row'; settings.appendChild(environmentRow);
     const environmentHead = document.createElement('div'); environmentHead.className = 'probe-environment-head';
-    const environmentTitle = document.createElement('strong'); environmentTitle.textContent = probeV3UiText('environment'); environmentHead.appendChild(environmentTitle); settings.appendChild(environmentHead);
-    const filterGrid = document.createElement('div'); filterGrid.className = 'probe-filter-grid'; settings.appendChild(filterGrid);
+    const environmentTitle = document.createElement('strong'); environmentTitle.textContent = probeV3UiText('environment'); environmentHead.appendChild(environmentTitle); environmentRow.appendChild(environmentHead);
+    const filterGrid = document.createElement('div'); filterGrid.className = 'probe-filter-grid'; environmentRow.appendChild(filterGrid);
     const allDetails = [];
     const dimensionConfig = [
       ['sources', 'source', 'source', 'sourceLabel'],
@@ -199,6 +200,12 @@ async function openPackageProbeV3Modal() {
       const chevron = document.createElement('span'); chevron.textContent = '▾'; chevron.setAttribute('aria-hidden', 'true');
       summary.append(summaryText, chevron); details.appendChild(summary);
       const panel = document.createElement('div'); panel.className = 'probe-multiselect-panel';
+      const floating = typeof createFloatingLayerController === 'function'
+        ? createFloatingLayerController(summary, panel, {
+          minWidth: 360, preferredHeight: 380,
+          onDismiss: () => { details.open = false; },
+        })
+        : null;
       const searchBox = document.createElement('input'); searchBox.type = 'search'; searchBox.className = 'probe-multiselect-search';
       searchBox.placeholder = `${probeV3UiText('searchDimension')} ${probeV3UiText(labelKey)}`; panel.appendChild(searchBox);
       const list = document.createElement('div'); list.className = 'probe-multiselect-list'; panel.appendChild(list); details.appendChild(panel);
@@ -237,7 +244,17 @@ async function openPackageProbeV3Modal() {
         }
       };
       searchBox.addEventListener('input', refresh);
-      details.addEventListener('toggle', () => { if (details.open) { closeOtherProbeSelects(details); setTimeout(() => searchBox.focus(), 0); } });
+      details.addEventListener('toggle', () => {
+        summary.setAttribute('aria-expanded', String(details.open));
+        if (details.open) {
+          closeOtherProbeSelects(details);
+          floating?.open();
+          setTimeout(() => searchBox.focus(), 0);
+        } else {
+          floating?.close();
+        }
+      });
+      summary.setAttribute('aria-expanded', 'false');
       refresh();
       return { field, details, refresh };
     };

@@ -144,6 +144,118 @@
     confirmButton.focus();
   });
 
+  const modalMask = document.getElementById('modal');
+  let backdropPointerDown = false;
+  if (modalMask) {
+    modalMask.addEventListener('pointerdown', (event) => {
+      backdropPointerDown = event.target === modalMask;
+    }, true);
+    modalMask.addEventListener('pointercancel', () => { backdropPointerDown = false; }, true);
+    modalMask.addEventListener('click', (event) => {
+      if (event.target !== modalMask) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
+    modalMask.addEventListener('dblclick', (event) => {
+      if (!backdropPointerDown || event.target !== modalMask) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      backdropPointerDown = false;
+      closeModal();
+    }, true);
+  }
+
+  globalThis.createFloatingLayerController = (anchor, layer, options = {}) => {
+    if (!(anchor instanceof Element) || !(layer instanceof HTMLElement)) return null;
+    const originParent = layer.parentNode;
+    const originNext = layer.nextSibling;
+    const margin = Math.max(4, Number(options.margin) || 8);
+    const gap = Math.max(0, Number(options.gap) || 5);
+    const minWidth = Math.max(0, Number(options.minWidth) || 0);
+    const preferredHeight = Math.max(120, Number(options.preferredHeight) || 320);
+    const ownerModal = anchor.closest('.modal-mask');
+    let open = false;
+    let raf = 0;
+    let ownerObserver = null;
+
+    const restore = () => {
+      if (!originParent) return;
+      const before = originNext?.parentNode === originParent ? originNext : null;
+      originParent.insertBefore(layer, before);
+      for (const property of ['position', 'z-index', 'left', 'right', 'top', 'bottom', 'width', 'max-height']) {
+        layer.style.removeProperty(property);
+      }
+      layer.classList.remove('ui-floating-layer');
+    };
+    const position = () => {
+      raf = 0;
+      if (!open || !anchor.isConnected || !layer.isConnected) return;
+      const viewportWidth = document.documentElement.clientWidth;
+      const viewportHeight = document.documentElement.clientHeight;
+      const rect = anchor.getBoundingClientRect();
+      const width = Math.min(Math.max(rect.width, minWidth), Math.max(0, viewportWidth - margin * 2));
+      const below = Math.max(0, viewportHeight - rect.bottom - gap - margin);
+      const above = Math.max(0, rect.top - gap - margin);
+      const useBelow = below >= Math.min(preferredHeight, above) || below >= above;
+      const available = Math.max(0, useBelow ? below : above);
+      const left = Math.min(Math.max(margin, rect.left), Math.max(margin, viewportWidth - width - margin));
+      layer.style.position = 'fixed';
+      layer.style.zIndex = String(Number(options.zIndex) || 70);
+      layer.style.left = `${left}px`;
+      layer.style.right = 'auto';
+      layer.style.width = `${width}px`;
+      layer.style.maxHeight = `${available}px`;
+      layer.style.top = useBelow ? `${rect.bottom + gap}px` : 'auto';
+      layer.style.bottom = useBelow ? 'auto' : `${viewportHeight - rect.top + gap}px`;
+    };
+    const schedulePosition = () => {
+      if (!open || raf) return;
+      raf = requestAnimationFrame(position);
+    };
+    const dismiss = () => {
+      options.onDismiss?.();
+      controller.close();
+    };
+    const outsidePointerDown = (event) => {
+      if (anchor.contains(event.target) || layer.contains(event.target)) return;
+      dismiss();
+    };
+    const controller = {
+      open() {
+        if (open) { schedulePosition(); return; }
+        open = true;
+        document.body.appendChild(layer);
+        layer.classList.add('ui-floating-layer');
+        layer.hidden = false;
+        document.addEventListener('pointerdown', outsidePointerDown, true);
+        document.addEventListener('scroll', schedulePosition, true);
+        window.addEventListener('resize', schedulePosition);
+        if (ownerModal) {
+          ownerObserver = new MutationObserver(() => { if (ownerModal.hidden) dismiss(); });
+          ownerObserver.observe(ownerModal, { attributes: true, attributeFilter: ['hidden'] });
+        }
+        position();
+      },
+      close() {
+        if (!open) return;
+        open = false;
+        if (raf) cancelAnimationFrame(raf);
+        raf = 0;
+        document.removeEventListener('pointerdown', outsidePointerDown, true);
+        document.removeEventListener('scroll', schedulePosition, true);
+        window.removeEventListener('resize', schedulePosition);
+        ownerObserver?.disconnect();
+        ownerObserver = null;
+        layer.hidden = true;
+        restore();
+      },
+      update: schedulePosition,
+      get isOpen() { return open; },
+    };
+    layer.hidden = true;
+    return controller;
+  };
+
   const interactionTypes = ['click', 'change', 'submit'];
   for (const type of interactionTypes) {
     document.addEventListener(type, (event) => {
