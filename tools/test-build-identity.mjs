@@ -265,4 +265,3 @@ assert(feedbackSource.includes("t('import.ok', { id: marker })") &&
   'UI feedback does not preserve human-readable import details or mobile action-bar avoidance');
 assert((appSource.match(/\bconfirm\(/g) || []).length === 4 && (appSource.match(/\balert\(/g) || []).length === 1,
   'native popup callsite count changed; route new feedback through the shared adapter instead');
-
