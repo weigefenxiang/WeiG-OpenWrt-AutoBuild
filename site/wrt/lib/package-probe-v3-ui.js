@@ -71,7 +71,16 @@ async function openPackageProbeV3Modal() {
 
     const intent = new Map();
     let latestFinalStates = new Map(baselineStates);
-    let previewRequest = 0;
+    let packageRevision = 0;
+    let packageSnapshotRevision = 0;
+    let packageConfigSnapshot = baselinePackageConfig;
+    let packageRefresh = null;
+    let environmentRevision = 0;
+    let environmentSnapshotRevision = -1;
+    let environmentSnapshot = [];
+    let latestPreview = null;
+    const coverageSnapshotCache = new Map();
+    let autoLimitTimer = 0;
     let autoLimitTouched = false;
     const autoDefaults = {
       'package-compile': 200,
@@ -157,14 +166,14 @@ async function openPackageProbeV3Modal() {
       option.append(input, level, title, tooltip); depth.appendChild(option);
       input.addEventListener('change', () => {
         if (!autoLimitTouched) autoLimit.value = String(autoDefaults[value] || 50);
-        void renderPreview();
+        refreshRequestPreview();
       });
     }
     const defconfig = document.createElement('label'); defconfig.className = 'probe-defconfig'; defconfig.title = probeV3UiText('defconfigHelp');
     const defconfigInput = document.createElement('input'); defconfigInput.type = 'checkbox'; defconfigInput.checked = true;
     const defconfigText = document.createElement('strong'); defconfigText.textContent = probeV3UiText('defconfig');
     defconfig.append(defconfigInput, defconfigText); depthRow.appendChild(defconfig);
-    defconfigInput.addEventListener('change', () => void renderPreview());
+    defconfigInput.addEventListener('change', refreshRequestPreview);
 
     const environmentRow = document.createElement('div'); environmentRow.className = 'probe-environment-row'; settings.appendChild(environmentRow);
     const environmentHead = document.createElement('div'); environmentHead.className = 'probe-environment-head';
@@ -191,8 +200,8 @@ async function openPackageProbeV3Modal() {
     const closeOtherProbeSelects = (except = null) => {
       for (const details of allDetails) if (details !== except) details.open = false;
     };
-    const createMultiSelect = (filterKey, labelKey, fullWidth = false) => {
-      const field = document.createElement('div'); field.className = `probe-multiselect-field${fullWidth ? ' is-wide' : ''}`;
+    const createMultiSelect = (filterKey, labelKey) => {
+      const field = document.createElement('div'); field.className = 'probe-multiselect-field';
       const fieldTitle = document.createElement('strong'); fieldTitle.textContent = probeV3UiText(labelKey);
       const details = document.createElement('details'); details.className = 'probe-multiselect'; allDetails.push(details);
       const summary = document.createElement('summary');
@@ -217,7 +226,7 @@ async function openPackageProbeV3Modal() {
         const allInput = document.createElement('input'); allInput.type = 'checkbox'; allInput.checked = selected.has('*');
         allLabel.append(allInput, document.createTextNode(probeV3UiText('all'))); list.appendChild(allLabel);
         allInput.addEventListener('change', () => {
-          selected.clear(); selected.add('*'); refresh(); void renderPreview();
+          selected.clear(); selected.add('*'); refresh(); refreshEnvironmentPreview();
         });
         for (const [value, labelText] of [...optionMaps[filterKey].entries()].sort((a, b) => a[1].localeCompare(b[1], undefined, { numeric: true }))) {
           const label = document.createElement('label'); label.className = 'probe-multiselect-option';
@@ -230,7 +239,7 @@ async function openPackageProbeV3Modal() {
             if (selected.has('*')) selected.delete('*');
             if (input.checked) selected.add(value); else selected.delete(value);
             if (!selected.size) selected.add('*');
-            refresh(); void renderPreview();
+            refresh(); refreshEnvironmentPreview();
           });
         }
         if (selected.has('*')) summaryText.textContent = probeV3UiText('all');
@@ -263,7 +272,7 @@ async function openPackageProbeV3Modal() {
       branches: createMultiSelect('branches', 'branch'),
       targetSystems: createMultiSelect('targetSystems', 'targetSystem'),
       subtargets: createMultiSelect('subtargets', 'subtarget'),
-      profiles: createMultiSelect('profiles', 'targetProfile', true),
+      profiles: createMultiSelect('profiles', 'targetProfile'),
     };
     const refreshMultiSelects = () => Object.values(multiSelects).forEach((control) => control.refresh());
 
@@ -275,7 +284,7 @@ async function openPackageProbeV3Modal() {
     const shortcuts = document.createElement('div'); shortcuts.className = 'probe-shortcuts'; settings.appendChild(shortcuts);
     const shortcutButton = (text, handler) => {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'btn probe-shortcut'; button.textContent = text;
-      button.addEventListener('click', () => { handler(); refreshMultiSelects(); void renderPreview(); }); shortcuts.appendChild(button); return button;
+      button.addEventListener('click', () => { handler(); refreshMultiSelects(); refreshEnvironmentPreview(); }); shortcuts.appendChild(button); return button;
     };
     const currentTarget = probeV3CurrentTarget();
     shortcutButton(probeV3UiText('currentEnvironment'), () => {
@@ -318,9 +327,13 @@ async function openPackageProbeV3Modal() {
     limitGroup.append(limitText, autoLimit, environmentText);
     const matchCount = document.createElement('strong'); matchCount.className = 'probe-match-count';
     coverageRow.append(coverageLabel, autoCoverageLabel, exhaustiveLabel, limitGroup, matchCount);
-    autoLimit.addEventListener('input', () => { autoLimitTouched = true; void renderPreview(); });
-    autoCoverageInput.addEventListener('change', () => void renderPreview());
-    exhaustiveInput.addEventListener('change', () => void renderPreview());
+    autoLimit.addEventListener('input', () => {
+      autoLimitTouched = true;
+      clearTimeout(autoLimitTimer);
+      autoLimitTimer = setTimeout(() => refreshRequestPreview(), 150);
+    });
+    autoCoverageInput.addEventListener('change', refreshRequestPreview);
+    exhaustiveInput.addEventListener('change', refreshRequestPreview);
 
     const accordion = document.createElement('div'); accordion.className = 'probe-accordion'; settings.appendChild(accordion);
     const accordionTriggers = document.createElement('div'); accordionTriggers.className = 'probe-accordion-triggers'; accordion.appendChild(accordionTriggers);
@@ -331,7 +344,7 @@ async function openPackageProbeV3Modal() {
       accordionMode = accordionMode === mode ? '' : mode;
       accordionBody.hidden = !accordionMode;
       for (const [key, button] of accordionButtons) button.setAttribute('aria-expanded', String(key === accordionMode));
-      void renderPreview();
+      renderAccordionSnapshot();
     };
     for (const [mode, labelKey] of [['scope', 'scopeDetail'], ['coverage', 'coveragePreview'], ['execution', 'executionPreview']]) {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'probe-accordion-trigger'; button.textContent = `▸ ${probeV3UiText(labelKey)}`;
@@ -384,7 +397,7 @@ async function openPackageProbeV3Modal() {
           const enableValue = states.includes('y') ? 'y' : states.find((value) => value !== 'n') || 'y';
           const nextValue = activeSelected ? 'n' : enableValue;
           if (setMenuValue(option, nextValue)) {
-            recordIntent(option); renderResults(); void renderPreview();
+            recordIntent(option); renderResults(); refreshPackagePreview();
           }
         });
         results.appendChild(row);
@@ -414,8 +427,7 @@ async function openPackageProbeV3Modal() {
         }
         accordionBody.appendChild(grid);
       } else if (accordionMode === 'coverage') {
-        const limit = currentCoverageMode() === 'auto' ? normalizedAutoLimit() : candidates.length;
-        const sample = probeV3CoverageSample(candidates, Math.min(limit, candidates.length));
+        const coverageSnapshot = currentCoverageSnapshot(candidates);
         const dimensions = [
           ['source', probeV3UiText('source')], ['branch', probeV3UiText('branch')],
           ['targetSystem', probeV3UiText('targetSystem')], ['subtarget', probeV3UiText('subtarget')],
@@ -423,12 +435,10 @@ async function openPackageProbeV3Modal() {
         ];
         const grid = document.createElement('div'); grid.className = 'probe-detail-grid';
         const firstKey = document.createElement('strong'); firstKey.textContent = currentCoverageMode() === 'auto' ? probeV3UiText('sampled') : probeV3UiText('exhaustiveCoverage');
-        const firstVal = document.createElement('span'); firstVal.textContent = `${sample.length} / ${candidates.length}`; grid.append(firstKey, firstVal);
+        const firstVal = document.createElement('span'); firstVal.textContent = `${coverageSnapshot.sample.length} / ${candidates.length}`; grid.append(firstKey, firstVal);
         for (const [keyName, label] of dimensions) {
-          const allValues = probeV3DimensionValues(candidates, keyName).size;
-          const sampledValues = probeV3DimensionValues(sample, keyName).size;
           const key = document.createElement('strong'); key.textContent = label;
-          const val = document.createElement('span'); val.textContent = `${sampledValues} / ${allValues}`; grid.append(key, val);
+          const val = document.createElement('span'); val.textContent = `${coverageSnapshot.sampledValues[keyName]} / ${coverageSnapshot.allValues[keyName]}`; grid.append(key, val);
         }
         if (currentCoverageMode() === 'all') {
           const key = document.createElement('strong'); key.textContent = probeV3UiText('batches');
@@ -440,49 +450,117 @@ async function openPackageProbeV3Modal() {
       }
     };
 
-    const requestValue = async () => {
-      const resolvedConfig = await generateResolvedConfigText();
-      const packageConfig = probeV3PackageConfigFromText(resolvedConfig);
-      latestFinalStates = probeV3PackageStateMap(packageConfig);
-      renderStateSummary();
-      const candidates = probeV3FilterEnvironments(universe, filters);
+    const markPackageStateChanged = () => {
+      packageRevision += 1;
+      submitButton.disabled = true;
+    };
+    const markEnvironmentChanged = () => {
+      environmentRevision += 1;
+      environmentSnapshotRevision = -1;
+      coverageSnapshotCache.clear();
+    };
+    const currentEnvironmentCandidates = () => {
+      if (environmentSnapshotRevision !== environmentRevision) {
+        environmentSnapshot = probeV3FilterEnvironments(universe, filters);
+        environmentSnapshotRevision = environmentRevision;
+      }
+      return environmentSnapshot;
+    };
+    const currentCoverageSnapshot = (candidates) => {
+      const mode = currentCoverageMode();
+      const limit = mode === 'auto' ? Math.min(normalizedAutoLimit(), candidates.length) : candidates.length;
+      const key = `${environmentRevision}|${mode}|${limit}`;
+      if (coverageSnapshotCache.has(key)) return coverageSnapshotCache.get(key);
+      const sample = mode === 'auto' ? probeV3CoverageSample(candidates, limit) : [...candidates];
+      const keys = ['source', 'branch', 'targetSystem', 'subtarget', 'profile'];
+      const allValues = Object.fromEntries(keys.map((name) => [name, probeV3DimensionValues(candidates, name).size]));
+      const sampledValues = Object.fromEntries(keys.map((name) => [name, probeV3DimensionValues(sample, name).size]));
+      const snapshot = { sample, allValues, sampledValues };
+      coverageSnapshotCache.set(key, snapshot);
+      while (coverageSnapshotCache.size > 8) coverageSnapshotCache.delete(coverageSnapshotCache.keys().next().value);
+      return snapshot;
+    };
+    const ensurePackageSnapshot = async () => {
+      if (packageSnapshotRevision === packageRevision) return packageConfigSnapshot;
+      if (packageRefresh?.revision === packageRevision) return packageRefresh.promise;
+      const revision = packageRevision;
+      const promise = (async () => {
+        const resolvedConfig = await generateResolvedConfigText();
+        if (revision !== packageRevision) return ensurePackageSnapshot();
+        packageConfigSnapshot = probeV3PackageConfigFromText(resolvedConfig);
+        packageSnapshotRevision = revision;
+        latestFinalStates = probeV3PackageStateMap(packageConfigSnapshot);
+        renderStateSummary();
+        return packageConfigSnapshot;
+      })();
+      packageRefresh = { revision, promise };
+      try {
+        return await promise;
+      } finally {
+        if (packageRefresh?.promise === promise) packageRefresh = null;
+      }
+    };
+    const buildRequestSnapshot = () => {
       const coverageMode = currentCoverageMode();
       const coverage = coverageMode === 'auto'
         ? { mode: 'auto', limit: normalizedAutoLimit() }
         : { mode: 'all' };
-      const request = {
+      return {
         schema: 3,
         channel: probeV3CodeChannel(),
         mode: depth.querySelector('input[name=probeDepth]:checked')?.value || 'package-compile',
         useDefconfig: defconfigInput.checked,
         baselinePackageConfig,
-        packageConfig,
+        packageConfig: packageConfigSnapshot,
         packageIntent: probeV3IntentRows(intent),
         environmentScope: probeV3FilterRequest(filters),
         coverage,
         maxParallel: 0,
         execute: true,
       };
-      return { request, candidates };
     };
-    async function renderPreview() {
-      const sequence = ++previewRequest;
+    const renderAccordionSnapshot = () => {
+      const snapshot = latestPreview;
+      renderAccordion(snapshot?.request || null, snapshot?.candidates || currentEnvironmentCandidates());
+    };
+    const syncPreview = () => {
+      autoLimit.value = String(normalizedAutoLimit());
+      const candidates = currentEnvironmentCandidates();
+      const request = buildRequestSnapshot();
+      const valid = packageSnapshotRevision === packageRevision &&
+        probeV3EnabledIntent(request).length > 0 && candidates.length > 0;
+      latestPreview = { request: valid ? request : null, candidates };
+      matchCount.textContent = `${probeV3UiText('currentMatches')} ${candidates.length}`;
+      limitGroup.hidden = currentCoverageMode() !== 'auto';
+      renderAccordionSnapshot();
+      submitButton.disabled = !valid;
+      return valid ? request : null;
+    };
+    async function refreshPackagePreview() {
+      markPackageStateChanged();
       try {
-        const { request, candidates } = await requestValue();
-        if (sequence !== previewRequest) return null;
-        autoLimit.value = String(normalizedAutoLimit());
-        const valid = probeV3EnabledIntent(request).length > 0 && candidates.length > 0;
-        matchCount.textContent = `${probeV3UiText('currentMatches')} ${candidates.length}`;
-        limitGroup.hidden = currentCoverageMode() !== 'auto';
-        renderAccordion(valid ? request : null, candidates);
-        submitButton.disabled = !valid;
-        return valid ? request : null;
+        await ensurePackageSnapshot();
+        return syncPreview();
       } catch (error) {
-        if (sequence === previewRequest) {
-          matchCount.textContent = String(error?.message || error).split('\n')[0];
-          accordionBody.textContent = String(error?.message || error);
-          submitButton.disabled = true;
-        }
+        matchCount.textContent = String(error?.message || error).split('\n')[0];
+        accordionBody.textContent = String(error?.message || error);
+        submitButton.disabled = true;
+        return null;
+      }
+    }
+    function refreshEnvironmentPreview() {
+      markEnvironmentChanged();
+      return syncPreview();
+    }
+    function refreshRequestPreview() { return syncPreview(); }
+    async function renderPreview() {
+      try {
+        await ensurePackageSnapshot();
+        return syncPreview();
+      } catch (error) {
+        matchCount.textContent = String(error?.message || error).split('\n')[0];
+        accordionBody.textContent = String(error?.message || error);
+        submitButton.disabled = true;
         return null;
       }
     }
@@ -495,7 +573,7 @@ async function openPackageProbeV3Modal() {
     ]));
     const actionsSpacer = document.createElement('span'); actionsSpacer.className = 'probe-actions-spacer'; actionsSpacer.setAttribute('aria-hidden', 'true');
     const previewButton = document.createElement('button'); previewButton.type = 'button'; previewButton.className = 'btn'; previewButton.textContent = probeV3UiText('preview');
-    previewButton.addEventListener('click', () => { if (accordionMode !== 'execution') setAccordion('execution'); else void renderPreview(); });
+    previewButton.addEventListener('click', () => { if (accordionMode !== 'execution') setAccordion('execution'); });
     const submitButton = document.createElement('button'); submitButton.type = 'button'; submitButton.className = 'btn btn-primary'; submitButton.textContent = probeV3UiText('submit');
     actions.append(helpButton, actionsSpacer, previewButton, submitButton); layout.appendChild(actions);
     submitButton.addEventListener('click', async () => {
@@ -511,7 +589,7 @@ async function openPackageProbeV3Modal() {
       } catch (error) {
         showToast(String(error?.message || error).split(';')[0]);
       } finally {
-        await renderPreview();
+        syncPreview();
       }
     });
 
@@ -522,7 +600,7 @@ async function openPackageProbeV3Modal() {
     layout.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') { closeOtherProbeSelects(); closeProbeOverlay(); }
     });
-    renderStateSummary(); renderResults(); await renderPreview(); search.focus();
+    renderStateSummary(); renderResults(); syncPreview(); search.focus();
   } catch (error) {
     body.textContent = '';
     const failure = document.createElement('p'); failure.className = 'import-error'; failure.textContent = String(error?.message || error); body.appendChild(failure);

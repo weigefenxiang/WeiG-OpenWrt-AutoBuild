@@ -90,9 +90,10 @@
 
 .probe-environment-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: end; gap: 10px; }
 .probe-environment-head { display: flex; min-height: 40px; align-items: center; padding-bottom: 1px; white-space: nowrap; }
-.probe-filter-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.probe-filter-grid {
+  display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1.15fr) minmax(0, 1.35fr); gap: 8px;
+}
 .probe-multiselect-field { display: grid; min-width: 0; gap: 5px; }
-.probe-multiselect-field.is-wide { grid-column: 1 / -1; }
 .probe-multiselect-field > strong { color: var(--text2); font-size: var(--menuconfig-body-size); }
 .probe-multiselect { position: relative; min-width: 0; }
 .probe-multiselect > summary {
@@ -187,6 +188,11 @@
   .modal.package-probe { width: calc(100vw - 24px); }
   .probe-depth-row { align-items: flex-start; flex-wrap: wrap; }
   .probe-defconfig { margin-left: auto; }
+  .probe-environment-row { grid-template-columns: 1fr; align-items: stretch; }
+  .probe-environment-head { min-height: 24px; padding-bottom: 0; }
+  .probe-filter-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .probe-multiselect-field { grid-column: span 2; }
+  .probe-multiselect-field:nth-child(4), .probe-multiselect-field:nth-child(5) { grid-column: span 3; }
   .probe-package { grid-template-columns: 30px minmax(0, 1fr) minmax(190px, .9fr); }
   .probe-package-usage { grid-column: 2 / 4; }
 }
@@ -203,10 +209,8 @@
   .probe-depth-option { justify-content: center; padding-inline: 5px; }
   .probe-depth-title { font-size: 0; }
   .probe-depth-title::after { content: attr(data-short); font-size: 13px; }
-  .probe-environment-row { grid-template-columns: 1fr; align-items: stretch; }
-  .probe-environment-head { min-height: 24px; padding-bottom: 0; }
   .probe-filter-grid { grid-template-columns: 1fr; }
-  .probe-multiselect-field.is-wide { grid-column: auto; }
+  .probe-multiselect-field, .probe-multiselect-field:nth-child(4), .probe-multiselect-field:nth-child(5) { grid-column: auto; }
   .probe-multiselect-panel { min-width: 100%; }
   .probe-coverage-row { gap: 8px 10px; }
   .probe-match-count { width: 100%; margin-left: 0; }
