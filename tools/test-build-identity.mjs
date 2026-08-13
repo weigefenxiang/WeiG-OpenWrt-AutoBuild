@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   artifactBuildRef,
   catalogDataBranch,
@@ -241,3 +244,25 @@ assert.deepEqual(
 );
 
 console.log('Build identity tests passed / 构建环境身份测试通过');
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const buildIdentitySource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'build-identity.js'), 'utf8');
+const feedbackSource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'ui-feedback.js'), 'utf8');
+const feedbackCss = readFileSync(join(ROOT, 'site', 'wrt', 'ui-feedback.css'), 'utf8');
+const appSource = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
+assert(buildIdentitySource.includes("new URL('./ui-feedback.js', import.meta.url)") &&
+  buildIdentitySource.includes('await import(feedbackUrl.href)'),
+  'mandatory browser startup module does not await the shared UI feedback adapter');
+assert(feedbackSource.includes("new URL('../ui-feedback.css', moduleUrl)") &&
+  feedbackSource.includes('stylesheet.dataset.uiFeedbackStyle') &&
+  feedbackSource.includes('function renderNotice(message, options = {})') &&
+  feedbackSource.includes('globalThis.confirmModal ='),
+  'UI feedback adapter does not own one release-scoped Notice/Modal presentation layer');
+assert(feedbackSource.includes("t('import.ok', { id: marker })") &&
+  feedbackSource.includes("[source, branch, system, profile]") &&
+  feedbackCss.includes('.toast[data-kind=error]') && feedbackCss.includes('.modal.confirm-dialog') &&
+  feedbackCss.includes('128px + env(safe-area-inset-bottom)'),
+  'UI feedback does not preserve human-readable import details or mobile action-bar avoidance');
+assert((appSource.match(/\bconfirm\(/g) || []).length === 4 && (appSource.match(/\balert\(/g) || []).length === 1,
+  'native popup callsite count changed; route new feedback through the shared adapter instead');
+

@@ -1,5 +1,13 @@
 // Shared build-environment naming rules for the browser and GitHub Actions request parser.
 
+// The browser already imports this module during its mandatory startup gate. Keep the
+// presentation adapter release-scoped and await it before the application continues.
+if (typeof document !== 'undefined') {
+  const feedbackUrl = new URL('./ui-feedback.js', import.meta.url);
+  feedbackUrl.search = new URL(import.meta.url).search;
+  await import(feedbackUrl.href);
+}
+
 const REQUEST_ID_RE = /^\d{6}_\d{4}$/;
 const BRANCH_RE = /^[A-Za-z0-9._/-]{1,160}$/;
 const DISPLAY_RE = /^[A-Za-z0-9._-]{1,160}$/;
