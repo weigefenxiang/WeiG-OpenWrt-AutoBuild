@@ -3947,13 +3947,16 @@ function renderImportedWorkspace() {
     return value !== 'n' && value !== '0' && value !== '""';
   }).length;
   const modified = menuTouched.size + importedUnknownEdits.size;
-  $('importSummaryText').textContent = uiText(
+  const summaryText = uiText(
     `已识别 ${menuImportedOriginal.size} 项 · 仅导入 ${importedUnknownOriginal.size} 项` +
-      `（启用 ${activeUnknown}）· 用户插件操作 ${state.sel.size + state.removed.size} 项 · 已修改 ${modified} 项`,
+      `（启用 ${activeUnknown}）· 插件操作 ${state.sel.size + state.removed.size} 项 · 已修改 ${modified} 项`,
     `已識別 ${menuImportedOriginal.size} 項 · 僅匯入 ${importedUnknownOriginal.size} 項` +
-      `（啟用 ${activeUnknown}）· 使用者外掛操作 ${state.sel.size + state.removed.size} 項 · 已修改 ${modified} 項`,
+      `（啟用 ${activeUnknown}）· 外掛操作 ${state.sel.size + state.removed.size} 項 · 已修改 ${modified} 項`,
     `Recognized ${menuImportedOriginal.size} · import-only ${importedUnknownOriginal.size}` +
-      ` (enabled ${activeUnknown}) · user plugin actions ${state.sel.size + state.removed.size} · modified ${modified}`);
+      ` (enabled ${activeUnknown}) · plugin actions ${state.sel.size + state.removed.size} · modified ${modified}`);
+  const summaryTextElement = $('importSummaryText');
+  summaryTextElement.textContent = summaryText;
+  summaryTextElement.title = summaryText;
   const targetCard = $('importTargetCard');
   targetCard.hidden = importedTargetVerified;
   workspace.hidden = importedTargetVerified;

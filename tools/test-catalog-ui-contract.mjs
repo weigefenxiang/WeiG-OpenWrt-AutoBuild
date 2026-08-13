@@ -287,10 +287,18 @@ expect(overview.includes('id="menuconfigSelectedToggle"') && overview.includes('
   html.indexOf('id="menuconfigWorkspace"') > html.indexOf('id="menuconfigOverviewRow"') &&
   app.includes("$('menuconfigWorkspace').hidden = selectedCollapsed"),
   'Selected options is not left of the import summary with the full-width workspace below');
-expect(css.includes('.menuconfig-overview-row{display:grid;grid-template-columns:minmax(220px,.38fr) minmax(0,1fr)') &&
+expect(html.includes('class="menuconfig-selected-label"') &&
+  css.includes('.menuconfig-overview-row{display:grid;grid-template-columns:max-content minmax(0,1fr)') &&
+  css.includes('.menuconfig-selected-label{display:flex;align-items:center;min-width:0;white-space:nowrap}') &&
+  css.includes('.import-summary strong{flex:1 1 auto;min-width:0;overflow:hidden;') &&
+  css.includes('text-overflow:ellipsis;white-space:nowrap}') &&
+  css.includes('.import-summary strong{overflow-x:auto;') &&
+  css.includes('.import-summary{align-items:center;flex-direction:row}') &&
+  !css.includes('.import-summary{align-items:flex-start;flex-direction:column}') &&
+  app.includes('summaryTextElement.title = summaryText') &&
   css.includes('.menuconfig-workspace{width:100%') &&
   /@media\(max-width:640px\)\{[\s\S]*?\.menuconfig-overview-row\{grid-template-columns:minmax\(0,1fr\)\}/.test(css),
-  'Selected options/import summary desktop or mobile layout no longer preserves full-width results');
+  'Selected options/import summary can wrap, hide full details, or lose full-width/mobile access');
 const pathRow = html.match(/<div class="menuconfig-path-row">([\s\S]*?)<\/div>/)?.[1] || '';
 expect(pathRow.includes('menuconfigBack') && pathRow.includes('menuconfigPanelTitle') &&
   !pathRow.includes('menuconfigSearch'), 'Advanced path row contains controls beyond back/breadcrumb');

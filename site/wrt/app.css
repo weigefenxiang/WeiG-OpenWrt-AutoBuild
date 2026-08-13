@@ -316,9 +316,10 @@ input:focus-visible { border-color: var(--accent); }
 .menuconfig-breadcrumb-separator{flex:none;color:var(--text3)}
 .catalog-fresh{color:var(--ok)}.catalog-fallback{color:var(--text3)}
 .catalog-stale{color:var(--warn)}.catalog-unavailable{color:var(--danger)}
-.menuconfig-overview-row{display:grid;grid-template-columns:minmax(220px,.38fr) minmax(0,1fr);align-items:stretch;gap:10px;width:100%;margin-top:12px}
+.menuconfig-overview-row{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:stretch;gap:10px;width:100%;margin-top:12px}
 .menuconfig-overview-row:has(.menuconfig-selected-toggle[hidden]),.menuconfig-overview-row:has(.import-summary[hidden]){grid-template-columns:minmax(0,1fr)}
-.menuconfig-selected-toggle{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:52px;margin:0;padding:9px 12px;border:1px solid color-mix(in srgb,var(--accent) 42%,var(--border));border-radius:9px;background:color-mix(in srgb,var(--accent) 7%,var(--card2));color:var(--text);text-align:left;cursor:pointer}
+.menuconfig-selected-toggle{display:flex;align-items:center;justify-content:space-between;width:auto;min-width:220px;max-width:100%;min-height:52px;margin:0;padding:9px 12px;border:1px solid color-mix(in srgb,var(--accent) 42%,var(--border));border-radius:9px;background:color-mix(in srgb,var(--accent) 7%,var(--card2));color:var(--text);text-align:left;cursor:pointer}
+.menuconfig-selected-label{display:flex;align-items:center;min-width:0;white-space:nowrap}
 .menuconfig-selected-toggle:hover,.menuconfig-selected-toggle:focus-visible{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 11%,var(--card2))}
 .menuconfig-selected-toggle small{display:inline-flex;min-width:24px;justify-content:center;margin-left:6px;padding:2px 7px;border-radius:999px;background:var(--accent);color:#fff}
 .menuconfig-selected-toggle[aria-expanded=true] .menuconfig-chevron{transform:rotate(180deg)}
@@ -378,8 +379,8 @@ input:focus-visible { border-color: var(--accent); }
 .profile-package-actions button:last-child{border-right:0}
 .profile-package-actions button.active{background:var(--accent);color:#fff}
 .import-workspace{margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:9px;background:var(--card2)}
-.import-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;min-height:52px;padding:9px 12px;border:1px solid var(--border);border-radius:9px;background:var(--card2)}
-.import-summary strong{min-width:0;line-height:1.55;overflow-wrap:anywhere}
+.import-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;min-height:52px;overflow:hidden;padding:9px 12px;border:1px solid var(--border);border-radius:9px;background:var(--card2)}
+.import-summary strong{flex:1 1 auto;min-width:0;overflow:hidden;color:var(--text);line-height:1.55;text-overflow:ellipsis;white-space:nowrap}
 .import-summary .text-btn{flex:none}
 .import-target-card{margin-top:8px;padding:8px 10px;border-left:3px solid var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent);color:var(--text2)}
 .import-unknown{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
@@ -414,6 +415,9 @@ input:focus-visible { border-color: var(--accent); }
   .build-contract-controls .menuconfig-origin-filter-label select{flex:1 1 auto;min-width:0;max-width:100%}
   .menuconfig-header{grid-template-columns:minmax(0,1fr);align-items:stretch}
   .menuconfig-overview-row{grid-template-columns:minmax(0,1fr)}
+  .menuconfig-selected-toggle{width:100%;min-width:0}
+  .import-summary strong{overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:none;text-overflow:clip;touch-action:pan-x}
+  .import-summary strong::-webkit-scrollbar{display:none}
   .menuconfig-toggle{flex:1 1 100%}
   .menuconfig-toggle{gap:7px}.menuconfig-toggle strong{font-size:var(--menuconfig-title-size)}.menuconfig-toggle .hint{font-size:12px}
   .menuconfig-grid{grid-template-columns:minmax(0,1fr)}
@@ -448,7 +452,7 @@ input:focus-visible { border-color: var(--accent); }
   .profile-package-row{grid-template-columns:minmax(0,1fr) auto}
   .profile-package-row small{grid-column:1}
   .profile-package-actions{grid-column:2;grid-row:1 / span 2}
-  .import-summary{align-items:flex-start;flex-direction:column}
+  .import-summary{align-items:center;flex-direction:row}
   .import-unknown-row{grid-template-columns:1fr}
   .build-contract-grid{grid-template-columns:1fr}
   .build-contract-toggle{align-items:flex-start;flex-wrap:wrap;gap:3px 8px}
