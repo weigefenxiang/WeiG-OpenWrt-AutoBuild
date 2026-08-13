@@ -34,8 +34,12 @@ expect(selfTestContract.indexOf("openModal(t('st.title'))") >= 0 &&
   selfTestContract.indexOf("openModal(t('st.title'))") < selfTestContract.indexOf('await Promise.all') &&
   selfTestContract.includes('probe.hidden = false') &&
   selfTestContract.includes('CATALOG_LOADER.fetchCompatibility()') &&
-  !selfTestContract.includes('ensureCompatibilityRules()'),
-  'self-test does not open immediately or its generic Catalog probe entry is gated by compatibility UI');
+  selfTestContract.indexOf("timedFetch('https://api.github.com/'") <
+    selfTestContract.indexOf('await ensureCompatibilityRules()') &&
+  selfTestContract.includes('evaluateLoadedCompatibility(loadedCompatibility)') &&
+  selfTestContract.includes('savedResults.appendChild') &&
+  selfTestContract.includes("error?.name === 'CompatibilityCancelledError'"),
+  'self-test does not finish its ordinary checks before reusing the build compatibility gate and restoring results');
 const probeContract = app.match(/async function openPackageProbeModal\(\) \{([\s\S]*?)\n\}\n\$\('modalProbe'/)?.[1] || '';
 expect(!probeContract.includes('ensureCatalogApplications()') && probeContract.includes('await ensureCatalogMenuLoaded(true)') &&
   probeContract.includes('probePackageChoices(search.value)') && probeContract.includes("'probeDepth'") && probeContract.includes('scopeSelect.value') &&

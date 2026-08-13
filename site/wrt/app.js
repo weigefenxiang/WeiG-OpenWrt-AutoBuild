@@ -6807,12 +6807,14 @@ async function runSelfTest() {
   d1(missing.length ? 'fail' : 'ok', missing.length ? t('st.browser.fail', { list: missing.join('、') }) : t('st.browser.ok'));
 
   const d2 = addRow(t('st.data'));
+  let loadedCompatibility = null;
   try {
     const [applications, compatibility] = await Promise.all([
       ensureCatalogApplications(),
       CATALOG_LOADER.fetchCompatibility(),
       ensurePackageMirrors(),
     ]);
+    loadedCompatibility = compatibility;
     if (viewToken !== selfTestViewToken) return;
     d2(applications.items.length ? 'ok' : 'fail',
       `${MENU_CATALOG_DATA_REF} · ${applications.items.length} curated applications · ${compatibility.compatibility.rules.length} compatibility rules`);
@@ -6867,6 +6869,52 @@ async function runSelfTest() {
   const gh = await timedFetch('https://api.github.com/', 6000);
   if (viewToken !== selfTestViewToken) return;
   d5(gh.ok ? 'ok' : 'warn', gh.ok ? t('st.github.ok', { ms: gh.ms }) : t('st.github.fail', { msg: gh.msg }));
+
+  const d6 = addRow(t('st.compatibility'));
+  if (!loadedCompatibility) {
+    d6('fail', t('st.compatibility.fail', { msg: t('st.data.allFail') }));
+    return;
+  }
+  let evaluation;
+  try {
+    evaluation = evaluateLoadedCompatibility(loadedCompatibility);
+  } catch (error) {
+    d6('fail', t('st.compatibility.fail', { msg: error.message }));
+    return;
+  }
+  if (!evaluation.warnings.length) {
+    d6('ok', t('st.compatibility.ok'));
+    return;
+  }
+
+  const activeRuleIds = evaluation.warnings.map((warning) => warning.rule.id).join(' · ');
+  d6('warn', t('st.compatibility.warn', { rules: activeRuleIds }));
+  const savedResults = document.createDocumentFragment();
+  while (mb.firstChild) savedResults.appendChild(mb.firstChild);
+  try {
+    const forced = await ensureCompatibilityRules();
+    const current = evaluateLoadedCompatibility(loadedCompatibility);
+    if (!current.warnings.length) d6('ok', t('st.compatibility.ok'));
+    else if (forced) d6('warn', t('st.compatibility.forced', {
+      rules: current.warnings.map((warning) => warning.rule.id).join(' · '),
+    }));
+    else d6('warn', t('st.compatibility.warn', {
+      rules: current.warnings.map((warning) => warning.rule.id).join(' · '),
+    }));
+  } catch (error) {
+    if (error?.name === 'CompatibilityCancelledError') {
+      d6('warn', t('st.compatibility.cancelled', { rules: activeRuleIds }));
+    } else {
+      d6('fail', t('st.compatibility.fail', { msg: error.message }));
+    }
+  }
+  selfTestViewToken += 1;
+  modalCancelHandler = null;
+  openModal(t('st.title'));
+  probe.textContent = uiText('插件兼容探针', '外掛相容性探針', 'Package compatibility probe');
+  probe.hidden = false;
+  mb.textContent = '';
+  mb.appendChild(savedResults);
 }
 $('selfTestBtn').addEventListener('click', () => { runSelfTest().catch((e) => showToast(t('toast.selfTestError', { msg: e.message }))); });
 
