@@ -6805,28 +6805,71 @@ async function runSelfTest() {
     };
   }
 
+  const src = state.source;
   const d1 = addRow(t('st.browser'));
+  const d2 = addRow(t('st.data'));
+  const d3 = addRow(t('st.config') + (src ? ' (' + src.label + ')' : ''));
+  const d4 = addRow(t('st.gen'));
+  const d5 = addRow(t('st.github'));
+
+  // Paint every ordinary check before network or config work starts. / 在网络与配置检查前先画出全部普通检查项。
+  const nextFrame = window.requestAnimationFrame
+    ? (callback) => window.requestAnimationFrame(callback)
+    : (callback) => window.setTimeout(callback, 0);
+  await new Promise((resolve) => {
+    let settled = false, fallbackTimer = null;
+    const finishPaint = () => {
+      if (settled) return;
+      settled = true;
+      if (fallbackTimer !== null) window.clearTimeout(fallbackTimer);
+      resolve();
+    };
+    fallbackTimer = window.setTimeout(finishPaint, 150);
+    nextFrame(() => nextFrame(finishPaint));
+  });
+  if (viewToken !== selfTestViewToken) return;
+
+  let loadedCompatibility = null;
+  let compatibilityError = null;
+  let catalogDataStatus = null;
+  const refreshCatalogDataStatus = () => {
+    if (!catalogDataStatus || viewToken !== selfTestViewToken) return;
+    const rules = loadedCompatibility?.compatibility?.rules;
+    const suffix = Array.isArray(rules) ? ` · ${rules.length} compatibility rules` : '';
+    d2(catalogDataStatus.status, `${catalogDataStatus.message}${suffix}`);
+  };
+  const compatibilityDownload = Promise.resolve()
+    .then(() => CATALOG_LOADER.fetchCompatibility())
+    .then((compatibility) => {
+      loadedCompatibility = compatibility;
+      refreshCatalogDataStatus();
+      return compatibility;
+    })
+    .catch((error) => {
+      compatibilityError = error;
+      return null;
+    });
+
   const missing = ['fetch', 'URL', 'Blob', 'AbortController', 'localStorage'].filter((k) => !(k in window));
   d1(missing.length ? 'fail' : 'ok', missing.length ? t('st.browser.fail', { list: missing.join('、') }) : t('st.browser.ok'));
 
-  const d2 = addRow(t('st.data'));
-  let loadedCompatibility = null;
   try {
-    const [applications, compatibility] = await Promise.all([
+    const [applications] = await Promise.all([
       ensureCatalogApplications(),
-      CATALOG_LOADER.fetchCompatibility(),
       ensurePackageMirrors(),
     ]);
-    loadedCompatibility = compatibility;
     if (viewToken !== selfTestViewToken) return;
-    d2(applications.items.length ? 'ok' : 'fail',
-      `${MENU_CATALOG_DATA_REF} · ${applications.items.length} curated applications · ${compatibility.compatibility.rules.length} compatibility rules`);
+    catalogDataStatus = {
+      status: applications.items.length ? 'ok' : 'fail',
+      message: `${MENU_CATALOG_DATA_REF} · ${applications.items.length} curated applications`,
+    };
+    refreshCatalogDataStatus();
   } catch (error) {
-    d2('fail', error.message);
+    if (viewToken !== selfTestViewToken) return;
+    catalogDataStatus = { status: 'fail', message: error.message };
+    refreshCatalogDataStatus();
   }
 
-  const src = state.source;
-  const d3 = addRow(t('st.config') + (src ? ' (' + src.label + ')' : ''));
   let cfgText = null, tierHit = '';
   if (!src) d3('fail', t('st.config.noData'));
   else if (state.device?.id === 'catalog-target') {
@@ -6847,11 +6890,11 @@ async function runSelfTest() {
     d3('fail', t('st.config.noData'));
   }
 
-  const d4 = addRow(t('st.gen'));
   if (!src || !cfgText || !PLUGINS) d4('fail', t('st.gen.skip'));
   else {
     try {
       const text = await generateResolvedConfigText();
+      if (viewToken !== selfTestViewToken) return;
       const headerOk = text.includes(`# page-version=${state.siteVersion}`) &&
         text.includes(`# device=${state.device.id} source=${state.source.id} version=${state.version.id}`);
       const targets = targetLines(text);
@@ -6864,18 +6907,20 @@ async function runSelfTest() {
           `Real generation passed · ${configLines.length} settings · ${targets.length} target signatures`)
         : `${t('st.gen.fail')} · header=${headerOk} target=${targets.length} config=${configLines.length}`);
     } catch (error) {
+      if (viewToken !== selfTestViewToken) return;
       d4('fail', `${t('st.gen.fail')} · ${error.message}`);
     }
   }
 
-  const d5 = addRow(t('st.github'));
   const gh = await timedFetch('https://api.github.com/', 6000);
   if (viewToken !== selfTestViewToken) return;
   d5(gh.ok ? 'ok' : 'warn', gh.ok ? t('st.github.ok', { ms: gh.ms }) : t('st.github.fail', { msg: gh.msg }));
 
   const d6 = addRow(t('st.compatibility'));
+  loadedCompatibility = await compatibilityDownload;
+  if (viewToken !== selfTestViewToken) return;
   if (!loadedCompatibility) {
-    d6('fail', t('st.compatibility.fail', { msg: t('st.data.allFail') }));
+    d6('fail', t('st.compatibility.fail', { msg: compatibilityError?.message || t('st.data.allFail') }));
     return;
   }
   let evaluation;

@@ -1,7 +1,7 @@
 {
-  "version": "v2608130946",
+  "version": "v2608131029",
   "timezone": "Asia/Shanghai",
-  "fingerprint": "1c19e73003bc66c37f61a99de2ff001f1aa3f86cb710650cbab471a5395c975d",
-  "siteSha256": "8c1d4aba4f35becbd9b543fae5dbf43de38d9d98d7f2edcef6f33c85a0e11357",
+  "fingerprint": "21b9c97b940c3a0bf8020390a4eb21e8cc2d0e7612f6c0e4fd1591cf2dd65c0f",
+  "siteSha256": "ec0456b19306bb3d7525da3d12b4bd437095dd7850f86b1d46a5688b0c00ecbe",
   "hashAlgorithm": "sha256"
 }

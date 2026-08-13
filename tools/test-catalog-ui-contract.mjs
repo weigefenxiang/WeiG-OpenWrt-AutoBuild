@@ -30,22 +30,37 @@ expect(modalHeader.includes('id="modalProbe"') && modalHeader.includes('id="moda
   modalHeader.includes('<button type="button" class="modal-probe-link"') && modalHeader.includes('hidden'),
   'self-test modal probe button is not safely positioned before close');
 const selfTestContract = app.match(/async function runSelfTest\(\) \{([\s\S]*?)\n\}\n\$\('selfTestBtn'/)?.[1] || '';
+const selfTestRows = ["const d1 = addRow(t('st.browser'))", "const d2 = addRow(t('st.data'))",
+  "const d3 = addRow(t('st.config')", "const d4 = addRow(t('st.gen'))", "const d5 = addRow(t('st.github'))"];
+const selfTestPaint = selfTestContract.indexOf('await new Promise((resolve) => {');
+const compatibilityDownload = selfTestContract.indexOf('const compatibilityDownload = Promise.resolve()');
+const compatibilityFetch = selfTestContract.indexOf('CATALOG_LOADER.fetchCompatibility()');
+const ordinaryDataDownload = selfTestContract.indexOf('const [applications] = await Promise.all([');
+const githubCheck = selfTestContract.indexOf("timedFetch('https://api.github.com/'");
+const compatibilityRow = selfTestContract.indexOf("const d6 = addRow(t('st.compatibility'))");
 expect(selfTestContract.indexOf("openModal(t('st.title'))") >= 0 &&
-  selfTestContract.indexOf("openModal(t('st.title'))") < selfTestContract.indexOf('await Promise.all') &&
+  selfTestRows.every((row) => selfTestContract.indexOf(row) >= 0 && selfTestContract.indexOf(row) < selfTestPaint) &&
+  selfTestPaint >= 0 && selfTestPaint < compatibilityDownload &&
+  selfTestContract.indexOf('nextFrame(() => nextFrame(finishPaint))') > selfTestPaint &&
+  selfTestContract.indexOf('window.setTimeout(finishPaint, 150)') > selfTestPaint &&
+  compatibilityDownload < compatibilityFetch && compatibilityFetch < ordinaryDataDownload &&
+  !selfTestContract.slice(ordinaryDataDownload, selfTestContract.indexOf(']);', ordinaryDataDownload)).includes('fetchCompatibility') &&
   selfTestContract.includes('probe.hidden = false') &&
-  selfTestContract.includes('CATALOG_LOADER.fetchCompatibility()') &&
-  selfTestContract.indexOf("timedFetch('https://api.github.com/'") <
-    selfTestContract.indexOf('await ensureCompatibilityRules()') &&
+  githubCheck < compatibilityRow && compatibilityRow < selfTestContract.indexOf('await compatibilityDownload') &&
+  selfTestContract.indexOf('await compatibilityDownload') < selfTestContract.indexOf('evaluateLoadedCompatibility(loadedCompatibility)') &&
+  githubCheck < selfTestContract.indexOf('await ensureCompatibilityRules()') &&
   selfTestContract.includes('evaluateLoadedCompatibility(loadedCompatibility)') &&
+  selfTestContract.includes('viewToken !== selfTestViewToken') &&
   selfTestContract.includes('savedResults.appendChild') &&
   selfTestContract.includes("error?.name === 'CompatibilityCancelledError'"),
-  'self-test does not finish its ordinary checks before reusing the build compatibility gate and restoring results');
+  'self-test does not paint five ordinary checks before background compatibility loading and gated evaluation');
 const probeContract = app.match(/async function openPackageProbeModal\(\) \{([\s\S]*?)\n\}\n\$\('modalProbe'/)?.[1] || '';
-expect(!probeContract.includes('ensureCatalogApplications()') && probeContract.includes('await ensureCatalogMenuLoaded(true)') &&
+expect(probeContract.includes('selfTestViewToken += 1') &&
+  !probeContract.includes('ensureCatalogApplications()') && probeContract.includes('await ensureCatalogMenuLoaded(true)') &&
   probeContract.includes('probePackageChoices(search.value)') && probeContract.includes("'probeDepth'") && probeContract.includes('scopeSelect.value') &&
   probeContract.includes('targetSelect.value') && probeContract.includes('probeIssueUrl(request, token)') &&
   probeContract.includes('packageConfig: probePackageConfigFromText(resolvedConfig)'),
-  'in-page probe is still gated by applications.json.gz or no longer reuses the current Catalog/Kconfig package model');
+  'in-page probe can race the self-test modal, remains gated by applications, or no longer reuses the Catalog/Kconfig model');
 expect(probeContract.includes('const depthOptions = [') && probeContract.includes('`L${index + 1}`') &&
   probeContract.includes("'packageCompileShort'") && probeContract.includes('title.dataset.short = probeUiText(shortKey)') &&
   probeContract.includes("popup.setAttribute('role', 'tooltip')") &&
@@ -289,8 +304,11 @@ expect(overview.includes('id="menuconfigSelectedToggle"') && overview.includes('
   'Selected options is not left of the import summary with the full-width workspace below');
 expect(html.includes('class="menuconfig-selected-label"') &&
   css.includes('.menuconfig-overview-row{display:grid;grid-template-columns:max-content minmax(0,1fr)') &&
+  css.includes('.menuconfig-selected-toggle{display:flex;align-items:center;justify-content:space-between;width:auto;min-width:220px;max-width:100%;min-height:42px;margin:0;padding:0 10px;') &&
   css.includes('.menuconfig-selected-label{display:flex;align-items:center;min-width:0;white-space:nowrap}') &&
+  css.includes('.import-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;min-height:42px;overflow:hidden;padding:0 10px;') &&
   css.includes('.import-summary strong{flex:1 1 auto;min-width:0;overflow:hidden;') &&
+  css.includes('.import-summary .text-btn{flex:none;padding:4px 10px}') &&
   css.includes('text-overflow:ellipsis;white-space:nowrap}') &&
   css.includes('.import-summary strong{overflow-x:auto;') &&
   css.includes('.import-summary{align-items:center;flex-direction:row}') &&
