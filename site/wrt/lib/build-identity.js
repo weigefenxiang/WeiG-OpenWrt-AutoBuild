@@ -37,10 +37,18 @@ function isValidBuildTag(value) {
 const SITE_SHA256_RE = /^[a-f0-9]{64}$/;
 const CATALOG_DATA_BRANCHES = Object.freeze({
   fix: 'catalog-fix',
+  'fix-A': 'catalog-fix-A',
+  'fix-B': 'catalog-fix-B',
+  'fix-C': 'catalog-fix-C',
   dev: 'catalog-dev',
   staging: 'catalog-staging',
   main: 'catalog-data',
 });
+
+function catalogFixChannel(environment) {
+  const lane = /-([ABC])$/i.exec(String(environment || ''))?.[1]?.toUpperCase() || '';
+  return lane ? `fix-${lane}` : 'fix';
+}
 
 export function normalizeBuildEnvironment(value) {
   let environment = String(value || '').trim();
@@ -59,7 +67,7 @@ export function normalizeBuildCommit(value) {
 
 export function catalogDataBranch(value, configured = CATALOG_DATA_BRANCHES) {
   const environment = normalizeBuildEnvironment(value) || 'main';
-  const channel = environment.startsWith('fix/') ? 'fix'
+  const channel = environment.startsWith('fix/') ? catalogFixChannel(environment)
     : ['dev', 'staging', 'main'].includes(environment) ? environment : 'main';
   const mapping = configured && typeof configured === 'object' ? configured : {};
   const branch = String(mapping[channel] || CATALOG_DATA_BRANCHES[channel] || '').trim();
