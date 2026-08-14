@@ -87,6 +87,7 @@ const regressionTests = [
   'test-menuconfig-scalar.mjs',
   'test-kconfig-serializer.mjs',
   'test-package-mirror.mjs',
+  'test-artifact-publish.mjs',
 ];
 for (const name of regressionTests) run(name, process.execPath, [join(ROOT, 'tools', name)]);
 

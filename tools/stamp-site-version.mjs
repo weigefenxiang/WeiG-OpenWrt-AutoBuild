@@ -30,6 +30,9 @@ const VERSION_INPUTS = [
   'site/wrt',
   'tools',
 ];
+const VERSION_FILES = [
+  '.github/automation-policy.json',
+];
 const SKIP_INPUTS = new Set([
   'site/wrt/data/build-meta.json',
   'site/wrt/data/site-version.json',
@@ -54,6 +57,7 @@ function walk(dir) {
   }
 }
 for (const input of VERSION_INPUTS) walk(join(ROOT, ...input.split('/')));
+for (const input of VERSION_FILES) files.push([input, join(ROOT, ...input.split('/'))]);
 files.sort(([a], [b]) => a.localeCompare(b));
 
 const hash = createHash('sha256');

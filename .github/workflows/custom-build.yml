@@ -216,8 +216,8 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 350
     outputs:
-      firmware_matrix: ${{ steps.firmware_manifest.outputs.matrix }}
-      bridge_artifact_id: ${{ steps.raw_bridge.outputs.artifact-id }}
+      standalone_matrix: ${{ steps.artifact_manifest.outputs.matrix }}
+      bridge_artifact_id: ${{ steps.standalone_bridge.outputs.artifact-id }}
       build_ref: ${{ steps.req.outputs.build_ref }}
       artifact_ref: ${{ steps.req.outputs.artifact_ref }}
 
@@ -813,32 +813,10 @@ jobs:
           set -euo pipefail
           ROOT="$GITHUB_WORKSPACE/artifact-staging"
           FIRMWARE="$ROOT/FIRMWARE-OTHER"
-          RAW="$ROOT/RAW-IMG-GZ"
+          STANDALONE="$ROOT/STANDALONE"
           LOGS="$ROOT/BUILD-LOGS"
-          mkdir -p "$FIRMWARE" "$RAW" "$LOGS"
-
-          shopt -s nullglob
-          for file in openwrt/bin/targets/*/*/*; do
-            [ -f "$file" ] || continue
-            base="$(basename "$file")"
-            if [[ "$base" == *.img.gz ]]; then
-              cp -a "$file" "$RAW/${{ steps.req.outputs.artifact_ref }}-$base"
-            else
-              cp -a "$file" "$FIRMWARE/${{ steps.req.outputs.artifact_ref }}-$base"
-            fi
-          done
-          if compgen -G "$RAW/*.img.gz" >/dev/null; then
-            (cd "$RAW" && sha256sum -- *.img.gz) > "$FIRMWARE/${{ steps.req.outputs.artifact_ref }}-sha256sums-img-gz.txt"
-          fi
-          if [ -s firmware-settings.txt ]; then
-            cp firmware-settings.txt "$FIRMWARE/${{ steps.req.outputs.artifact_ref }}-00-BUILD-SETTINGS.txt"
-          fi
-          printf '%s\n' \
-            '其他固件与构建资料 / OTHER FIRMWARE AND BUILD FILES' \
-            '首次刷机通常使用 factory；sysupgrade 仅用于当前固件与闪存布局兼容的升级。' \
-            'First flash usually uses factory. Use sysupgrade only for a compatible installed firmware and flash layout.' \
-            'initramfs 用于临时启动/救援；manifest、buildinfo、sha256sums 仅用于核对。' \
-            'Always verify the exact model and partition layout before flashing.' > "$FIRMWARE/00-请先读我-README.txt"
+          PLAN="$GITHUB_WORKSPACE/artifact-publish-plan.json"
+          mkdir -p "$LOGS"
 
           cp download.log build-metadata.txt firmware-settings.txt "$LOGS/" 2>/dev/null || true
           if [ -d failure-logs ]; then
@@ -852,18 +830,41 @@ jobs:
             '成功且未进入诊断时仅保留常规 build.log / download.log。' \
             '构建 Artifact 统一保留 60 天。' > "$LOGS/00-请先读我-README.txt"
 
+          node tools/artifact-publish.mjs \
+            --source openwrt/bin/targets \
+            --staging "$ROOT" \
+            --artifact-ref "${{ steps.req.outputs.artifact_ref }}" \
+            --policy .github/automation-policy.json \
+            --plan "$PLAN"
+
+          HAS_STANDALONE="$(node -p 'String(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).hasStandalone)' "$PLAN")"
+          STANDALONE_SUFFIXES="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).standaloneSuffixes.join(", ")' "$PLAN")"
+          STANDALONE_COUNT="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).standalone.length' "$PLAN")"
+          if [ "$HAS_STANDALONE" = "true" ]; then
+            (cd "$STANDALONE" && sha256sum -- *) > "$FIRMWARE/${{ steps.req.outputs.artifact_ref }}-sha256sums-standalone.txt"
+          fi
+          if [ -s firmware-settings.txt ]; then
+            cp firmware-settings.txt "$FIRMWARE/${{ steps.req.outputs.artifact_ref }}-00-BUILD-SETTINGS.txt"
+          fi
+          printf '%s\n' \
+            '其他固件与构建资料 / OTHER FIRMWARE AND BUILD FILES' \
+            '配置为独立发布的固件文件不会放在本目录；其余文件保留在这里。' \
+            'Firmware files selected by the standalone suffix policy are published separately; all remaining files stay here.' \
+            '首次刷机与升级包取决于具体机型和闪存布局，请先核对上游说明。' \
+            'Always verify the exact model and partition layout before flashing.' > "$FIRMWARE/00-请先读我-README.txt"
+
           {
             echo ''
             echo '## 📦 固件下载与安装选择 / Firmware download guide'
             echo ''
             echo '> [!IMPORTANT]'
-            echo '> 最终 `.img.gz` 固件按 `${{ steps.req.outputs.artifact_ref }}-原文件名.img.gz` 逐个上传，不解压、不套 ZIP；首次刷机通常用 `factory`。'
-            echo '> Final `.img.gz` images are uploaded one by one as `${{ steps.req.outputs.artifact_ref }}-original-name.img.gz`, without decompression or a ZIP wrapper. First flash usually uses `factory`.'
+            echo "> 独立发布后缀 / standalone suffixes: \`$STANDALONE_SUFFIXES\`。命中的 $STANDALONE_COUNT 个文件逐个成为 Artifact；新增后缀只需修改自动化策略。"
+            echo "> Files matching the configured suffix policy are uploaded one by one without changing this Workflow."
             echo ''
             echo '| Artifact | 内容 / Contents |'
             echo '| --- | --- |'
-            echo '| 📦 `${{ steps.req.outputs.artifact_ref }}-*.img.gz` | 可直接下载的最终固件；一个文件对应一个 Artifact |'
-            echo '| 📁 `${{ steps.req.outputs.artifact_ref }}-FIRMWARE-OTHER` | manifest、buildinfo、校验和及其他非 `.img.gz` 文件 |'
+            echo '| 📦 `${{ steps.req.outputs.artifact_ref }}-<standalone file>` | 命中独立发布后缀的固件；一个文件对应一个 Artifact |'
+            echo '| 📁 `${{ steps.req.outputs.artifact_ref }}-FIRMWARE-OTHER` | 其余固件文件、manifest、buildinfo 与通用校验和 |'
             echo '| ⚙️ `${{ steps.req.outputs.artifact_ref }}-CONFIG` | 用户提交配置、实际开编配置和构建元数据 |'
             echo '| 🧾 `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS` | 完整下载/编译日志；保留 60 天 |'
             echo '| 🧩 `${{ steps.req.outputs.artifact_ref }}-OPTIONAL-PACKAGES` | menuconfig 选为 M：已编译但未写入固件的软件包 |'
@@ -875,27 +876,26 @@ jobs:
             echo ''
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Build raw firmware manifest / 生成原始固件清单
-        id: firmware_manifest
+      - name: Build standalone artifact manifest / 生成独立 Artifact 清单
+        id: artifact_manifest
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          json="$(find artifact-staging/RAW-IMG-GZ -maxdepth 1 -type f -printf '%f\n' 2>/dev/null | sort | jq -Rsc 'split("\n") | map(select(length > 0)) | if length == 0 then [{name:"__none__", enabled:false}] else map({name:., enabled:true}) end')"
-          echo "matrix=$json" >> "$GITHUB_OUTPUT"
-          if find artifact-staging/RAW-IMG-GZ -maxdepth 1 -type f -name '*.img.gz' -print -quit 2>/dev/null | grep -q .; then
-            echo "has_raw=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_raw=false" >> "$GITHUB_OUTPUT"
-          fi
+          node - "$GITHUB_WORKSPACE/artifact-publish-plan.json" <<'NODE' >> "$GITHUB_OUTPUT"
+          const fs = require('fs');
+          const plan = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          console.log(`matrix=${JSON.stringify(plan.matrix)}`);
+          console.log(`has_standalone=${plan.hasStandalone ? 'true' : 'false'}`);
+          NODE
 
-      - name: Upload raw firmware bridge / 上传原始固件桥接包
-        id: raw_bridge
-        if: success() && steps.firmware_manifest.outputs.has_raw == 'true'
+      - name: Upload standalone bridge / 上传独立固件桥接包
+        id: standalone_bridge
+        if: success() && steps.artifact_manifest.outputs.has_standalone == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.req.outputs.artifact_ref }}-RAW-BRIDGE
-          path: artifact-staging/RAW-IMG-GZ/
+          name: ${{ steps.req.outputs.artifact_ref }}-STANDALONE-BRIDGE
+          path: artifact-staging/STANDALONE/
           if-no-files-found: error
           retention-days: 1
 
@@ -928,35 +928,35 @@ jobs:
           compression-level: 0
           retention-days: 60
 
-  publish-firmware:
-    name: Publish raw firmware / 发布原始固件
+  publish-standalone:
+    name: Publish standalone firmware / 发布独立固件
     needs: build
     if: needs.build.result == 'success'
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
-        file: ${{ fromJSON(needs.build.outputs.firmware_matrix || '[{"name":"__none__","enabled":false}]') }}
+        file: ${{ fromJSON(needs.build.outputs.standalone_matrix || '[{"name":"__none__","enabled":false}]') }}
     steps:
-      - name: Download raw bridge / 下载原始固件桥接包
+      - name: Download standalone bridge / 下载独立固件桥接包
         if: matrix.file.enabled == true
         uses: actions/download-artifact@v8
         with:
-          name: ${{ needs.build.outputs.artifact_ref }}-RAW-BRIDGE
-          path: raw-bridge
+          name: ${{ needs.build.outputs.artifact_ref }}-STANDALONE-BRIDGE
+          path: standalone-bridge
 
-      - name: Upload one raw .img.gz / 逐个上传原始 .img.gz
+      - name: Upload one standalone artifact / 逐个上传独立固件
         if: matrix.file.enabled == true
         uses: actions/upload-artifact@v7
         with:
-          path: raw-bridge/${{ matrix.file.name }}
+          path: standalone-bridge/${{ matrix.file.name }}
           archive: false
           if-no-files-found: error
           retention-days: 60
 
-  cleanup-raw-bridge:
-    name: Cleanup raw bridge / 清理原始桥接包
-    needs: [build, publish-firmware]
+  cleanup-standalone-bridge:
+    name: Cleanup standalone bridge / 清理独立固件桥接包
+    needs: [build, publish-standalone]
     if: always() && needs.build.outputs.bridge_artifact_id != ''
     runs-on: ubuntu-22.04
     steps:
@@ -975,7 +975,7 @@ jobs:
 
   notify:
     name: Final result / 最终结果
-    needs: [admission, build, publish-firmware, cleanup-raw-bridge]
+    needs: [admission, build, publish-standalone, cleanup-standalone-bridge]
     if: always() && needs.build.outputs.build_ref != ''
     runs-on: ubuntu-22.04
     steps:
@@ -983,7 +983,7 @@ jobs:
         uses: actions/github-script@v8
         env:
           BUILD_RESULT: ${{ needs.build.result }}
-          PUBLISH_RESULT: ${{ needs.publish-firmware.result }}
+          PUBLISH_RESULT: ${{ needs.publish-standalone.result }}
           ARTIFACT_REF: ${{ needs.build.outputs.artifact_ref }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
           REQUESTER: ${{ inputs.requester }}
@@ -993,8 +993,8 @@ jobs:
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const ref = process.env.ARTIFACT_REF;
             const body = ok
-              ? `@${process.env.REQUESTER}\n\n✅ 构建和固件发布全部完成。\n\n下载 / Download: ${url}\n\n- 每个 \`${ref}-*.img.gz\` 是可直接下载的独立 Artifact，不解压、不套 ZIP。\n- \`${ref}-CONFIG\`、\`${ref}-BUILD-LOGS\`、\`${ref}-OPTIONAL-PACKAGES\`、\`${ref}-FIRMWARE-OTHER\` 为分类资料（没有对应内容时可能不生成）。\n\n首次刷机通常选 \`factory\`；\`sysupgrade\` 只用于当前固件与闪存布局兼容的升级。`
-              : `@${process.env.REQUESTER}\n\n❌ 构建或原始固件发布失败。\n\nBuild: ${process.env.BUILD_RESULT}; raw publish: ${process.env.PUBLISH_RESULT}\n\n请打开本次 Actions 查看 \`${ref}-CONFIG\` 与 \`${ref}-BUILD-LOGS\`：${url}`;
+              ? `@${process.env.REQUESTER}\n\n✅ 构建和固件发布全部完成。\n\n下载 / Download: ${url}\n\n- 命中自动化策略独立发布后缀的固件会逐文件成为 \`${ref}-<standalone file>\` Artifact。\n- \`${ref}-CONFIG\`、\`${ref}-BUILD-LOGS\`、\`${ref}-OPTIONAL-PACKAGES\`、\`${ref}-FIRMWARE-OTHER\` 为分类资料（没有对应内容时可能不生成）。\n\n首次刷机通常选 \`factory\`；\`sysupgrade\` 只用于当前固件与闪存布局兼容的升级。`
+              : `@${process.env.REQUESTER}\n\n❌ 构建或独立固件发布失败。\n\nBuild: ${process.env.BUILD_RESULT}; standalone publish: ${process.env.PUBLISH_RESULT}\n\n请打开本次 Actions 查看 \`${ref}-CONFIG\` 与 \`${ref}-BUILD-LOGS\`：${url}`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,

@@ -5,7 +5,11 @@
     "configurationDays": 60,
     "summaryDays": 60,
     "buildLogsDays": 60,
-    "internalRawBridgeDays": 1
+    "internalRawBridgeDays": 1,
+    "standaloneSuffixes": [
+      ".img.gz",
+      ".itb"
+    ]
   },
   "catalogProbe": {
     "normalizedEvidenceDays": 60,
