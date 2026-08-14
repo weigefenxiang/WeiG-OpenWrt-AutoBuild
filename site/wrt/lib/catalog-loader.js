@@ -21,10 +21,17 @@ function safeReleaseTag(value) {
 
 export function safeCatalogDataRef(value) {
   const ref = String(value || '').trim();
-  if (!/^catalog-(?:fix|dev|staging|data)$/.test(ref)) {
+  if (!/^catalog-(?:fix(?:-[ABC])?|dev|staging|data)$/.test(ref)) {
     throw new Error(`invalid Catalog data branch: ${value}`);
   }
   return ref;
+}
+
+function catalogFixCodeRefMatches(codeRef, branch) {
+  if (!/^fix\/[A-Za-z0-9._/-]+$/.test(codeRef)) return false;
+  const lane = /-([ABC])$/i.exec(codeRef)?.[1]?.toUpperCase() || '';
+  if (branch === 'catalog-fix') return lane === '';
+  return Boolean(lane) && branch === `catalog-fix-${lane}`;
 }
 
 export function validateCatalogProvenance(index, dataRef, repository) {
@@ -44,7 +51,7 @@ export function validateCatalogProvenance(index, dataRef, repository) {
   if (typeof provenance.complete !== 'boolean') throw new Error('Catalog provenance complete must be boolean');
 
   const branch = safeCatalogDataRef(dataRef);
-  const validCodeRef = branch === 'catalog-fix' ? /^fix\/[A-Za-z0-9._/-]+$/.test(codeRef)
+  const validCodeRef = branch.startsWith('catalog-fix') ? catalogFixCodeRefMatches(codeRef, branch)
     : branch === 'catalog-dev' ? codeRef === 'dev'
       : branch === 'catalog-staging' ? codeRef === 'staging'
         : codeRef === 'main';
