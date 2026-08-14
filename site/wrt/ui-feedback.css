@@ -39,3 +39,15 @@
 @media (max-width: 860px) {
   .toast { right: 12px; bottom: calc(128px + env(safe-area-inset-bottom)); width: calc(100vw - 24px); }
 }
+
+/* Shared dropdown preset: content expands until its declared boundary, then wraps. */
+.ui-floating-dropdown { overflow-wrap: anywhere; }
+.catalog-locator-results.ui-floating-dropdown { right: auto; width: auto; min-width: 0; max-width: none; }
+.catalog-locator-results.ui-floating-dropdown .catalog-locator-item {
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr); width: 100%; min-width: 0; white-space: normal;
+}
+.catalog-locator-results.ui-floating-dropdown .catalog-locator-item > span,
+.catalog-locator-results.ui-floating-dropdown .catalog-locator-item small {
+  min-width: 0; white-space: normal; overflow-wrap: anywhere;
+}
+.timezone-menu.ui-floating-dropdown { width: auto; min-width: 0; max-width: none; }

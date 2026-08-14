@@ -169,23 +169,44 @@
     if (!(anchor instanceof Element) || !(layer instanceof HTMLElement)) return null;
     const originParent = layer.parentNode;
     const originNext = layer.nextSibling;
+    const inferredDropdown = anchor.matches('summary') || anchor.getAttribute('role') === 'combobox' ||
+      anchor.getAttribute('aria-haspopup') === 'listbox';
+    const preset = options.preset || (inferredDropdown ? 'dropdown' : 'floating');
     const margin = Math.max(4, Number(options.margin) || 8);
     const gap = Math.max(0, Number(options.gap) || 5);
     const minWidth = Math.max(0, Number(options.minWidth) || 0);
+    const maxWidth = Math.max(0, Number(options.maxWidth) || 0);
+    const fitContent = options.fitContent ?? preset === 'dropdown';
+    const portal = options.portal !== false;
     const preferredHeight = Math.max(120, Number(options.preferredHeight) || 320);
     const ownerModal = anchor.closest('.modal-mask');
     let open = false;
     let raf = 0;
     let ownerObserver = null;
 
+    const resolveBoundary = () => {
+      let boundary = options.boundary;
+      if (typeof boundary === 'function') boundary = boundary(anchor, layer);
+      if (typeof boundary === 'string') boundary = anchor.closest(boundary) || document.querySelector(boundary);
+      if (boundary instanceof Element) return boundary;
+      return anchor.closest('[data-floating-boundary]') || anchor.closest('.modal') || null;
+    };
     const restore = () => {
       if (!originParent) return;
       const before = originNext?.parentNode === originParent ? originNext : null;
       originParent.insertBefore(layer, before);
-      for (const property of ['position', 'z-index', 'left', 'right', 'top', 'bottom', 'width', 'max-height']) {
-        layer.style.removeProperty(property);
-      }
-      layer.classList.remove('ui-floating-layer');
+      for (const property of [
+        'position', 'z-index', 'box-sizing', 'left', 'right', 'top', 'bottom',
+        'width', 'min-width', 'max-width', 'max-height',
+      ]) layer.style.removeProperty(property);
+      layer.classList.remove('ui-floating-layer', 'ui-floating-dropdown');
+    };
+    const naturalLayerWidth = () => {
+      if (!fitContent) return 0;
+      layer.style.width = 'max-content';
+      layer.style.minWidth = '0';
+      layer.style.maxWidth = 'none';
+      return Math.ceil(Math.max(layer.scrollWidth, layer.getBoundingClientRect().width));
     };
     const position = () => {
       raf = 0;
@@ -193,17 +214,40 @@
       const viewportWidth = document.documentElement.clientWidth;
       const viewportHeight = document.documentElement.clientHeight;
       const rect = anchor.getBoundingClientRect();
-      const width = Math.min(Math.max(rect.width, minWidth), Math.max(0, viewportWidth - margin * 2));
+      const viewportLeft = margin;
+      const viewportRight = Math.max(viewportLeft, viewportWidth - margin);
+      let boundaryLeft = viewportLeft;
+      let boundaryRight = viewportRight;
+      const boundary = resolveBoundary();
+      if (boundary) {
+        const boundaryRect = boundary.getBoundingClientRect();
+        const candidateLeft = Math.max(viewportLeft, boundaryRect.left + margin);
+        const candidateRight = Math.min(viewportRight, boundaryRect.right - margin);
+        if (candidateRight > candidateLeft) {
+          boundaryLeft = candidateLeft;
+          boundaryRight = candidateRight;
+        }
+      }
+      const availableWidth = Math.max(0, boundaryRight - boundaryLeft);
+      layer.style.position = 'fixed';
+      layer.style.boxSizing = 'border-box';
+      layer.style.zIndex = String(Number(options.zIndex) || 70);
+      const naturalWidth = naturalLayerWidth();
+      const allowedWidth = maxWidth > 0 ? Math.min(availableWidth, maxWidth) : availableWidth;
+      const width = Math.min(Math.max(rect.width, minWidth, naturalWidth), allowedWidth);
       const below = Math.max(0, viewportHeight - rect.bottom - gap - margin);
       const above = Math.max(0, rect.top - gap - margin);
       const useBelow = below >= Math.min(preferredHeight, above) || below >= above;
       const available = Math.max(0, useBelow ? below : above);
-      const left = Math.min(Math.max(margin, rect.left), Math.max(margin, viewportWidth - width - margin));
-      layer.style.position = 'fixed';
-      layer.style.zIndex = String(Number(options.zIndex) || 70);
+      const left = Math.min(
+        Math.max(boundaryLeft, rect.left),
+        Math.max(boundaryLeft, boundaryRight - width),
+      );
       layer.style.left = `${left}px`;
       layer.style.right = 'auto';
       layer.style.width = `${width}px`;
+      layer.style.minWidth = '0';
+      layer.style.maxWidth = `${allowedWidth}px`;
       layer.style.maxHeight = `${available}px`;
       layer.style.top = useBelow ? `${rect.bottom + gap}px` : 'auto';
       layer.style.bottom = useBelow ? 'auto' : `${viewportHeight - rect.top + gap}px`;
@@ -224,8 +268,9 @@
       open() {
         if (open) { schedulePosition(); return; }
         open = true;
-        document.body.appendChild(layer);
+        if (portal) document.body.appendChild(layer);
         layer.classList.add('ui-floating-layer');
+        if (preset === 'dropdown') layer.classList.add('ui-floating-dropdown');
         layer.hidden = false;
         document.addEventListener('pointerdown', outsidePointerDown, true);
         document.addEventListener('scroll', schedulePosition, true);
@@ -255,6 +300,48 @@
     layer.hidden = true;
     return controller;
   };
+
+  const bindDeclaredFloatingDropdown = (anchor) => {
+    if (!(anchor instanceof HTMLElement) || anchor.dataset.floatingDropdownBound === '1') return null;
+    const controls = String(anchor.getAttribute('aria-controls') || '').trim();
+    const layer = controls ? document.getElementById(controls) : null;
+    if (!(layer instanceof HTMLElement)) return null;
+    const controller = globalThis.createFloatingLayerController(anchor, layer, {
+      preset: 'dropdown',
+      portal: false,
+      minWidth: Number(anchor.dataset.floatingMinWidth) || 0,
+      maxWidth: Number(anchor.dataset.floatingMaxWidth) || 0,
+      preferredHeight: Number(anchor.dataset.floatingHeight) || 320,
+      onDismiss: () => {
+        layer.hidden = true;
+        anchor.setAttribute('aria-expanded', 'false');
+      },
+    });
+    if (!controller) return null;
+    anchor.dataset.floatingDropdownBound = '1';
+    const sync = () => {
+      if (layer.hidden) {
+        controller.close();
+        anchor.setAttribute('aria-expanded', 'false');
+      } else {
+        controller.open();
+        anchor.setAttribute('aria-expanded', 'true');
+      }
+    };
+    const observer = new MutationObserver((records) => {
+      if (records.some((record) => record.type === 'attributes' && record.attributeName === 'hidden')) sync();
+      else if (controller.isOpen) controller.update();
+    });
+    observer.observe(layer, { attributes: true, attributeFilter: ['hidden'], childList: true, subtree: true, characterData: true });
+    sync();
+    return controller;
+  };
+
+  const bindDeclaredFloatingDropdowns = (root = document) => {
+    for (const anchor of root.querySelectorAll('[data-floating-dropdown][aria-controls]')) bindDeclaredFloatingDropdown(anchor);
+  };
+  bindDeclaredFloatingDropdowns();
+  globalThis.bindDeclaredFloatingDropdowns = bindDeclaredFloatingDropdowns;
 
   const interactionTypes = ['click', 'change', 'submit'];
   for (const type of interactionTypes) {

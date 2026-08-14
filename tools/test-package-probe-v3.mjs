@@ -9,6 +9,8 @@ const probeText = fs.readFileSync(path.join(root, 'site/wrt/lib/package-probe-v3
 const probeCss = fs.readFileSync(path.join(root, 'site/wrt/package-probe-v3.css'), 'utf8');
 const feedbackText = fs.readFileSync(path.join(root, 'site/wrt/lib/ui-feedback.js'), 'utf8');
 const appText = fs.readFileSync(path.join(root, 'site/wrt/app.js'), 'utf8');
+const indexText = fs.readFileSync(path.join(root, 'site/wrt/index.html'), 'utf8');
+const feedbackCss = fs.readFileSync(path.join(root, 'site/wrt/ui-feedback.css'), 'utf8');
 
 assert.match(buildIdentityText, /package-probe-v3-core\.js/, 'startup gate must load Probe V3 core');
 assert.match(buildIdentityText, /package-probe-v3-ui\.js/, 'startup gate must load Probe V3 UI');
@@ -69,6 +71,32 @@ assert.match(probeText, /createFloatingLayerController\(summary, panel/,
   'Probe dropdowns must reuse the shared floating-layer controller');
 assert.match(feedbackText, /globalThis\.createFloatingLayerController/,
   'shared UI layer must expose one reusable floating-layer controller');
+assert.match(feedbackText, /const inferredDropdown = anchor\.matches\('summary'\)[\s\S]*?const preset = options\.preset \|\| \(inferredDropdown \? 'dropdown' : 'floating'\)/,
+  'shared floating layers must infer dropdown semantics while preserving an explicit generic override');
+assert.match(feedbackText, /options\.boundary[\s\S]*?anchor\.closest\('\[data-floating-boundary\]'\)[\s\S]*?anchor\.closest\('\.modal'\)/,
+  'shared dropdowns must resolve an explicit or nearest-container boundary');
+assert.match(feedbackText, /naturalLayerWidth[\s\S]*?max-content[\s\S]*?scrollWidth/,
+  'shared dropdowns must measure their content before choosing a width');
+assert.match(feedbackText, /boundaryRight - width/,
+  'shared dropdowns must shift left when their content would cross the right boundary');
+assert.match(feedbackText, /ui-floating-dropdown/,
+  'shared dropdowns must expose one presentation hook for dropdown-specific CSS');
+assert.match(indexText, /id="catalogLocator"[\s\S]*?aria-controls="catalogLocatorResults"[\s\S]*?data-floating-dropdown/,
+  'Catalog locator results must declare the shared dropdown placement policy');
+assert.match(indexText, /id="timezoneBox"[\s\S]*?aria-controls="timezoneMenu"[\s\S]*?data-floating-dropdown/,
+  'Timezone search results must declare the shared dropdown placement policy');
+assert.match(indexText, /id="deviceStep"[^>]*data-floating-boundary/,
+  'Target selection must declare the boundary shared by its custom dropdowns');
+assert.match(feedbackText, /\[data-floating-dropdown\]\[aria-controls\]/,
+  'shared UI layer must auto-bind declarative dropdowns');
+assert.match(feedbackText, /portal:\s*false/,
+  'legacy in-page dropdowns must keep their DOM ancestry while using fixed placement');
+assert.match(feedbackCss, /\.ui-floating-dropdown[\s\S]*?overflow-wrap:\s*anywhere/,
+  'shared dropdown presentation must allow long content to wrap at its boundary');
+assert.match(probeCss, /\.probe-multiselect-option span\s*\{[^}]*white-space:\s*normal[^}]*overflow-wrap:\s*anywhere/,
+  'Probe dropdown labels must wrap instead of truncating at the boundary');
+assert.doesNotMatch(probeCss, /\.probe-multiselect-option span\s*\{[^}]*text-overflow:\s*ellipsis/,
+  'Probe dropdown labels must not retain ellipsis truncation');
 assert.match(feedbackText, /MutationObserver/,
   'floating layers must close when their owner modal is dismissed');
 assert.match(feedbackText, /modalMask\.addEventListener\('dblclick'/,

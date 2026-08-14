@@ -167,7 +167,7 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
   </div>
 
   <div id="form" hidden>
-    <section class="step device-step" id="deviceStep">
+    <section class="step device-step" id="deviceStep" data-floating-boundary>
       <h2><span class="stepnum">①</span> <span data-i18n="step.device">选择构建参数</span> <span class="hint" data-i18n="step.device.hint"></span>
         <button class="fold-btn" id="deviceFold" type="button" aria-expanded="true" aria-controls="devicePicker" data-i18n="fold.hide">隐藏</button>
       </h2>
@@ -188,7 +188,9 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
         </div>
         <div class="catalog-overview-row">
           <div class="catalog-locator">
-            <input type="search" id="catalogLocator" autocomplete="off"
+            <input type="search" id="catalogLocator" autocomplete="off" role="combobox" aria-autocomplete="list"
+              aria-controls="catalogLocatorResults" aria-expanded="false" data-floating-dropdown
+              data-floating-min-width="360" data-floating-max-width="920" data-floating-height="390"
               placeholder="… Subtarget / Target Profile"
               aria-label="Search Source, Branch, Target System, Subtarget or Target Profile"
               title="Search Source, Branch, Target System, Subtarget or Target Profile">
@@ -325,7 +327,7 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
       <div id="groups"></div>
     </section>
 
-    <section class="step">
+    <section class="step" data-floating-boundary>
       <h2><span class="stepnum">③</span> <span data-i18n="step.submit">提交设置</span></h2>
       <div class="submit-primary-fields">
         <div>
@@ -345,7 +347,9 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
       <p class="hint" id="loginInfo"></p>
       <p class="hint rootpw-warning"><strong data-i18n="rootpw.public">⚠️ 提交内容公开可见,密码公开！！</strong><span data-i18n="rootpw.hint">临时登录密码,刷机后必须立即修改! (lede 源 填 @empty 清成空密码）</span></p>
       <div class="firmware-settings">
-        <label><span data-i18n="fw.timezone">时区</span><span class="timezone-combo" id="timezoneCombo"><input type="search" id="timezoneBox" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="timezoneMenu" autocomplete="off" spellcheck="false"><span class="timezone-menu" id="timezoneMenu" role="listbox" hidden></span></span></label>
+        <label><span data-i18n="fw.timezone">时区</span><span class="timezone-combo" id="timezoneCombo"><input type="search" id="timezoneBox" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="timezoneMenu"
+          data-floating-dropdown data-floating-min-width="360" data-floating-max-width="620" data-floating-height="280"
+          autocomplete="off" spellcheck="false"><span class="timezone-menu" id="timezoneMenu" role="listbox" hidden></span></span></label>
         <label><span data-i18n="fw.theme">固件主题</span><select id="fwThemeBox"></select></label>
         <label><span data-i18n="fw.ntp">NTP 服务器</span><select id="ntpBox"></select></label>
         <label><span data-i18n="fw.packageMirror">软件包镜像（APK / OPKG）</span><select id="packageMirrorBox"></select></label>
