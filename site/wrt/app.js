@@ -510,22 +510,59 @@ function renderUiTooltip({ title = '', emphasis = '', body = '' } = {}) {
 function positionUiTooltip(target, event = null) {
   if (!uiTooltip || uiTooltip.hidden || !target) return;
   const boundary = uiTooltipBoundary(target);
-  const gap = 14;
+  const gap = 9;
+  const margin = 8;
   const anchor = target.getBoundingClientRect();
-  const pointerX = Number.isFinite(event?.clientX) ? event.clientX : anchor.left;
+  const pointerX = Number.isFinite(event?.clientX) ? event.clientX : anchor.right;
   const pointerY = Number.isFinite(event?.clientY) ? event.clientY : anchor.bottom;
-  const availableWidth = Math.max(180, boundary.right - boundary.left);
+
+  const actionbar = $('actionbar');
+  const actionbarRect = actionbar && !actionbar.hidden ? actionbar.getBoundingClientRect() : null;
+  const actionbarVisible = Boolean(actionbarRect && actionbarRect.top < innerHeight && actionbarRect.bottom > 0);
+  const safeBottom = actionbarVisible
+    ? Math.max(boundary.top, Math.min(boundary.bottom, actionbarRect.top - margin))
+    : boundary.bottom;
+  const safeBoundary = { ...boundary, bottom: safeBottom };
+  const availableWidth = Math.max(1, safeBoundary.right - safeBoundary.left);
+  const availableHeight = Math.max(1, safeBoundary.bottom - safeBoundary.top);
   uiTooltip.style.maxWidth = `${Math.min(400, availableWidth)}px`;
+  uiTooltip.style.maxHeight = `${Math.min(360, availableHeight)}px`;
   const rect = uiTooltip.getBoundingClientRect();
 
-  let left = pointerX + gap;
-  if (left + rect.width > boundary.right) left = pointerX - rect.width - gap;
-  left = Math.min(Math.max(boundary.left, left), Math.max(boundary.left, boundary.right - rect.width));
+  const candidates = [
+    { left: pointerX + gap, top: pointerY + gap },
+    { left: pointerX - rect.width - gap, top: pointerY + gap },
+    { left: pointerX + gap, top: pointerY - rect.height - gap },
+    { left: pointerX - rect.width - gap, top: pointerY - rect.height - gap },
+  ];
+  const fits = (candidate) => candidate.left >= safeBoundary.left &&
+    candidate.top >= safeBoundary.top &&
+    candidate.left + rect.width <= safeBoundary.right &&
+    candidate.top + rect.height <= safeBoundary.bottom;
+  const visibleArea = (candidate) => {
+    const left = Math.max(candidate.left, safeBoundary.left);
+    const right = Math.min(candidate.left + rect.width, safeBoundary.right);
+    const top = Math.max(candidate.top, safeBoundary.top);
+    const bottom = Math.min(candidate.top + rect.height, safeBoundary.bottom);
+    return Math.max(0, right - left) * Math.max(0, bottom - top);
+  };
 
-  let top = pointerY + gap;
-  if (top + rect.height > boundary.bottom) top = pointerY - rect.height - gap;
-  top = Math.min(Math.max(boundary.top, top), Math.max(boundary.top, boundary.bottom - rect.height));
+  let chosen = candidates.find(fits);
+  if (!chosen) {
+    chosen = candidates.reduce((best, candidate) => {
+      const area = visibleArea(candidate);
+      const distance = Math.hypot(candidate.left - (pointerX + gap), candidate.top - (pointerY + gap));
+      if (!best || area > best.area || (area === best.area && distance < best.distance)) {
+        return { candidate, area, distance };
+      }
+      return best;
+    }, null).candidate;
+  }
 
+  const maxLeft = Math.max(safeBoundary.left, safeBoundary.right - rect.width);
+  const maxTop = Math.max(safeBoundary.top, safeBoundary.bottom - rect.height);
+  const left = Math.min(Math.max(safeBoundary.left, chosen.left), maxLeft);
+  const top = Math.min(Math.max(safeBoundary.top, chosen.top), maxTop);
   uiTooltip.style.left = `${left}px`;
   uiTooltip.style.top = `${top}px`;
 }
@@ -556,6 +593,7 @@ function hideUiTooltip(force = false) {
   uiTooltip.style.removeProperty('left');
   uiTooltip.style.removeProperty('top');
   uiTooltip.style.removeProperty('max-width');
+  uiTooltip.style.removeProperty('max-height');
 }
 function showPopover(anchor, title, body) {
   showUiTooltip(anchor, { title, body, pinned: true });

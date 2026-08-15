@@ -118,6 +118,15 @@ expect(html.includes('class="ui-tooltip" id="uiTooltip"') &&
   !css.includes('.menu-tooltip{') && !css.includes('.popover {') &&
   sharedTooltipContract.includes("const UI_TOOLTIP_SELECTOR = '[data-ui-tooltip-title],[data-ui-tooltip-emphasis],[data-ui-tooltip-body]'") &&
   sharedTooltipContract.includes("const wrap = target?.closest?.('.wrap') || $('app')") &&
+  sharedTooltipContract.includes("const gap = 9;") &&
+  sharedTooltipContract.includes("const actionbar = $('actionbar');") &&
+  sharedTooltipContract.includes('actionbarRect.top - margin') &&
+  sharedTooltipContract.includes('const safeBoundary = { ...boundary, bottom: safeBottom };') &&
+  sharedTooltipContract.includes('uiTooltip.style.maxHeight = `${Math.min(360, availableHeight)}px`;') &&
+  sharedTooltipContract.includes('const candidates = [') &&
+  sharedTooltipContract.includes('const visibleArea = (candidate) => {') &&
+  sharedTooltipContract.includes('area > best.area || (area === best.area && distance < best.distance)') &&
+  sharedTooltipContract.includes("uiTooltip.style.removeProperty('max-height');") &&
   sharedTooltipContract.includes("document.addEventListener('pointermove'") &&
   sharedTooltipContract.includes('positionUiTooltip(target, event)') &&
   app.includes('showUiTooltip(element, { body: text, event });'),
