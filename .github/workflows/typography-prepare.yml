@@ -40,6 +40,12 @@ jobs:
           import fs from 'node:fs';
           const path = 'tools/test-catalog-ui-contract.mjs';
           let text = fs.readFileSync(path, 'utf8');
+          text = text.replace(
+            "css.includes('font-size:var(--menuconfig-body-size)')",
+            "css.includes('font-size:var(--font-description)')");
+          text = text.replace(
+            'font-size:var\\\\(--menuconfig-body-size\\\\)',
+            'font-size:var\\\\(--font-description\\\\)');
           const start = text.indexOf('const typographyRoot = css.match(');
           const end = text.indexOf('const sharedTooltipContract = app.match(', start);
           if (start < 0 || end < 0) throw new Error('typography regression block not found');
