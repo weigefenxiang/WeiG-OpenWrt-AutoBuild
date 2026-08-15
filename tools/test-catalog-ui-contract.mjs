@@ -79,6 +79,7 @@ expect(
   css.includes('--font-page-title: 24px;') &&
   css.includes('--font-section-title: 20px;') &&
   css.includes('--font-item-title: 19px;') &&
+  css.includes('--font-emphasis: 18px;') &&
   css.includes('--font-body: 17px;') &&
   css.includes('--font-description: 16px;') &&
   css.includes('--font-meta: 14px;') &&
@@ -91,12 +92,20 @@ expect(
   css.includes('.plugin-name.fit-s2 { font-size: var(--font-item-title-fit-2); }') &&
   css.includes('.ui-tooltip-title{display:block;margin:0;color:var(--text);font-size:var(--font-item-title);') &&
   css.includes('.ui-tooltip{position:fixed;') && css.includes('font-size:var(--font-description);') &&
-  css.includes(':root{--font-page-title:21px;--font-section-title:19px;--font-item-title:17px;--font-body:16px;--font-description:14px;--font-meta:13px;--font-badge:12px}') &&
-  css.includes(':root{--font-page-title:20px;--font-section-title:18px;--font-item-title:16px;--font-body:16px;--font-description:14px;--font-meta:13px;--font-badge:12px}') &&
+  css.includes(':root{--font-page-title:21px;--font-section-title:19px;--font-item-title:17px;--font-emphasis:16px;--font-body:16px;--font-description:14px;--font-meta:13px;--font-badge:12px}') &&
+  css.includes(':root{--font-page-title:20px;--font-section-title:18px;--font-item-title:16px;--font-emphasis:16px;--font-body:16px;--font-description:14px;--font-meta:13px;--font-badge:12px}') &&
   !css.includes('--menuconfig-title-size') && !css.includes('--menuconfig-body-size') &&
   !css.includes('body.dense') &&
+  css.includes('.build-contract-toggle strong{font-size:var(--font-description);white-space:nowrap}') &&
+  css.includes('.build-contract-key{color:var(--text2);font-size:var(--font-emphasis);min-width:0}') &&
+  css.includes('font:600 var(--font-emphasis) ui-monospace,Consolas,monospace') &&
+  css.includes('.build-contract-list>strong{display:block;margin-bottom:6px;color:var(--text);font-size:var(--font-emphasis)}') &&
+  css.includes('.build-contract-list-head>strong{color:var(--text);font-size:var(--font-emphasis)}') &&
+  css.includes('color:var(--accent);font:var(--font-emphasis) ui-monospace,Consolas,monospace') &&
+  css.includes('.menuconfig-scroll{max-height:clamp(280px,55vh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior-y:auto;') &&
+  !css.includes('.menuconfig-scroll{max-height:clamp(280px,55vh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior:contain;') &&
   app.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;'),
-  'shared typography scale, responsive tokens, or retired density cleanup regressed');
+  'shared typography scale, build-contract hierarchy, native menuconfig scroll chaining, responsive tokens, or retired density cleanup regressed');
 
 const sharedTooltipContract = app.match(/\/\* ============ 统一悬浮说明[\s\S]*?function makePill/)?.[0] || '';
 const pluginRenderContract = app.match(/function renderPlugin\(p\) \{([\s\S]*?)\n\}\n\n\/\* V10:清掉/)?.[1] || '';

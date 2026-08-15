@@ -6,6 +6,7 @@
   --font-page-title: 24px;
   --font-section-title: 20px;
   --font-item-title: 19px;
+  --font-emphasis: 18px;
   --font-item-title-fit-1: calc(var(--font-item-title) - 1px);
   --font-item-title-fit-2: calc(var(--font-item-title) - 2px);
   --font-item-title-fit-3: calc(var(--font-item-title) - 3px);
@@ -266,23 +267,23 @@ input:focus-visible { border-color: var(--accent); }
 .build-contract{display:contents}
 .build-contract-head{display:flex;grid-column:2;grid-row:1;align-items:center;gap:7px;min-width:0;min-height:42px;padding:5px 8px;border:1px solid color-mix(in srgb,var(--accent) 38%,var(--border));border-radius:9px;background:color-mix(in srgb,var(--accent) 7%,var(--card));color:var(--text);flex-wrap:nowrap}
 .build-contract-toggle{display:flex;flex:0 0 auto;align-items:center;gap:8px;min-width:0;min-height:32px;padding:0;border:0;background:transparent;color:var(--text);text-align:left;cursor:pointer}
-.build-contract-toggle strong{font-size:var(--font-item-title);white-space:nowrap}
+.build-contract-toggle strong{font-size:var(--font-description);white-space:nowrap}
 .build-contract-chevron{flex:none;margin-left:auto;color:var(--text3);transition:transform .15s}
 .build-contract-toggle[aria-expanded=true] .build-contract-chevron{transform:rotate(180deg)}
 .build-contract-body{grid-column:1 / -1;grid-row:2;margin-top:0;padding:12px 2px 2px;border-top:1px solid color-mix(in srgb,var(--accent) 25%,var(--border))}
 .build-contract-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:28px;row-gap:8px}
 .build-contract-row{display:grid;grid-template-columns:minmax(92px,.42fr) minmax(0,1fr);align-items:center;gap:10px;min-width:0;padding:6px 8px;border-radius:7px;background:color-mix(in srgb,var(--card2) 78%,transparent)}
-.build-contract-key{color:var(--text2);font-size:var(--font-description);min-width:0}
-.build-contract-row code{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font:600 var(--font-item-title) ui-monospace,Consolas,monospace}
+.build-contract-key{color:var(--text2);font-size:var(--font-emphasis);min-width:0}
+.build-contract-row code{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font:600 var(--font-emphasis) ui-monospace,Consolas,monospace}
 .build-contract-list{margin-top:9px;padding-top:9px;border-top:1px solid color-mix(in srgb,var(--border) 75%,transparent);color:var(--text2);font-size:var(--font-description)}
-.build-contract-list>strong{display:block;margin-bottom:6px;color:var(--text);font-size:var(--font-item-title)}
+.build-contract-list>strong{display:block;margin-bottom:6px;color:var(--text);font-size:var(--font-emphasis)}
 .build-contract-list-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
-.build-contract-list-head>strong{color:var(--text);font-size:var(--font-item-title)}
+.build-contract-list-head>strong{color:var(--text);font-size:var(--font-emphasis)}
 .build-contract-body .profile-package-manage{flex:none;padding:4px 9px;font-size:var(--font-description)}
 .profile-package-chip.mode-include{border-color:color-mix(in srgb,#22a06b 55%,var(--border));color:#178252}
 .profile-package-chip.mode-exclude{border-color:color-mix(in srgb,var(--danger) 55%,var(--border));color:var(--danger)}
 .build-contract-chips{display:flex;flex-wrap:wrap;gap:5px}
-.build-contract-chip{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 7px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:6px;background:color-mix(in srgb,var(--accent) 10%,var(--card2));color:var(--accent);font:var(--font-item-title) ui-monospace,Consolas,monospace}
+.build-contract-chip{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 7px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:6px;background:color-mix(in srgb,var(--accent) 10%,var(--card2));color:var(--accent);font:var(--font-emphasis) ui-monospace,Consolas,monospace}
 .catalog-load-state{display:flex;flex:1.8 1 300px;align-items:center;justify-content:center;gap:9px;height:44px;padding:0 12px;border:1px dashed color-mix(in srgb,var(--accent) 45%,var(--border));border-radius:9px;background:color-mix(in srgb,var(--accent) 6%,var(--card));color:var(--text2);font:inherit}
 .catalog-load-state[data-state=loading]{cursor:wait}
 .catalog-load-state[data-state=error]{border-color:color-mix(in srgb,var(--danger) 55%,var(--border));color:var(--danger);cursor:pointer}
@@ -316,7 +317,7 @@ input:focus-visible { border-color: var(--accent); }
 .menuconfig-toggle[aria-expanded=true] .menuconfig-chevron{transform:rotate(180deg)}
 .menuconfig-workspace{width:100%;margin-top:12px;overflow:hidden;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--card2) 56%,var(--card))}
 .menuconfig-workspace-head{padding:0 10px 9px;border-bottom:1px solid var(--border);background:var(--card)}
-.menuconfig-scroll{max-height:clamp(280px,55vh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior:contain;scrollbar-gutter:stable;-webkit-overflow-scrolling:touch}
+.menuconfig-scroll{max-height:clamp(280px,55vh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior-y:auto;scrollbar-gutter:stable;-webkit-overflow-scrolling:touch}
 .menuconfig-toolbar{display:block;margin-top:10px;padding-bottom:2px}
 .menuconfig-path-row{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:nowrap}
 .menuconfig-search-group{display:flex;flex:0 1 360px;align-items:center;gap:8px;min-width:260px;margin-left:auto}
@@ -416,7 +417,7 @@ input:focus-visible { border-color: var(--accent); }
   .build-contract-body{grid-column:1 / -1;grid-row:3}
 }
 @media(max-width:640px){
-  :root{--font-page-title:21px;--font-section-title:19px;--font-item-title:17px;--font-body:16px;--font-description:14px;--font-meta:13px;--font-badge:12px}
+  :root{--font-page-title:21px;--font-section-title:19px;--font-item-title:17px;--font-emphasis:16px;--font-body:16px;--font-description:14px;--font-meta:13px;--font-badge:12px}
   .catalog-overview-row{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;width:100%;max-width:100%;padding:10px}
   .catalog-locator{grid-column:1;grid-row:1}
   .catalog-locator{width:100%;min-width:0;max-width:100%}
@@ -1166,7 +1167,7 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
 }
 /* 超窄屏(小手机/分屏)再紧一档 */
 @media (max-width: 400px) {
-  :root{--font-page-title:20px;--font-section-title:18px;--font-item-title:16px;--font-body:16px;--font-description:14px;--font-meta:13px;--font-badge:12px}
+  :root{--font-page-title:20px;--font-section-title:18px;--font-item-title:16px;--font-emphasis:16px;--font-body:16px;--font-description:14px;--font-meta:13px;--font-badge:12px}
   .wrap { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
   .header-row { padding: 10px 12px; gap: 8px; }
   .brand-icon { width: 26px; height: 26px; }
