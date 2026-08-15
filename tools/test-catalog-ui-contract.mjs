@@ -75,6 +75,29 @@ expect(app.includes('useDefconfig: false,') &&
   css.includes('.menuconfig-defconfig{flex:none;min-width:52px;min-height:42px;'),
   'Defconfig default, Advanced menuconfig placement, or compact Catalog overview layout regressed');
 
+expect(
+  css.includes('--font-page-title: 24px;') &&
+  css.includes('--font-section-title: 20px;') &&
+  css.includes('--font-item-title: 19px;') &&
+  css.includes('--font-body: 17px;') &&
+  css.includes('--font-description: 16px;') &&
+  css.includes('--font-meta: 14px;') &&
+  css.includes('--font-badge: 13px;') &&
+  css.includes('font: var(--font-body)/1.75') &&
+  css.includes('.brand h1 { margin: 0; font-size: var(--font-page-title);') &&
+  css.includes('.step h2 { font-size: var(--font-section-title);') &&
+  css.includes('padding: 13px 14px; font-size: var(--font-item-title); font-weight: 600;') &&
+  css.includes('.plugin-name.fit-s1 { font-size: var(--font-item-title-fit-1); }') &&
+  css.includes('.plugin-name.fit-s2 { font-size: var(--font-item-title-fit-2); }') &&
+  css.includes('.ui-tooltip-title{display:block;margin:0;color:var(--text);font-size:var(--font-item-title);') &&
+  css.includes('.ui-tooltip{position:fixed;') && css.includes('font-size:var(--font-description);') &&
+  css.includes(':root{--font-page-title:21px;--font-section-title:19px;--font-item-title:17px;--font-body:16px;--font-description:14px;--font-meta:13px;--font-badge:12px}') &&
+  css.includes(':root{--font-page-title:20px;--font-section-title:18px;--font-item-title:16px;--font-body:16px;--font-description:14px;--font-meta:13px;--font-badge:12px}') &&
+  !css.includes('--menuconfig-title-size') && !css.includes('--menuconfig-body-size') &&
+  !css.includes('body.dense') &&
+  app.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;'),
+  'shared typography scale, responsive tokens, or retired density cleanup regressed');
+
 const sharedTooltipContract = app.match(/\/\* ============ 统一悬浮说明[\s\S]*?function makePill/)?.[0] || '';
 const pluginRenderContract = app.match(/function renderPlugin\(p\) \{([\s\S]*?)\n\}\n\n\/\* V10:清掉/)?.[1] || '';
 expect(html.includes('class="ui-tooltip" id="uiTooltip"') &&
@@ -411,11 +434,11 @@ expect(pathRow.includes('menuconfigBack') && pathRow.includes('menuconfigPanelTi
   !pathRow.includes('menuconfigSearch'), 'Advanced path row contains controls beyond back/breadcrumb');
 expect(css.includes('.menuconfig-header{display:grid') &&
   css.includes('.menuconfig-breadcrumb-current{min-width:0;overflow:hidden;text-overflow:ellipsis') &&
-  css.includes('font-size:var(--menuconfig-body-size)'),
+  css.includes('font-size:var(--font-description)'),
   'desktop/mobile menuconfig typography or overflow contract is missing');
 expect(!/\.build-contract-(?:key|chip)[^{]*\{[^}]*font(?:-size)?:\s*(?:12|13)px/.test(css),
   'build contract retains internal 12/13px typography');
-expect(/\.build-contract-body \.profile-package-manage\{[^}]*font-size:var\(--menuconfig-body-size\)/.test(css),
+expect(/\.build-contract-body \.profile-package-manage\{[^}]*font-size:var\(--font-description\)/.test(css),
   'expanded build-contract controls can render below the body token');
 const startup = project.catalogLoadPolicy?.startup || [];
 const idle = project.catalogLoadPolicy?.idle || [];
