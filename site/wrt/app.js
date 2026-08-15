@@ -534,7 +534,7 @@ function renderBuildInfoSha(id, value) {
   if (!button) return;
   const sha = String(value || '').trim().toLowerCase();
   if (/^[a-f0-9]{40}$/.test(sha)) {
-    button.textContent = `${sha.slice(0, 12)}…`;
+    button.textContent = sha;
     button.title = sha;
     button.disabled = false;
     button.onclick = async () => {
@@ -553,25 +553,47 @@ function renderCatalogBuildInfo() {
   renderBuildInfoSha('buildInfoCatalogData', MENU_INDEX?.assetRef);
 }
 
+function positionBuildInfoPanel(trigger, card) {
+  const gutter = 8;
+  const gap = 9;
+  const triggerRect = trigger.getBoundingClientRect();
+  const cardRect = card.getBoundingClientRect();
+  const centeredLeft = triggerRect.left + (triggerRect.width / 2) - (cardRect.width / 2);
+  const left = Math.max(gutter, Math.min(centeredLeft, window.innerWidth - cardRect.width - gutter));
+  const top = Math.max(gutter, triggerRect.top - cardRect.height - gap);
+  const anchor = Math.max(18, Math.min(cardRect.width - 18, triggerRect.left + (triggerRect.width / 2) - left));
+  card.style.left = `${Math.round(left)}px`;
+  card.style.top = `${Math.round(top)}px`;
+  card.style.setProperty('--build-info-anchor-x', `${Math.round(anchor)}px`);
+}
+
 function renderBuildInfo() {
   const trigger = $('siteVersion');
   const panel = $('buildInfo');
+  const card = $('buildInfoCard');
   trigger.textContent = shortSiteVersion(state.siteVersion);
   document.querySelectorAll('.site-version-value').forEach((node) => { node.textContent = state.siteVersion; });
   const meta = state.buildMeta;
   renderBuildInfoSha('buildInfoCommit', meta?.commit);
   renderCatalogBuildInfo();
   $('buildInfoBuilt').textContent = formatBuildTime(meta?.builtAt);
+  const setOpen = (open) => {
+    panel.classList.toggle('is-open', open);
+    trigger.setAttribute('aria-expanded', String(open));
+    if (open) requestAnimationFrame(() => positionBuildInfoPanel(trigger, card));
+  };
   trigger.addEventListener('click', (event) => {
     event.stopPropagation();
-    const open = panel.classList.toggle('is-open');
-    trigger.setAttribute('aria-expanded', String(open));
+    setOpen(!panel.classList.contains('is-open'));
   });
-  document.addEventListener('click', (event) => {
-    if (!panel.contains(event.target)) { panel.classList.remove('is-open'); trigger.setAttribute('aria-expanded', 'false'); }
+  document.addEventListener('dblclick', (event) => {
+    if (panel.classList.contains('is-open') && !panel.contains(event.target)) setOpen(false);
   });
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') { panel.classList.remove('is-open'); trigger.setAttribute('aria-expanded', 'false'); }
+    if (event.key === 'Escape') setOpen(false);
+  });
+  window.addEventListener('resize', () => {
+    if (panel.classList.contains('is-open')) positionBuildInfoPanel(trigger, card);
   });
 }
 
@@ -5106,7 +5128,7 @@ function updateStats() {
     $('capBox').hidden = true;
     capText.disabled = false;
     capText.classList.add('rootfs-capacity');
-    capText.textContent = `RootFS ${rootfs.value} MiB`;
+    capText.textContent = `${rootfs.value} MiB`;
     capText.title = uiText('查看 RootFS 容量与修改位置', '查看 RootFS 容量與修改位置', 'View RootFS capacity and where to modify it');
   } else {
     $('capBox').hidden = false;

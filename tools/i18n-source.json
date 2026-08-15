@@ -224,6 +224,8 @@
   "warn.dnsmasqFull": "⚠️ 路由器唯一的 DNS/DHCP 服务:取消内置且不补装基础版 dnsmasq,内网设备将拿不到 IP、无法上网;多数魔法插件强依赖完整版",
   "warn.blockMount": "⚠️ 取消后 U 盘不再自动挂载;不用 USB 存储可放心取消",
   "generation.error.title": "生成失败",
-  "generation.error.hint": "可点右下角“自检”排查"
+  "generation.error.hint": "可点右下角“自检”排查",
+  "btn.import.short": "加载",
+  "btn.submit.short": "提交"
  }
 }

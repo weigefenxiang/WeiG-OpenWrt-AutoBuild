@@ -378,12 +378,6 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
       <div class="cap" id="capBox" data-i18n-title="bar.capacity.title"><div class="cap-fill" id="capFill"></div></div>
       <button type="button" class="cap-text cap-info" id="capText" disabled></button>
     </div>
-    <div class="actions">
-      <input id="configImport" type="file" accept=".json,.config,.buildinfo,text/plain,application/json" hidden>
-      <button type="button" class="btn" id="importBtn" data-i18n="btn.import">加载配置</button>
-      <button type="button" class="btn" id="importLogBtn" data-i18n="import.downloadLog" hidden>下载加载日志</button>
-      <button type="button" class="btn btn-primary" id="submitBtn" data-i18n="btn.submit" disabled aria-disabled="true">提交云编译</button>
-    </div>
     <div class="site-version-action build-info" id="buildInfo">
       <button type="button" class="site-version" id="siteVersion" aria-expanded="false" aria-controls="buildInfoCard">--------</button>
       <div class="build-info-card" id="buildInfoCard" role="dialog" aria-label="Build Information">
@@ -396,6 +390,12 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
           <div><dt>Built</dt><dd id="buildInfoBuilt">—</dd></div>
         </dl>
       </div>
+    </div>
+    <div class="actions">
+      <input id="configImport" type="file" accept=".json,.config,.buildinfo,text/plain,application/json" hidden>
+      <button type="button" class="btn" id="importBtn" data-i18n-aria="btn.import"><span class="action-label-full" data-i18n="btn.import">加载配置</span><span class="action-label-short" data-i18n="btn.import.short">加载</span></button>
+      <button type="button" class="btn" id="importLogBtn" data-i18n="import.downloadLog" hidden>下载加载日志</button>
+      <button type="button" class="btn btn-primary" id="submitBtn" data-i18n-aria="btn.submit" disabled aria-disabled="true"><span class="action-label-full" data-i18n="btn.submit">提交云编译</span><span class="action-label-short" data-i18n="btn.submit.short">提交</span></button>
     </div>
   </div>
 </div>

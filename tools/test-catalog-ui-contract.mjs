@@ -32,6 +32,22 @@ expect(html.includes('<dt>Web Version</dt>') &&
   (app.match(/MENU_INDEX = (?:index|remote\.index);\n\s+renderCatalogBuildInfo\(\);/g) || []).length >= 2,
   'Build Information does not expose the loaded Catalog code and data identities');
 
+const buildInfoUiContract = app.match(/function renderBuildInfo\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
+expect(app.includes('button.textContent = sha;') && !app.includes('sha.slice(0, 12)') &&
+  app.includes('function positionBuildInfoPanel(trigger, card)') &&
+  buildInfoUiContract.includes("document.addEventListener('dblclick'") &&
+  !buildInfoUiContract.includes("document.addEventListener('click'") &&
+  css.includes('.build-info.is-open .build-info-card') && !css.includes('.build-info:hover .build-info-card') &&
+  css.includes('width: min(480px, calc(100vw - 16px))') && css.includes('text-overflow: ellipsis') &&
+  html.indexOf('id="siteVersion"') < html.indexOf('id="importBtn"') && html.indexOf('id="importBtn"') < html.indexOf('id="submitBtn"'),
+  'Build Information anchoring, full-width SHA display, or footer order regressed');
+expect(html.includes('data-i18n="btn.import.short"') && html.includes('data-i18n="btn.submit.short"') &&
+  css.includes('.actionbar-row { flex-wrap: nowrap; gap: 5px; padding: 6px 8px; }') &&
+  css.includes('.action-label-full { display: none; }') && css.includes('.action-label-short { display: inline; }') &&
+  app.includes("capText.textContent = `${rootfs.value} MiB`;") && css.includes('.cap-info.rootfs-capacity::before{content:"RootFS "}') &&
+  css.includes('.cap-info.rootfs-capacity::before { content: ""; }'),
+  'mobile one-line action bar labels or compact RootFS capacity regressed');
+
 expect(!app.includes('syncThemeFromMenu') && app.includes('syncFirmwareThemeFromMenu'),
   'Catalog intent still calls a missing theme coordinator');
 const modalHeader = html.match(/<div class="modal-head">([\s\S]*?)<\/div>\s*<div class="modal-body"/)?.[1] || '';
