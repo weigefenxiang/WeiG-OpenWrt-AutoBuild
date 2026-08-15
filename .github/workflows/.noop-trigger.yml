@@ -1,0 +1,8 @@
+name: Temporary Noop Trigger
+on:
+  workflow_dispatch:
+jobs:
+  noop:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo noop
