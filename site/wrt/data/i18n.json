@@ -2970,6 +2970,32 @@
    "de": "Unten rechts mit „Selbsttest“ prüfen.",
    "fr": "Utilisez « Diagnostic » en bas à droite pour rechercher la cause.",
    "vi": "Nhấn “Tự kiểm tra” ở góc dưới bên phải để kiểm tra."
+  },
+  "btn.import.short": {
+   "zh-CN": "加载",
+   "zh-TW": "載入",
+   "en": "Load",
+   "ru": "Загрузить",
+   "es": "Cargar",
+   "pt": "Carregar",
+   "ja": "読込",
+   "ko": "불러오기",
+   "de": "Laden",
+   "fr": "Charger",
+   "vi": "Tải"
+  },
+  "btn.submit.short": {
+   "zh-CN": "提交",
+   "zh-TW": "送出",
+   "en": "Submit",
+   "ru": "Отправить",
+   "es": "Enviar",
+   "pt": "Enviar",
+   "ja": "送信",
+   "ko": "제출",
+   "de": "Senden",
+   "fr": "Envoyer",
+   "vi": "Gửi"
   }
  }
 }
