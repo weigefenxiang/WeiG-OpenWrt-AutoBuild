@@ -567,6 +567,18 @@ function positionBuildInfoPanel(trigger, card) {
   card.style.setProperty('--build-info-anchor-x', `${Math.round(anchor)}px`);
 }
 
+const BUILD_INFO_INTERACTIVE_SELECTOR = [
+  'a[href]', 'button', 'input', 'select', 'textarea', 'label', 'summary',
+  '[contenteditable="true"]', '[role="button"]', '[role="checkbox"]', '[role="radio"]',
+  '[role="option"]', '[role="menuitem"]', '[role="menuitemcheckbox"]', '[role="menuitemradio"]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+function buildInfoInteractiveTarget(target) {
+  const element = target instanceof Element ? target : target?.parentElement;
+  return element?.closest(BUILD_INFO_INTERACTIVE_SELECTOR) || null;
+}
+
 function renderBuildInfo() {
   const trigger = $('siteVersion');
   const panel = $('buildInfo');
@@ -590,6 +602,10 @@ function renderBuildInfo() {
   closeButton.addEventListener('click', (event) => {
     event.stopPropagation();
     setOpen(false);
+  });
+  document.addEventListener('click', (event) => {
+    if (!panel.classList.contains('is-open') || panel.contains(event.target)) return;
+    if (buildInfoInteractiveTarget(event.target)) setOpen(false);
   });
   document.addEventListener('dblclick', (event) => {
     if (panel.classList.contains('is-open') && !panel.contains(event.target)) setOpen(false);

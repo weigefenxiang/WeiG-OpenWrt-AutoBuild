@@ -35,8 +35,14 @@ expect(html.includes('<dt>Web Version</dt>') &&
 const buildInfoUiContract = app.match(/function renderBuildInfo\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
 expect(app.includes('button.textContent = sha;') && !app.includes('sha.slice(0, 12)') &&
   app.includes('function positionBuildInfoPanel(trigger, card)') &&
+  buildInfoUiContract.includes("document.addEventListener('click'") &&
+  buildInfoUiContract.includes("if (!panel.classList.contains('is-open') || panel.contains(event.target)) return;") &&
+  buildInfoUiContract.includes('if (buildInfoInteractiveTarget(event.target)) setOpen(false);') &&
   buildInfoUiContract.includes("document.addEventListener('dblclick'") &&
-  !buildInfoUiContract.includes("document.addEventListener('click'") &&
+  app.includes('const BUILD_INFO_INTERACTIVE_SELECTOR = [') &&
+  app.includes("'a[href]', 'button', 'input', 'select', 'textarea', 'label', 'summary'") &&
+  app.includes("'[role=\"button\"]', '[role=\"checkbox\"]', '[role=\"radio\"]'") &&
+  app.includes("'[tabindex]:not([tabindex=\"-1\"])'") &&
   html.includes('id="buildInfoClose"') && html.includes('data-i18n-aria="btn.close"') &&
   buildInfoUiContract.includes("const closeButton = $('buildInfoClose')") &&
   buildInfoUiContract.includes("closeButton.addEventListener('click', (event) => {") &&
@@ -45,7 +51,7 @@ expect(app.includes('button.textContent = sha;') && !app.includes('sha.slice(0, 
   css.includes('.build-info.is-open .build-info-card') && !css.includes('.build-info:hover .build-info-card') &&
   css.includes('width: min(480px, calc(100vw - 16px))') && css.includes('text-overflow: ellipsis') &&
   html.indexOf('id="siteVersion"') < html.indexOf('id="importBtn"') && html.indexOf('id="importBtn"') < html.indexOf('id="submitBtn"'),
-  'Build Information anchoring, full-width SHA display, or footer order regressed');
+  'Build Information anchoring, interactive auto-close, full-width SHA display, or footer order regressed');
 expect(html.includes('data-i18n="btn.import.short"') && html.includes('data-i18n="btn.submit.short"') &&
   css.includes('.actionbar-row { flex-wrap: nowrap; gap: 5px; padding: 6px 8px; }') &&
   css.includes('.action-label-full { display: none; }') && css.includes('.action-label-short { display: inline; }') &&
