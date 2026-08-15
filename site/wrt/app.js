@@ -571,6 +571,7 @@ function renderBuildInfo() {
   const trigger = $('siteVersion');
   const panel = $('buildInfo');
   const card = $('buildInfoCard');
+  const closeButton = $('buildInfoClose');
   trigger.textContent = shortSiteVersion(state.siteVersion);
   document.querySelectorAll('.site-version-value').forEach((node) => { node.textContent = state.siteVersion; });
   const meta = state.buildMeta;
@@ -585,6 +586,10 @@ function renderBuildInfo() {
   trigger.addEventListener('click', (event) => {
     event.stopPropagation();
     setOpen(!panel.classList.contains('is-open'));
+  });
+  closeButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setOpen(false);
   });
   document.addEventListener('dblclick', (event) => {
     if (panel.classList.contains('is-open') && !panel.contains(event.target)) setOpen(false);

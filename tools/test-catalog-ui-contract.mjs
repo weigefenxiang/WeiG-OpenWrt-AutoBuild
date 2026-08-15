@@ -37,6 +37,11 @@ expect(app.includes('button.textContent = sha;') && !app.includes('sha.slice(0, 
   app.includes('function positionBuildInfoPanel(trigger, card)') &&
   buildInfoUiContract.includes("document.addEventListener('dblclick'") &&
   !buildInfoUiContract.includes("document.addEventListener('click'") &&
+  html.includes('id="buildInfoClose"') && html.includes('data-i18n-aria="btn.close"') &&
+  buildInfoUiContract.includes("const closeButton = $('buildInfoClose')") &&
+  buildInfoUiContract.includes("closeButton.addEventListener('click', (event) => {") &&
+  buildInfoUiContract.includes("event.stopPropagation();\n    setOpen(false);") &&
+  css.includes('.build-info-head') && css.includes('.build-info-close') &&
   css.includes('.build-info.is-open .build-info-card') && !css.includes('.build-info:hover .build-info-card') &&
   css.includes('width: min(480px, calc(100vw - 16px))') && css.includes('text-overflow: ellipsis') &&
   html.indexOf('id="siteVersion"') < html.indexOf('id="importBtn"') && html.indexOf('id="importBtn"') < html.indexOf('id="submitBtn"'),

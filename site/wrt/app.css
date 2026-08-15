@@ -703,9 +703,15 @@ button.catalog-applications-state{cursor:pointer}
 .build-info.is-open .build-info-card {
   opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0);
 }
+.build-info-head {
+  display: flex; align-items: center; gap: 8px; padding: 9px 9px 9px 17px; border-bottom: 1px solid var(--border);
+}
 .build-info-title {
-  margin: 0; padding: 13px 17px; border-bottom: 1px solid var(--border);
+  margin: 0; min-width: 0; flex: 1 1 auto;
   color: var(--text); font-size: 15px; font-weight: 650; letter-spacing: .01em;
+}
+.build-info-close {
+  width: 32px; height: 32px; flex: none; border: 0; background: transparent; font-size: 17px;
 }
 .build-info-card dl { margin: 0; padding: 13px 17px 15px; display: grid; gap: 8px; }
 .build-info-card dl > div { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 12px; align-items: baseline; min-width: 0; }

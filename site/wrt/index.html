@@ -381,7 +381,10 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
     <div class="site-version-action build-info" id="buildInfo">
       <button type="button" class="site-version" id="siteVersion" aria-expanded="false" aria-controls="buildInfoCard">--------</button>
       <div class="build-info-card" id="buildInfoCard" role="dialog" aria-label="Build Information">
-        <div class="build-info-title">Build Information</div>
+        <div class="build-info-head">
+          <div class="build-info-title">Build Information</div>
+          <button type="button" class="icon-btn build-info-close" id="buildInfoClose" data-i18n-aria="btn.close">✕</button>
+        </div>
         <dl>
           <div><dt>Web Version</dt><dd class="site-version-value">v----------</dd></div>
           <div><dt>Web Commit</dt><dd><button type="button" class="build-info-commit" id="buildInfoCommit" aria-label="Commit">—</button></dd></div>
