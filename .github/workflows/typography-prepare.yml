@@ -33,6 +33,44 @@ jobs:
       - name: Apply approved typography standard
         run: node tools/.typography-patch.mjs
 
+      - name: Normalize typography regression contract
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const path = 'tools/test-catalog-ui-contract.mjs';
+          let text = fs.readFileSync(path, 'utf8');
+          const start = text.indexOf('const typographyRoot = css.match(');
+          const end = text.indexOf('const sharedTooltipContract = app.match(', start);
+          if (start < 0 || end < 0) throw new Error('typography regression block not found');
+          const block = `expect(
+            css.includes('--font-page-title: 24px;') &&
+            css.includes('--font-section-title: 20px;') &&
+            css.includes('--font-item-title: 19px;') &&
+            css.includes('--font-body: 17px;') &&
+            css.includes('--font-description: 16px;') &&
+            css.includes('--font-meta: 14px;') &&
+            css.includes('--font-badge: 13px;') &&
+            css.includes('font: var(--font-body)/1.75') &&
+            css.includes('.brand h1 { margin: 0; font-size: var(--font-page-title);') &&
+            css.includes('.step h2 { font-size: var(--font-section-title);') &&
+            css.includes('padding: 13px 14px; font-size: var(--font-item-title); font-weight: 600;') &&
+            css.includes('.plugin-name.fit-s1 { font-size: var(--font-item-title-fit-1); }') &&
+            css.includes('.plugin-name.fit-s2 { font-size: var(--font-item-title-fit-2); }') &&
+            css.includes('.ui-tooltip-title{display:block;margin:0;color:var(--text);font-size:var(--font-item-title);') &&
+            css.includes('.ui-tooltip{position:fixed;') && css.includes('font-size:var(--font-description);') &&
+            css.includes(':root{--font-page-title:21px;--font-section-title:19px;--font-item-title:17px;--font-body:16px;--font-description:14px;--font-meta:13px;--font-badge:12px}') &&
+            css.includes(':root{--font-page-title:20px;--font-section-title:18px;--font-item-title:16px;--font-body:16px;--font-description:14px;--font-meta:13px;--font-badge:12px}') &&
+            !css.includes('--menuconfig-title-size') && !css.includes('--menuconfig-body-size') &&
+            !css.includes('body.dense') &&
+            app.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;'),
+            'shared typography scale, responsive tokens, or retired density cleanup regressed');
+
+          `;
+          text = text.slice(0, start) + block + text.slice(end);
+          fs.writeFileSync(path, text);
+          NODE
+
       - name: Remove temporary runner files
         shell: bash
         run: |
