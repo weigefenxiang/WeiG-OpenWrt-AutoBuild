@@ -1,0 +1,340 @@
+name: Prepare Refined Build Information
+
+on:
+  push:
+    branches: [fix-D]
+    paths:
+      - ".github/workflows/refine-build-info-prepare.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refine-build-info-prepare-fix-D
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix-D
+          fetch-depth: 2
+
+      - name: Verify bootstrap base
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "b5ffa907856abc894bcafa261325e7f614eb9194"
+          test "$(git branch --show-current)" = "fix-D"
+
+      - name: Apply approved layout change
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/refine-build-info-prepare.yml
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+
+          def replace_once(path, old, new):
+              text = path.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, found {count}: {old[:120]!r}')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+
+          index = Path('site/wrt/index.html')
+          old = '''    <div class="actions">
+      <input id="configImport" type="file" accept=".json,.config,.buildinfo,text/plain,application/json" hidden>
+      <button type="button" class="btn" id="importBtn" data-i18n="btn.import">加载配置</button>
+      <button type="button" class="btn" id="importLogBtn" data-i18n="import.downloadLog" hidden>下载加载日志</button>
+      <button type="button" class="btn btn-primary" id="submitBtn" data-i18n="btn.submit" disabled aria-disabled="true">提交云编译</button>
+    </div>
+    <div class="site-version-action build-info" id="buildInfo">
+      <button type="button" class="site-version" id="siteVersion" aria-expanded="false" aria-controls="buildInfoCard">--------</button>
+      <div class="build-info-card" id="buildInfoCard" role="dialog" aria-label="Build Information">
+        <div class="build-info-title">Build Information</div>
+        <dl>
+          <div><dt>Web Version</dt><dd class="site-version-value">v----------</dd></div>
+          <div><dt>Web Commit</dt><dd><button type="button" class="build-info-commit" id="buildInfoCommit" aria-label="Commit">—</button></dd></div>
+          <div><dt>Catalog Code</dt><dd><button type="button" class="build-info-commit" id="buildInfoCatalogCode" aria-label="Catalog code commit">—</button></dd></div>
+          <div><dt>Catalog Data</dt><dd><button type="button" class="build-info-commit" id="buildInfoCatalogData" aria-label="Catalog data revision">—</button></dd></div>
+          <div><dt>Built</dt><dd id="buildInfoBuilt">—</dd></div>
+        </dl>
+      </div>
+    </div>'''
+          new = '''    <div class="site-version-action build-info" id="buildInfo">
+      <button type="button" class="site-version" id="siteVersion" aria-expanded="false" aria-controls="buildInfoCard">--------</button>
+      <div class="build-info-card" id="buildInfoCard" role="dialog" aria-label="Build Information">
+        <div class="build-info-title">Build Information</div>
+        <dl>
+          <div><dt>Web Version</dt><dd class="site-version-value">v----------</dd></div>
+          <div><dt>Web Commit</dt><dd><button type="button" class="build-info-commit" id="buildInfoCommit" aria-label="Commit">—</button></dd></div>
+          <div><dt>Catalog Code</dt><dd><button type="button" class="build-info-commit" id="buildInfoCatalogCode" aria-label="Catalog code commit">—</button></dd></div>
+          <div><dt>Catalog Data</dt><dd><button type="button" class="build-info-commit" id="buildInfoCatalogData" aria-label="Catalog data revision">—</button></dd></div>
+          <div><dt>Built</dt><dd id="buildInfoBuilt">—</dd></div>
+        </dl>
+      </div>
+    </div>
+    <div class="actions">
+      <input id="configImport" type="file" accept=".json,.config,.buildinfo,text/plain,application/json" hidden>
+      <button type="button" class="btn" id="importBtn" data-i18n-aria="btn.import"><span class="action-label-full" data-i18n="btn.import">加载配置</span><span class="action-label-short" data-i18n="btn.import.short">加载</span></button>
+      <button type="button" class="btn" id="importLogBtn" data-i18n="import.downloadLog" hidden>下载加载日志</button>
+      <button type="button" class="btn btn-primary" id="submitBtn" data-i18n-aria="btn.submit" disabled aria-disabled="true"><span class="action-label-full" data-i18n="btn.submit">提交云编译</span><span class="action-label-short" data-i18n="btn.submit.short">提交</span></button>
+    </div>'''
+          replace_once(index, old, new)
+
+          app = Path('site/wrt/app.js')
+          text = app.read_text(encoding='utf-8')
+          old_sha = "    button.textContent = `${sha.slice(0, 12)}…`;"
+          if text.count(old_sha) != 1:
+              raise SystemExit('app.js: SHA truncation marker mismatch')
+          text = text.replace(old_sha, '    button.textContent = sha;', 1)
+          old_rootfs = "    capText.textContent = `RootFS ${rootfs.value} MiB`;"
+          if text.count(old_rootfs) != 1:
+              raise SystemExit('app.js: RootFS label marker mismatch')
+          text = text.replace(old_rootfs, "    capText.textContent = `${rootfs.value} MiB`;", 1)
+          start = text.find('function renderBuildInfo() {\n')
+          end = text.find('\n\n/* ============ 初始化 / Init ============ */', start)
+          if start < 0 or end < 0:
+              raise SystemExit('app.js: renderBuildInfo bounds missing')
+          new_render = '''function positionBuildInfoPanel(trigger, card) {
+  const gutter = 8;
+  const gap = 9;
+  const triggerRect = trigger.getBoundingClientRect();
+  const cardRect = card.getBoundingClientRect();
+  const centeredLeft = triggerRect.left + (triggerRect.width / 2) - (cardRect.width / 2);
+  const left = Math.max(gutter, Math.min(centeredLeft, window.innerWidth - cardRect.width - gutter));
+  const top = Math.max(gutter, triggerRect.top - cardRect.height - gap);
+  const anchor = Math.max(18, Math.min(cardRect.width - 18, triggerRect.left + (triggerRect.width / 2) - left));
+  card.style.left = `${Math.round(left)}px`;
+  card.style.top = `${Math.round(top)}px`;
+  card.style.setProperty('--build-info-anchor-x', `${Math.round(anchor)}px`);
+}
+
+function renderBuildInfo() {
+  const trigger = $('siteVersion');
+  const panel = $('buildInfo');
+  const card = $('buildInfoCard');
+  trigger.textContent = shortSiteVersion(state.siteVersion);
+  document.querySelectorAll('.site-version-value').forEach((node) => { node.textContent = state.siteVersion; });
+  const meta = state.buildMeta;
+  renderBuildInfoSha('buildInfoCommit', meta?.commit);
+  renderCatalogBuildInfo();
+  $('buildInfoBuilt').textContent = formatBuildTime(meta?.builtAt);
+  const setOpen = (open) => {
+    panel.classList.toggle('is-open', open);
+    trigger.setAttribute('aria-expanded', String(open));
+    if (open) requestAnimationFrame(() => positionBuildInfoPanel(trigger, card));
+  };
+  trigger.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setOpen(!panel.classList.contains('is-open'));
+  });
+  document.addEventListener('dblclick', (event) => {
+    if (panel.classList.contains('is-open') && !panel.contains(event.target)) setOpen(false);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') setOpen(false);
+  });
+  window.addEventListener('resize', () => {
+    if (panel.classList.contains('is-open')) positionBuildInfoPanel(trigger, card);
+  });
+}'''
+          text = text[:start] + new_render + text[end:]
+          app.write_text(text, encoding='utf-8', newline='\n')
+
+          css = Path('site/wrt/app.css')
+          text = css.read_text(encoding='utf-8')
+          old = '''.actions { margin-left: auto; display: flex; gap: 10px; flex: none; }
+.site-version-action { position: relative; order: 0; align-self: center; }'''
+          new = '''.actions { margin-left: 0; display: flex; gap: 10px; flex: none; }
+.site-version-action { position: relative; order: 0; margin-left: auto; align-self: center; flex: none; }'''
+          if text.count(old) != 1:
+              raise SystemExit('app.css: desktop action order marker mismatch')
+          text = text.replace(old, new, 1)
+          old = '''.build-info-card {
+  position: absolute; right: 0; bottom: calc(100% + 9px); z-index: 45; width: min(330px, calc(100vw - 24px));
+  padding: 12px 13px; border: 1px solid var(--border); border-radius: 12px; background: var(--card);
+  box-shadow: 0 10px 28px rgba(16, 24, 40, .18); opacity: 0; visibility: hidden; pointer-events: none;
+  transform: translateY(4px); transition: opacity .14s ease, transform .14s ease, visibility .14s;
+}
+.build-info:hover .build-info-card, .build-info.is-open .build-info-card {
+  opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0);
+}
+.build-info-title { margin-bottom: 8px; color: var(--text); font-size: 13px; font-weight: 650; letter-spacing: .01em; }
+.build-info-card dl { margin: 0; display: grid; gap: 6px; }
+.build-info-card dl > div { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.build-info-card dt { color: var(--text3); font-size: 12px; }
+.build-info-card dd { margin: 0; min-width: 0; color: var(--text2); font: 12px/1.45 ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.build-info-commit {
+  max-width: 100%; border: 0; padding: 0; background: none; color: var(--accent-text); font: inherit;
+  text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.build-info-commit:disabled { color: var(--text2); cursor: default; }
+.build-info-commit:not(:disabled):hover { text-decoration: underline; }'''
+          new = '''.build-info-card {
+  position: fixed; left: 8px; top: 8px; z-index: 49; width: min(480px, calc(100vw - 16px));
+  border: 1px solid var(--border); border-radius: 14px; background: var(--card);
+  box-shadow: 0 22px 64px rgba(16, 24, 40, .24); opacity: 0; visibility: hidden; pointer-events: none;
+  transform: translateY(4px); transition: opacity .14s ease, transform .14s ease, visibility .14s;
+}
+.build-info-card::after {
+  content: ""; position: absolute; left: calc(var(--build-info-anchor-x, 50%) - 6px); bottom: -7px;
+  width: 12px; height: 12px; background: var(--card); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  transform: rotate(45deg);
+}
+.build-info.is-open .build-info-card {
+  opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0);
+}
+.build-info-title {
+  margin: 0; padding: 13px 17px; border-bottom: 1px solid var(--border);
+  color: var(--text); font-size: 15px; font-weight: 650; letter-spacing: .01em;
+}
+.build-info-card dl { margin: 0; padding: 13px 17px 15px; display: grid; gap: 8px; }
+.build-info-card dl > div { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 12px; align-items: baseline; min-width: 0; }
+.build-info-card dt { color: var(--text3); font-size: 12.5px; white-space: nowrap; }
+.build-info-card dd {
+  margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text2); font: 12.5px/1.45 ui-monospace, Consolas, monospace;
+}
+.build-info-commit {
+  display: block; width: 100%; max-width: 100%; border: 0; padding: 0; background: none; color: var(--accent-text); font: inherit;
+  text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.build-info-commit:disabled { color: var(--text2); cursor: default; }
+.build-info-commit:not(:disabled):hover { text-decoration: underline; }'''
+          if text.count(old) != 1:
+              raise SystemExit('app.css: Build Information block marker mismatch')
+          text = text.replace(old, new, 1)
+          old = '.cap-info.rootfs-capacity{color:var(--accent-text);cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}'
+          new = old + '\n.cap-info.rootfs-capacity::before{content:"RootFS "}'
+          if text.count(old) != 1:
+              raise SystemExit('app.css: RootFS class marker mismatch')
+          text = text.replace(old, new, 1)
+          old = '''.actions .btn { order: 1; }
+.actions .btn-primary { order: 2; }'''
+          new = '''.actions .btn { order: 1; }
+.actions .btn-primary { order: 2; }
+.action-label-short { display: none; }'''
+          if text.count(old) != 1:
+              raise SystemExit('app.css: action label marker mismatch')
+          text = text.replace(old, new, 1)
+          old = '''  .actionbar-row { flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
+  .stats { width: auto; flex: 0 1 auto; justify-content: flex-start; gap: 6px; }
+  .stats .link-btn { margin-right: 0; }
+  .cap { width: 64px; }
+  .site-version-action { order: 0; margin-left: auto; align-self: center; }
+  .site-version { padding-left: 4px; padding-right: 4px; font-size: 13.5px; line-height: 1.2; }
+  .actions { order: 2; margin-left: 0; width: 100%; }
+  .actions .btn { flex: 1; min-height: 44px; }'''
+          new = '''  .actionbar-row { flex-wrap: nowrap; gap: 5px; padding: 6px 8px; }
+  .stats { width: auto; flex: 1 1 auto; min-width: 0; justify-content: flex-start; gap: 4px; font-size: 12px; white-space: nowrap; overflow: hidden; }
+  .stats .link-btn { margin-right: 0; padding: 3px 0; font-size: 12px; flex: none; }
+  .cap { width: 32px; }
+  .cap-text { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+  .cap-info.rootfs-capacity::before { content: ""; }
+  .site-version-action { order: 0; margin-left: 0; align-self: center; flex: none; }
+  .site-version { padding: 3px 2px; font-size: 11.5px; line-height: 1.2; }
+  .actions { order: 0; margin-left: 0; width: auto; gap: 4px; flex: none; }
+  .actions .btn { flex: none; min-height: 34px; padding: 5px 9px; font-size: 13px; }
+  .action-label-full { display: none; }
+  .action-label-short { display: inline; }
+  .build-info-card dl > div { grid-template-columns: 84px minmax(0, 1fr); gap: 9px; }'''
+          if text.count(old) != 1:
+              raise SystemExit('app.css: mobile actionbar marker mismatch')
+          text = text.replace(old, new, 1)
+          text = text.replace('    bottom: calc(132px + env(safe-area-inset-bottom));', '    bottom: calc(86px + env(safe-area-inset-bottom));', 1)
+          text = text.replace('  .toast { bottom: calc(128px + env(safe-area-inset-bottom)); }\n  .toast.toast-device { right: 16px; bottom: calc(128px + env(safe-area-inset-bottom)); }', '  .toast { bottom: calc(74px + env(safe-area-inset-bottom)); }\n  .toast.toast-device { right: 16px; bottom: calc(74px + env(safe-area-inset-bottom)); }', 1)
+          marker = '  .brand h1 { font-size: 15px; }\n'
+          compact = '''  .brand h1 { font-size: 15px; }
+  .actionbar-row { gap: 3px; padding: 5px 6px; }
+  .stats, .stats .link-btn, .cap-text { font-size: 11px; }
+  .site-version { font-size: 10.5px; }
+  .actions .btn { min-height: 32px; padding: 4px 7px; font-size: 12px; }
+'''
+          if text.count(marker) != 1:
+              raise SystemExit('app.css: max-400 marker mismatch')
+          text = text.replace(marker, compact, 1)
+          css.write_text(text, encoding='utf-8', newline='\n')
+
+          source = Path('tools/i18n-source.json')
+          data = json.loads(source.read_text(encoding='utf-8'))
+          data['strings']['btn.import.short'] = '加载'
+          data['strings']['btn.submit.short'] = '提交'
+          source.write_text(json.dumps(data, ensure_ascii=False, indent=1) + '\n', encoding='utf-8', newline='\n')
+
+          translations = Path('tools/i18n-translations.json')
+          data = json.loads(translations.read_text(encoding='utf-8'))
+          short = {
+              'zh-TW': ('載入', '送出'),
+              'en': ('Load', 'Submit'),
+              'ru': ('Загрузить', 'Отправить'),
+              'es': ('Cargar', 'Enviar'),
+              'pt': ('Carregar', 'Enviar'),
+              'ja': ('読込', '送信'),
+              'ko': ('불러오기', '제출'),
+              'de': ('Laden', 'Senden'),
+              'fr': ('Charger', 'Envoyer'),
+              'vi': ('Tải', 'Gửi'),
+          }
+          unknown = set(data) - set(short)
+          if unknown:
+              raise SystemExit(f'i18n-translations.json: missing mobile short labels for {sorted(unknown)}')
+          for lang, table in data.items():
+              table['btn.import.short'], table['btn.submit.short'] = short[lang]
+          translations.write_text(json.dumps(data, ensure_ascii=False, indent=1) + '\n', encoding='utf-8', newline='\n')
+
+          test = Path('tools/test-catalog-ui-contract.mjs')
+          text = test.read_text(encoding='utf-8')
+          marker = "  'Build Information does not expose the loaded Catalog code and data identities');\n"
+          if text.count(marker) != 1:
+              raise SystemExit('test-catalog-ui-contract.mjs: Build Information marker mismatch')
+          regression = '''
+const buildInfoUiContract = app.match(/function renderBuildInfo\\(\\) \\{([\\s\\S]*?)\\n\\}/)?.[1] || '';
+expect(app.includes('button.textContent = sha;') && !app.includes('sha.slice(0, 12)') &&
+  app.includes('function positionBuildInfoPanel(trigger, card)') &&
+  buildInfoUiContract.includes("document.addEventListener('dblclick'") &&
+  !buildInfoUiContract.includes("document.addEventListener('click'") &&
+  css.includes('.build-info.is-open .build-info-card') && !css.includes('.build-info:hover .build-info-card') &&
+  css.includes('width: min(480px, calc(100vw - 16px))') && css.includes('text-overflow: ellipsis') &&
+  html.indexOf('id="siteVersion"') < html.indexOf('id="importBtn"') && html.indexOf('id="importBtn"') < html.indexOf('id="submitBtn"'),
+  'Build Information anchoring, full-width SHA display, or footer order regressed');
+expect(html.includes('data-i18n="btn.import.short"') && html.includes('data-i18n="btn.submit.short"') &&
+  css.includes('.actionbar-row { flex-wrap: nowrap; gap: 5px; padding: 6px 8px; }') &&
+  css.includes('.action-label-full { display: none; }') && css.includes('.action-label-short { display: inline; }') &&
+  app.includes("capText.textContent = `${rootfs.value} MiB`;") && css.includes('.cap-info.rootfs-capacity::before{content:"RootFS "}') &&
+  css.includes('.cap-info.rootfs-capacity::before { content: ""; }'),
+  'mobile one-line action bar labels or compact RootFS capacity regressed');
+'''
+          text = text.replace(marker, marker + regression, 1)
+          test.write_text(text, encoding='utf-8', newline='\n')
+          PY
+
+      - name: Prepare project version and generated bytes
+        run: node tools/dev-assistant.mjs prepare
+
+      - name: Verify prepared project
+        run: node tools/dev-assistant.mjs verify
+
+      - name: Guard final change scope
+        run: |
+          set -euo pipefail
+          allowed='^(\.github/workflows/refine-build-info-prepare\.yml|VERSION|site/wrt/app\.js|site/wrt/app\.css|site/wrt/index\.html|site/wrt/data/site-version\.json|site/wrt/data/i18n\.json|tools/test-catalog-ui-contract\.mjs|tools/i18n-source\.json|tools/i18n-translations\.json)$'
+          unexpected="$(git status --porcelain | sed -E 's/^.. //' | grep -Ev "$allowed" || true)"
+          if [ -n "$unexpected" ]; then
+            echo "Unexpected prepared files:"
+            echo "$unexpected"
+            exit 1
+          fi
+          git diff --check
+
+      - name: Commit prepared change
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "feat: refine build information panel"
+          git push origin HEAD:fix-D
