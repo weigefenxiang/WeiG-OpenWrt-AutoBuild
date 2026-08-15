@@ -362,15 +362,22 @@ function applyI18n() {
     $('menuconfigStateHelp').setAttribute('aria-label',
       uiText('N、M、Y 状态说明', 'N、M、Y 狀態說明', 'N, M, and Y state help'));
   }
+  const defconfigEmphasis = uiText(
+    '⚠ 当前版本加载时已完成基准配置解析。通常直接在现有结果上增减即可，无需开启 D。',
+    '⚠ 目前版本載入時已完成基準設定解析。通常直接在現有結果上增減即可，無需開啟 D。',
+    '⚠ The current version baseline is already resolved when loaded. Normally you can adjust the existing result directly without enabling D.');
   const defconfigHelp = uiText(
-    '根据当前 Target / Subtarget / Profile 解析 Kconfig 默认值和依赖，补齐设备基准配置（驱动、分区、UBI 等），降低缺失配置导致构建失败或固件不可用的风险。仍须确认机型，不能保证绝对防砖。',
-    '依目前 Target / Subtarget / Profile 解析 Kconfig 默认值与依赖，补齐设备基准设定（驱动、分区、UBI 等），降低设定缺失导致建置失败或固件不可用的风险。仍须确认机型，不能保证绝对防砖。',
-    'Resolve Kconfig defaults and dependencies for the selected Target / Subtarget / Profile to fill the device baseline (drivers, partitions, UBI, and more). This lowers the risk of missing settings, but you must still verify the device; it cannot guarantee safe flashing.');
+    '开启 D 会在构建前重新执行 Defconfig，按当前选择补齐 Kconfig 默认值和依赖，可能把你手工删减的默认项重新补回。',
+    '開啟 D 會在建置前重新執行 Defconfig，依目前選擇補齊 Kconfig 預設值與相依性，可能把你手動刪減的預設項目重新補回。',
+    'Enabling D reruns Defconfig before the build, refilling Kconfig defaults and dependencies from the current selection and potentially restoring defaults you removed manually.');
   if ($('defconfigLabel')) $('defconfigLabel').textContent = 'D';
   if ($('defconfigSwitch')) {
-    $('defconfigSwitch').title = defconfigHelp;
-    $('defconfigSwitch').dataset.help = defconfigHelp;
-    $('defconfigSwitch').setAttribute('aria-label', defconfigHelp);
+    $('defconfigSwitch').removeAttribute('title');
+    $('defconfigSwitch').dataset.uiTooltipTitle = 'D · Defconfig';
+    $('defconfigSwitch').dataset.uiTooltipEmphasis = defconfigEmphasis;
+    $('defconfigSwitch').dataset.uiTooltipBody = defconfigHelp;
+    $('defconfigSwitch').setAttribute('aria-describedby', 'uiTooltip');
+    $('defconfigSwitch').setAttribute('aria-label', `${defconfigEmphasis} ${defconfigHelp}`);
   }
   renderCatalogLoadState();
   $('advLabel').title = t('adv.title');
@@ -470,25 +477,123 @@ function showToast(msg, kind = '') {
   toastTimer = setTimeout(() => { el.classList.remove('show', 'toast-device'); el.hidden = true; }, 2800);
 }
 
-/* ============ 气泡说明 / Info popover ============ */
-const popover = $('popover');
-function showPopover(anchor, title, body) {
-  $('popTitle').textContent = title;
-  $('popBody').textContent = body;
-  popover.hidden = false;
-  const r = anchor.getBoundingClientRect();
-  const pw = Math.min(320, window.innerWidth - 24);
-  let left = r.left + window.scrollX;
-  if (left + pw > window.scrollX + window.innerWidth - 12) left = window.scrollX + window.innerWidth - pw - 12;
-  popover.style.left = left + 'px';
-  popover.style.top = (r.bottom + window.scrollY + 8) + 'px';
+/* ============ 统一悬浮说明 / Shared tooltip ============ */
+const uiTooltip = $('uiTooltip');
+const UI_TOOLTIP_SELECTOR = '[data-ui-tooltip-title],[data-ui-tooltip-emphasis],[data-ui-tooltip-body]';
+let uiTooltipTarget = null;
+let uiTooltipPinned = false;
+
+function uiTooltipBoundary(target) {
+  const margin = 8;
+  const viewport = { left: margin, top: margin, right: innerWidth - margin, bottom: innerHeight - margin };
+  const wrap = target?.closest?.('.wrap') || $('app');
+  if (!wrap) return viewport;
+  const rect = wrap.getBoundingClientRect();
+  return {
+    left: Math.max(viewport.left, rect.left),
+    top: viewport.top,
+    right: Math.min(viewport.right, rect.right),
+    bottom: viewport.bottom,
+  };
 }
-function hidePopover() { popover.hidden = true; }
-document.addEventListener('click', (e) => {
-  if (!popover.hidden && !popover.contains(e.target) && !e.target.closest('.info')) hidePopover();
+function renderUiTooltip({ title = '', emphasis = '', body = '' } = {}) {
+  const titleEl = $('uiTooltipTitle');
+  const emphasisEl = $('uiTooltipEmphasis');
+  const bodyEl = $('uiTooltipBody');
+  titleEl.textContent = title;
+  emphasisEl.textContent = emphasis;
+  bodyEl.textContent = body;
+  titleEl.hidden = !title;
+  emphasisEl.hidden = !emphasis;
+  bodyEl.hidden = !body;
+}
+function positionUiTooltip(target, event = null) {
+  if (!uiTooltip || uiTooltip.hidden || !target) return;
+  const boundary = uiTooltipBoundary(target);
+  const gap = 14;
+  const anchor = target.getBoundingClientRect();
+  const pointerX = Number.isFinite(event?.clientX) ? event.clientX : anchor.left;
+  const pointerY = Number.isFinite(event?.clientY) ? event.clientY : anchor.bottom;
+  const availableWidth = Math.max(180, boundary.right - boundary.left);
+  uiTooltip.style.maxWidth = `${Math.min(400, availableWidth)}px`;
+  const rect = uiTooltip.getBoundingClientRect();
+
+  let left = pointerX + gap;
+  if (left + rect.width > boundary.right) left = pointerX - rect.width - gap;
+  left = Math.min(Math.max(boundary.left, left), Math.max(boundary.left, boundary.right - rect.width));
+
+  let top = pointerY + gap;
+  if (top + rect.height > boundary.bottom) top = pointerY - rect.height - gap;
+  top = Math.min(Math.max(boundary.top, top), Math.max(boundary.top, boundary.bottom - rect.height));
+
+  uiTooltip.style.left = `${left}px`;
+  uiTooltip.style.top = `${top}px`;
+}
+function showUiTooltip(target, { title = '', emphasis = '', body = '', event = null, pinned = false } = {}) {
+  if (!uiTooltip || !target || (!title && !emphasis && !body)) return;
+  uiTooltipTarget = target;
+  uiTooltipPinned = Boolean(pinned);
+  renderUiTooltip({ title, emphasis, body });
+  uiTooltip.hidden = false;
+  positionUiTooltip(target, event);
+}
+function showDatasetTooltip(target, event = null, pinned = false) {
+  if (!target) return;
+  showUiTooltip(target, {
+    title: target.dataset.uiTooltipTitle || '',
+    emphasis: target.dataset.uiTooltipEmphasis || '',
+    body: target.dataset.uiTooltipBody || '',
+    event,
+    pinned,
+  });
+}
+function hideUiTooltip(force = false) {
+  if (!uiTooltip || (!force && uiTooltipPinned)) return;
+  uiTooltip.hidden = true;
+  uiTooltipTarget = null;
+  uiTooltipPinned = false;
+  renderUiTooltip();
+  uiTooltip.style.removeProperty('left');
+  uiTooltip.style.removeProperty('top');
+  uiTooltip.style.removeProperty('max-width');
+}
+function showPopover(anchor, title, body) {
+  showUiTooltip(anchor, { title, body, pinned: true });
+}
+function hidePopover() { hideUiTooltip(true); }
+
+document.addEventListener('pointerover', (event) => {
+  const target = event.target.closest?.(UI_TOOLTIP_SELECTOR);
+  if (!target || matchMedia('(hover: none)').matches) return;
+  showDatasetTooltip(target, event);
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hidePopover(); closeModal(); } });
-window.addEventListener('scroll', hidePopover, { passive: true });
+document.addEventListener('pointermove', (event) => {
+  if (!uiTooltipTarget || uiTooltipPinned || uiTooltip.hidden) return;
+  const target = event.target.closest?.(UI_TOOLTIP_SELECTOR);
+  if (target === uiTooltipTarget) positionUiTooltip(target, event);
+});
+document.addEventListener('pointerout', (event) => {
+  const target = event.target.closest?.(UI_TOOLTIP_SELECTOR);
+  if (!target || uiTooltipPinned) return;
+  if (!event.relatedTarget?.closest?.(UI_TOOLTIP_SELECTOR) || event.relatedTarget.closest(UI_TOOLTIP_SELECTOR) !== target) {
+    hideUiTooltip();
+  }
+});
+document.addEventListener('focusin', (event) => {
+  const target = event.target.closest?.(UI_TOOLTIP_SELECTOR);
+  if (target) showDatasetTooltip(target);
+});
+document.addEventListener('focusout', (event) => {
+  const target = event.target.closest?.(UI_TOOLTIP_SELECTOR);
+  if (target && !event.relatedTarget?.closest?.(UI_TOOLTIP_SELECTOR)) hideUiTooltip();
+});
+document.addEventListener('click', (event) => {
+  if (uiTooltipPinned && uiTooltipTarget && !uiTooltipTarget.contains(event.target)) hideUiTooltip(true);
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') { hideUiTooltip(true); closeModal(); }
+});
+window.addEventListener('scroll', () => hideUiTooltip(true), { passive: true });
 
 function makePill(label, infoTitle, infoBody, onSelect) {
   const pill = document.createElement('button');
@@ -1171,9 +1276,9 @@ function applyMenuTranslation(element, chinese, usageChinese = '', mobileChip = 
   }
   return element;
 }
-function showMenuTooltip(element) {
+function showMenuTooltip(element, event = null) {
   if (state.lang === 'en' || !element?.dataset.translation) return;
-  showMenuPopup(element, element.dataset.translation);
+  showMenuPopup(element, element.dataset.translation, event);
 }
 function menuOptionPopupText(element) {
   if (!element?.dataset.symbol) return '';
@@ -1187,43 +1292,20 @@ function menuOptionPopupText(element) {
     element.dataset.path || '',
   ].filter(Boolean).join('\n\n');
 }
-function showMenuOptionTooltip(element) {
+function showMenuOptionTooltip(element, event = null) {
   const text = menuOptionPopupText(element);
-  if (text) showMenuPopup(element, text);
+  if (text) showMenuPopup(element, text, event);
 }
-function showMenuHelp(element) {
+function showMenuHelp(element, event = null) {
   if (!element?.dataset.help) return;
-  showMenuPopup(element, element.dataset.help);
+  showMenuPopup(element, element.dataset.help, event);
 }
-function showMenuPopup(element, text) {
-  const tooltip = $('menuTooltip');
-  if (!tooltip || !text) return;
-  const margin = 8;
-  const optionRow = element.closest('.menuconfig-option');
-  const actions = optionRow?.querySelector('.menuconfig-option-actions');
-  const rowRect = optionRow?.getBoundingClientRect();
-  const rightLimit = actions ? actions.getBoundingClientRect().left - margin : innerWidth - margin;
-  const leftLimit = Math.max(margin, rowRect?.left || margin);
-  tooltip.style.maxWidth = `${Math.max(180, Math.min(520, rightLimit - leftLimit))}px`;
-  tooltip.textContent = text;
-  tooltip.hidden = false;
-  const rect = element.getBoundingClientRect();
-  const tipRect = tooltip.getBoundingClientRect();
-  const left = Math.min(Math.max(leftLimit, rect.left), Math.max(leftLimit, rightLimit - tipRect.width));
-  const below = rect.bottom + margin;
-  const top = below + tipRect.height <= innerHeight - margin
-    ? below : Math.max(margin, rect.top - tipRect.height - margin);
-  tooltip.style.left = `${left}px`;
-  tooltip.style.top = `${top}px`;
+function showMenuPopup(element, text, event = null) {
+  if (!element || !text) return;
+  showUiTooltip(element, { body: text, event });
 }
 function hideMenuTooltip() {
-  const tooltip = $('menuTooltip');
-  if (!tooltip) return;
-  tooltip.hidden = true;
-  tooltip.textContent = '';
-  tooltip.style.removeProperty('left');
-  tooltip.style.removeProperty('top');
-  tooltip.style.removeProperty('max-width');
+  hideUiTooltip(true);
 }
 function catalogDiagnosticsText() {
   const source = selectedCatalogSource();
@@ -3459,17 +3541,17 @@ function initMenuconfigControls() {
   document.addEventListener('pointerover', (event) => {
     const optionLabel = event.target.closest('.menuconfig-option-label');
     if (optionLabel?.dataset.symbol && !matchMedia('(hover: none)').matches) {
-      showMenuOptionTooltip(optionLabel);
+      showMenuOptionTooltip(optionLabel, event);
       return;
     }
     const help = event.target.closest('.menuconfig-state-help');
     if (help && !matchMedia('(hover: none)').matches) {
-      showMenuHelp(help);
+      showMenuHelp(help, event);
       return;
     }
     const translated = event.target.closest('.menu-translation');
     if (state.lang !== 'en' && translated && !matchMedia('(hover: none)').matches) {
-      showMenuTooltip(translated);
+      showMenuTooltip(translated, event);
     }
   });
   document.addEventListener('pointerout', (event) => {
@@ -4883,26 +4965,28 @@ function renderPlugin(p) {
     '由当前 Target / Profile 基础配置锁定', '由目前 Target / Profile 基礎設定鎖定',
     'Locked by the current Target / Profile baseline');
   cb.setAttribute('aria-label', pName(p));
-  cb.addEventListener('change', () => {
+  const applyChecked = (checked) => {
+    cb.checked = checked;
     if (catalogOption) {
-      setMenuValue(catalogOption, cb.checked ? 'y' : 'n');
-      return;
+      const applied = setMenuValue(catalogOption, checked ? 'y' : 'n');
+      if (!applied) cb.checked = curatedPluginChecked(p, st, catalogOption);
+      return applied;
     }
     const selectedBefore = new Set(state.sel);
     if (st === 'builtin') {
-      if (cb.checked) {
+      if (checked) {
         state.removed.delete(p.id);
       } else {
         state.removed.add(p.id);
         if (p.warn) showToast(t(p.warn));   // 取消高风险内置项时同样提示 / warn when removing a risky builtin too
       }
-    } else if (cb.checked) {
+    } else if (checked) {
       state.sel.add(p.id);
       if (p.warn) showToast(t(p.warn));   // 资源警告(如 Docker)勾选即弹 / resource warning pops right on ticking
     } else {
       state.sel.delete(p.id);
     }
-    syncCuratedToMenu(p, cb.checked ? 'y' : 'n');
+    syncCuratedToMenu(p, checked ? 'y' : 'n');
     for (const id of state.sel) {
       if (!selectedBefore.has(id)) {
         const required = byId(id);
@@ -4910,7 +4994,9 @@ function renderPlugin(p) {
       }
     }
     updateStats();
-  });
+    return true;
+  };
+  cb.addEventListener('change', () => { applyChecked(cb.checked); });
   item.appendChild(cb);
 
   const nameBtn = document.createElement('button');
@@ -4958,13 +5044,27 @@ function renderPlugin(p) {
       ? `\n${uiText('来源', '來源', 'Origin')}: ${catalogOrigin.label}` : '') +
     (p.warn ? '\n' + t(p.warn) : '');
   const pkg = p.pkgs?.[state.source.id] || p.pkg || p.catalogCandidates?.[0] || p.id;
-  nameBtn.title = detail;
+  const size = p.sizeBytes === null ? uiText('大小未知', '大小未知', 'Size unknown')
+    : t('drawer.size', { n: fmtSize(p.sizeBytes) });
+  const tooltipBody = detail + '\n' + pkg + ' · ' + size;
+  item.dataset.uiTooltipTitle = pName(p);
+  item.dataset.uiTooltipBody = tooltipBody;
+  item.setAttribute('aria-describedby', 'uiTooltip');
+  nameBtn.removeAttribute('title');
   nameBtn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-  const size = p.sizeBytes === null ? uiText('大小未知', '大小未知', 'Size unknown')
-    : t('drawer.size', { n: fmtSize(p.sizeBytes) });
-  showPopover(nameBtn, pName(p), detail + '\n' + pkg + ' · ' + size);
+    if (e.detail > 1) return;
+    showPopover(nameBtn, pName(p), tooltipBody);
+  });
+  item.addEventListener('dblclick', (event) => {
+    if (event.target.closest('a,select,textarea,input:not([type="checkbox"]),button:not(.plugin-name)')) return;
+    if (cb.disabled) return;
+    event.preventDefault();
+    event.stopPropagation();
+    hideUiTooltip(true);
+    if (curatedPluginChecked(p, st, catalogOption) && cb.checked) return;
+    applyChecked(true);
   });
   item.appendChild(nameBtn);
   return item;

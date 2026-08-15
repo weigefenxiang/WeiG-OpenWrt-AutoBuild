@@ -237,7 +237,7 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
                 <span class="hint" id="menuconfigStatus"></span>
                 <span class="menuconfig-chevron" aria-hidden="true">⌄</span>
               </button>
-              <label class="defconfig-switch menuconfig-defconfig" id="defconfigSwitch" title="Defconfig">
+              <label class="defconfig-switch menuconfig-defconfig" id="defconfigSwitch">
                 <input type="checkbox" id="defconfigToggle" aria-label="Defconfig">
                 <span id="defconfigLabel">D</span>
               </label>
@@ -371,7 +371,11 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
     </section>
   </div>
 </main>
-<div class="menu-tooltip" id="menuTooltip" role="tooltip" hidden></div>
+<div class="ui-tooltip" id="uiTooltip" role="tooltip" hidden>
+  <strong class="ui-tooltip-title" id="uiTooltipTitle" hidden></strong>
+  <div class="ui-tooltip-emphasis" id="uiTooltipEmphasis" hidden></div>
+  <div class="ui-tooltip-body" id="uiTooltipBody" hidden></div>
+</div>
 
 <div class="actionbar" id="actionbar" hidden>
   <div class="wrap actionbar-row">
@@ -420,11 +424,6 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
      <a class="blog-link" href="https://www.weigeshare.cc.cd/" target="_blank" rel="noopener">Weige Share Blog</a> ·
      <a href="https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog" target="_blank" rel="noopener">Menuconfig Catalog</a></p>
 </footer>
-
-<div class="popover" id="popover" hidden role="tooltip">
-  <p class="pop-title" id="popTitle"></p>
-  <p class="pop-body" id="popBody"></p>
-</div>
 
 <div class="modal-mask" id="modal" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">

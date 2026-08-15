@@ -75,6 +75,38 @@ expect(app.includes('useDefconfig: false,') &&
   css.includes('.menuconfig-defconfig{flex:none;min-width:52px;min-height:42px;'),
   'Defconfig default, Advanced menuconfig placement, or compact Catalog overview layout regressed');
 
+const sharedTooltipContract = app.match(/\/\* ============ 统一悬浮说明[\s\S]*?function makePill/)?.[0] || '';
+const pluginRenderContract = app.match(/function renderPlugin\(p\) \{([\s\S]*?)\n\}\n\n\/\* V10:清掉/)?.[1] || '';
+expect(html.includes('class="ui-tooltip" id="uiTooltip"') &&
+  html.includes('id="uiTooltipTitle"') && html.includes('id="uiTooltipEmphasis"') &&
+  html.includes('id="uiTooltipBody"') &&
+  !html.includes('id="menuTooltip"') && !html.includes('id="popover"') &&
+  css.includes('.ui-tooltip{position:fixed;z-index:999;width:max-content;max-width:min(400px,calc(100vw - 24px))') &&
+  css.includes('.ui-tooltip-emphasis{') && css.includes('color:var(--danger)') &&
+  !css.includes('.menu-tooltip{') && !css.includes('.popover {') &&
+  sharedTooltipContract.includes("const UI_TOOLTIP_SELECTOR = '[data-ui-tooltip-title],[data-ui-tooltip-emphasis],[data-ui-tooltip-body]'") &&
+  sharedTooltipContract.includes("const wrap = target?.closest?.('.wrap') || $('app')") &&
+  sharedTooltipContract.includes("document.addEventListener('pointermove'") &&
+  sharedTooltipContract.includes('positionUiTooltip(target, event)') &&
+  app.includes('showUiTooltip(element, { body: text, event });'),
+  'shared pointer-following tooltip template or content-bound positioning regressed');
+expect(app.includes("dataset.uiTooltipTitle = 'D · Defconfig'") &&
+  app.includes('⚠ 当前版本加载时已完成基准配置解析。通常直接在现有结果上增减即可，无需开启 D。') &&
+  app.includes('可能把你手工删减的默认项重新补回。') &&
+  app.includes("dataset.uiTooltipEmphasis = defconfigEmphasis") &&
+  app.includes("dataset.uiTooltipBody = defconfigHelp") &&
+  app.includes("removeAttribute('title')"),
+  'Defconfig compact warning or shared tooltip binding regressed');
+expect(pluginRenderContract.includes('const applyChecked = (checked) => {') &&
+  pluginRenderContract.includes('item.dataset.uiTooltipTitle = pName(p)') &&
+  pluginRenderContract.includes('item.dataset.uiTooltipBody = tooltipBody') &&
+  pluginRenderContract.includes("item.addEventListener('dblclick', (event) => {") &&
+  pluginRenderContract.includes('if (cb.disabled) return;') &&
+  pluginRenderContract.includes('if (curatedPluginChecked(p, st, catalogOption) && cb.checked) return;') &&
+  pluginRenderContract.includes('applyChecked(true);') &&
+  !pluginRenderContract.includes('nameBtn.title = detail'),
+  'plugin card double-click selection or shared tooltip binding regressed');
+
 expect(!app.includes('syncThemeFromMenu') && app.includes('syncFirmwareThemeFromMenu'),
   'Catalog intent still calls a missing theme coordinator');
 const modalHeader = html.match(/<div class="modal-head">([\s\S]*?)<\/div>\s*<div class="modal-body"/)?.[1] || '';
