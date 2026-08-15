@@ -102,10 +102,14 @@ expect(pluginRenderContract.includes('const applyChecked = (checked) => {') &&
   pluginRenderContract.includes('item.dataset.uiTooltipBody = tooltipBody') &&
   pluginRenderContract.includes("item.addEventListener('dblclick', (event) => {") &&
   pluginRenderContract.includes('if (cb.disabled) return;') &&
-  pluginRenderContract.includes('if (curatedPluginChecked(p, st, catalogOption) && cb.checked) return;') &&
-  pluginRenderContract.includes('applyChecked(true);') &&
+  pluginRenderContract.includes('applyChecked(!cb.checked);') &&
+  !pluginRenderContract.includes('if (curatedPluginChecked(p, st, catalogOption) && cb.checked) return;') &&
+  !pluginRenderContract.includes('applyChecked(true);') &&
   !pluginRenderContract.includes('nameBtn.title = detail'),
-  'plugin card double-click selection or shared tooltip binding regressed');
+  'plugin card double-click toggle or shared tooltip binding regressed');
+expect((app.match(/origin\.kind !== 'inactive' && origin\.kind !== 'user'/g) || []).length >= 2 &&
+  app.includes("kind: 'user', label: uiText('用户选择'"),
+  'user-selected state must remain internal while its item badges stay hidden');
 
 expect(!app.includes('syncThemeFromMenu') && app.includes('syncFirmwareThemeFromMenu'),
   'Catalog intent still calls a missing theme coordinator');

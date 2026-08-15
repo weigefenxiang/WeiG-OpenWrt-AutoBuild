@@ -3621,7 +3621,7 @@ function renderMenuOption(option) {
   description.dataset.path = path;
   description.tabIndex = 0;
   summary.append(id);
-  if (origin.kind !== 'inactive') {
+  if (origin.kind !== 'inactive' && origin.kind !== 'user') {
     const badge = document.createElement('small');
     badge.className = `catalog-origin catalog-origin-${origin.kind}`;
     badge.textContent = origin.label;
@@ -5029,7 +5029,7 @@ function renderPlugin(p) {
       required.textContent = t('plugin.required');
       nameBtn.appendChild(required);
     }
-    if (origin.kind !== 'inactive') {
+    if (origin.kind !== 'inactive' && origin.kind !== 'user') {
       const f = document.createElement('span');
       f.className = `flag flag-origin flag-origin-${origin.kind}`;
       f.textContent = origin.label;
@@ -5063,8 +5063,7 @@ function renderPlugin(p) {
     event.preventDefault();
     event.stopPropagation();
     hideUiTooltip(true);
-    if (curatedPluginChecked(p, st, catalogOption) && cb.checked) return;
-    applyChecked(true);
+    applyChecked(!cb.checked);
   });
   item.appendChild(nameBtn);
   return item;
