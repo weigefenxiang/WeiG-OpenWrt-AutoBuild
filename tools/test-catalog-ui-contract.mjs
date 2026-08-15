@@ -59,6 +59,22 @@ expect(html.includes('data-i18n="btn.import.short"') && html.includes('data-i18n
   css.includes('.cap-info.rootfs-capacity::before { content: ""; }'),
   'mobile one-line action bar labels or compact RootFS capacity regressed');
 
+const defconfigTogglePosition = html.indexOf('id="defconfigToggle"');
+const menuconfigHeaderPosition = html.indexOf('<div class="menuconfig-header">');
+const menuconfigBodyPosition = html.indexOf('<div id="menuconfigBody"');
+expect(app.includes('useDefconfig: false,') &&
+  app.includes("if ($('defconfigLabel')) $('defconfigLabel').textContent = 'D';") &&
+  app.includes("state.useDefconfig = false;\n  if ($('defconfigToggle')) $('defconfigToggle').checked = false;") &&
+  html.includes('class="defconfig-switch menuconfig-defconfig"') &&
+  html.includes('<input type="checkbox" id="defconfigToggle" aria-label="Defconfig">') &&
+  !html.includes('id="defconfigToggle" checked') &&
+  defconfigTogglePosition > menuconfigHeaderPosition && defconfigTogglePosition < menuconfigBodyPosition &&
+  css.includes('.catalog-overview-row{display:grid;grid-template-columns:minmax(0,1fr) max-content max-content;') &&
+  css.includes('.build-contract-toggle{display:flex;flex:0 0 auto;') &&
+  css.includes('.menuconfig-title-group{display:flex;align-items:center;gap:8px;min-width:0}') &&
+  css.includes('.menuconfig-defconfig{flex:none;min-width:52px;min-height:42px;'),
+  'Defconfig default, Advanced menuconfig placement, or compact Catalog overview layout regressed');
+
 expect(!app.includes('syncThemeFromMenu') && app.includes('syncFirmwareThemeFromMenu'),
   'Catalog intent still calls a missing theme coordinator');
 const modalHeader = html.match(/<div class="modal-head">([\s\S]*?)<\/div>\s*<div class="modal-body"/)?.[1] || '';
@@ -411,7 +427,7 @@ const contractHead = html.match(/<div class="build-contract-head">([\s\S]*?)<\/d
 expect(contractHead.includes('buildContractTitle') && contractHead.includes('build-contract-chevron') &&
   !contractHead.includes('buildContractCatalog') && !contractHead.includes('class="hint"'),
   'collapsed build contract repeats the Catalog commit');
-expect(css.includes('grid-template-columns:minmax(320px,1fr) clamp(210px,18vw,250px) max-content') &&
+expect(css.includes('grid-template-columns:minmax(0,1fr) max-content max-content') &&
   /@media\(min-width:641px\) and \(max-width:960px\)\{[\s\S]*?\.catalog-locator\{grid-column:1 \/ -1;grid-row:1[\s\S]*?\.build-contract-head\{grid-column:1;grid-row:2\}[\s\S]*?\.build-contract-controls\{grid-column:2;grid-row:2[\s\S]*?\.build-contract-body\{grid-column:1 \/ -1;grid-row:3\}/.test(css) &&
   /@media\(max-width:640px\)\{[\s\S]*?\.catalog-locator\{grid-column:1;grid-row:1\}[\s\S]*?\.build-contract-head\{grid-column:1;grid-row:2[\s\S]*?\.build-contract-controls\{grid-column:1;grid-row:3[\s\S]*?\.build-contract-body\{grid-column:1;grid-row:4\}/.test(css),
   'desktop/tablet/mobile build-contract layout contract drifted');

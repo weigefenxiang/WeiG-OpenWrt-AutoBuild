@@ -77,7 +77,7 @@ const state = {
   rootpwAuto: false,
   timezone: '',
   theme: '@base',
-  useDefconfig: true,
+  useDefconfig: false,
   ntp: 'cn',
   packageMirror: 'source-default',
   siteVersion: 'v----------',
@@ -366,7 +366,7 @@ function applyI18n() {
     '根据当前 Target / Subtarget / Profile 解析 Kconfig 默认值和依赖，补齐设备基准配置（驱动、分区、UBI 等），降低缺失配置导致构建失败或固件不可用的风险。仍须确认机型，不能保证绝对防砖。',
     '依目前 Target / Subtarget / Profile 解析 Kconfig 默认值与依赖，补齐设备基准设定（驱动、分区、UBI 等），降低设定缺失导致建置失败或固件不可用的风险。仍须确认机型，不能保证绝对防砖。',
     'Resolve Kconfig defaults and dependencies for the selected Target / Subtarget / Profile to fill the device baseline (drivers, partitions, UBI, and more). This lowers the risk of missing settings, but you must still verify the device; it cannot guarantee safe flashing.');
-  if ($('defconfigLabel')) $('defconfigLabel').textContent = 'Defconfig';
+  if ($('defconfigLabel')) $('defconfigLabel').textContent = 'D';
   if ($('defconfigSwitch')) {
     $('defconfigSwitch').title = defconfigHelp;
     $('defconfigSwitch').dataset.help = defconfigHelp;
@@ -4078,8 +4078,8 @@ function renderImportedWorkspace() {
 function clearImportedWorkspace() {
   state.importedConfig = null;
   state.importedConfigId = '';
-  state.useDefconfig = true;
-  if ($('defconfigToggle')) $('defconfigToggle').checked = true;
+  state.useDefconfig = false;
+  if ($('defconfigToggle')) $('defconfigToggle').checked = false;
   importedConfigValues.clear();
   importedUnknownOriginal.clear();
   importedUnknownEdits.clear();

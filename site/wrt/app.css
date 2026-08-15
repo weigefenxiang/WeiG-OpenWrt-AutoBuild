@@ -256,7 +256,7 @@ input:focus-visible { border-color: var(--accent); }
 .target-picker .target-extra{flex:1 1 180px}
 .build-contract{display:contents}
 .build-contract-head{display:flex;grid-column:2;grid-row:1;align-items:center;gap:7px;min-width:0;min-height:42px;padding:5px 8px;border:1px solid color-mix(in srgb,var(--accent) 38%,var(--border));border-radius:9px;background:color-mix(in srgb,var(--accent) 7%,var(--card));color:var(--text);flex-wrap:nowrap}
-.build-contract-toggle{display:flex;flex:1 1 190px;align-items:center;gap:8px;min-width:0;min-height:32px;padding:0;border:0;background:transparent;color:var(--text);text-align:left;cursor:pointer}
+.build-contract-toggle{display:flex;flex:0 0 auto;align-items:center;gap:8px;min-width:0;min-height:32px;padding:0;border:0;background:transparent;color:var(--text);text-align:left;cursor:pointer}
 .build-contract-toggle strong{font-size:var(--menuconfig-title-size);white-space:nowrap}
 .build-contract-chevron{flex:none;margin-left:auto;color:var(--text3);transition:transform .15s}
 .build-contract-toggle[aria-expanded=true] .build-contract-chevron{transform:rotate(180deg)}
@@ -285,7 +285,7 @@ input:focus-visible { border-color: var(--accent); }
 .catalog-copy-diagnostics{min-height:34px;padding:0 10px;border:1px solid var(--border);border-radius:7px;background:var(--card2);color:var(--text);font:inherit;cursor:pointer}
 .catalog-copy-diagnostics:hover,.catalog-copy-diagnostics:focus-visible{border-color:var(--accent);color:var(--accent)}
 @keyframes catalog-spin{to{transform:rotate(360deg)}}
-.catalog-overview-row{display:grid;grid-template-columns:minmax(320px,1fr) clamp(210px,18vw,250px) max-content;grid-template-rows:auto auto;align-items:start;gap:10px;margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+.catalog-overview-row{display:grid;grid-template-columns:minmax(0,1fr) max-content max-content;grid-template-rows:auto auto;align-items:start;gap:10px;margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
 .catalog-locator{position:relative;grid-column:1;grid-row:1;min-width:0}
 .catalog-locator>input{width:100%;min-width:0;height:42px;padding:0 10px;border:1px solid var(--border);border-radius:9px;background:var(--card2);color:var(--text);font-size:13px}
 .defconfig-switch{display:flex;align-items:center;gap:7px;min-height:42px;padding:0 12px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:9px;background:color-mix(in srgb,var(--accent) 8%,var(--card));color:var(--text);font-weight:600;white-space:nowrap;cursor:pointer}
@@ -297,6 +297,10 @@ input:focus-visible { border-color: var(--accent); }
 .target-picker label.target-extra{grid-column:auto}
 .menuconfig-box{margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
 .menuconfig-header{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,360px);align-items:center;gap:10px;min-width:0}
+.menuconfig-title-group{display:flex;align-items:center;gap:8px;min-width:0}
+.menuconfig-title-group .menuconfig-toggle{flex:1 1 auto}
+.menuconfig-defconfig{flex:none;min-width:52px;min-height:42px;padding:0 9px;justify-content:center;gap:5px}
+.menuconfig-defconfig input{margin:0}
 .menuconfig-toggle{display:flex;flex:1 1 340px;align-items:center;gap:10px;min-width:0;min-height:42px;padding:0 10px;border:1px solid var(--border);border-radius:9px;background:var(--card2);color:var(--text);text-align:left;cursor:pointer}
 .menuconfig-toggle strong{flex:none;white-space:nowrap;font-size:var(--menuconfig-title-size)}.menuconfig-toggle .hint{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .menuconfig-toggle .hint{margin-left:auto}.menuconfig-chevron{color:var(--text3);transition:transform .15s}
@@ -393,7 +397,7 @@ input:focus-visible { border-color: var(--accent); }
 .import-unknown-actions button,.menuconfig-restore{padding:5px 8px;border:1px solid var(--border);border-radius:7px;background:transparent;color:var(--text2);cursor:pointer}
 .import-unknown-actions button:hover,.menuconfig-restore:hover{border-color:var(--accent);color:var(--accent)}
 @media(min-width:641px) and (max-width:960px){
-  .catalog-overview-row{grid-template-columns:clamp(210px,28vw,250px) minmax(0,1fr);grid-template-rows:auto auto auto}
+  .catalog-overview-row{grid-template-columns:max-content minmax(0,1fr);grid-template-rows:auto auto auto}
   .catalog-locator{grid-column:1 / -1;grid-row:1;width:100%}
   .build-contract-head{grid-column:1;grid-row:2}
   .build-contract-controls{grid-column:2;grid-row:2;justify-self:end}

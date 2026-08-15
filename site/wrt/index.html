@@ -211,10 +211,6 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
             </div>
           </section>
           <div class="build-contract-controls" id="buildContractControls" hidden>
-            <label class="defconfig-switch" id="defconfigSwitch" title="">
-              <input type="checkbox" id="defconfigToggle" checked>
-              <span id="defconfigLabel">Defconfig</span>
-            </label>
             <label class="build-contract-selected-filter" title="Selected only">
               <input type="checkbox" id="menuconfigSelectedOnly">
               <span>Selected only</span>
@@ -235,11 +231,17 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
         </div>
         <div class="menuconfig-box" id="menuconfigBox" hidden>
           <div class="menuconfig-header">
-            <button class="menuconfig-toggle" id="menuconfigToggle" type="button" aria-expanded="false" aria-controls="menuconfigBody">
-              <strong>Advanced menuconfig</strong>
-              <span class="hint" id="menuconfigStatus"></span>
-              <span class="menuconfig-chevron" aria-hidden="true">⌄</span>
-            </button>
+            <div class="menuconfig-title-group">
+              <button class="menuconfig-toggle" id="menuconfigToggle" type="button" aria-expanded="false" aria-controls="menuconfigBody">
+                <strong>Advanced menuconfig</strong>
+                <span class="hint" id="menuconfigStatus"></span>
+                <span class="menuconfig-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <label class="defconfig-switch menuconfig-defconfig" id="defconfigSwitch" title="Defconfig">
+                <input type="checkbox" id="defconfigToggle" aria-label="Defconfig">
+                <span id="defconfigLabel">D</span>
+              </label>
+            </div>
             <div class="menuconfig-search-group">
               <input type="search" id="menuconfigSearch" placeholder="Search option name / CONFIG symbol">
               <button class="menuconfig-state-help" id="menuconfigStateHelp" type="button">N/M/Y</button>
