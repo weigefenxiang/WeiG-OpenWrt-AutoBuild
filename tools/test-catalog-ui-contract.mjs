@@ -22,6 +22,16 @@ expect(html.includes('if (optional && response.status === 404) return null') &&
   !html.includes('if (optional) return null;'),
   'deployment metadata network/parse failures can silently fall back to the main Catalog channel');
 
+const buildInfoContract = app.match(/function renderCatalogBuildInfo\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
+expect(html.includes('<dt>Web Version</dt>') &&
+  html.includes('<dt>Web Commit</dt>') &&
+  html.includes('id="buildInfoCatalogCode"') &&
+  html.includes('id="buildInfoCatalogData"') &&
+  buildInfoContract.includes("renderBuildInfoSha('buildInfoCatalogCode', MENU_INDEX?.provenance?.codeSha)") &&
+  buildInfoContract.includes("renderBuildInfoSha('buildInfoCatalogData', MENU_INDEX?.assetRef)") &&
+  (app.match(/MENU_INDEX = (?:index|remote\.index);\n\s+renderCatalogBuildInfo\(\);/g) || []).length >= 2,
+  'Build Information does not expose the loaded Catalog code and data identities');
+
 expect(!app.includes('syncThemeFromMenu') && app.includes('syncFirmwareThemeFromMenu'),
   'Catalog intent still calls a missing theme coordinator');
 const modalHeader = html.match(/<div class="modal-head">([\s\S]*?)<\/div>\s*<div class="modal-body"/)?.[1] || '';

@@ -529,27 +529,38 @@ async function loadDeploymentIdentity() {
   return BUILD_IDENTITY_MODULE.normalizeDeploymentIdentity(RELEASE_BOOTSTRAP.stamp, RELEASE_BOOTSTRAP.meta);
 }
 
-function renderBuildInfo() {
-  const trigger = $('siteVersion');
-  const panel = $('buildInfo');
-  const commit = $('buildInfoCommit');
-  trigger.textContent = shortSiteVersion(state.siteVersion);
-  document.querySelectorAll('.site-version-value').forEach((node) => { node.textContent = state.siteVersion; });
-  const meta = state.buildMeta;
-  if (meta?.commit) {
-    commit.textContent = meta.commit.length > 12 ? `${meta.commit.slice(0, 12)}…` : meta.commit;
-    commit.title = meta.commit;
-    commit.disabled = false;
-    commit.onclick = async () => {
-      try { await navigator.clipboard.writeText(meta.commit); }
+function renderBuildInfoSha(id, value) {
+  const button = $(id);
+  if (!button) return;
+  const sha = String(value || '').trim().toLowerCase();
+  if (/^[a-f0-9]{40}$/.test(sha)) {
+    button.textContent = `${sha.slice(0, 12)}…`;
+    button.title = sha;
+    button.disabled = false;
+    button.onclick = async () => {
+      try { await navigator.clipboard.writeText(sha); }
       catch (e) { /* clipboard permission can be unavailable on plain HTTP */ }
     };
   } else {
-    commit.textContent = '—';
-    commit.title = '';
-    commit.disabled = true;
-    commit.onclick = null;
+    button.textContent = '—';
+    button.title = '';
+    button.disabled = true;
+    button.onclick = null;
   }
+}
+function renderCatalogBuildInfo() {
+  renderBuildInfoSha('buildInfoCatalogCode', MENU_INDEX?.provenance?.codeSha);
+  renderBuildInfoSha('buildInfoCatalogData', MENU_INDEX?.assetRef);
+}
+
+function renderBuildInfo() {
+  const trigger = $('siteVersion');
+  const panel = $('buildInfo');
+  trigger.textContent = shortSiteVersion(state.siteVersion);
+  document.querySelectorAll('.site-version-value').forEach((node) => { node.textContent = state.siteVersion; });
+  const meta = state.buildMeta;
+  renderBuildInfoSha('buildInfoCommit', meta?.commit);
+  renderCatalogBuildInfo();
   $('buildInfoBuilt').textContent = formatBuildTime(meta?.builtAt);
   trigger.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -987,6 +998,7 @@ async function refreshMenuIndex() {
       index.catalogRepo = MENU_CATALOG_REPO;
       index.loadedFrom = remote.url;
       MENU_INDEX = index;
+      renderCatalogBuildInfo();
       if (!importingConfig) {
         const activeSource = index.sources.find((item) => item.id === previousSourceId);
         const activeBranch = activeSource?.branches?.find((item) => item.id === previousBranchId);
@@ -1655,6 +1667,7 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
     catalog.loadedFrom = remote.url;
     if (seq !== menuCatalogSeq || abortController.signal.aborted) return null;
     MENU_INDEX = remote.index;
+    renderCatalogBuildInfo();
     const active = catalogBranchFromIndex(remote.index, source.id, branch.branch);
     const activeSource = active.source || source;
     const activeBranch = active.branch || branch;
