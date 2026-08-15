@@ -65,9 +65,14 @@ replace_once(
 )
 
 test = Path('tools/test-catalog-ui-contract.mjs')
+text = test.read_text(encoding='utf-8')
+old_layout = "expect(css.includes('grid-template-columns:minmax(320px,1fr) clamp(210px,18vw,250px) max-content') &&"
+new_layout = "expect(css.includes('grid-template-columns:minmax(0,1fr) max-content max-content') &&"
+if text.count(old_layout) != 1:
+    raise SystemExit('test-catalog-ui-contract.mjs: legacy desktop layout contract mismatch')
+text = text.replace(old_layout, new_layout, 1)
 marker = "expect(!app.includes('syncThemeFromMenu') && app.includes('syncFirmwareThemeFromMenu'),\n"
 insert = '''const defconfigTogglePosition = html.indexOf('id="defconfigToggle"');\nconst menuconfigHeaderPosition = html.indexOf('<div class="menuconfig-header">');\nconst menuconfigBodyPosition = html.indexOf('<div id="menuconfigBody"');\nexpect(app.includes('useDefconfig: false,') &&\n  app.includes("if ($('defconfigLabel')) $('defconfigLabel').textContent = 'D';") &&\n  app.includes("state.useDefconfig = false;\\n  if ($('defconfigToggle')) $('defconfigToggle').checked = false;") &&\n  html.includes('class="defconfig-switch menuconfig-defconfig"') &&\n  html.includes('<input type="checkbox" id="defconfigToggle" aria-label="Defconfig">') &&\n  !html.includes('id="defconfigToggle" checked') &&\n  defconfigTogglePosition > menuconfigHeaderPosition && defconfigTogglePosition < menuconfigBodyPosition &&\n  css.includes('.catalog-overview-row{display:grid;grid-template-columns:minmax(0,1fr) max-content max-content;') &&\n  css.includes('.build-contract-toggle{display:flex;flex:0 0 auto;') &&\n  css.includes('.menuconfig-title-group{display:flex;align-items:center;gap:8px;min-width:0}') &&\n  css.includes('.menuconfig-defconfig{flex:none;min-width:52px;min-height:42px;'),\n  'Defconfig default, Advanced menuconfig placement, or compact Catalog overview layout regressed');\n\n'''
-text = test.read_text(encoding='utf-8')
 if text.count(marker) != 1:
     raise SystemExit('test-catalog-ui-contract.mjs: insertion marker mismatch')
 test.write_text(text.replace(marker, insert + marker, 1), encoding='utf-8', newline='\n')
