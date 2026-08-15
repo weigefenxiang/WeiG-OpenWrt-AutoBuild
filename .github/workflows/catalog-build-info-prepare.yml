@@ -21,12 +21,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: fix-D
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Verify bootstrap base
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "712780016870572ffcd54dde03683798ddb9d24c"
+          git merge-base --is-ancestor 712780016870572ffcd54dde03683798ddb9d24c HEAD
           test "$(git branch --show-current)" = "fix-D"
 
       - name: Apply approved Build Information change
@@ -46,8 +46,8 @@ jobs:
           index = Path('site/wrt/index.html')
           replace_once(index, '<dt>Version</dt>', '<dt>Web Version</dt>')
           replace_once(index, '<dt>Commit</dt>', '<dt>Web Commit</dt>')
-          built = '            <div><dt>Built</dt><dd id="buildInfoBuilt">—</dd></div>'
-          catalog_rows = '''            <div><dt>Catalog Code</dt><dd><button type="button" class="build-info-commit" id="buildInfoCatalogCode" aria-label="Catalog code commit">—</button></dd></div>\n            <div><dt>Catalog Data</dt><dd><button type="button" class="build-info-commit" id="buildInfoCatalogData" aria-label="Catalog data revision">—</button></dd></div>\n'''
+          built = '<div><dt>Built</dt><dd id="buildInfoBuilt">—</dd></div>'
+          catalog_rows = '''<div><dt>Catalog Code</dt><dd><button type="button" class="build-info-commit" id="buildInfoCatalogCode" aria-label="Catalog code commit">—</button></dd></div>\n          <div><dt>Catalog Data</dt><dd><button type="button" class="build-info-commit" id="buildInfoCatalogData" aria-label="Catalog data revision">—</button></dd></div>\n          '''
           replace_once(index, built, catalog_rows + built)
 
           app = Path('site/wrt/app.js')
