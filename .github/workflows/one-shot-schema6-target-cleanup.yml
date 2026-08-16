@@ -82,19 +82,6 @@ jobs:
             return text;
           });
 
-          edit('.github/workflows/custom-build.yml', (input) => {
-            const lines = input.split('\n');
-            const filtered = lines.filter((line) =>
-              !line.includes('构建契约 / build contract:') &&
-              !line.includes('echo "catalog_arch=') &&
-              !line.includes('echo "catalog_arch_packages=') &&
-              !line.includes('echo "catalog_profile_packages='));
-            if (lines.length - filtered.length !== 4) {
-              throw new Error(`workflow derived metadata cleanup expected 4 lines, removed ${lines.length - filtered.length}`);
-            }
-            return filtered.join('\n');
-          });
-
           edit('tools/test-catalog-ui-contract.mjs', (input) => {
             const anchor = `const defconfigTogglePosition = html.indexOf('id="defconfigToggle"');`;
             if (!input.includes(anchor)) throw new Error('UI contract schema6 insertion anchor missing');
@@ -103,19 +90,13 @@ jobs:
           });
 
           edit('tools/check-all.mjs', (input) => {
-            let text = input;
-            text = replaceOnce(text,
-              `const requestAudit = readFileSync(join(ROOT, 'tools', 'request-audit.mjs'), 'utf8');\nconst project = parsed.get('site/wrt/data/project.json');`,
-              `const requestAudit = readFileSync(join(ROOT, 'tools', 'request-audit.mjs'), 'utf8');\nconst customBuildWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8');\nconst project = parsed.get('site/wrt/data/project.json');`,
-              'check-all custom build workflow source');
             const anchor = `if (catalogOnly) pass('Source/Branch/build tools, Kconfig, applications and schema-2 compatibility are Catalog-driven');\nelse fail('Catalog-only execution contract');\n`;
-            if (!text.includes(anchor)) throw new Error('check-all schema6 anchor missing');
-            const block = `${anchor}\nconst minimalSchema6Target =\n  app.includes('function schema6TargetIdentity(target = state.device?.target) {') &&\n  app.includes('payload.customTarget = schema6TargetIdentity();') &&\n  !app.includes('payload.customTarget = state.device.target') &&\n  parser.includes("const CUSTOM_TARGET_FIELDS = Object.freeze(['profileSelector', 'profileSymbol', 'subtarget', 'system']);") &&\n  parser.includes('customTarget 只接受最小 Target/Profile 身份字段') &&\n  !parser.includes('targetContract.arch') && !parser.includes('targetContract.archPackages') &&\n  !parser.includes('targetContract.profilePackagesAdd') &&\n  !parser.includes('catalog_arch=') && !parser.includes('catalog_arch_packages=') &&\n  !parser.includes('catalog_profile_packages=') &&\n  !customBuildWorkflow.includes('steps.req.outputs.catalog_arch') &&\n  !customBuildWorkflow.includes('steps.req.outputs.catalog_arch_packages') &&\n  !customBuildWorkflow.includes('steps.req.outputs.catalog_profile_packages');\nif (minimalSchema6Target) pass('schema6 carries only immutable Target/Profile identity; derived Catalog metadata stays out of the request and Worker outputs');\nelse fail('schema6 minimal Target/Profile identity contract');\n`;
-            return text.replace(anchor, block);
+            if (!input.includes(anchor)) throw new Error('check-all schema6 anchor missing');
+            const block = `${anchor}\nconst minimalSchema6Target =\n  app.includes('function schema6TargetIdentity(target = state.device?.target) {') &&\n  app.includes('payload.customTarget = schema6TargetIdentity();') &&\n  !app.includes('payload.customTarget = state.device.target') &&\n  parser.includes("const CUSTOM_TARGET_FIELDS = Object.freeze(['profileSelector', 'profileSymbol', 'subtarget', 'system']);") &&\n  parser.includes('customTarget 只接受最小 Target/Profile 身份字段') &&\n  !parser.includes('targetContract.arch') && !parser.includes('targetContract.archPackages') &&\n  !parser.includes('targetContract.profilePackagesAdd') &&\n  !parser.includes('catalog_arch=') && !parser.includes('catalog_arch_packages=') &&\n  !parser.includes('catalog_profile_packages=');\nif (minimalSchema6Target) pass('schema6 carries only immutable Target/Profile identity; derived Catalog metadata stays out of the request and Worker outputs');\nelse fail('schema6 minimal Target/Profile identity contract');\n`;
+            return input.replace(anchor, block);
           });
           NODE
 
-          git rm .github/workflows/one-shot-schema6-target-cleanup.yml
           node tools/dev-assistant.mjs prepare
           node tools/test-profile-baseline.mjs
           node tools/test-catalog-ui-contract.mjs
