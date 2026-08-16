@@ -160,6 +160,7 @@ const engine = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.js'
 const profileBaseline = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'profile-baseline.js'), 'utf8');
 const parser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
 const requestAudit = readFileSync(join(ROOT, 'tools', 'request-audit.mjs'), 'utf8');
+const customBuildWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8');
 const project = parsed.get('site/wrt/data/project.json');
 const automationPolicy = parsed.get('.github/automation-policy.json');
 const architecture = readFileSync(join(ROOT, 'ARCHITECTURE.md'), 'utf8');
@@ -209,7 +210,10 @@ const minimalSchema6Target =
   !parser.includes('targetContract.arch') && !parser.includes('targetContract.archPackages') &&
   !parser.includes('targetContract.profilePackagesAdd') &&
   !parser.includes('catalog_arch=') && !parser.includes('catalog_arch_packages=') &&
-  !parser.includes('catalog_profile_packages=');
+  !parser.includes('catalog_profile_packages=') &&
+  !customBuildWorkflow.includes('steps.req.outputs.catalog_arch') &&
+  !customBuildWorkflow.includes('steps.req.outputs.catalog_arch_packages') &&
+  !customBuildWorkflow.includes('steps.req.outputs.catalog_profile_packages');
 if (minimalSchema6Target) pass('schema6 carries only immutable Target/Profile identity; derived Catalog metadata stays out of the request and Worker outputs');
 else fail('schema6 minimal Target/Profile identity contract');
 
