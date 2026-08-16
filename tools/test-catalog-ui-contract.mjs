@@ -320,11 +320,14 @@ const lateBaselineContract = app.match(/function backfillCatalogBaselineForLoade
 expect(hiddenLoadContract.includes('buildMenuIndexes(catalog)') &&
   hiddenLoadContract.includes('backfillCatalogBaselineForLoadedOptions()') &&
   hiddenLoadContract.indexOf('buildMenuIndexes(catalog)') < hiddenLoadContract.indexOf('backfillCatalogBaselineForLoadedOptions()') &&
-  lateBaselineContract.includes('const baselineValues = new Map(catalogBaselineValues)') &&
-  lateBaselineContract.includes("catalogValidationContext(baselineValues, 'interactive')") &&
+  lateBaselineContract.includes('nativeProfileBaselineEntries()') &&
+  lateBaselineContract.includes('normalizeImportedKconfigValue') &&
   lateBaselineContract.includes('catalogBaselineValues.set(option.symbol, value)') &&
+  lateBaselineContract.includes('!menuTouched.has(option.symbol)') &&
+  lateBaselineContract.includes('!catalogUserOverrides.has(option.symbol)') &&
+  !lateBaselineContract.includes('catalogValidationContext') &&
   !lateBaselineContract.includes('new Map(menuValues)'),
-  'late hidden PACKAGE defaults can be misclassified as Probe user selections');
+  'late hidden PACKAGE values must come only from the immutable Native Profile baseline');
 const probeIssueTitleContract = app.match(/function probeIssueTitle\(request\) \{[\s\S]*?\n\}/)?.[0] || '';
 const probeIssueTitleForTest = Function(`${probeIssueTitleContract}\nreturn probeIssueTitle;`)();
 const titleRequest = {

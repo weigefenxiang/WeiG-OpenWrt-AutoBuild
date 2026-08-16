@@ -87,6 +87,7 @@ const regressionTests = [
   'test-catalog-performance.mjs',
   'test-menuconfig-scalar.mjs',
   'test-kconfig-serializer.mjs',
+  'test-profile-baseline.mjs',
   'test-package-mirror.mjs',
   'test-artifact-publish.mjs',
 ];
@@ -156,6 +157,7 @@ const app = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
 const html = readFileSync(join(ROOT, 'site', 'wrt', 'index.html'), 'utf8');
 const loader = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.js'), 'utf8');
 const engine = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.js'), 'utf8');
+const profileBaseline = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'profile-baseline.js'), 'utf8');
 const parser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
 const requestAudit = readFileSync(join(ROOT, 'tools', 'request-audit.mjs'), 'utf8');
 const project = parsed.get('site/wrt/data/project.json');
@@ -187,7 +189,10 @@ const catalogOnly =
   engine.includes('compatibility document requires schema 2') && engine.includes('compatibilityPatternMatches') &&
   app.includes('ensureCatalogApplications') && app.includes('CATALOG_ENGINE.evaluateCompatibilityRules') &&
   app.includes('CATALOG_ENGINE.deriveCompatibilityPlans') && app.includes('CATALOG_ENGINE.applyUserIntent') &&
-  parser.includes('Catalog Source 缺少有效构建工具') && parser.includes('schema 5 only accepts a Catalog target') &&
+  parser.includes('Catalog Source 缺少有效构建工具') && parser.includes('schema 6 only accepts a Catalog target') &&
+  parser.includes('createProfileBaselineStore') && parser.includes('applyProfileOverrides') &&
+  profileBaseline.includes('branch-common-plus-exact-config-groups-v1') &&
+  !parser.includes(['submitted', 'config'].join('.')) &&
   !parser.includes('devices.json') && !parser.includes('config-manifest.json');
 if (catalogOnly) pass('Source/Branch/build tools, Kconfig, applications and schema-2 compatibility are Catalog-driven');
 else fail('Catalog-only execution contract');

@@ -90,6 +90,8 @@ let PLUGINS = { groups: [], plugins: [] }, I18N = null, TIMEZONES = null;
 let PACKAGE_MIRRORS = { schema: 2, presets: [{ id: 'source-default', label: { 'zh-CN': '跟随源码默认', en: 'Follow source default' }, sources: [] }] };
 let MENU_INDEX = null, MENU_CATALOG = null, CATALOG_ENGINE = null, CATALOG_MODEL = null;
 let CATALOG_LOADER_MODULE = null, CATALOG_SCHEMA6_MODULE = null, BUILD_IDENTITY_MODULE = null, CATALOG_LOADER = null;
+let PROFILE_BASELINE_MODULE = null, PROFILE_BASELINE_STORE = null, ACTIVE_PROFILE_BASELINE = null;
+let profileBaselineKey = '', catalogProfileBaselineLoadingPromise = null;
 let MENU_CATALOG_DATA_REF = 'catalog-data';
 let catalogShardLoader = null, catalogMenuLoadingPromise = null;
 let catalogHiddenLoadingPromise = null, catalogHelpLoadingPromise = null, packageMirrorsPromise = null;
@@ -1809,6 +1811,61 @@ function buildMenuIndexes(catalog) {
   if (catalog.menu?.displayLoaded || menuExpanded) startCatalogSearchWorker();
   else stopCatalogSearchWorker();
 }
+async function ensureProfileBaselineModule() {
+  if (!PROFILE_BASELINE_MODULE) {
+    PROFILE_BASELINE_MODULE = await import(releaseAssetUrl('./lib/profile-baseline.js'));
+  }
+  return PROFILE_BASELINE_MODULE;
+}
+async function ensureCatalogProfileBaselines(source = selectedCatalogSource(), branch = selectedCatalogBranch(source)) {
+  const revision = String(MENU_INDEX?.assetRef || '').trim().toLowerCase();
+  const key = [source?.id, branch?.branch || branch?.id, branch?.commit, revision].join('|');
+  if (PROFILE_BASELINE_STORE && profileBaselineKey === key) return PROFILE_BASELINE_STORE;
+  if (catalogProfileBaselineLoadingPromise?.key === key) return catalogProfileBaselineLoadingPromise.promise;
+  const contract = branch?.assets?.profileBaselines;
+  if (!source || !branch || !catalogShardLoader || !contract?.asset) {
+    throw new Error('Catalog Native Profile baseline is unavailable');
+  }
+  const promise = (async () => {
+    const module = await ensureProfileBaselineModule();
+    const document = await catalogShardLoader('profileBaselines');
+    if (!document) throw new Error('Catalog Native Profile baseline shard is unavailable');
+    const store = module.createProfileBaselineStore(document, {
+      sourceId: source.id,
+      branch: branch.branch,
+      commit: branch.commit,
+      schema: contract.schema,
+      encoding: contract.encoding,
+      profiles: contract.profiles,
+      configGroups: contract.configGroups,
+    });
+    PROFILE_BASELINE_STORE = store;
+    profileBaselineKey = key;
+    return store;
+  })();
+  catalogProfileBaselineLoadingPromise = { key, promise };
+  try { return await promise; }
+  finally {
+    if (catalogProfileBaselineLoadingPromise?.promise === promise) catalogProfileBaselineLoadingPromise = null;
+  }
+}
+function resolveActiveProfileBaseline(target = state.device?.target) {
+  if (!PROFILE_BASELINE_STORE || !target) return null;
+  return PROFILE_BASELINE_STORE.resolve({
+    system: target.system,
+    subtarget: target.subtarget,
+    profile: target.profile,
+    profileSymbol: target.profileSymbol,
+    profileSelector: target.profileSelector,
+  });
+}
+function nativeProfileBaselineEntries() {
+  if (!ACTIVE_PROFILE_BASELINE || !PROFILE_BASELINE_MODULE) {
+    throw new Error('Native Profile baseline has not been resolved for the selected Target Profile');
+  }
+  return parseConfigEntries(PROFILE_BASELINE_MODULE.serializeConfigMap(ACTIVE_PROFILE_BASELINE.values));
+}
+
 async function loadCatalog(source, branch, applyDefault = true, requested = null, options = {}) {
   if (!source || !branch) return null;
   const key = `${source.id}/${branch.branch}`;
@@ -1836,6 +1893,10 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
     const activeBranch = active.branch || branch;
     CATALOG_MODEL = remote.model;
     catalogShardLoader = remote.loadShard || null;
+    PROFILE_BASELINE_STORE = null;
+    ACTIVE_PROFILE_BASELINE = null;
+    profileBaselineKey = "";
+    await ensureCatalogProfileBaselines(activeSource, activeBranch);
     if (catalog.splitAssets) catalog.menu = CATALOG_SCHEMA6_MODULE.createRuntimeMenu(CATALOG_MODEL);
     MENU_CATALOG = catalog;
     menuCatalogKey = key;
@@ -2052,6 +2113,11 @@ async function applyCatalogTarget() {
     await switchDevice(device, false);
   }
   state.device = device;
+  await ensureCatalogProfileBaselines(sourceRow, branchRow);
+  ACTIVE_PROFILE_BASELINE = resolveActiveProfileBaseline(device.target);
+  if (!ACTIVE_PROFILE_BASELINE) {
+    throw new Error(`Native Profile baseline does not contain ${device.target.system}/${device.target.subtarget}/${device.target.profileSymbol}`);
+  }
   const needsBaseline = targetChanged || !catalogBaselineValues.size;
   if (needsBaseline) initializeCatalogBaseline();
   syncCatalogApplications();
@@ -2332,49 +2398,21 @@ function initializeCatalogBaseline() {
   catalogUserOverrides.clear();
   state.sel.clear();
   state.removed.clear();
-  // Defaults can reference other defaults. Iterate to a stable point after the Target/Profile
-  // context exists; deferred conditions are never treated as enabled. Bypass the revision
-  // cache while this batch mutates menuValues, then publish one new revision at the end.
-  catalogContextCacheBypass = true;
-  try {
-    const needsDefaultContext = menuSearchOptions.some((option) =>
-      !option.hidden && (option.defaults || []).length > 0);
-    for (let pass = 0; pass < 8; pass++) {
-      let changed = false;
-      const passContext = needsDefaultContext
-        ? catalogValidationContext(menuValues, 'interactive') : null;
-      const contextOwnedSymbols = new Set([
-        ...(passContext?.changes || []).map((change) => change.symbol),
-        ...menuTargetSymbols,
-        'TARGET_BOARD', 'TARGET_SUBTARGET', 'TARGET_PROFILE', 'TARGET_ARCH_PACKAGES',
-        'ARCH_PACKAGES', 'ARCH',
-      ]);
-      for (const option of menuSearchOptions) {
-        if (option.hidden) continue;
-        const value = simpleKconfigDefault(option, passContext);
-        if (value === '' || menuValues.get(option.symbol) === value) continue;
-        menuValues.set(option.symbol, value);
-        if (passContext && !contextOwnedSymbols.has(option.symbol)) {
-          passContext.values.set(option.symbol, value);
-        }
-        changed = true;
-      }
-      if (!changed) break;
+  const entries = nativeProfileBaselineEntries();
+  for (const option of menuSearchOptions) {
+    const entry = entries.get(option.symbol);
+    if (!entry) continue;
+    const fallback = option.type === 'string' ? '' : 'n';
+    const value = normalizeImportedKconfigValue(entry, option.type, fallback);
+    if (value === undefined) {
+      throw new Error(`Native Profile baseline value cannot be normalized: CONFIG_${option.symbol}`);
     }
-    for (const choice of MENU_CATALOG?.menu?.choices || []) {
-      const selected = (menuChoiceOptions.get(choice.id) || []).some((item) =>
-        item.choice === choice.id && menuValues.get(item.symbol) === 'y');
-      const preferred = String(choice.defaults?.[0] || '').split(/\s+/)[0];
-      if (!selected && preferred && menuOptionBySymbol.has(preferred)) {
-        menuValues.set(preferred, 'y');
-      }
-    }
-  } finally {
-    catalogContextCacheBypass = false;
+    menuValues.set(option.symbol, value);
   }
   markCatalogStateChanged();
   snapshotCatalogBaseline();
 }
+
 function snapshotCatalogBaseline() {
   catalogBaselineValues.clear();
   for (const option of menuSearchOptions) {
@@ -2398,40 +2436,26 @@ function backfillCatalogBaselineForLoadedOptions() {
   const missing = menuSearchOptions.filter((option) =>
     option?.symbol && !catalogBaselineValues.has(option.symbol));
   if (!missing.length) return;
-  const baselineValues = new Map(catalogBaselineValues);
-  // Resolve only from the upstream Target/Profile baseline. Current menuValues/user overrides
-  // are intentionally excluded so late hidden defaults never appear as user Probe changes.
-  for (let pass = 0; pass < 8; pass++) {
-    const context = catalogValidationContext(baselineValues, 'interactive');
-    let changed = false;
-    for (const option of missing) {
-      const contextual = context.values.get(option.symbol);
-      const resolved = contextual !== undefined
-        ? contextual
-        : CATALOG_ENGINE.resolveKconfigDefault(
-          option, context.values, context.validationOptions,
-        ).value;
-      const value = normalizeCatalogBaselineValue(option, resolved);
-      if (baselineValues.get(option.symbol) === value) continue;
-      baselineValues.set(option.symbol, value);
-      changed = true;
-    }
-    if (!changed) break;
-  }
-  const resolvedContext = catalogValidationContext(baselineValues, 'interactive');
+  const entries = nativeProfileBaselineEntries();
   for (const option of missing) {
-    const value = normalizeCatalogBaselineValue(
-      option,
-      resolvedContext.values.get(option.symbol) ?? baselineValues.get(option.symbol),
-    );
+    const entry = entries.get(option.symbol);
+    if (!entry) continue;
+    const fallback = option.type === 'string' ? '' : 'n';
+    const value = normalizeImportedKconfigValue(entry, option.type, fallback);
+    if (value === undefined) continue;
     catalogBaselineValues.set(option.symbol, value);
+    if (!menuTouched.has(option.symbol) && !catalogUserOverrides.has(option.symbol) &&
+        !catalogImportedSymbols.has(option.symbol)) {
+      menuValues.set(option.symbol, value);
+    }
     if (value !== 'n' && value !== '') {
       catalogBaselineOrigins.set(option.symbol, {
-        kind: 'kconfig-default', detail: 'Kconfig default',
+        kind: 'kconfig-default', detail: 'Native Profile baseline',
       });
     }
   }
 }
+
 function catalogInheritedValue(symbol) {
   if (state.importedConfig && menuImportedOriginal.has(symbol)) return menuImportedOriginal.get(symbol);
   if (catalogRecommendedValues.has(symbol)) return catalogRecommendedValues.get(symbol);
@@ -5428,35 +5452,12 @@ function applyImportedUnknownEdits(text) {
   return text;
 }
 function catalogTargetConfig() {
-  const target = state.device.target;
-  const targetSelector = target.targetSelector ||
-    `TARGET_${target.system}${target.subtarget ? `_${target.subtarget}` : ''}`;
-  const profileSymbol = target.profileSymbol || (target.profile ? `DEVICE_${target.profile}` : '');
-  const profileSelector = target.profileSelector || `${targetSelector}_${profileSymbol}`;
-  const boardSelector = target.boardSelector || `TARGET_${target.system}`;
-  const arch = String(target.arch || '').trim();
-  const archPackages = String(target.archPackages || '').trim();
-  if (!arch || !/^[A-Za-z0-9_+-]+$/.test(arch)) {
-    throw new Error('Catalog target is missing a valid build architecture');
+  if (!ACTIVE_PROFILE_BASELINE || !PROFILE_BASELINE_MODULE) {
+    throw new Error('Native Profile baseline has not finished loading');
   }
-  if (!archPackages || !/^[A-Za-z0-9._+-]+$/.test(archPackages)) {
-    throw new Error('Catalog target is missing a valid package architecture');
-  }
-  const lines = [
-    ...(boardSelector && boardSelector !== targetSelector ? [`CONFIG_${boardSelector}=y`] : []),
-    `CONFIG_${targetSelector}=y`,
-    `CONFIG_${profileSelector}=y`,
-    `CONFIG_${arch}=y`,
-    `CONFIG_ARCH="${arch}"`,
-    `CONFIG_TARGET_BOARD="${target.system}"`,
-    `CONFIG_TARGET_ARCH_PACKAGES="${archPackages}"`,
-  ];
-  if (target.subtarget) lines.push(`CONFIG_TARGET_SUBTARGET="${target.subtarget}"`);
-  if (profileSymbol) lines.push(`CONFIG_TARGET_PROFILE="${profileSymbol}"`);
-  lines.push('');
-  let text = lines.join('\n');
-  return applyMenuConfig(text);
+  return applyMenuConfig(PROFILE_BASELINE_MODULE.serializeConfigMap(ACTIVE_PROFILE_BASELINE.values));
 }
+
 function applyProfilePackageOverrides(text) {
   for (const [packageName, mode] of profilePackageOverrides) {
     if (!/^[A-Za-z0-9._+@-]+$/.test(packageName)) {
@@ -6002,7 +6003,7 @@ function restoreSelections(config, payload) {
   markCatalogStateChanged();
   const importedConfigEntries = parseConfigEntries(config);
   for (const [symbol, entry] of importedConfigEntries) importedConfigValues.set(symbol, entry.value);
-  const explicit = payload && Array.isArray(payload.plugins) ? payload.plugins : null;
+  const explicit = payload && payload.schema !== 6 && Array.isArray(payload.plugins) ? payload.plugins : null;
   let skipped = 0;
   for (const p of PLUGINS.plugins) {
     const pkg = p.pkgs?.[state.source.id] || p.pkg;
@@ -6028,7 +6029,7 @@ function restoreSelections(config, payload) {
         menuValues.set(option.symbol, value);
         catalogImportedSymbols.add(option.symbol);
         menuImportedOriginal.set(option.symbol, value);
-        let defaultValue = simpleKconfigDefault(option);
+        let defaultValue = catalogBaselineValues.get(option.symbol) ?? simpleKconfigDefault(option);
         if ((option.type === 'bool' || option.type === 'tristate') && !defaultValue) defaultValue = 'n';
         if (String(value) !== String(defaultValue)) menuImportedNonDefault.add(option.symbol);
       }
@@ -6153,6 +6154,38 @@ function parseImportedJson(text) {
   }
 }
 
+async function reconstructSchema6Import(payload) {
+  if (!payload || payload.schema !== 6 || !Array.isArray(payload.overrides) || !payload.customTarget) return null;
+  const revision = String(payload.catalog?.revision || '').trim().toLowerCase();
+  if (!/^[a-f0-9]{40}$/.test(revision) || revision !== String(MENU_INDEX?.assetRef || '').trim().toLowerCase()) {
+    throw new Error('This build request uses a different immutable Catalog snapshot; load the matching page release before importing it');
+  }
+  const source = MENU_INDEX?.sources?.find((item) => item.id === payload.source);
+  const branch = source?.branches?.find((item) =>
+    item.id === payload.version && (!payload.branch || item.branch === payload.branch));
+  if (!source || !branch || branch.state === 'unavailable') throw new Error('Build request Source/Branch is unavailable');
+  if (payload.catalog?.sourceCommit && String(branch.commit || '').toLowerCase() !== String(payload.catalog.sourceCommit).toLowerCase()) {
+    throw new Error('Build request upstream commit does not match the immutable Catalog snapshot');
+  }
+  const target = payload.customTarget;
+  const request = {
+    sourceId: source.id,
+    branchId: branch.id,
+    system: target.system,
+    subtarget: target.subtarget,
+    profileSymbol: target.profileSymbol || (target.profile ? `DEVICE_${target.profile}` : ''),
+  };
+  await loadCatalog(source, branch, false, request);
+  renderCatalogPicker(false, request);
+  await applyCatalogTarget();
+  if (!ACTIVE_PROFILE_BASELINE) throw new Error('Native Profile baseline could not be resolved for this build request');
+  const values = PROFILE_BASELINE_MODULE.applyProfileOverrides(ACTIVE_PROFILE_BASELINE, payload.overrides);
+  return {
+    config: PROFILE_BASELINE_MODULE.serializeConfigMap(values),
+    configId: ['catalog-target', source.id, branch.id, state.variant.id].join('/'),
+  };
+}
+
 async function importConfigFile(file) {
   const seq = ++configImportSeq;
   importingConfig = true;
@@ -6175,14 +6208,21 @@ async function importConfigFile(file) {
       } catch (e) {
         throw new Error(t('import.jsonInvalid', { msg: e.message }));
       }
-      if (typeof payload.config !== 'string') throw new Error(t('import.jsonNoConfig'));
-      text = payload.config;
+      if (payload.schema === 6) {
+        const restored = await reconstructSchema6Import(payload);
+        if (!restored) throw new Error(t('import.jsonInvalid', { msg: 'invalid schema 6 request' }));
+        text = restored.config;
+        payload.__restoredConfigId = restored.configId;
+      } else {
+        if (typeof payload.config !== 'string') throw new Error(t('import.jsonNoConfig'));
+        text = payload.config;
+      }
     }
     text = text.replace(/\r\n/g, '\n');
     state.useDefconfig = payload && typeof payload.use_defconfig === 'boolean'
       ? payload.use_defconfig : false;
     if ($('defconfigToggle')) $('defconfigToggle').checked = state.useDefconfig;
-    const configId = await selectImportedTarget(text, file.name, payload);
+    const configId = payload?.__restoredConfigId || await selectImportedTarget(text, file.name, payload);
     if (seq !== configImportSeq) return;
     if (!configId) {
       finishImportLog('cancelled');
@@ -6245,6 +6285,7 @@ function submitReadiness() {
     ['target', Boolean(state.device && state.source && state.version && state.variant)],
     ['catalog', !isCatalog || Boolean(MENU_CATALOG && catalogLoadMode === 'idle')],
     ['menuconfig', !isCatalog || Boolean(MENU_CATALOG && menuOptionBySymbol.size)],
+    ['profile-baseline', !isCatalog || Boolean(ACTIVE_PROFILE_BASELINE && PROFILE_BASELINE_STORE)],
     ['theme', Boolean($('fwThemeBox')?.options?.length && $('fwThemeBox')?.value)],
     ['defconfig', typeof state.useDefconfig === 'boolean'],
     ['identity', Boolean(state.buildMeta && state.buildMeta.version === state.siteVersion &&
@@ -6312,6 +6353,13 @@ $('modal').addEventListener('keydown', (e) => {
 
 async function generateResolvedConfigText(options = {}) {
   return generateConfigText(options);
+}
+function buildRequestOverrides(configText) {
+  if (!ACTIVE_PROFILE_BASELINE || !PROFILE_BASELINE_MODULE) {
+    throw new Error('Native Profile baseline has not finished loading');
+  }
+  const finalValues = PROFILE_BASELINE_MODULE.parseConfigMap(configText);
+  return PROFILE_BASELINE_MODULE.diffProfileBaseline(ACTIVE_PROFILE_BASELINE, finalValues);
 }
 
 function buildAudit(compatibility = null) {
@@ -6397,8 +6445,9 @@ function openSubmitModal() {
         await ensurePackageMirrors();
         const forcedCompatibility = await ensureCompatibilityRules();
         const config = await generateResolvedConfigText();
+        const overrides = buildRequestOverrides(config);
         const payload = {
-          schema: 5,
+          schema: 6,
           generatedAt: new Date().toISOString(),
           requestId: requestStamp,
           sourceEnv,
@@ -6407,7 +6456,7 @@ function openSubmitModal() {
           configId: [state.device.id, state.source.id, state.version.id, state.variant.id].join('/'),
           device: state.device.id, source: state.source.id, version: state.version.id,
           branch: state.version.branch,
-          variant: state.variant.id, plugins, tag, lanip: state.lanip, config,
+          variant: state.variant.id, plugins, tag, lanip: state.lanip, overrides,
           use_defconfig: state.useDefconfig === true,
           audit: buildAudit(forcedCompatibility),
           firmware: configFirmwareSettings(config),
