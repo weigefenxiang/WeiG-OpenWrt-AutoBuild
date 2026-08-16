@@ -21,6 +21,18 @@ jobs:
         with:
           ref: fix-E
           fetch-depth: 0
+      - name: Normalize patch helper input
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tools/e-light-select-card-once.py')
+          text = path.read_text()
+          old = "css = css_path.read_text()\n"
+          new = "css = css_path.read_text().replace('\\r\\n', '\\n').replace('\\r', '\\n')\n"
+          if text.count(old) != 1:
+              raise SystemExit(f'patch helper read anchor count={text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
       - name: Apply selectable-card patch
         run: python3 tools/e-light-select-card-once.py
       - name: Remove one-shot controls before fingerprinting
