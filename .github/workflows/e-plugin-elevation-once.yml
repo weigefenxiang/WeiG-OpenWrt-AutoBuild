@@ -1,0 +1,194 @@
+name: Apply E plugin card elevation
+
+on:
+  push:
+    branches: [fix-E]
+    paths:
+      - ".github/workflows/e-plugin-elevation-once.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: e-plugin-card-elevation-once
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix-E
+          fetch-depth: 0
+      - name: Apply raised plugin card template
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          css_path = Path('site/wrt/app.css')
+          css = css_path.read_text()
+          if '--plugin-card-shadow:' in css:
+              raise SystemExit('plugin card elevation template already exists')
+
+          old_grid = '''.plugin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+            gap: 8px;
+            padding: 10px;
+          }
+          '''
+          new_grid = '''.plugin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+            gap: 8px;
+            padding: 10px;
+            --plugin-card-highlight: rgba(255, 255, 255, .68);
+            --plugin-card-shadow: 0 1px 2px rgba(16, 24, 40, .08), 0 5px 12px rgba(16, 24, 40, .10);
+            --plugin-card-shadow-hover: 0 2px 3px rgba(16, 24, 40, .10), 0 9px 18px rgba(16, 24, 40, .13);
+            --plugin-card-shadow-selected: 0 7px 16px rgba(37, 99, 235, .16);
+          }
+          html[data-theme="dark"] .plugin-grid {
+            --plugin-card-highlight: rgba(255, 255, 255, .075);
+            --plugin-card-shadow: 0 1px 2px rgba(0, 0, 0, .28), 0 6px 14px rgba(0, 0, 0, .22);
+            --plugin-card-shadow-hover: 0 2px 3px rgba(0, 0, 0, .32), 0 10px 20px rgba(0, 0, 0, .28);
+            --plugin-card-shadow-selected: 0 8px 18px rgba(0, 0, 0, .28), 0 0 14px color-mix(in srgb, var(--accent) 18%, transparent);
+          }
+          @media (prefers-color-scheme: dark) {
+            html:not([data-theme]) .plugin-grid {
+              --plugin-card-highlight: rgba(255, 255, 255, .075);
+              --plugin-card-shadow: 0 1px 2px rgba(0, 0, 0, .28), 0 6px 14px rgba(0, 0, 0, .22);
+              --plugin-card-shadow-hover: 0 2px 3px rgba(0, 0, 0, .32), 0 10px 20px rgba(0, 0, 0, .28);
+              --plugin-card-shadow-selected: 0 8px 18px rgba(0, 0, 0, .28), 0 0 14px color-mix(in srgb, var(--accent) 18%, transparent);
+            }
+          }
+          '''
+          if old_grid not in css:
+              raise SystemExit('plugin-grid block changed; refusing broad edit')
+          css = css.replace(old_grid, new_grid, 1)
+
+          old_plugin = '''.plugin {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 14px; font-size: var(--font-body);
+            border: 1px solid color-mix(in srgb, var(--border) 72%, var(--text3));
+            border-radius: var(--radius);
+            background: var(--plugin-item);
+            min-width: 0;
+            transition: background-color .12s ease, border-color .12s ease, box-shadow .12s ease;
+          }
+          .plugin:hover {
+            background: var(--plugin-hover);
+            border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+          }
+          .plugin:has(input:checked) {
+            background: var(--plugin-selected);
+            border-color: var(--accent);
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+          }
+          '''
+          new_plugin = '''.plugin {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 14px; font-size: var(--font-body);
+            border: 1px solid color-mix(in srgb, var(--border) 64%, var(--text3));
+            border-radius: var(--radius);
+            background: linear-gradient(180deg,
+              color-mix(in srgb, var(--plugin-item) 92%, #fff 8%) 0%,
+              var(--plugin-item) 38%,
+              color-mix(in srgb, var(--plugin-item) 96%, var(--bg) 4%) 100%);
+            box-shadow: inset 0 1px 0 var(--plugin-card-highlight), var(--plugin-card-shadow);
+            transform: translateY(0);
+            min-width: 0;
+            transition: background .12s ease, border-color .12s ease, box-shadow .12s ease, transform .12s ease;
+          }
+          .plugin:not(.plugin-disabled):not(.plugin-loading):hover {
+            background: linear-gradient(180deg,
+              color-mix(in srgb, var(--plugin-hover) 90%, #fff 10%) 0%,
+              var(--plugin-hover) 42%,
+              color-mix(in srgb, var(--plugin-hover) 96%, var(--bg) 4%) 100%);
+            border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+            box-shadow: inset 0 1px 0 var(--plugin-card-highlight), var(--plugin-card-shadow-hover);
+            transform: translateY(-1px);
+          }
+          .plugin:not(.plugin-disabled):not(.plugin-loading):active {
+            transform: translateY(0);
+            box-shadow: inset 0 1px 0 var(--plugin-card-highlight), var(--plugin-card-shadow);
+          }
+          .plugin:has(input:checked) {
+            background: linear-gradient(180deg,
+              color-mix(in srgb, var(--plugin-selected) 90%, #fff 10%) 0%,
+              var(--plugin-selected) 44%,
+              color-mix(in srgb, var(--plugin-selected) 96%, var(--bg) 4%) 100%);
+            border-color: var(--accent);
+            box-shadow: inset 0 1px 0 var(--plugin-card-highlight),
+              0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent),
+              var(--plugin-card-shadow-selected);
+          }
+          '''
+          if old_plugin not in css:
+              raise SystemExit('plugin card block changed; refusing broad edit')
+          css = css.replace(old_plugin, new_plugin, 1)
+
+          old_disabled = '''.plugin-disabled { opacity: .45; }
+          .plugin-disabled input { cursor: not-allowed; }
+          .plugin-disabled, .plugin-disabled:hover { background: var(--plugin-muted); }
+          .plugin-loading { opacity: .68; cursor: wait; }
+          '''
+          new_disabled = '''.plugin-disabled { opacity: .45; }
+          .plugin-disabled input { cursor: not-allowed; }
+          .plugin-disabled, .plugin-disabled:hover {
+            background: var(--plugin-muted);
+            box-shadow: none;
+            transform: none;
+          }
+          .plugin-loading { opacity: .68; cursor: wait; box-shadow: none; transform: none; }
+          '''
+          if old_disabled not in css:
+              raise SystemExit('plugin disabled block changed; refusing broad edit')
+          css = css.replace(old_disabled, new_disabled, 1)
+
+          reduced_motion = '''
+          @media (prefers-reduced-motion: reduce) {
+            .plugin { transition: background-color .12s ease, border-color .12s ease, box-shadow .12s ease; }
+            .plugin:not(.plugin-disabled):not(.plugin-loading):hover,
+            .plugin:not(.plugin-disabled):not(.plugin-loading):active { transform: none; }
+          }
+          '''
+          insert_before = '.adv-toggle { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; color: var(--warn); font-weight: 600; }'
+          if insert_before not in css:
+              raise SystemExit('plugin section tail changed; refusing reduced-motion insertion')
+          css = css.replace(insert_before, reduced_motion + insert_before, 1)
+          css_path.write_text(css)
+
+          test_path = Path('tools/test-catalog-ui-contract.mjs')
+          test = test_path.read_text()
+          marker = "expect(!app.includes('syncThemeFromMenu') && app.includes('syncFirmwareThemeFromMenu'),"
+          if marker not in test:
+              raise SystemExit('UI contract insertion marker missing')
+          check = '''expect(css.includes('--plugin-card-shadow: 0 1px 2px') &&
+            css.includes('--plugin-card-shadow-hover: 0 2px 3px') &&
+            css.includes('--plugin-card-shadow-selected: 0 7px 16px') &&
+            css.includes('.plugin:not(.plugin-disabled):not(.plugin-loading):hover {') &&
+            css.includes('transform: translateY(-1px);') &&
+            css.includes('.plugin:not(.plugin-disabled):not(.plugin-loading):active {') &&
+            css.includes('box-shadow: inset 0 1px 0 var(--plugin-card-highlight), var(--plugin-card-shadow);') &&
+            css.includes('.plugin-disabled, .plugin-disabled:hover {') &&
+            css.includes('box-shadow: none;') &&
+            css.includes('@media (prefers-reduced-motion: reduce) {'),
+            'plugin card elevation, press feedback, disabled flattening, or reduced-motion fallback regressed');
+
+          '''
+          test = test.replace(marker, check + marker, 1)
+          test_path.write_text(test)
+          PY
+      - name: Prepare and verify project release
+        run: node tools/dev-assistant.mjs prepare
+      - name: Commit reviewed output and remove one-shot workflow
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/e-plugin-elevation-once.yml
+          git add -- site/wrt/app.css tools/test-catalog-ui-contract.mjs VERSION site/wrt/data/site-version.json .github/workflows/e-plugin-elevation-once.yml
+          git diff --cached --check
+          git commit -m "style: raise plugin selection cards"
+          git push origin HEAD:fix-E
