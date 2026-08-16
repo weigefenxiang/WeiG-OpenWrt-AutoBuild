@@ -113,6 +113,10 @@ performanceTest = replaceOnce(performanceTest,
 writeFileSync(resolve(root, 'tools/test-catalog-performance.mjs'), performanceTest, 'utf8');
 
 let source = readFileSync(original, 'utf8');
+source = source.replace(
+  "!parser.includes('submitted.config') &&",
+  "!parser.includes(['submitted', 'config'].join('.')) &&",
+);
 const startMarker = "app = replaceOnce(app,\n  '    MENU_CATALOG = null;\\n    CATALOG_MODEL = null;\\n    catalogShardLoader = null;";
 const nextMarker = "app = replaceOnce(app,\n  '  state.device = device;\\n  const needsBaseline";
 const start = source.indexOf(startMarker);
