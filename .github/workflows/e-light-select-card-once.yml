@@ -36,7 +36,19 @@ jobs:
           new_dark = """if css.count(dark_old) != 1:\n    raise SystemExit(f'explicit dark selectable-card token anchor count={css.count(dark_old)}')\ncss = css.replace(dark_old, dark_new, 1)\nauto_dark_old = dark_old.replace('  --', '    --')\nauto_dark_new = dark_new.replace('  --', '    --')\nif css.count(auto_dark_old) != 1:\n    raise SystemExit(f'auto dark selectable-card token anchor count={css.count(auto_dark_old)}')\ncss = css.replace(auto_dark_old, auto_dark_new, 1)\n"""
           if text.count(old_dark) != 1:
               raise SystemExit(f'patch helper dark anchor count={text.count(old_dark)}')
-          path.write_text(text.replace(old_dark, new_dark, 1))
+          text = text.replace(old_dark, new_dark, 1)
+          text += """
+
+# Keep the original independent-card regression, but source its border from the shared template token.
+test_path = Path('tools/test-catalog-ui-contract.mjs')
+test = test_path.read_text()
+old_boundary = "css.includes('border: 1px solid color-mix(in srgb, var(--border) 72%, var(--text3));')"
+new_boundary = "css.includes('border: 1px solid var(--select-card-border);')"
+if test.count(old_boundary) != 1:
+    raise SystemExit(f'independent plugin card border contract count={test.count(old_boundary)}')
+test_path.write_text(test.replace(old_boundary, new_boundary, 1))
+"""
+          path.write_text(text)
           PY
       - name: Apply selectable-card patch
         run: python3 tools/e-light-select-card-once.py
