@@ -9,8 +9,10 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const BLOCKED_HASHES = new Set([
-  '32e83e92d45d71f69dcf9d214688f0375542108631b45d344e5df2eb91c11566',
+const CASE_SENSITIVE_HASHES = new Set([
+  '11fb682be0a0233d5fb899721ecfc1827d20f0d2ff2e093310efa61efca8af1c',
+]);
+const CASE_INSENSITIVE_HASHES = new Set([
   '7d3194f79e645c42e4396dda38be04766810ec6a00d00aced3ffc2a0a1f1a9ef',
   '60965168ce762e949600281ba6d01fee136e5b6e8257b1f216f9025ed324474c',
   'c857d09db23e6822e3600bc06ad8d58f92ed62bc8efd81c753f77048662cb97d',
@@ -23,18 +25,17 @@ const BLOCKED_HASHES = new Set([
 const CANDIDATE_LENGTHS = new Set([2, 3, 4, 6, 7, 8, 9]);
 const cache = new Map();
 
-function tokenHash(token) {
-  const normalized = token.toLowerCase();
-  if (!CANDIDATE_LENGTHS.has(normalized.length)) return '';
-  if (!cache.has(normalized)) {
-    cache.set(normalized, createHash('sha256').update(normalized).digest('hex'));
-  }
-  return cache.get(normalized);
+function digest(value) {
+  if (!cache.has(value)) cache.set(value, createHash('sha256').update(value).digest('hex'));
+  return cache.get(value);
 }
 
 function blockedToken(token) {
-  const hash = tokenHash(token);
-  return hash && BLOCKED_HASHES.has(hash) ? hash : '';
+  if (!CANDIDATE_LENGTHS.has(token.length)) return '';
+  const exact = digest(token);
+  if (CASE_SENSITIVE_HASHES.has(exact)) return exact;
+  const folded = digest(token.toLowerCase());
+  return CASE_INSENSITIVE_HASHES.has(folded) ? folded : '';
 }
 
 function tokens(text) {
