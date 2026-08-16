@@ -5,9 +5,8 @@ import { createUiSessionState } from '../site/wrt/lib/ui-session-state.js';
 
 const session = createUiSessionState();
 assert.equal(session.compatibility.getAcknowledgement(), null);
-assert.equal(session.compatibility.getRememberDefault(), false);
-session.compatibility.setRememberDefault(true);
-assert.equal(session.compatibility.getRememberDefault(), true);
+assert.equal('getRememberDefault' in session.compatibility, false);
+assert.equal('setRememberDefault' in session.compatibility, false);
 const acknowledgement = { signature: 'test', audit: { forced: ['RULE'] } };
 session.compatibility.setAcknowledgement(acknowledgement);
 assert.equal(session.compatibility.getAcknowledgement(), acknowledgement);

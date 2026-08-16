@@ -73,22 +73,30 @@ expect(app.includes('function schema6TargetIdentity(target = state.device?.targe
 const defconfigTogglePosition = html.indexOf('id="defconfigToggle"');
 const menuconfigHeaderPosition = html.indexOf('<div class="menuconfig-header">');
 const menuconfigBodyPosition = html.indexOf('<div id="menuconfigBody"');
-expect(uiSession.includes('let compatibilityRememberDefault = false;') &&
+expect(!uiSession.includes('compatibilityRememberDefault') &&
   uiSession.includes('let compatibilityAcknowledgement = null;') &&
-  uiSession.includes('setRememberDefault(value) { compatibilityRememberDefault = value === true; }') &&
+  !uiSession.includes('getRememberDefault') && !uiSession.includes('setRememberDefault') &&
   uiSession.includes('clearAcknowledgement() { compatibilityAcknowledgement = null; }') &&
   app.includes('UI_COMPONENTS.createUiCheckboxControl({') &&
-  app.includes('checked: UI_SESSION.compatibility.getRememberDefault(),') &&
+  app.includes('checked: false,') &&
+  !app.includes('本页默认记住强制兼容选择') &&
+  !app.includes('getRememberDefault') && !app.includes('setRememberDefault') &&
   app.includes("finish(rememberInput.checked ? 'forced-remember' : 'forced')") &&
   app.includes('remembered.size === forced.size') &&
-  app.includes('onChange: (checked) => UI_SESSION.compatibility.setRememberDefault(checked)') &&
   app.includes('仅当前页面有效；刷新或重新打开网页、清除站点数据后失效。') &&
   !app.includes('wrt_compatibility_remember') && !uiSession.includes('localStorage') &&
   uiComponents.includes('export function createUiCheckboxControl') &&
   uiComponentsCss.includes('.ui-checkbox-control{display:inline-flex;') &&
   css.includes('.compatibility-remember{display:inline-flex;') &&
-  css.includes('.st-option.compatibility-remember{width:100%;'),
+  !css.includes('.st-option.compatibility-remember'),
   'force-confirm remember-choice control, page-session default, tooltip, or non-persistence regressed');
+
+expect(app.includes('function applySourceDefaults() {') &&
+  app.includes("if (state.source.id === 'lede') {") &&
+  app.includes('} else if (state.rootpwAuto) {') &&
+  !app.includes("previousSource.id === 'lede'") &&
+  !app.includes('applySourceDefaults(previousSource)'),
+  'source-derived LEDE initial-password default can leak across Source changes');
 
 expect(app.includes('useDefconfig: false,') &&
   app.includes("if ($('defconfigLabel')) $('defconfigLabel').textContent = 'D';") &&

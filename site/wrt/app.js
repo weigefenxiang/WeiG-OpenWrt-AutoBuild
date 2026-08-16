@@ -3309,7 +3309,7 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       const { root: rememberChoice, input: rememberInput } = UI_COMPONENTS.createUiCheckboxControl({
         className: 'compatibility-remember',
         label: uiText('记住选择', '記住選擇', 'Remember choice'),
-        checked: UI_SESSION.compatibility.getRememberDefault(),
+        checked: false,
         tooltipTitle: uiText('记住选择', '記住選擇', 'Remember choice'),
         tooltipBody: uiText(
           '仅当前页面有效；刷新或重新打开网页、清除站点数据后失效。',
@@ -4407,11 +4407,10 @@ function initCatalogLocator() {
   });
 }
 function activateTargetRecord(record) {
-  const previousSource = state.source;
   state.source = record.source;
   state.version = record.version;
   state.variant = record.variant;
-  applySourceDefaults(previousSource);
+  applySourceDefaults();
   renderGroups();
   updateStats();
   updateLoginInfo();
@@ -4484,14 +4483,14 @@ function initDeviceFold() {
   $('deviceSummary').addEventListener('click', () => setDeviceFold(false));
 }
 
-function applySourceDefaults(previousSource) {
+function applySourceDefaults() {
   const box = $('rootpwBox');
   if (state.source.id === 'lede') {
     if (!box.value || state.rootpwAuto) {
       box.value = state.rootpw = '@empty';
       state.rootpwAuto = true;
     }
-  } else if (state.rootpwAuto && (!previousSource || previousSource.id === 'lede')) {
+  } else if (state.rootpwAuto) {
     box.value = state.rootpw = '';
     state.rootpwAuto = false;
   }
@@ -4505,7 +4504,6 @@ function renderSources() {
   const preferred = state.device.sources.find((s) => previousSource && s.id === previousSource.id) || state.device.sources[0];
   state.device.sources.forEach((s) => {
     const pill = makePill(s.label, s.label + ' · ' + s.repo, s.desc, () => {
-      const previousSource = state.source;
       state.source = s;
       setActive(row, pill);
       renderVersions();
@@ -4513,13 +4511,13 @@ function renderSources() {
       renderGroups();
       updateStats();
       updateLoginInfo();
-      applySourceDefaults(previousSource);
+      applySourceDefaults();
     });
     row.appendChild(pill);
     if (s.id === preferred.id) setActive(row, pill);
   });
   state.source = preferred;
-  applySourceDefaults(previousSource);
+  applySourceDefaults();
   renderVersions();
   renderVariants();
 }
@@ -7080,22 +7078,6 @@ async function runSelfTest() {
   intro.className = 'hint';
   intro.textContent = t('st.intro');
   mb.appendChild(intro);
-  const { root: rememberDefault } = UI_COMPONENTS.createUiCheckboxControl({
-    className: 'st-option compatibility-remember',
-    label: uiText(
-      '本页默认记住强制兼容选择', '本頁預設記住強制相容選擇',
-      'Default to remember forced compatibility choices on this page'),
-    checked: UI_SESSION.compatibility.getRememberDefault(),
-    tooltipTitle: uiText(
-      '本页记住强制兼容选择', '本頁記住強制相容選擇',
-      'Remember forced compatibility choices on this page'),
-    tooltipBody: uiText(
-      '开启后，后续强制确认框中的“记住选择”默认勾选；第一次遇到新的兼容性风险仍需手动确认。刷新或重新打开网页后失效。',
-      '開啟後，後續強制確認框中的「記住選擇」預設勾選；第一次遇到新的相容性風險仍需手動確認。重新整理或重新開啟網頁後失效。',
-      'When enabled, future force-confirmation dialogs default “Remember choice” to checked. A new compatibility risk still requires an explicit first confirmation. Refreshing or reopening the page resets it.'),
-    onChange: (checked) => UI_SESSION.compatibility.setRememberDefault(checked),
-  });
-  mb.appendChild(rememberDefault);
 
   function addRow(name) {
     const row = document.createElement('div');

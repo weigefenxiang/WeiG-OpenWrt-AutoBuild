@@ -6,14 +6,11 @@
 // Page-session-only state. This module deliberately has no storage dependency.
 export function createUiSessionState() {
   let compatibilityAcknowledgement = null;
-  let compatibilityRememberDefault = false;
 
   const compatibility = Object.freeze({
     getAcknowledgement: () => compatibilityAcknowledgement,
     setAcknowledgement(value) { compatibilityAcknowledgement = value && typeof value === 'object' ? value : null; },
     clearAcknowledgement() { compatibilityAcknowledgement = null; },
-    getRememberDefault: () => compatibilityRememberDefault,
-    setRememberDefault(value) { compatibilityRememberDefault = value === true; },
   });
 
   return Object.freeze({ compatibility });
