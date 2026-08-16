@@ -1,0 +1,135 @@
+name: Temporary E plugin card update
+
+on:
+  push:
+    branches: [fix-E]
+    paths:
+      - ".github/workflows/tmp-e-plugin-card-template.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-e-plugin-card-update
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout fix-E
+        uses: actions/checkout@v6
+        with:
+          ref: fix-E
+          fetch-depth: 0
+
+      - name: Apply unified plugin card template
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          css_path = Path('site/wrt/app.css')
+          css = css_path.read_text(encoding='utf-8')
+          old = '''.plugin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); }
+          .plugin {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 14px; font-size: var(--font-body);
+            border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
+            background: var(--plugin-item);
+            min-width: 0;
+            transition: background-color .12s ease;
+          }
+          .plugin:hover { background: var(--plugin-hover); }
+          .plugin:has(input:checked) { background: var(--plugin-selected); }
+          '''
+          new = '''.plugin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+            gap: 8px;
+            padding: 10px;
+          }
+          .plugin {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 14px; font-size: var(--font-body);
+            border: 1px solid color-mix(in srgb, var(--border) 72%, var(--text3));
+            border-radius: var(--radius);
+            background: var(--plugin-item);
+            min-width: 0;
+            transition: background-color .12s ease, border-color .12s ease, box-shadow .12s ease;
+          }
+          .plugin:hover {
+            background: var(--plugin-hover);
+            border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+          }
+          .plugin:has(input:checked) {
+            background: var(--plugin-selected);
+            border-color: var(--accent);
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+          }
+          '''
+          if css.count(old) != 1:
+              raise SystemExit(f'plugin template anchor count={css.count(old)}; expected 1')
+          css = css.replace(old, new, 1)
+          mobile_old = '.plugin { border-right: none; padding: 12px 14px; }'
+          mobile_new = '.plugin { padding: 12px 14px; }'
+          if css.count(mobile_old) != 1:
+              raise SystemExit(f'mobile plugin anchor count={css.count(mobile_old)}; expected 1')
+          css = css.replace(mobile_old, mobile_new, 1)
+          css_path.write_text(css, encoding='utf-8', newline='\n')
+
+          test_path = Path('tools/test-catalog-ui-contract.mjs')
+          test = test_path.read_text(encoding='utf-8')
+          guard = 'plugin option cards lost their independent rounded boundary template'
+          if guard not in test:
+              insert_at = test.rfind('console.log(')
+              if insert_at < 0:
+                  raise SystemExit('catalog UI contract final console.log anchor not found')
+              assertion = '''expect(
+            css.includes('.plugin-grid {\\n  display: grid;\\n  grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));\\n  gap: 8px;\\n  padding: 10px;\\n}') &&
+            css.includes('border: 1px solid color-mix(in srgb, var(--border) 72%, var(--text3));') &&
+            css.includes('border-radius: var(--radius);') &&
+            css.includes('.plugin:hover {\\n  background: var(--plugin-hover);\\n  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));\\n}') &&
+            css.includes('.plugin:has(input:checked) {\\n  background: var(--plugin-selected);\\n  border-color: var(--accent);') &&
+            !css.includes('.plugin { border-right: none; padding: 12px 14px; }'),
+            'plugin option cards lost their independent rounded boundary template');
+          
+          '''
+              test = test[:insert_at] + assertion + test[insert_at:]
+              test_path.write_text(test, encoding='utf-8', newline='\n')
+          PY
+
+      - name: Remove one-off workflow from final tree
+        run: rm .github/workflows/tmp-e-plugin-card-template.yml
+
+      - name: Prepare version and run all project checks
+        run: node tools/dev-assistant.mjs prepare
+
+      - name: Verify final change scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --short
+          changed="$(git diff --name-only | sort)"
+          printf '%s\n' "$changed"
+          for path in $changed; do
+            case "$path" in
+              VERSION|site/wrt/app.css|site/wrt/data/site-version.json|tools/test-catalog-ui-contract.mjs|.github/workflows/tmp-e-plugin-card-template.yml) ;;
+              *) echo "Unexpected changed file: $path"; exit 1 ;;
+            esac
+          done
+          test -n "$(git diff -- site/wrt/app.css)"
+          test -n "$(git diff -- tools/test-catalog-ui-contract.mjs)"
+          test -n "$(git diff -- VERSION)"
+          test -n "$(git diff -- site/wrt/data/site-version.json)"
+
+      - name: Commit final fix-E change
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "style: unify plugin option card boundaries"
+          git push origin HEAD:fix-E
