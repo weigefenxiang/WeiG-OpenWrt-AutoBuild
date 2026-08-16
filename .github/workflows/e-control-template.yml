@@ -37,7 +37,7 @@ jobs:
       - name: Apply shared control template
         run: python3 .e-control-template.py
       - name: Remove one-shot control files before fingerprinting
-        run: git rm .e-control-template.py .e-control-template.trigger .github/workflows/e-control-template.yml
+        run: git rm -f .e-control-template.py .e-control-template.trigger .github/workflows/e-control-template.yml
       - name: Prepare project-native version and contracts
         run: node tools/dev-assistant.mjs prepare
       - name: Verify prepared project
