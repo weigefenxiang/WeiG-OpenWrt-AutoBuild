@@ -12,6 +12,7 @@ import {
 } from '../site/wrt/lib/build-identity.js';
 
 const REQUEST_ID_RE = /^\d{6}_\d{4}$/;
+const ROUTABLE_SCHEMAS = new Set([5, 6]);
 
 function fail(message) {
   console.error(`Build request identity validation failed / 构建请求身份校验失败: ${message}`);
@@ -32,7 +33,9 @@ if (manifest.files.length !== 1 || manifest.files[0]?.type !== 'json') {
 let request;
 try { request = JSON.parse(readFileSync(manifest.files[0].path, 'utf8')); }
 catch (error) { fail(`cannot read build-request.json: ${error.message}`); }
-if (!request || request.schema !== 5) fail(`unsupported build-request schema: ${JSON.stringify(request?.schema)} (schema 5 required)`);
+if (!request || !ROUTABLE_SCHEMAS.has(request.schema)) {
+  fail(`unsupported build-request schema: ${JSON.stringify(request?.schema)} (routing accepts schema 5 or 6)`);
+}
 
 const sourceEnv = normalizeBuildEnvironment(request.sourceEnv);
 if (!sourceEnv || sourceEnv !== String(request.sourceEnv || '').trim().replace(/^refs\/heads\//, '').replace(/^origin\//, '')) {
