@@ -1,0 +1,101 @@
+name: one-shot fix-F3 UI state repair
+on:
+  push:
+    branches: [fix-F3]
+    paths:
+      - '.github/workflows/one-shot-fix-f3-ui-state.yml'
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix-F3
+          fetch-depth: 0
+      - name: Apply approved UI state repairs
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          app_path = Path('site/wrt/app.js')
+          app = app_path.read_text()
+
+          block = re.compile(r"\n  const \{ root: rememberDefault \} = UI_COMPONENTS\.createUiCheckboxControl\(\{[\s\S]*?\n  mb\.appendChild\(rememberDefault\);\n")
+          app, count = block.subn('\n', app, count=1)
+          assert count == 1, f'self-test remember block count={count}'
+
+          app = app.replace('checked: UI_SESSION.compatibility.getRememberDefault(),', 'checked: false,')
+          assert 'getRememberDefault' not in app
+          assert 'setRememberDefault' not in app
+          assert '本页默认记住强制兼容选择' not in app
+          assert "finish(rememberInput.checked ? 'forced-remember' : 'forced')" in app
+
+          old = "function applySourceDefaults(previousSource) {\n  const box = $('rootpwBox');\n  if (state.source.id === 'lede') {\n    if (!box.value || state.rootpwAuto) {\n      box.value = state.rootpw = '@empty';\n      state.rootpwAuto = true;\n    }\n  } else if (state.rootpwAuto && (!previousSource || previousSource.id === 'lede')) {\n    box.value = state.rootpw = '';\n    state.rootpwAuto = false;\n  }\n  renderFirmwareSettings();\n}"
+          new = "function applySourceDefaults() {\n  const box = $('rootpwBox');\n  if (state.source.id === 'lede') {\n    if (!box.value || state.rootpwAuto) {\n      box.value = state.rootpw = '@empty';\n      state.rootpwAuto = true;\n    }\n  } else if (state.rootpwAuto) {\n    box.value = state.rootpw = '';\n    state.rootpwAuto = false;\n  }\n  renderFirmwareSettings();\n}"
+          assert old in app, 'applySourceDefaults contract changed unexpectedly'
+          app = app.replace(old, new, 1)
+          app = app.replace('  const previousSource = state.source;\n  state.source = record.source;', '  state.source = record.source;', 1)
+          app = app.replace('      const previousSource = state.source;\n      state.source = s;', '      state.source = s;', 1)
+          app = app.replace('applySourceDefaults(previousSource);', 'applySourceDefaults();')
+          assert 'applySourceDefaults(previousSource)' not in app
+          assert "previousSource.id === 'lede'" not in app
+          app_path.write_text(app)
+
+          session_path = Path('site/wrt/lib/ui-session-state.js')
+          session = session_path.read_text()
+          session = session.replace('  let compatibilityRememberDefault = false;\n', '')
+          session = session.replace('    getRememberDefault: () => compatibilityRememberDefault,\n    setRememberDefault(value) { compatibilityRememberDefault = value === true; },\n', '')
+          assert 'RememberDefault' not in session
+          assert 'compatibilityRememberDefault' not in session
+          session_path.write_text(session)
+
+          css_path = Path('site/wrt/app.css')
+          css = css_path.read_text()
+          css = css.replace('.st-option.compatibility-remember{width:100%;margin:2px 0 8px;padding:8px 10px;border-color:var(--border);background:var(--card2)}\n', '')
+          assert '.st-option.compatibility-remember' not in css
+          css_path.write_text(css)
+
+          test_path = Path('tools/test-ui-modules.mjs')
+          test = test_path.read_text()
+          test = test.replace("assert.equal(session.compatibility.getRememberDefault(), false);\nsession.compatibility.setRememberDefault(true);\nassert.equal(session.compatibility.getRememberDefault(), true);\n", '')
+          marker = "assert.equal(session.compatibility.getAcknowledgement(), null);\n"
+          assert marker in test
+          test = test.replace(marker, marker + "assert.equal('getRememberDefault' in session.compatibility, false);\nassert.equal('setRememberDefault' in session.compatibility, false);\n", 1)
+          assert 'getRememberDefault()' not in test
+          assert 'setRememberDefault(true)' not in test
+          test_path.write_text(test)
+
+          contract_path = Path('tools/test-catalog-ui-contract.mjs')
+          contract = contract_path.read_text()
+          contract = contract.replace("expect(uiSession.includes('let compatibilityRememberDefault = false;') &&\n  uiSession.includes('let compatibilityAcknowledgement = null;') &&\n  uiSession.includes('setRememberDefault(value) { compatibilityRememberDefault = value === true; }') &&\n", "expect(!uiSession.includes('compatibilityRememberDefault') &&\n  uiSession.includes('let compatibilityAcknowledgement = null;') &&\n  !uiSession.includes('getRememberDefault') && !uiSession.includes('setRememberDefault') &&\n")
+          contract = contract.replace("  app.includes('checked: UI_SESSION.compatibility.getRememberDefault(),') &&\n", "  app.includes('checked: false,') &&\n  !app.includes('本页默认记住强制兼容选择') &&\n  !app.includes('getRememberDefault') && !app.includes('setRememberDefault') &&\n")
+          contract = contract.replace("  app.includes('onChange: (checked) => UI_SESSION.compatibility.setRememberDefault(checked)') &&\n", '')
+          contract = contract.replace("  css.includes('.compatibility-remember{display:inline-flex;') &&\n  css.includes('.st-option.compatibility-remember{width:100%;'),\n", "  css.includes('.compatibility-remember{display:inline-flex;') &&\n  !css.includes('.st-option.compatibility-remember'),\n")
+          anchor = "expect(app.includes('useDefconfig: false,') &&\n"
+          source_contract = "expect(app.includes('function applySourceDefaults() {') &&\n  app.includes(\"if (state.source.id === 'lede') {\") &&\n  app.includes('} else if (state.rootpwAuto) {') &&\n  !app.includes(\"previousSource.id === 'lede'\") &&\n  !app.includes('applySourceDefaults(previousSource)'),\n  'source-derived LEDE initial-password default can leak across Source changes');\n\n"
+          assert anchor in contract
+          contract = contract.replace(anchor, source_contract + anchor, 1)
+          contract_path.write_text(contract)
+          PY
+      - name: Remove temporary runner from working tree before prepare
+        run: rm .github/workflows/one-shot-fix-f3-ui-state.yml
+      - name: Official prepare
+        run: node tools/dev-assistant.mjs prepare
+      - name: Verify project
+        run: |
+          node tools/test-ui-modules.mjs
+          node tools/test-catalog-ui-contract.mjs
+          node tools/check-all.mjs
+          git diff --check
+      - name: Commit business files only
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add site/wrt/app.js site/wrt/app.css site/wrt/lib/ui-session-state.js tools/test-ui-modules.mjs tools/test-catalog-ui-contract.mjs VERSION site/wrt/data/site-version.json
+          git commit -m 'fix: reset source-derived UI defaults correctly'
+          git push origin HEAD:fix-F3
