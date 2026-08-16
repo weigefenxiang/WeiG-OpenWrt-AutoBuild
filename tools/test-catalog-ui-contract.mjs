@@ -152,17 +152,24 @@ expect((app.match(/origin\.kind !== 'inactive' && origin\.kind !== 'user'/g) || 
   app.includes("kind: 'user', label: uiText('用户选择'"),
   'user-selected state must remain internal while its item badges stay hidden');
 
-expect(css.includes('--plugin-card-shadow: 0 1px 2px') &&
-  css.includes('--plugin-card-shadow-hover: 0 2px 3px') &&
-  css.includes('--plugin-card-shadow-selected: 0 7px 16px') &&
+expect(css.includes('/* 可勾选卡片立体模板 / shared selectable-card elevation template */') &&
+  css.includes('--select-card-border: color-mix(in srgb, var(--border) 46%, #8ea0b7 54%);') &&
+  css.includes('--select-card-shadow: 0 1px 1px rgba(15, 23, 42, .10), 0 4px 9px rgba(55, 75, 104, .15)') &&
+  css.includes('--select-card-shadow-hover: 0 2px 2px rgba(15, 23, 42, .11), 0 7px 14px rgba(55, 75, 104, .18)') &&
+  css.includes('--select-card-shadow-selected: 0 5px 12px rgba(37, 99, 235, .20)') &&
+  (css.match(/--select-card-shadow: 0 1px 2px rgba\(0, 0, 0, \.28\), 0 6px 14px rgba\(0, 0, 0, \.22\);/g) || []).length >= 2 &&
+  css.includes('border: 1px solid var(--select-card-border);') &&
+  css.includes('var(--select-card-surface-top) 0%') &&
+  css.includes('var(--select-card-hover-top) 0%') &&
+  css.includes('var(--select-card-selected-top) 0%') &&
   css.includes('.plugin:not(.plugin-disabled):not(.plugin-loading):hover {') &&
-  css.includes('transform: translateY(-1px);') &&
+  css.includes('transform: translateY(var(--select-card-lift));') &&
   css.includes('.plugin:not(.plugin-disabled):not(.plugin-loading):active {') &&
-  css.includes('box-shadow: inset 0 1px 0 var(--plugin-card-highlight), var(--plugin-card-shadow);') &&
+  css.includes('box-shadow: inset 0 1px 0 var(--select-card-highlight), var(--select-card-shadow);') &&
   css.includes('.plugin-disabled, .plugin-disabled:hover {') &&
   css.includes('box-shadow: none;') &&
   css.includes('@media (prefers-reduced-motion: reduce) {'),
-  'plugin card elevation, press feedback, disabled flattening, or reduced-motion fallback regressed');
+  'shared light/dark selectable-card template, elevation, press feedback, disabled flattening, or reduced-motion fallback regressed');
 
 expect(!app.includes('syncThemeFromMenu') && app.includes('syncFirmwareThemeFromMenu'),
   'Catalog intent still calls a missing theme coordinator');
@@ -562,7 +569,7 @@ expect(catalogFileNameTokenMatch('release-27.4', 'firmware-27.4-device.config', 
 
 expect(
   css.includes('.plugin-grid {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));\n  gap: 8px;\n  padding: 10px;\n}') &&
-  css.includes('border: 1px solid color-mix(in srgb, var(--border) 72%, var(--text3));') &&
+  css.includes('border: 1px solid var(--select-card-border);') &&
   css.includes('border-radius: var(--radius);') &&
   css.includes('.plugin:hover {\n  background: var(--plugin-hover);\n  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));\n}') &&
   css.includes('.plugin:has(input:checked) {\n  background: var(--plugin-selected);\n  border-color: var(--accent);') &&
