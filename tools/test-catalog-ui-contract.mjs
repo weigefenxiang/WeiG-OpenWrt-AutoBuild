@@ -152,6 +152,18 @@ expect((app.match(/origin\.kind !== 'inactive' && origin\.kind !== 'user'/g) || 
   app.includes("kind: 'user', label: uiText('用户选择'"),
   'user-selected state must remain internal while its item badges stay hidden');
 
+expect(css.includes('--plugin-card-shadow: 0 1px 2px') &&
+  css.includes('--plugin-card-shadow-hover: 0 2px 3px') &&
+  css.includes('--plugin-card-shadow-selected: 0 7px 16px') &&
+  css.includes('.plugin:not(.plugin-disabled):not(.plugin-loading):hover {') &&
+  css.includes('transform: translateY(-1px);') &&
+  css.includes('.plugin:not(.plugin-disabled):not(.plugin-loading):active {') &&
+  css.includes('box-shadow: inset 0 1px 0 var(--plugin-card-highlight), var(--plugin-card-shadow);') &&
+  css.includes('.plugin-disabled, .plugin-disabled:hover {') &&
+  css.includes('box-shadow: none;') &&
+  css.includes('@media (prefers-reduced-motion: reduce) {'),
+  'plugin card elevation, press feedback, disabled flattening, or reduced-motion fallback regressed');
+
 expect(!app.includes('syncThemeFromMenu') && app.includes('syncFirmwareThemeFromMenu'),
   'Catalog intent still calls a missing theme coordinator');
 const modalHeader = html.match(/<div class="modal-head">([\s\S]*?)<\/div>\s*<div class="modal-body"/)?.[1] || '';

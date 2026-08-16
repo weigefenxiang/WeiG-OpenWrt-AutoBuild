@@ -572,23 +572,68 @@ button.catalog-applications-state{cursor:pointer}
   gap: 8px;
   padding: 10px;
 }
+.plugin-grid {
+  --plugin-card-highlight: rgba(255, 255, 255, .68);
+  --plugin-card-shadow: 0 1px 2px rgba(16, 24, 40, .08), 0 5px 12px rgba(16, 24, 40, .10);
+  --plugin-card-shadow-hover: 0 2px 3px rgba(16, 24, 40, .10), 0 9px 18px rgba(16, 24, 40, .13);
+  --plugin-card-shadow-selected: 0 7px 16px rgba(37, 99, 235, .16);
+}
+html[data-theme="dark"] .plugin-grid {
+  --plugin-card-highlight: rgba(255, 255, 255, .075);
+  --plugin-card-shadow: 0 1px 2px rgba(0, 0, 0, .28), 0 6px 14px rgba(0, 0, 0, .22);
+  --plugin-card-shadow-hover: 0 2px 3px rgba(0, 0, 0, .32), 0 10px 20px rgba(0, 0, 0, .28);
+  --plugin-card-shadow-selected: 0 8px 18px rgba(0, 0, 0, .28), 0 0 14px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .plugin-grid {
+    --plugin-card-highlight: rgba(255, 255, 255, .075);
+    --plugin-card-shadow: 0 1px 2px rgba(0, 0, 0, .28), 0 6px 14px rgba(0, 0, 0, .22);
+    --plugin-card-shadow-hover: 0 2px 3px rgba(0, 0, 0, .32), 0 10px 20px rgba(0, 0, 0, .28);
+    --plugin-card-shadow-selected: 0 8px 18px rgba(0, 0, 0, .28), 0 0 14px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+}
 .plugin {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 14px; font-size: var(--font-body);
   border: 1px solid color-mix(in srgb, var(--border) 72%, var(--text3));
   border-radius: var(--radius);
   background: var(--plugin-item);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--plugin-item) 92%, #fff 8%) 0%,
+    var(--plugin-item) 38%,
+    color-mix(in srgb, var(--plugin-item) 96%, var(--bg) 4%) 100%);
+  box-shadow: inset 0 1px 0 var(--plugin-card-highlight), var(--plugin-card-shadow);
+  transform: translateY(0);
   min-width: 0;
-  transition: background-color .12s ease, border-color .12s ease, box-shadow .12s ease;
+  transition: background .12s ease, border-color .12s ease, box-shadow .12s ease, transform .12s ease;
 }
 .plugin:hover {
   background: var(--plugin-hover);
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
 }
+.plugin:not(.plugin-disabled):not(.plugin-loading):hover {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--plugin-hover) 90%, #fff 10%) 0%,
+    var(--plugin-hover) 42%,
+    color-mix(in srgb, var(--plugin-hover) 96%, var(--bg) 4%) 100%);
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+  box-shadow: inset 0 1px 0 var(--plugin-card-highlight), var(--plugin-card-shadow-hover);
+  transform: translateY(-1px);
+}
+.plugin:not(.plugin-disabled):not(.plugin-loading):active {
+  transform: translateY(0);
+  box-shadow: inset 0 1px 0 var(--plugin-card-highlight), var(--plugin-card-shadow);
+}
 .plugin:has(input:checked) {
   background: var(--plugin-selected);
   border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--plugin-selected) 90%, #fff 10%) 0%,
+    var(--plugin-selected) 44%,
+    color-mix(in srgb, var(--plugin-selected) 96%, var(--bg) 4%) 100%);
+  box-shadow: inset 0 1px 0 var(--plugin-card-highlight),
+    0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent),
+    var(--plugin-card-shadow-selected);
 }
 .plugin input[type="checkbox"] {
   flex: none; display: grid; place-content: center; width: 16px; height: 16px; margin: 0;
@@ -640,12 +685,22 @@ button.catalog-applications-state{cursor:pointer}
 .flag-remove { color: var(--warn); background: var(--gold-bg); }
 .plugin-disabled { opacity: .45; }
 .plugin-disabled input { cursor: not-allowed; }
-.plugin-disabled, .plugin-disabled:hover { background: var(--plugin-muted); }
-.plugin-loading { opacity: .68; cursor: wait; }
+.plugin-disabled, .plugin-disabled:hover {
+  background: var(--plugin-muted);
+  box-shadow: none;
+  transform: none;
+}
+.plugin-loading { opacity: .68; cursor: wait; box-shadow: none; transform: none; }
 .plugin-loading input { cursor: wait; }
 .plugin-builtin { opacity: .72; background: color-mix(in srgb, var(--plugin-item) 72%, var(--plugin-muted)); }
 .plugin-forceable { outline: 1px dashed color-mix(in srgb, var(--danger) 45%, transparent); outline-offset: -3px; }
 .plugin-removable { outline: 1px dashed color-mix(in srgb, var(--warn) 45%, transparent); outline-offset: -3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .plugin { transition: background-color .12s ease, border-color .12s ease, box-shadow .12s ease; }
+  .plugin:not(.plugin-disabled):not(.plugin-loading):hover,
+  .plugin:not(.plugin-disabled):not(.plugin-loading):active { transform: none; }
+}
 .adv-toggle { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; color: var(--warn); font-weight: 600; }
 .adv-toggle input { accent-color: var(--warn); }
 .empty-hint { padding: 14px; }
