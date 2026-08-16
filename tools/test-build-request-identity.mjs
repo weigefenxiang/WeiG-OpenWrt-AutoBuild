@@ -37,68 +37,73 @@ function run(request, {
 
 const commit = '005e435f91b2c2891cf46468e2cb46e36519df8b';
 const base = { schema: 5, requestId: '260808_2242', sourceEnv: 'dev', requestCommit: commit, config: 'CONFIG_TARGET_x86=y\n' };
+const schema6 = { schema: 6, requestId: '260808_2242', sourceEnv: 'dev', requestCommit: commit, overrides: [] };
 
 try {
-  let result = run(base);
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /^request_branch=dev$/m);
-  assert.match(result.stdout, new RegExp(`^request_commit=${commit}$`, 'm'));
-  assert.match(result.stdout, /^request_id=260808_2242$/m);
-  assert.match(result.stdout, /^run_title=dev-260808_2242\/test#141\/Generic_x86\/64\/ImmortalWrt\/25\.12\/generic$/m);
+  for (const request of [base, schema6]) {
+    const result = run(request);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /^request_branch=dev$/m);
+    assert.match(result.stdout, new RegExp(`^request_commit=${commit}$`, 'm'));
+    assert.match(result.stdout, /^request_id=260808_2242$/m);
+    assert.match(result.stdout, /^run_title=dev-260808_2242\/test#141\/Generic_x86\/64\/ImmortalWrt\/25\.12\/generic$/m);
+  }
 
+  let result;
   for (const tag of ['✔Defconfig', '×Defconfig', '✅ Defconfig', '测试🧪']) {
-    result = run(base, {
+    result = run(schema6, {
       title: `[build] dev/260808_2242/${tag}/Generic_x86/64/ImmortalWrt/25.12/generic`,
     });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, new RegExp(`^run_title=dev-260808_2242/${tag}#141/Generic_x86/64/ImmortalWrt/25\\.12/generic$`, 'm'));
   }
 
-  result = run(base, {
+  result = run(schema6, {
     title: '[build] dev/260808_2242/   /Generic_x86/64/ImmortalWrt/25.12/generic',
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /^run_title=$/m);
   assert.match(result.stderr, /routing continues without display metadata/);
 
-  result = run({ ...base, sourceEnv: 'main' }, { title: '[build] 260808_2242/test/Generic_x86/64/ImmortalWrt/25.12/generic' });
+  result = run({ ...schema6, sourceEnv: 'main' }, { title: '[build] 260808_2242/test/Generic_x86/64/ImmortalWrt/25.12/generic' });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /^request_branch=main$/m);
   assert.match(result.stdout, /^run_title=260808_2242\/test#141\/Generic_x86\/64\/ImmortalWrt\/25\.12\/generic$/m);
 
-  result = run({ ...base, sourceEnv: 'fix/e-v2' }, { title: '[build] fix_e-v2/260808_2242/test/Generic_x86/64/ImmortalWrt/25.12/generic' });
+  result = run({ ...schema6, sourceEnv: 'fix/e-v2' }, { title: '[build] fix_e-v2/260808_2242/test/Generic_x86/64/ImmortalWrt/25.12/generic' });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /^request_branch=fix\/e-v2$/m);
   assert.match(result.stdout, /^run_title=fix_e-v2-260808_2242\/test#141\/Generic_x86\/64\/ImmortalWrt\/25\.12\/generic$/m);
 
-  result = run(base, { title: '[route-test] manual E v2' });
+  result = run(schema6, { title: '[route-test] manual E v2' });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /^run_title=$/m);
 
   for (const bad of [
-    { ...base, schema: 4 },
-    { ...base, sourceEnv: '../main' },
-    { ...base, requestCommit: '005e435' },
-    { ...base, requestCommit: 'g05e435f91b2c2891cf46468e2cb46e36519df8b' },
-    { ...base, requestId: 'bad-id' },
+    { ...schema6, schema: 4 },
+    { ...schema6, schema: 7 },
+    { ...schema6, sourceEnv: '../main' },
+    { ...schema6, requestCommit: '005e435' },
+    { ...schema6, requestCommit: 'g05e435f91b2c2891cf46468e2cb46e36519df8b' },
+    { ...schema6, requestId: 'bad-id' },
   ]) {
     result = run(bad);
     assert.notEqual(result.status, 0, `unexpected pass: ${JSON.stringify(bad)}`);
   }
 
-  result = run(base, { issueNumber: '0' });
+  result = run(schema6, { issueNumber: '0' });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr + result.stdout, /positive safe integer/);
 
-  result = run(base, { title: '[build] staging/260808_2242/test/Generic_x86/64/ImmortalWrt/25.12/generic' });
+  result = run(schema6, { title: '[build] staging/260808_2242/test/Generic_x86/64/ImmortalWrt/25.12/generic' });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr + result.stdout, /branch identity mismatch/);
 
-  result = run(base, { title: '[build] dev/260808_9999/test/Generic_x86/64/ImmortalWrt/25.12/generic' });
+  result = run(schema6, { title: '[build] dev/260808_9999/test/Generic_x86/64/ImmortalWrt/25.12/generic' });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr + result.stdout, /requestId mismatch/);
 
-  result = run(base, { extraFiles: [{ name: 'extra.config', path: 'unused', type: 'config', bytes: 100 }] });
+  result = run(schema6, { extraFiles: [{ name: 'extra.config', path: 'unused', type: 'config', bytes: 100 }] });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr + result.stdout, /exactly one build-request\.json/);
 
