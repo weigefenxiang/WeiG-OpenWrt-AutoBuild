@@ -21,17 +21,24 @@ function safeReleaseTag(value) {
 
 export function safeCatalogDataRef(value) {
   const ref = String(value || '').trim();
-  if (!/^catalog-(?:fix(?:-[ABC])?|dev|staging|data)$/.test(ref)) {
+  if (!/^catalog-(?:fix(?:-[A-Za-z0-9][A-Za-z0-9._-]{0,95})?|dev|staging|main)$/.test(ref)) {
     throw new Error(`invalid Catalog data branch: ${value}`);
   }
   return ref;
 }
 
 function catalogFixCodeRefMatches(codeRef, branch) {
-  if (!/^fix\/[A-Za-z0-9._/-]+$/.test(codeRef)) return false;
-  const lane = /-([ABC])$/i.exec(codeRef)?.[1]?.toUpperCase() || '';
-  if (branch === 'catalog-fix') return lane === '';
-  return Boolean(lane) && branch === `catalog-fix-${lane}`;
+  const ref = String(codeRef || '').trim();
+  if (branch === 'catalog-fix') {
+    if (!/^fix\/[A-Za-z0-9._/-]+$/.test(ref)) return false;
+    return !/-[ABC]$/i.test(ref);
+  }
+  const suffix = /^catalog-fix-([A-Za-z0-9][A-Za-z0-9._-]{0,95})$/.exec(branch)?.[1] || '';
+  if (!suffix) return false;
+  if (ref === `fix-${suffix}`) return true;
+  if (!/^fix\/[A-Za-z0-9._/-]+$/.test(ref)) return false;
+  const legacyLane = /-([ABC])$/i.exec(ref)?.[1]?.toUpperCase() || '';
+  return Boolean(legacyLane) && suffix === legacyLane;
 }
 
 export function validateCatalogProvenance(index, dataRef, repository) {
@@ -58,7 +65,7 @@ export function validateCatalogProvenance(index, dataRef, repository) {
   if (!validCodeRef) {
     throw new Error(`Catalog provenance codeRef ${codeRef || '(missing)'} does not match ${branch}`);
   }
-  if (branch === 'catalog-data' && provenance.complete !== true) {
+  if (branch === 'catalog-main' && provenance.complete !== true) {
     throw new Error('Production Catalog provenance must be complete');
   }
   return { repository: actualRepository, codeRef, codeSha, complete: provenance.complete };
@@ -356,8 +363,8 @@ export function formatCatalogDiagnostics(diagnostics = []) {
 export function createCatalogLoader({
   repository,
   releaseTag = 'menuconfig-catalog-complete',
-  dataRef = 'catalog-data',
-  allowReleaseFallback = dataRef === 'catalog-data',
+  dataRef = 'catalog-main',
+  allowReleaseFallback = dataRef === 'catalog-main',
   engine,
   fetchImpl = globalThis.fetch,
   cacheStorage = globalThis.caches,

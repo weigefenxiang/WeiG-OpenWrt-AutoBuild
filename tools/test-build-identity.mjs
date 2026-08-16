@@ -27,25 +27,25 @@ assert.equal(normalizeBuildEnvironment('bad branch'), '');
 assert.equal(normalizeBuildEnvironment('../main'), '');
 
 const catalogChannels = {
-  fix: 'catalog-fix',
-  'fix-A': 'catalog-fix-A',
-  'fix-B': 'catalog-fix-B',
-  'fix-C': 'catalog-fix-C',
-  dev: 'catalog-dev', staging: 'catalog-staging', main: 'catalog-data',
+  fixPrefix: 'catalog-fix-', legacyFix: 'catalog-fix',
+  dev: 'catalog-dev', staging: 'catalog-staging', main: 'catalog-main',
 };
+assert.equal(catalogDataBranch('fix-F', catalogChannels), 'catalog-fix-F');
+assert.equal(catalogDataBranch('fix-next.test', catalogChannels), 'catalog-fix-next.test');
+assert.equal(catalogDataBranch('fix-a', catalogChannels), 'catalog-fix-a');
+assert.throws(() => catalogDataBranch('fix-F', { ...catalogChannels, fixPrefix: 'catalog-other-' }),
+  /invalid Catalog data branch/);
+// Historical slash-style branches remain read-compatible but are not the standard authority.
 assert.equal(catalogDataBranch('fix/catalog-compatibility', catalogChannels), 'catalog-fix');
 assert.equal(catalogDataBranch('fix/catalog-compatibility-A', catalogChannels), 'catalog-fix-A');
 assert.equal(catalogDataBranch('fix/catalog-compatibility-B', catalogChannels), 'catalog-fix-B');
 assert.equal(catalogDataBranch('fix/catalog-compatibility-C', catalogChannels), 'catalog-fix-C');
-assert.equal(catalogDataBranch('fix/catalog-compatibility-a', catalogChannels), 'catalog-fix-A');
-assert.throws(() => catalogDataBranch('fix/demo-A', { ...catalogChannels, 'fix-A': 'catalog-fix-B' }),
-  /invalid Catalog data branch/);
 assert.equal(catalogDataBranch('dev', catalogChannels), 'catalog-dev');
 assert.equal(catalogDataBranch('staging', catalogChannels), 'catalog-staging');
-assert.equal(catalogDataBranch('main', catalogChannels), 'catalog-data');
-assert.equal(catalogDataBranch('', catalogChannels), 'catalog-data');
-assert.equal(catalogDataBranch('feature/unpublished', catalogChannels), 'catalog-data');
-assert.throws(() => catalogDataBranch('dev', { ...catalogChannels, dev: 'catalog-data' }),
+assert.equal(catalogDataBranch('main', catalogChannels), 'catalog-main');
+assert.equal(catalogDataBranch('', catalogChannels), 'catalog-main');
+assert.equal(catalogDataBranch('feature/unpublished', catalogChannels), 'catalog-main');
+assert.throws(() => catalogDataBranch('dev', { ...catalogChannels, dev: 'catalog-main' }),
   /invalid Catalog data branch/);
 
 const catalogProvenanceSha = 'f'.repeat(40);
@@ -54,18 +54,21 @@ const catalogProvenance = (codeRef) => ({
     repository: 'owner/catalog', codeRef, codeSha: catalogProvenanceSha, complete: true,
   },
 });
+assert.equal(validateCatalogProvenance(catalogProvenance('fix-F'), 'catalog-fix-F', 'owner/catalog')?.codeRef,
+  'fix-F');
+assert.equal(validateCatalogProvenance(catalogProvenance('fix-next.test'), 'catalog-fix-next.test', 'owner/catalog')?.codeRef,
+  'fix-next.test');
+assert.throws(() => validateCatalogProvenance(catalogProvenance('fix-F'), 'catalog-fix-G', 'owner/catalog'),
+  /does not match catalog-fix-G/);
+// Historical slash-style A/B/C provenance remains compatible.
 assert.equal(validateCatalogProvenance(catalogProvenance('fix/demo-A'), 'catalog-fix-A', 'owner/catalog')?.codeRef,
   'fix/demo-A');
 assert.equal(validateCatalogProvenance(catalogProvenance('fix/demo-b'), 'catalog-fix-B', 'owner/catalog')?.codeRef,
   'fix/demo-b');
-assert.equal(validateCatalogProvenance(catalogProvenance('fix/demo-C'), 'catalog-fix-C', 'owner/catalog')?.codeRef,
-  'fix/demo-C');
 assert.throws(() => validateCatalogProvenance(catalogProvenance('fix/demo-A'), 'catalog-fix-B', 'owner/catalog'),
   /does not match catalog-fix-B/);
 assert.throws(() => validateCatalogProvenance(catalogProvenance('fix/demo-A'), 'catalog-fix', 'owner/catalog'),
   /does not match catalog-fix/);
-assert.throws(() => validateCatalogProvenance(catalogProvenance('fix/demo'), 'catalog-fix-A', 'owner/catalog'),
-  /does not match catalog-fix-A/);
 
 assert.equal(normalizeBuildCommit('005e435f91b2c2891cf46468e2cb46e36519df8b'), '005e435f91b2c2891cf46468e2cb46e36519df8b');
 assert.equal(normalizeBuildCommit('005E435F91B2C2891CF46468E2CB46E36519DF8B'), '005e435f91b2c2891cf46468e2cb46e36519df8b');
