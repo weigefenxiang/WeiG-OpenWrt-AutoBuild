@@ -6,9 +6,17 @@
   "blogUrl": "https://www.weigeshare.cc.cd/",
   "catalogReleaseTag": "menuconfig-catalog-complete",
   "catalogSelectionPolicy": {
-    "sourcePriority": ["ImmortalWrt", "lede", "OpenWrt", "hanwckf"],
+    "sourcePriority": [
+      "ImmortalWrt",
+      "lede",
+      "OpenWrt",
+      "hanwckf"
+    ],
     "defaultSource": "ImmortalWrt",
-    "developmentBranches": ["master", "main"],
+    "developmentBranches": [
+      "master",
+      "main"
+    ],
     "preferredTarget": {
       "selectors": {
         "system": "x86",
@@ -18,14 +26,24 @@
     }
   },
   "catalogLoadPolicy": {
-    "startup": ["menu", "menu:language", "package-mirrors"],
-    "idle": ["applications", "hidden", "help", "compatibility"],
+    "startup": [
+      "menu",
+      "menu:language",
+      "package-mirrors"
+    ],
+    "idle": [
+      "applications",
+      "hidden",
+      "help",
+      "compatibility"
+    ],
     "startupConcurrency": 3,
     "idleConcurrency": 1,
     "idleDelayMs": 15000
   },
   "catalogDataBranches": {
-    "fixPrefix": "catalog-fix-",
+    "fixDefault": "catalog-dev",
+    "fixOverrides": {},
     "legacyFix": "catalog-fix",
     "dev": "catalog-dev",
     "staging": "catalog-staging",

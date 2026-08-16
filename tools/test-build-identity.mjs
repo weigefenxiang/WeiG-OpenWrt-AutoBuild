@@ -27,13 +27,25 @@ assert.equal(normalizeBuildEnvironment('bad branch'), '');
 assert.equal(normalizeBuildEnvironment('../main'), '');
 
 const catalogChannels = {
-  fixPrefix: 'catalog-fix-', legacyFix: 'catalog-fix',
+  fixDefault: 'catalog-dev', fixOverrides: {}, legacyFix: 'catalog-fix',
   dev: 'catalog-dev', staging: 'catalog-staging', main: 'catalog-main',
 };
-assert.equal(catalogDataBranch('fix-F', catalogChannels), 'catalog-fix-F');
-assert.equal(catalogDataBranch('fix-next.test', catalogChannels), 'catalog-fix-next.test');
-assert.equal(catalogDataBranch('fix-a', catalogChannels), 'catalog-fix-a');
-assert.throws(() => catalogDataBranch('fix-F', { ...catalogChannels, fixPrefix: 'catalog-other-' }),
+assert.equal(catalogDataBranch('fix-F', catalogChannels), 'catalog-dev');
+assert.equal(catalogDataBranch('fix-next.test', catalogChannels), 'catalog-dev');
+assert.equal(catalogDataBranch('fix-a', catalogChannels), 'catalog-dev');
+const catalogOverrideChannels = {
+  ...catalogChannels,
+  fixOverrides: {
+    'fix-runtime-change': 'catalog-fix-runtime-data',
+    'fix-B': 'catalog-fix-A',
+  },
+};
+assert.equal(catalogDataBranch('fix-runtime-change', catalogOverrideChannels), 'catalog-fix-runtime-data');
+assert.equal(catalogDataBranch('fix-B', catalogOverrideChannels), 'catalog-fix-A');
+assert.throws(() => catalogDataBranch('fix-F', {
+  ...catalogChannels, fixOverrides: { 'fix-F': 'catalog-other' },
+}), /invalid Catalog data branch override/);
+assert.throws(() => catalogDataBranch('fix-F', { ...catalogChannels, fixDefault: 'catalog-main' }),
   /invalid Catalog data branch/);
 // Historical slash-style branches remain read-compatible but are not the standard authority.
 assert.equal(catalogDataBranch('fix/catalog-compatibility', catalogChannels), 'catalog-fix');
@@ -54,6 +66,7 @@ const catalogProvenance = (codeRef) => ({
     repository: 'owner/catalog', codeRef, codeSha: catalogProvenanceSha, complete: true,
   },
 });
+// Catalog snapshot provenance remains self-consistent independently of AutoBuild's routing choice.
 assert.equal(validateCatalogProvenance(catalogProvenance('fix-F'), 'catalog-fix-F', 'owner/catalog')?.codeRef,
   'fix-F');
 assert.equal(validateCatalogProvenance(catalogProvenance('fix-next.test'), 'catalog-fix-next.test', 'owner/catalog')?.codeRef,

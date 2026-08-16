@@ -36,13 +36,15 @@ function isValidBuildTag(value) {
 }
 const SITE_SHA256_RE = /^[a-f0-9]{64}$/;
 const CATALOG_DATA_BRANCHES = Object.freeze({
-  fixPrefix: 'catalog-fix-',
+  fixDefault: 'catalog-dev',
+  fixOverrides: Object.freeze({}),
   legacyFix: 'catalog-fix',
   dev: 'catalog-dev',
   staging: 'catalog-staging',
   main: 'catalog-main',
 });
 const CANONICAL_FIX_RE = /^fix-([A-Za-z0-9][A-Za-z0-9._-]{0,95})$/;
+const CATALOG_DATA_REF_RE = /^catalog-(?:fix(?:-[A-Za-z0-9][A-Za-z0-9._-]{0,95})?|dev|staging|main)$/;
 
 function configuredCatalogChannel(configured, key) {
   const mapping = configured && typeof configured === 'object' ? configured : {};
@@ -50,6 +52,22 @@ function configuredCatalogChannel(configured, key) {
   const branch = String(mapping[key] || expected || '').trim();
   if (!expected || branch !== expected) throw new Error(`invalid Catalog data branch for ${key}`);
   return branch;
+}
+
+function configuredFixDataBranch(configured, environment) {
+  const mapping = configured && typeof configured === 'object' ? configured : {};
+  const overrides = mapping.fixOverrides == null ? {} : mapping.fixOverrides;
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
+    throw new Error('invalid Catalog fix overrides');
+  }
+  if (Object.hasOwn(overrides, environment)) {
+    const branch = String(overrides[environment] || '').trim();
+    if (!CATALOG_DATA_REF_RE.test(branch)) {
+      throw new Error(`invalid Catalog data branch override for ${environment}`);
+    }
+    return branch;
+  }
+  return configuredCatalogChannel(configured, 'fixDefault');
 }
 
 // Frozen compatibility only for historical slash-style fix branches.
@@ -77,10 +95,7 @@ export function normalizeBuildCommit(value) {
 
 export function catalogDataBranch(value, configured = CATALOG_DATA_BRANCHES) {
   const environment = normalizeBuildEnvironment(value) || 'main';
-  const canonicalFix = CANONICAL_FIX_RE.exec(environment)?.[1] || '';
-  if (canonicalFix) {
-    return `${configuredCatalogChannel(configured, 'fixPrefix')}${canonicalFix}`;
-  }
+  if (CANONICAL_FIX_RE.test(environment)) return configuredFixDataBranch(configured, environment);
   const legacyFix = legacyFixDataBranch(environment);
   if (legacyFix) {
     if (legacyFix === 'catalog-fix') configuredCatalogChannel(configured, 'legacyFix');
