@@ -47,11 +47,18 @@ function safeName(name, index) {
   const clean = String(name).replace(/[^A-Za-z0-9._+-]/g, '_').slice(0, 100);
   return `${String(index + 1).padStart(2, '0')}-${clean || 'attachment.txt'}`;
 }
+function buildRequestEnvelope(json) {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return false;
+  if (json.schema === 5) return typeof json.config === 'string';
+  if (json.schema !== 6) return false;
+  return typeof json.sourceEnv === 'string' && typeof json.requestCommit === 'string' &&
+    typeof json.requestId === 'string' && Array.isArray(json.overrides) && !Object.hasOwn(json, 'config');
+}
 function detect(name, text) {
   if (text.trimStart().startsWith('{')) {
     try {
       const json = JSON.parse(text);
-      if (typeof json.config === 'string') return 'json';
+      if (buildRequestEnvelope(json)) return 'json';
     } catch (e) { fail(`${name}: invalid JSON: ${e.message}`); }
   }
   const lines = text.replace(/\r\n/g, '\n').split('\n');
