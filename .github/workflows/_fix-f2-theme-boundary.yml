@@ -1,0 +1,90 @@
+name: Fix F2 theme boundary repair
+
+on:
+  push:
+    branches: [fix-F2]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix-F2
+          fetch-depth: 0
+
+      - name: Apply minimal theme module boundary repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path_name, old, new):
+              path = Path(path_name)
+              text = path.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path_name}: expected exactly one marker, found {count}')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+
+          replace_once(
+              'site/wrt/lib/page-shell-ui.js',
+              "  applyTheme(themeMode);\n}\n",
+              "  applyTheme(themeMode);\n  return Object.freeze({ refreshThemeControl: applyThemeIcon });\n}\n",
+          )
+
+          replace_once(
+              'site/wrt/app.js',
+              "const PAGE_SHELL_UI = UI_RUNTIME.pageShell;\n",
+              "const PAGE_SHELL_UI = UI_RUNTIME.pageShell;\nlet PAGE_SHELL_CONTROLLER = null;\n",
+          )
+          replace_once(
+              'site/wrt/app.js',
+              "  applyThemeIcon();\n",
+              "  PAGE_SHELL_CONTROLLER?.refreshThemeControl();\n",
+          )
+          replace_once(
+              'site/wrt/app.js',
+              "PAGE_SHELL_UI.installPageShellUi({\n  get: $, t, safeSet, openModal, fitPluginNames,\n});\n",
+              "PAGE_SHELL_CONTROLLER = PAGE_SHELL_UI.installPageShellUi({\n  get: $, t, safeSet, openModal, fitPluginNames,\n});\n",
+          )
+
+          test = Path('tools/test-ui-modules.mjs')
+          text = test.read_text(encoding='utf-8')
+          marker = "assert.match(app, /PAGE_SHELL_UI\\.installPageShellUi/);\n"
+          addition = (
+              marker
+              + "assert.match(app, /let PAGE_SHELL_CONTROLLER = null/);\n"
+              + "assert.match(app, /PAGE_SHELL_CONTROLLER = PAGE_SHELL_UI\\.installPageShellUi/);\n"
+              + "assert.match(app, /PAGE_SHELL_CONTROLLER\\?\\.refreshThemeControl\\(\\)/);\n"
+              + "assert.doesNotMatch(app, /\\bapplyThemeIcon\\s*\\(/);\n"
+              + "assert.match(shell, /return Object\\.freeze\\(\\{ refreshThemeControl: applyThemeIcon \\}\\)/);\n"
+          )
+          if text.count(marker) != 1:
+              raise SystemExit('tools/test-ui-modules.mjs: installPageShellUi assertion marker drifted')
+          test.write_text(text.replace(marker, addition, 1), encoding='utf-8', newline='\n')
+          PY
+
+          rm -f .github/workflows/_fix-f2-theme-boundary.yml
+          node --check site/wrt/app.js
+          node --check site/wrt/lib/page-shell-ui.js
+          node tools/test-ui-modules.mjs
+          node tools/dev-assistant.mjs prepare
+          node tools/dev-assistant.mjs verify
+
+      - name: Commit verified clean tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e .github/workflows/_fix-f2-theme-boundary.yml
+          git config user.name weigefenxiang
+          git config user.email 119787190+weigefenxiang@users.noreply.github.com
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: restore theme refresh module boundary"
+          git push origin HEAD:fix-F2
