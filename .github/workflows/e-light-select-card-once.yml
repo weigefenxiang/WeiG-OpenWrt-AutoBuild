@@ -31,7 +31,12 @@ jobs:
           new = "css = css_path.read_text().replace('\\r\\n', '\\n').replace('\\r', '\\n')\n"
           if text.count(old) != 1:
               raise SystemExit(f'patch helper read anchor count={text.count(old)}')
-          path.write_text(text.replace(old, new, 1))
+          text = text.replace(old, new, 1)
+          old_dark = """if css.count(dark_old) != 2:\n    raise SystemExit(f'dark selectable-card token anchor count={css.count(dark_old)}')\ncss = css.replace(dark_old, dark_new)\n"""
+          new_dark = """if css.count(dark_old) != 1:\n    raise SystemExit(f'explicit dark selectable-card token anchor count={css.count(dark_old)}')\ncss = css.replace(dark_old, dark_new, 1)\nauto_dark_old = dark_old.replace('  --', '    --')\nauto_dark_new = dark_new.replace('  --', '    --')\nif css.count(auto_dark_old) != 1:\n    raise SystemExit(f'auto dark selectable-card token anchor count={css.count(auto_dark_old)}')\ncss = css.replace(auto_dark_old, auto_dark_new, 1)\n"""
+          if text.count(old_dark) != 1:
+              raise SystemExit(f'patch helper dark anchor count={text.count(old_dark)}')
+          path.write_text(text.replace(old_dark, new_dark, 1))
           PY
       - name: Apply selectable-card patch
         run: python3 tools/e-light-select-card-once.py
