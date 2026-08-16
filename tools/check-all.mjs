@@ -73,6 +73,7 @@ const regressionTests = [
   'check-public-terminology.mjs',
   'test-site-release.mjs',
   'test-theme-bootstrap.mjs',
+  'test-ui-modules.mjs',
   'test-build-identity.mjs',
   'test-build-admission.mjs',
   'test-preview-server.mjs',

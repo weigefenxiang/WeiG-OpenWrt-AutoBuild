@@ -13,6 +13,10 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = readFileSync(join(root, 'site', 'wrt', 'app.js'), 'utf8');
 const html = readFileSync(join(root, 'site', 'wrt', 'index.html'), 'utf8');
 const css = readFileSync(join(root, 'site', 'wrt', 'app.css'), 'utf8');
+const uiSession = readFileSync(join(root, 'site', 'wrt', 'lib', 'ui-session-state.js'), 'utf8');
+const uiComponents = readFileSync(join(root, 'site', 'wrt', 'lib', 'ui-components.js'), 'utf8');
+const pageShell = readFileSync(join(root, 'site', 'wrt', 'lib', 'page-shell-ui.js'), 'utf8');
+const uiComponentsCss = readFileSync(join(root, 'site', 'wrt', 'ui-components.css'), 'utf8');
 const project = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
 const expect = (condition, message) => { if (!condition) throw new Error(message); };
 
@@ -69,15 +73,19 @@ expect(app.includes('function schema6TargetIdentity(target = state.device?.targe
 const defconfigTogglePosition = html.indexOf('id="defconfigToggle"');
 const menuconfigHeaderPosition = html.indexOf('<div class="menuconfig-header">');
 const menuconfigBodyPosition = html.indexOf('<div id="menuconfigBody"');
-expect(app.includes('let compatibilityRememberDefault = false;') &&
-  app.includes("rememberChoice.className = 'compatibility-remember'") &&
-  app.includes("rememberInput.checked = compatibilityRememberDefault") &&
+expect(uiSession.includes('let compatibilityRememberDefault = false;') &&
+  uiSession.includes('let compatibilityAcknowledgement = null;') &&
+  uiSession.includes('setRememberDefault(value) { compatibilityRememberDefault = value === true; }') &&
+  uiSession.includes('clearAcknowledgement() { compatibilityAcknowledgement = null; }') &&
+  app.includes('UI_COMPONENTS.createUiCheckboxControl({') &&
+  app.includes('checked: UI_SESSION.compatibility.getRememberDefault(),') &&
   app.includes("finish(rememberInput.checked ? 'forced-remember' : 'forced')") &&
   app.includes('remembered.size === forced.size') &&
-  app.includes("rememberDefault.className = 'st-option compatibility-remember'") &&
-  app.includes('compatibilityRememberDefault = rememberDefaultInput.checked') &&
+  app.includes('onChange: (checked) => UI_SESSION.compatibility.setRememberDefault(checked)') &&
   app.includes('仅当前页面有效；刷新或重新打开网页、清除站点数据后失效。') &&
-  !app.includes('wrt_compatibility_remember') &&
+  !app.includes('wrt_compatibility_remember') && !uiSession.includes('localStorage') &&
+  uiComponents.includes('export function createUiCheckboxControl') &&
+  uiComponentsCss.includes('.ui-checkbox-control{display:inline-flex;') &&
   css.includes('.compatibility-remember{display:inline-flex;') &&
   css.includes('.st-option.compatibility-remember{width:100%;'),
   'force-confirm remember-choice control, page-session default, tooltip, or non-persistence regressed');
@@ -124,7 +132,8 @@ expect(
   css.includes('color:var(--accent);font:var(--font-emphasis) ui-monospace,Consolas,monospace') &&
   css.includes('.menuconfig-scroll{max-height:clamp(280px,55vh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior-y:auto;') &&
   !css.includes('.menuconfig-scroll{max-height:clamp(280px,55vh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior:contain;') &&
-  app.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;'),
+  pageShell.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;') &&
+  !app.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;'),
   'shared typography scale, build-contract hierarchy, native menuconfig scroll chaining, responsive tokens, or retired density cleanup regressed');
 
 const sharedTooltipContract = app.match(/\/\* ============ 统一悬浮说明[\s\S]*?function makePill/)?.[0] || '';
@@ -444,7 +453,7 @@ expect(snapshotContract.includes('revision: catalogStateRevision') &&
   snapshotContract.includes('compatibilityAcknowledgement'),
   'Catalog rollback snapshot does not preserve revision/acknowledgement');
 expect(restoreContract.includes('catalogStateRevision = snapshot.revision') &&
-  restoreContract.includes('compatibilityAcknowledgement = snapshot.compatibilityAcknowledgement') &&
+  restoreContract.includes('UI_SESSION.compatibility.setAcknowledgement(snapshot.compatibilityAcknowledgement)') &&
   restoreContract.includes('clearCatalogDerivedCaches()') &&
   !restoreContract.includes('markCatalogStateChanged'),
   'failure rollback is incorrectly counted as a configuration change');

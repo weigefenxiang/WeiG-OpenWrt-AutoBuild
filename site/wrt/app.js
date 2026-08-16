@@ -15,6 +15,14 @@ if (!/^[a-f0-9]{64}$/.test(SITE_RELEASE_SHA) || typeof globalThis.__WEIG_RELEASE
   throw new Error('Missing validated site release bootstrap / 缺少已验证的站点发布身份');
 }
 const releaseAssetUrl = (path) => globalThis.__WEIG_RELEASE_URL__(path);
+const UI_RUNTIME = globalThis.__WEIG_UI_RUNTIME__;
+if (!UI_RUNTIME?.session?.createUiSessionState || !UI_RUNTIME?.components?.createUiCheckboxControl ||
+    !UI_RUNTIME?.pageShell?.installPageShellUi) {
+  throw new Error('Missing standardized UI runtime modules / 缺少标准 UI 运行模块');
+}
+const UI_SESSION = UI_RUNTIME.session.createUiSessionState();
+const UI_COMPONENTS = UI_RUNTIME.components;
+const PAGE_SHELL_UI = UI_RUNTIME.pageShell;
 function releaseScopedUrl(url) {
   const resolved = new URL(url, document.baseURI);
   resolved.searchParams.set('r', SITE_RELEASE_SHA);
@@ -133,8 +141,7 @@ let catalogSearchWorker = null, catalogSearchGeneration = 0, catalogSearchReques
 let catalogSearchWorkerReady = false, catalogSearchPending = new Set(), catalogSearchResults = new Map();
 let catalogLocatorEntryCache = null;
 let catalogStateRevision = 0, catalogContextCache = new Map(), catalogContextCacheBypass = false;
-let compatibilityPrefetchTimer = null, compatibilityAcknowledgement = null;
-let compatibilityRememberDefault = false;
+let compatibilityPrefetchTimer = null;
 let catalogApplicationsPromise = null, catalogApplicationsDocument = null;
 let catalogApplicationsLoadState = 'loading', catalogApplicationsError = '';
 let selfTestViewToken = 0;
@@ -1443,7 +1450,7 @@ function addMenuIndex(map, key, value) {
 }
 function markCatalogStateChanged() {
   catalogStateRevision++;
-  compatibilityAcknowledgement = null;
+  UI_SESSION.compatibility.clearAcknowledgement();
   clearCatalogDerivedCaches();
 }
 function clearCatalogDerivedCaches() {
@@ -2879,7 +2886,7 @@ function snapshotCatalogUiState() {
     userOverrides: new Map(catalogUserOverrides), recommended: new Map(catalogRecommendedValues),
     imported: new Set(catalogImportedSymbols), theme: state.theme,
     revision: catalogStateRevision,
-    compatibilityAcknowledgement,
+    compatibilityAcknowledgement: UI_SESSION.compatibility.getAcknowledgement(),
   };
 }
 function restoreMap(target, source) {
@@ -2901,7 +2908,7 @@ function restoreCatalogUiState(snapshot) {
   restoreSet(catalogImportedSymbols, snapshot.imported);
   state.theme = snapshot.theme;
   catalogStateRevision = snapshot.revision;
-  compatibilityAcknowledgement = snapshot.compatibilityAcknowledgement;
+  UI_SESSION.compatibility.setAcknowledgement(snapshot.compatibilityAcknowledgement);
   clearCatalogDerivedCaches();
 }
 function renderCatalogUiAfterIntent(openChildren = false, option = null, value = 'n') {
@@ -3119,7 +3126,8 @@ async function ensureCompatibilityRules() {
   let evaluation = await loadCompatibilityEvaluation();
   if (!evaluation.warnings.length) return null;
   const signature = compatibilitySignature(evaluation);
-  if (compatibilityAcknowledgement?.signature === signature) return compatibilityAcknowledgement.audit;
+  const acknowledged = UI_SESSION.compatibility.getAcknowledgement();
+  if (acknowledged?.signature === signature) return acknowledged.audit;
   const forced = new Set();
   const remembered = new Set();
   while (true) {
@@ -3128,11 +3136,11 @@ async function ensureCompatibilityRules() {
     if (!pending.length) {
       const audit = forcedCompatibilityAudit(evaluation, forced);
       if (audit && forced.size && remembered.size === forced.size) {
-        compatibilityAcknowledgement = {
+        UI_SESSION.compatibility.setAcknowledgement({
           signature: compatibilitySignature(evaluation), audit,
-        };
+        });
       } else {
-        compatibilityAcknowledgement = null;
+        UI_SESSION.compatibility.clearAcknowledgement();
       }
       return audit;
     }
@@ -3295,31 +3303,28 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       modalCancelHandler = renderChoice;
       const body = renderModalShell(uiText('确认强制继续', '確認強制繼續', 'Confirm force continuation'));
       appendCompatibilitySummary(body, { confirmation: true });
-      const actions = document.createElement('div');
-      actions.className = 'modal-actions compatibility-actions compatibility-confirm-actions';
-      const rememberChoice = document.createElement('label');
-      rememberChoice.className = 'compatibility-remember';
-      rememberChoice.dataset.uiTooltipTitle = uiText('记住选择', '記住選擇', 'Remember choice');
-      rememberChoice.dataset.uiTooltipBody = uiText(
-        '仅当前页面有效；刷新或重新打开网页、清除站点数据后失效。',
-        '僅目前頁面有效；重新整理或重新開啟網頁、清除網站資料後失效。',
-        'Valid only on this page. Refreshing or reopening the page, or clearing site data, resets it.');
-      const rememberInput = document.createElement('input');
-      rememberInput.type = 'checkbox';
-      rememberInput.checked = compatibilityRememberDefault;
-      const rememberText = document.createElement('span');
-      rememberText.textContent = uiText('记住选择', '記住選擇', 'Remember choice');
-      rememberChoice.append(rememberInput, rememberText);
-      const backButton = document.createElement('button');
-      backButton.type = 'button';
-      backButton.className = 'btn compatibility-close';
-      backButton.textContent = uiText('返回修改', '返回修改', 'Back to edit');
-      backButton.onclick = renderChoice;
-      const confirmForceButton = document.createElement('button');
-      confirmForceButton.type = 'button';
-      confirmForceButton.className = 'btn compatibility-force-confirm';
-      confirmForceButton.textContent = uiText('确认强制继续', '確認強制繼續', 'Confirm and force');
-      confirmForceButton.onclick = () => finish(rememberInput.checked ? 'forced-remember' : 'forced');
+      const actions = UI_COMPONENTS.createUiActionRow(
+        'modal-actions compatibility-actions compatibility-confirm-actions');
+      const { root: rememberChoice, input: rememberInput } = UI_COMPONENTS.createUiCheckboxControl({
+        className: 'compatibility-remember',
+        label: uiText('记住选择', '記住選擇', 'Remember choice'),
+        checked: UI_SESSION.compatibility.getRememberDefault(),
+        tooltipTitle: uiText('记住选择', '記住選擇', 'Remember choice'),
+        tooltipBody: uiText(
+          '仅当前页面有效；刷新或重新打开网页、清除站点数据后失效。',
+          '僅目前頁面有效；重新整理或重新開啟網頁、清除網站資料後失效。',
+          'Valid only on this page. Refreshing or reopening the page, or clearing site data, resets it.'),
+      });
+      const backButton = UI_COMPONENTS.createUiButton({
+        text: uiText('返回修改', '返回修改', 'Back to edit'),
+        className: 'btn compatibility-close',
+        onClick: renderChoice,
+      });
+      const confirmForceButton = UI_COMPONENTS.createUiButton({
+        text: uiText('确认强制继续', '確認強制繼續', 'Confirm and force'),
+        className: 'btn compatibility-force-confirm',
+        onClick: () => finish(rememberInput.checked ? 'forced-remember' : 'forced'),
+      });
       actions.append(rememberChoice, backButton, confirmForceButton);
       body.appendChild(actions);
     };
@@ -7074,24 +7079,21 @@ async function runSelfTest() {
   intro.className = 'hint';
   intro.textContent = t('st.intro');
   mb.appendChild(intro);
-  const rememberDefault = document.createElement('label');
-  rememberDefault.className = 'st-option compatibility-remember';
-  rememberDefault.dataset.uiTooltipTitle = uiText('本页记住强制兼容选择', '本頁記住強制相容選擇', 'Remember forced compatibility choices on this page');
-  rememberDefault.dataset.uiTooltipBody = uiText(
-    '开启后，后续强制确认框中的“记住选择”默认勾选；第一次遇到新的兼容性风险仍需手动确认。刷新或重新打开网页后失效。',
-    '開啟後，後續強制確認框中的「記住選擇」預設勾選；第一次遇到新的相容性風險仍需手動確認。重新整理或重新開啟網頁後失效。',
-    'When enabled, future force-confirmation dialogs default “Remember choice” to checked. A new compatibility risk still requires an explicit first confirmation. Refreshing or reopening the page resets it.');
-  const rememberDefaultInput = document.createElement('input');
-  rememberDefaultInput.type = 'checkbox';
-  rememberDefaultInput.checked = compatibilityRememberDefault;
-  const rememberDefaultText = document.createElement('span');
-  rememberDefaultText.textContent = uiText(
-    '本页默认记住强制兼容选择', '本頁預設記住強制相容選擇',
-    'Default to remember forced compatibility choices on this page');
-  rememberDefaultInput.addEventListener('change', () => {
-    compatibilityRememberDefault = rememberDefaultInput.checked;
+  const { root: rememberDefault } = UI_COMPONENTS.createUiCheckboxControl({
+    className: 'st-option compatibility-remember',
+    label: uiText(
+      '本页默认记住强制兼容选择', '本頁預設記住強制相容選擇',
+      'Default to remember forced compatibility choices on this page'),
+    checked: UI_SESSION.compatibility.getRememberDefault(),
+    tooltipTitle: uiText(
+      '本页记住强制兼容选择', '本頁記住強制相容選擇',
+      'Remember forced compatibility choices on this page'),
+    tooltipBody: uiText(
+      '开启后，后续强制确认框中的“记住选择”默认勾选；第一次遇到新的兼容性风险仍需手动确认。刷新或重新打开网页后失效。',
+      '開啟後，後續強制確認框中的「記住選擇」預設勾選；第一次遇到新的相容性風險仍需手動確認。重新整理或重新開啟網頁後失效。',
+      'When enabled, future force-confirmation dialogs default “Remember choice” to checked. A new compatibility risk still requires an explicit first confirmation. Refreshing or reopening the page resets it.'),
+    onChange: (checked) => UI_SESSION.compatibility.setRememberDefault(checked),
   });
-  rememberDefault.append(rememberDefaultInput, rememberDefaultText);
   mb.appendChild(rememberDefault);
 
   function addRow(name) {
@@ -7277,118 +7279,10 @@ async function runSelfTest() {
 }
 $('selfTestBtn').addEventListener('click', () => { runSelfTest().catch((e) => showToast(t('toast.selfTestError', { msg: e.message }))); });
 
-/* ============ V11:Aa 字号面板(整页缩放),替代旧密度切换 / V11: Aa font-size panel (whole-page zoom), replaces the old density toggle ============ */
-const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;
-let fontPx = parseInt(localStorage.getItem('wrt_font'), 10);
-if (!fontPx && localStorage.getItem('wrt_density') === '1') { fontPx = 16; safeSet('wrt_font', '16'); }   // 旧紧凑档用户迁移为 16px / legacy compact-density users migrate to 16px
-try { localStorage.removeItem('wrt_density'); } catch (e) { /* 隐私模式可能抛错,忽略 / may throw in private mode; ignore */ }
-if (!(fontPx >= FONT_MIN && fontPx <= FONT_MAX)) fontPx = FONT_DEF;
-function applyFont(px, save) {
-  fontPx = Math.min(FONT_MAX, Math.max(FONT_MIN, Math.round(Number(px)) || FONT_DEF));
-  document.body.style.zoom = fontPx === FONT_DEF ? '' : String(fontPx / FONT_DEF);   // 17px = 原始大小 / 17px = original size
-  $('fontInput').value = fontPx;
-  if (save) safeSet('wrt_font', String(fontPx));
-  fitPluginNames();   // 缩放改变有效布局宽度,重测名称适配 / zoom changes the effective layout width; re-fit names
-}
-function toggleFontPanel(show) {
-  const open = show !== undefined ? show : $('fontPanel').hidden;
-  if (!open && $('fontPanel').contains(document.activeElement)) $('densityBtn').focus();   // 关闭时焦点还给 Aa / hand focus back to Aa on close
-  $('fontPanel').hidden = !open;
-  $('densityBtn').setAttribute('aria-expanded', String(open));
-  if (open) $('fontDec').focus();
-}
-$('densityBtn').addEventListener('click', (e) => { e.stopPropagation(); toggleFontPanel(); });
-$('fontDec').addEventListener('click', () => applyFont(fontPx - 1, true));
-$('fontInc').addEventListener('click', () => applyFont(fontPx + 1, true));
-$('fontReset').addEventListener('click', () => applyFont(FONT_DEF, true));
-$('fontInput').addEventListener('change', () => applyFont($('fontInput').value, true));
-document.addEventListener('click', (e) => {
-  if (!$('fontPanel').hidden && !$('fontPanel').contains(e.target)) toggleFontPanel(false);   // 点外部关闭 / close on outside click
+/* ============ 页面壳层 / Page shell ============ */
+PAGE_SHELL_UI.installPageShellUi({
+  get: $, t, safeSet, openModal, fitPluginNames,
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleFontPanel(false); });
-applyFont(fontPx, false);
-
-/* ============ 使用说明弹窗:序号徽章 + 引号关键词高亮 / Help modal: numbered badges + quoted-keyword highlights ============ */
-$('helpBtn').addEventListener('click', () => {
-  openModal(t('help.title'));
-  $('modal').querySelector('.modal').classList.add('modal-wide', 'recommended-config');
-  const mb = $('modalBody');
-  mb.textContent = '';
-  for (const line of t('help.body').split('\n')) {
-    const m = line.match(/^([①②③④⑤⑥⑦⑧⑨⑩]|\d+\.)\s*(.*)$/);
-    const row = document.createElement('div');
-    row.className = 'help-item';
-    const num = document.createElement('span');
-    num.className = 'help-num';
-    num.textContent = m ? m[1].replace('.', '') : '·';
-    row.appendChild(num);
-    const body = document.createElement('span');
-    body.className = 'help-text';
-    // 中英引号里的词高亮为主题蓝 / words inside quotes get accent-colored
-    const text = m ? m[2] : line;
-    let last = 0;
-    for (const q of text.matchAll(/"([^"]+)"|'([^']+)'|“([^”]+)”/g)) {
-      body.appendChild(document.createTextNode(text.slice(last, q.index)));
-      const em = document.createElement('em');
-      em.textContent = q[1] || q[2] || q[3];
-      body.appendChild(em);
-      last = q.index + q[0].length;
-    }
-    body.appendChild(document.createTextNode(text.slice(last)));
-    row.appendChild(body);
-    mb.appendChild(row);
-  }
-  const links = document.createElement('div');
-  links.className = 'help-links';
-  const addHelpLink = (href, label) => {
-    const link = document.createElement('a');
-    link.href = href;
-    link.target = '_blank';
-    link.rel = 'noopener';
-    link.textContent = label;
-    links.appendChild(link);
-  };
-  addHelpLink('https://openwrt.org/docs/guide-user/installation/generic.sysupgrade', t('help.link.ubi'));
-  mb.appendChild(links);
-});
-
-/* ============ 悬浮坞收起/展开(记忆状态;手机首次默认只留 ⚙) / dock collapse toggle (persisted; first mobile visit starts as gear only) ============ */
-const savedDock = localStorage.getItem('wrt_dock');
-if (savedDock === '1' || (savedDock === null && matchMedia('(max-width: 560px)').matches)) {
-  $('sideDock').classList.add('collapsed');
-}
-$('dockToggle').setAttribute('aria-expanded', String(!$('sideDock').classList.contains('collapsed')));
-$('dockToggle').addEventListener('click', () => {
-  const collapsed = $('sideDock').classList.toggle('collapsed');
-  $('dockToggle').setAttribute('aria-expanded', String(!collapsed));
-  safeSet('wrt_dock', collapsed ? '1' : '0');
-});
-
-/* ============ 风险横幅 / Risk banner ============ */
-$('riskOk').addEventListener('click', () => { $('riskBar').hidden = true; safeSet('wrt_risk', 'ok'); });
-
-/* ============ 主题三态 / Tri-state theme ============ */
-let themeMode = localStorage.getItem('wrt_theme') || 'auto';
-const THEME_ICON = { auto: '◐', light: '☀', dark: '☾' };
-function applyThemeIcon() {
-  $('themeBtn').textContent = THEME_ICON[themeMode];
-  $('themeBtn').title = t('theme.' + themeMode);
-  $('themeBtn').setAttribute('aria-label', t('theme.' + themeMode));
-}
-function applyTheme(mode) {
-  themeMode = (mode === 'light' || mode === 'dark') ? mode : 'auto';
-  if (typeof globalThis.__WEIG_APPLY_THEME__ === 'function') {
-    themeMode = globalThis.__WEIG_APPLY_THEME__(themeMode);
-  } else if (themeMode === 'auto') delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = themeMode;
-  applyThemeIcon();
-  if (themeMode === 'auto') { try { localStorage.removeItem('wrt_theme'); } catch (e) { /* 隐私模式下 localStorage 可能抛错,忽略 / localStorage may throw in private mode; ignore */ } }
-  else safeSet('wrt_theme', themeMode);
-}
-$('themeBtn').addEventListener('click', () => {
-  applyTheme(themeMode === 'auto' ? 'light' : themeMode === 'light' ? 'dark' : 'auto');
-});
-applyTheme(themeMode);
 
 init();
 updateSubmitGate();
