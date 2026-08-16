@@ -1,0 +1,42 @@
+name: One-shot schema6 version finalizer
+
+on:
+  push:
+    branches:
+      - fix-F
+    paths:
+      - .github/workflows/one-shot-finalize-schema6-version.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: "${{ github.event.head_commit.message == 'chore: stage schema6 version finalizer' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fix-F
+        uses: actions/checkout@v6
+        with:
+          ref: fix-F
+          fetch-depth: 0
+
+      - name: Finalize version against the permanent tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/one-shot-finalize-schema6-version.yml
+          node tools/dev-assistant.mjs prepare
+          node tools/check-all.mjs
+          git diff --check
+          git status --short
+
+      - name: Commit and push fix-F
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: finalize schema 6 version state'
+          git push origin HEAD:fix-F
