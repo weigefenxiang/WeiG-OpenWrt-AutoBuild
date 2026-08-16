@@ -93,6 +93,7 @@ const regressionTests = [
   'test-artifact-publish.mjs',
 ];
 for (const name of regressionTests) run(name, process.execPath, [join(ROOT, 'tools', name)]);
+run('version behavior policy', process.execPath, [join(ROOT, 'tools', 'stamp-site-version.mjs'), '--self-test']);
 
 const license = readFileSync(join(ROOT, 'LICENSE'), 'utf8');
 const notice = readFileSync(join(ROOT, 'NOTICE'), 'utf8');
