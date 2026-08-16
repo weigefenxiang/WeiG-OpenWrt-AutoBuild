@@ -79,10 +79,12 @@ const versionStateOk = old.fingerprint === fingerprint && old.siteSha256 === sit
 if (CHECK_ONLY) {
   if (versionStateOk) {
     console.log(`Project version verified / 项目版本验证通过: ${old.version}`);
+    console.log(`Project fingerprint verified / 项目指纹验证通过: ${fingerprint}`);
     console.log(`Site SHA-256 verified / 全站 SHA-256 验证通过: ${old.siteSha256}`);
     process.exit(0);
   }
   console.error('VERSION, project fingerprint or siteSha256 is stale / VERSION、项目指纹或全站 siteSha256 未更新');
+  console.error(`Computed fingerprint / 当前项目指纹: ${fingerprint}`);
   console.error(`Computed siteSha256 / 当前全站 SHA-256: ${siteRelease.siteSha256}`);
   console.error('Run locally before commit / 提交前请在本地运行: node tools/stamp-site-version.mjs');
   process.exit(1);
