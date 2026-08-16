@@ -6,6 +6,7 @@ on:
     branches: [fix-F]
     paths:
       - "tools/fix-f-apply.mjs"
+      - "tools/fix-f-apply-v2.mjs"
       - ".github/workflows/fix-f-apply.yml"
 
 permissions:
@@ -25,7 +26,7 @@ jobs:
           ref: fix-F
           fetch-depth: 0
       - name: Apply guarded runtime patch
-        run: node tools/fix-f-apply.mjs
+        run: node tools/fix-f-apply-v2.mjs
       - name: Prepare and verify AutoBuild
         run: node tools/dev-assistant.mjs prepare
       - name: Verify retired config authority is gone
@@ -40,10 +41,12 @@ jobs:
         run: |
           set -euo pipefail
           test ! -e tools/fix-f-apply.mjs
+          test ! -e tools/fix-f-apply-v2.mjs
+          test ! -e tools/fix-f-runtime.mjs
           test ! -e .github/workflows/fix-f-apply.yml
           git diff --check
           git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git config user.email 4189822+github-actions[bot]@users.noreply.github.com
           git add -A
           git diff --cached --quiet && { echo 'No patch changes to commit.'; exit 1; }
           git commit -m "build: consume native profile baselines"
