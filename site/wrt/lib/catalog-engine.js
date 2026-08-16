@@ -1503,7 +1503,7 @@ export function compatibilityAcknowledgementKey({
 } = {}) {
   const ids = Array.isArray(ruleIds) ? [...ruleIds].map(String).sort() : [];
   if (!/^[a-f0-9]{64}$/.test(String(sha256 || '')) ||
-      !/^catalog-(?:fix|dev|staging|data)$/.test(String(dataRef || '')) ||
+      !/^catalog-(?:fix(?:-[A-Za-z0-9][A-Za-z0-9._-]{0,95})?|dev|staging|main|data)$/.test(String(dataRef || '')) ||
       !COMPATIBILITY_SOURCE_RE.test(String(sourceId || '')) ||
       !COMPATIBILITY_BRANCH_RE.test(String(branchName || '')) ||
       !Number.isSafeInteger(revision) || revision < 0 || !ids.length ||
