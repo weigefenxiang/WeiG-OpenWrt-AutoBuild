@@ -1,0 +1,8 @@
+/* SPDX-FileCopyrightText: 2026 weigefenxiang <weigefenxiang@gmail.com> */
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+
+.ui-action-row{align-items:center}
+.ui-checkbox-control{display:inline-flex;align-items:center;gap:8px;min-width:0;cursor:pointer}
+.ui-checkbox-control>input[type=checkbox]{flex:none;width:17px;height:17px;margin:0;accent-color:var(--accent)}
+.ui-checkbox-label{min-width:0}
+.ui-button{font-family:inherit}

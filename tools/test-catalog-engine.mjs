@@ -19,6 +19,7 @@ import {
   selectableKconfigStates,
   validateConfig,
 } from '../site/wrt/lib/catalog-engine.js';
+import { safeCatalogDataRef } from '../site/wrt/lib/catalog-loader.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -619,9 +620,19 @@ expectThrow(() => evaluateCompatibilityRules(model, missingPackage, ownershipVal
 'active compatibility rule silently accepted a missing package ID');
 
 const acknowledgement = {
-  sha256: 'a'.repeat(64), dataRef: 'catalog-fix', sourceId: 'Demo', branchName: 'stable',
+  sha256: 'a'.repeat(64), dataRef: 'catalog-fix-F', sourceId: 'Demo', branchName: 'stable',
   revision: 7, ruleIds: ['OWN-TEST', 'OWN-TIE'],
 };
+for (const dataRef of ['catalog-fix', 'catalog-fix-F', 'catalog-dev', 'catalog-staging', 'catalog-main']) {
+  assert(safeCatalogDataRef(dataRef) === dataRef, `Catalog loader rejected canonical dataRef ${dataRef}`);
+  compatibilityAcknowledgementKey({ ...acknowledgement, dataRef });
+}
+compatibilityAcknowledgementKey({ ...acknowledgement, dataRef: 'catalog-data' });
+expectThrow(() => safeCatalogDataRef('catalog-candidate'), /invalid Catalog data branch/,
+  'Catalog loader accepted the non-browser candidate channel');
+expectThrow(() => compatibilityAcknowledgementKey({ ...acknowledgement, dataRef: 'catalog-candidate' }),
+  /compatibility acknowledgement context is invalid/,
+  'compatibility acknowledgement accepted the non-browser candidate channel');
 const acknowledgementKey = compatibilityAcknowledgementKey(acknowledgement);
 assert(acknowledgementKey === compatibilityAcknowledgementKey({
   ...acknowledgement, ruleIds: [...acknowledgement.ruleIds].reverse(),

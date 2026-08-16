@@ -13,6 +13,10 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = readFileSync(join(root, 'site', 'wrt', 'app.js'), 'utf8');
 const html = readFileSync(join(root, 'site', 'wrt', 'index.html'), 'utf8');
 const css = readFileSync(join(root, 'site', 'wrt', 'app.css'), 'utf8');
+const uiSession = readFileSync(join(root, 'site', 'wrt', 'lib', 'ui-session-state.js'), 'utf8');
+const uiComponents = readFileSync(join(root, 'site', 'wrt', 'lib', 'ui-components.js'), 'utf8');
+const pageShell = readFileSync(join(root, 'site', 'wrt', 'lib', 'page-shell-ui.js'), 'utf8');
+const uiComponentsCss = readFileSync(join(root, 'site', 'wrt', 'ui-components.css'), 'utf8');
 const project = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
 const expect = (condition, message) => { if (!condition) throw new Error(message); };
 
@@ -21,6 +25,206 @@ expect(html.includes("if (meta && !releaseMeta) throw new Error('Site release me
 expect(html.includes('if (optional && response.status === 404) return null') &&
   !html.includes('if (optional) return null;'),
   'deployment metadata network/parse failures can silently fall back to the main Catalog channel');
+
+const buildInfoContract = app.match(/function renderCatalogBuildInfo\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
+expect(html.includes('<dt>Web Version</dt>') &&
+  html.includes('<dt>Web Commit</dt>') &&
+  html.includes('id="buildInfoCatalogCode"') &&
+  html.includes('id="buildInfoCatalogData"') &&
+  buildInfoContract.includes("renderBuildInfoSha('buildInfoCatalogCode', MENU_INDEX?.provenance?.codeSha)") &&
+  buildInfoContract.includes("renderBuildInfoSha('buildInfoCatalogData', MENU_INDEX?.assetRef)") &&
+  (app.match(/MENU_INDEX = (?:index|remote\.index);\n\s+renderCatalogBuildInfo\(\);/g) || []).length >= 2,
+  'Build Information does not expose the loaded Catalog code and data identities');
+
+const buildInfoUiContract = app.match(/function renderBuildInfo\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
+expect(app.includes('button.textContent = sha;') && !app.includes('sha.slice(0, 12)') &&
+  app.includes('function positionBuildInfoPanel(trigger, card)') &&
+  buildInfoUiContract.includes("document.addEventListener('click'") &&
+  buildInfoUiContract.includes("if (!panel.classList.contains('is-open') || panel.contains(event.target)) return;") &&
+  buildInfoUiContract.includes('if (buildInfoInteractiveTarget(event.target)) setOpen(false);') &&
+  buildInfoUiContract.includes("document.addEventListener('dblclick'") &&
+  app.includes('const BUILD_INFO_INTERACTIVE_SELECTOR = [') &&
+  app.includes("'a[href]', 'button', 'input', 'select', 'textarea', 'label', 'summary'") &&
+  app.includes("'[role=\"button\"]', '[role=\"checkbox\"]', '[role=\"radio\"]'") &&
+  app.includes("'[tabindex]:not([tabindex=\"-1\"])'") &&
+  html.includes('id="buildInfoClose"') && html.includes('data-i18n-aria="btn.close"') &&
+  buildInfoUiContract.includes("const closeButton = $('buildInfoClose')") &&
+  buildInfoUiContract.includes("closeButton.addEventListener('click', (event) => {") &&
+  buildInfoUiContract.includes("event.stopPropagation();\n    setOpen(false);") &&
+  css.includes('.build-info-head') && css.includes('.build-info-close') &&
+  css.includes('.build-info.is-open .build-info-card') && !css.includes('.build-info:hover .build-info-card') &&
+  css.includes('width: min(480px, calc(100vw - 16px))') && css.includes('text-overflow: ellipsis') &&
+  html.indexOf('id="siteVersion"') < html.indexOf('id="importBtn"') && html.indexOf('id="importBtn"') < html.indexOf('id="submitBtn"'),
+  'Build Information anchoring, interactive auto-close, full-width SHA display, or footer order regressed');
+expect(html.includes('data-i18n="btn.import.short"') && html.includes('data-i18n="btn.submit.short"') &&
+  css.includes('.actionbar-row { flex-wrap: nowrap; gap: 5px; padding: 6px 8px; }') &&
+  css.includes('.action-label-full { display: none; }') && css.includes('.action-label-short { display: inline; }') &&
+  app.includes("capText.textContent = `${rootfs.value} MiB`;") && css.includes('.cap-info.rootfs-capacity::before{content:"RootFS "}') &&
+  css.includes('.cap-info.rootfs-capacity::before { content: ""; }'),
+  'mobile one-line action bar labels or compact RootFS capacity regressed');
+
+expect(app.includes('function schema6TargetIdentity(target = state.device?.target) {') &&
+  app.includes('payload.customTarget = schema6TargetIdentity();') &&
+  !app.includes('payload.customTarget = state.device.target') &&
+  app.includes('ACTIVE_PROFILE_BASELINE, payload.overrides, { allowedSymbols }') &&
+  app.includes('const allowedSymbols = CATALOG_MODEL?.bySymbol instanceof Map'),
+  'schema6 request Target identity is not minimal or schema6 import lost the active Catalog symbol allowlist');
+
+const defconfigTogglePosition = html.indexOf('id="defconfigToggle"');
+const menuconfigHeaderPosition = html.indexOf('<div class="menuconfig-header">');
+const menuconfigBodyPosition = html.indexOf('<div id="menuconfigBody"');
+expect(!uiSession.includes('compatibilityRememberDefault') &&
+  uiSession.includes('let compatibilityAcknowledgement = null;') &&
+  !uiSession.includes('getRememberDefault') && !uiSession.includes('setRememberDefault') &&
+  uiSession.includes('clearAcknowledgement() { compatibilityAcknowledgement = null; }') &&
+  app.includes('UI_COMPONENTS.createUiCheckboxControl({') &&
+  app.includes('checked: false,') &&
+  !app.includes('本页默认记住强制兼容选择') &&
+  !app.includes('getRememberDefault') && !app.includes('setRememberDefault') &&
+  app.includes("finish(rememberInput.checked ? 'forced-remember' : 'forced')") &&
+  app.includes('remembered.size === forced.size') &&
+  app.includes('仅当前页面有效；刷新或重新打开网页、清除站点数据后失效。') &&
+  !app.includes('wrt_compatibility_remember') && !uiSession.includes('localStorage') &&
+  uiComponents.includes('export function createUiCheckboxControl') &&
+  uiComponentsCss.includes('.ui-checkbox-control{display:inline-flex;') &&
+  css.includes('.compatibility-remember{display:inline-flex;') &&
+  !css.includes('.st-option.compatibility-remember'),
+  'force-confirm remember-choice control, page-session default, tooltip, or non-persistence regressed');
+
+expect(app.includes('function applySourceDefaults() {') &&
+  app.includes("if (state.source.id === 'lede') {") &&
+  app.includes('} else if (state.rootpwAuto) {') &&
+  !app.includes("previousSource.id === 'lede'") &&
+  !app.includes('applySourceDefaults(previousSource)'),
+  'source-derived LEDE initial-password default can leak across Source changes');
+
+expect(app.includes('useDefconfig: false,') &&
+  app.includes("if ($('defconfigLabel')) $('defconfigLabel').textContent = 'D';") &&
+  app.includes("state.useDefconfig = false;\n  if ($('defconfigToggle')) $('defconfigToggle').checked = false;") &&
+  html.includes('class="defconfig-switch menuconfig-defconfig"') &&
+  html.includes('<input type="checkbox" id="defconfigToggle" aria-label="Defconfig">') &&
+  !html.includes('id="defconfigToggle" checked') &&
+  defconfigTogglePosition > menuconfigHeaderPosition && defconfigTogglePosition < menuconfigBodyPosition &&
+  css.includes('.catalog-overview-row{display:grid;grid-template-columns:minmax(0,1fr) max-content max-content;') &&
+  css.includes('.build-contract-toggle{display:flex;flex:0 0 auto;') &&
+  css.includes('.menuconfig-title-group{display:flex;align-items:center;gap:8px;min-width:0}') &&
+  css.includes('.menuconfig-defconfig{flex:none;min-width:52px;min-height:42px;'),
+  'Defconfig default, Advanced menuconfig placement, or compact Catalog overview layout regressed');
+
+expect(
+  css.includes('--font-page-title: 24px;') &&
+  css.includes('--font-section-title: 20px;') &&
+  css.includes('--font-item-title: 19px;') &&
+  css.includes('--font-emphasis: 18px;') &&
+  css.includes('--font-body: 17px;') &&
+  css.includes('--font-description: 16px;') &&
+  css.includes('--font-meta: 14px;') &&
+  css.includes('--font-badge: 13px;') &&
+  css.includes('font: var(--font-body)/1.75') &&
+  css.includes('.brand h1 { margin: 0; font-size: var(--font-page-title);') &&
+  css.includes('.step h2 { font-size: var(--font-section-title);') &&
+  css.includes('padding: 13px 14px; font-size: var(--font-item-title); font-weight: 600;') &&
+  css.includes('.plugin-name.fit-s1 { font-size: var(--font-item-title-fit-1); }') &&
+  css.includes('.plugin-name.fit-s2 { font-size: var(--font-item-title-fit-2); }') &&
+  css.includes('.ui-tooltip-title{display:block;margin:0;color:var(--text);font-size:var(--font-item-title);') &&
+  css.includes('.ui-tooltip{position:fixed;') && css.includes('font-size:var(--font-description);') &&
+  css.includes(':root{--font-page-title:21px;--font-section-title:19px;--font-item-title:17px;--font-emphasis:16px;--font-body:16px;--font-description:14px;--font-meta:13px;--font-badge:12px}') &&
+  css.includes(':root{--font-page-title:20px;--font-section-title:18px;--font-item-title:16px;--font-emphasis:16px;--font-body:16px;--font-description:14px;--font-meta:13px;--font-badge:12px}') &&
+  !css.includes('--menuconfig-title-size') && !css.includes('--menuconfig-body-size') &&
+  !css.includes('body.dense') &&
+  css.includes('.build-contract-toggle strong{font-size:var(--font-description);white-space:nowrap}') &&
+  css.includes('.build-contract-key{color:var(--text2);font-size:var(--font-emphasis);min-width:0}') &&
+  css.includes('font:600 var(--font-emphasis) ui-monospace,Consolas,monospace') &&
+  css.includes('.build-contract-list>strong{display:block;margin-bottom:6px;color:var(--text);font-size:var(--font-emphasis)}') &&
+  css.includes('.build-contract-list-head>strong{color:var(--text);font-size:var(--font-emphasis)}') &&
+  css.includes('color:var(--accent);font:var(--font-emphasis) ui-monospace,Consolas,monospace') &&
+  css.includes('.menuconfig-scroll{max-height:clamp(280px,55vh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior-y:auto;') &&
+  !css.includes('.menuconfig-scroll{max-height:clamp(280px,55vh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior:contain;') &&
+  pageShell.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;') &&
+  !app.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;'),
+  'shared typography scale, build-contract hierarchy, native menuconfig scroll chaining, responsive tokens, or retired density cleanup regressed');
+
+const sharedTooltipContract = app.match(/\/\* ============ 统一悬浮说明[\s\S]*?function makePill/)?.[0] || '';
+const pluginRenderContract = app.match(/function renderPlugin\(p\) \{([\s\S]*?)\n\}\n\n\/\* V10:清掉/)?.[1] || '';
+expect(html.includes('class="ui-tooltip" id="uiTooltip"') &&
+  html.includes('id="uiTooltipTitle"') && html.includes('id="uiTooltipEmphasis"') &&
+  html.includes('id="uiTooltipBody"') &&
+  !html.includes('id="menuTooltip"') && !html.includes('id="popover"') &&
+  css.includes('.ui-tooltip{position:fixed;z-index:999;width:max-content;max-width:min(400px,calc(100vw - 24px))') &&
+  css.includes('.ui-tooltip-emphasis{') && css.includes('color:var(--danger)') &&
+  !css.includes('.menu-tooltip{') && !css.includes('.popover {') &&
+  sharedTooltipContract.includes("const UI_TOOLTIP_SELECTOR = '[data-ui-tooltip-title],[data-ui-tooltip-emphasis],[data-ui-tooltip-body]'") &&
+  sharedTooltipContract.includes("const wrap = target?.closest?.('.wrap') || $('app')") &&
+  sharedTooltipContract.includes("const gap = 9;") &&
+  sharedTooltipContract.includes("const actionbar = $('actionbar');") &&
+  sharedTooltipContract.includes('actionbarRect.top - margin') &&
+  sharedTooltipContract.includes('const safeBoundary = { ...boundary, bottom: safeBottom };') &&
+  sharedTooltipContract.includes('uiTooltip.style.maxHeight = `${Math.min(360, availableHeight)}px`;') &&
+  sharedTooltipContract.includes('const candidates = [') &&
+  sharedTooltipContract.includes('const visibleArea = (candidate) => {') &&
+  sharedTooltipContract.includes('area > best.area || (area === best.area && distance < best.distance)') &&
+  sharedTooltipContract.includes("uiTooltip.style.removeProperty('max-height');") &&
+  sharedTooltipContract.includes("document.addEventListener('pointermove'") &&
+  sharedTooltipContract.includes('positionUiTooltip(target, event)') &&
+  app.includes('showUiTooltip(element, { body: text, event });'),
+  'shared pointer-following tooltip template or content-bound positioning regressed');
+expect(app.includes("dataset.uiTooltipTitle = 'D · Defconfig'") &&
+  app.includes('⚠ 当前版本加载时已完成基准配置解析。通常直接在现有结果上增减即可，无需开启 D。') &&
+  app.includes('可能把你手工删减的默认项重新补回。') &&
+  app.includes("dataset.uiTooltipEmphasis = defconfigEmphasis") &&
+  app.includes("dataset.uiTooltipBody = defconfigHelp") &&
+  app.includes("removeAttribute('title')"),
+  'Defconfig compact warning or shared tooltip binding regressed');
+expect(pluginRenderContract.includes('const applyChecked = (checked) => {') &&
+  pluginRenderContract.includes('item.dataset.uiTooltipTitle = pName(p)') &&
+  pluginRenderContract.includes('item.dataset.uiTooltipBody = tooltipBody') &&
+  pluginRenderContract.includes("item.addEventListener('dblclick', (event) => {") &&
+  pluginRenderContract.includes('if (cb.disabled) return;') &&
+  pluginRenderContract.includes('applyChecked(!cb.checked);') &&
+  !pluginRenderContract.includes('if (curatedPluginChecked(p, st, catalogOption) && cb.checked) return;') &&
+  !pluginRenderContract.includes('applyChecked(true);') &&
+  !pluginRenderContract.includes('nameBtn.title = detail'),
+  'plugin card double-click toggle or shared tooltip binding regressed');
+expect((app.match(/origin\.kind !== 'inactive' && origin\.kind !== 'user'/g) || []).length >= 2 &&
+  app.includes("kind: 'user', label: uiText('用户选择'"),
+  'user-selected state must remain internal while its item badges stay hidden');
+
+expect(css.includes('/* 可勾选卡片立体模板 / shared selectable-card elevation template */') &&
+  css.includes('--select-card-border: color-mix(in srgb, var(--border) 46%, #8ea0b7 54%);') &&
+  css.includes('--select-card-shadow: 0 1px 1px rgba(15, 23, 42, .10), 0 4px 9px rgba(55, 75, 104, .15)') &&
+  css.includes('--select-card-shadow-hover: 0 2px 2px rgba(15, 23, 42, .11), 0 7px 14px rgba(55, 75, 104, .18)') &&
+  css.includes('--select-card-shadow-selected: 0 5px 12px rgba(37, 99, 235, .20)') &&
+  (css.match(/--select-card-shadow: 0 1px 2px rgba\(0, 0, 0, \.28\), 0 6px 14px rgba\(0, 0, 0, \.22\);/g) || []).length >= 2 &&
+  css.includes('border: 1px solid var(--select-card-border);') &&
+  css.includes('var(--select-card-surface-top) 0%') &&
+  css.includes('var(--select-card-hover-top) 0%') &&
+  css.includes('var(--select-card-selected-top) 0%') &&
+  css.includes('.plugin:not(.plugin-disabled):not(.plugin-loading):hover {') &&
+  css.includes('transform: translateY(var(--select-card-lift));') &&
+  css.includes('.plugin:not(.plugin-disabled):not(.plugin-loading):active {') &&
+  css.includes('box-shadow: inset 0 1px 0 var(--select-card-highlight), var(--select-card-shadow);') &&
+  css.includes('.plugin-disabled, .plugin-disabled:hover {') &&
+  css.includes('box-shadow: none;') &&
+  css.includes('@media (prefers-reduced-motion: reduce) {'),
+  'shared light/dark selectable-card template, elevation, press feedback, disabled flattening, or reduced-motion fallback regressed');
+
+expect(css.includes('/* 统一交互控件立体模板 / shared elevated interactive-control template */') &&
+  css.includes('--control-border: color-mix(in srgb, var(--border) 52%, #91a0b4 48%);') &&
+  css.includes('--control-shadow: 0 1px 1px rgba(15, 23, 42, .08), 0 3px 7px rgba(55, 75, 104, .13)') &&
+  (css.match(/--control-shadow: 0 1px 2px rgba\(0, 0, 0, \.24\), 0 5px 12px rgba\(0, 0, 0, \.18\);/g) || []).length >= 2 &&
+  css.includes('/* 标准交互控件模板：以后新增输入/下拉/按钮/选择框优先复用 .control-field / .control-action / .control-choice */') &&
+  css.includes(':where(.control-field, input[type="search"], input[type="text"], input[type="password"], input[type="number"], select, textarea) {') &&
+  css.includes('.control-action, .control-choice, .btn, .icon-btn, .text-btn, .pill, .device-summary, .catalog-copy-diagnostics,') &&
+  css.includes('transform: translateY(var(--control-lift));') &&
+  css.includes('.defconfig-switch:has(input:checked),') &&
+  css.includes('.build-contract-selected-filter:has(input:checked),') &&
+  css.includes('.pill-active,') &&
+  css.includes('.build-contract-head {') &&
+  css.includes('.btn-primary:active { transform: translateY(0);') &&
+  css.includes(':where(.defconfig-switch, .build-contract-selected-filter, .adv-toggle) input[type="checkbox"] {') &&
+  css.includes('box-shadow: none;\n  transform: none;\n  cursor: not-allowed;') &&
+  css.includes('@media (prefers-reduced-motion: reduce) {'),
+  'shared light/dark form-control template, elevation, selected states, checkbox treatment, disabled flattening, or reduced-motion fallback regressed');
 
 expect(!app.includes('syncThemeFromMenu') && app.includes('syncFirmwareThemeFromMenu'),
   'Catalog intent still calls a missing theme coordinator');
@@ -153,11 +357,14 @@ const lateBaselineContract = app.match(/function backfillCatalogBaselineForLoade
 expect(hiddenLoadContract.includes('buildMenuIndexes(catalog)') &&
   hiddenLoadContract.includes('backfillCatalogBaselineForLoadedOptions()') &&
   hiddenLoadContract.indexOf('buildMenuIndexes(catalog)') < hiddenLoadContract.indexOf('backfillCatalogBaselineForLoadedOptions()') &&
-  lateBaselineContract.includes('const baselineValues = new Map(catalogBaselineValues)') &&
-  lateBaselineContract.includes("catalogValidationContext(baselineValues, 'interactive')") &&
+  lateBaselineContract.includes('nativeProfileBaselineEntries()') &&
+  lateBaselineContract.includes('normalizeImportedKconfigValue') &&
   lateBaselineContract.includes('catalogBaselineValues.set(option.symbol, value)') &&
+  lateBaselineContract.includes('!menuTouched.has(option.symbol)') &&
+  lateBaselineContract.includes('!catalogUserOverrides.has(option.symbol)') &&
+  !lateBaselineContract.includes('catalogValidationContext') &&
   !lateBaselineContract.includes('new Map(menuValues)'),
-  'late hidden PACKAGE defaults can be misclassified as Probe user selections');
+  'late hidden PACKAGE values must come only from the immutable Native Profile baseline');
 const probeIssueTitleContract = app.match(/function probeIssueTitle\(request\) \{[\s\S]*?\n\}/)?.[0] || '';
 const probeIssueTitleForTest = Function(`${probeIssueTitleContract}\nreturn probeIssueTitle;`)();
 const titleRequest = {
@@ -254,7 +461,7 @@ expect(snapshotContract.includes('revision: catalogStateRevision') &&
   snapshotContract.includes('compatibilityAcknowledgement'),
   'Catalog rollback snapshot does not preserve revision/acknowledgement');
 expect(restoreContract.includes('catalogStateRevision = snapshot.revision') &&
-  restoreContract.includes('compatibilityAcknowledgement = snapshot.compatibilityAcknowledgement') &&
+  restoreContract.includes('UI_SESSION.compatibility.setAcknowledgement(snapshot.compatibilityAcknowledgement)') &&
   restoreContract.includes('clearCatalogDerivedCaches()') &&
   !restoreContract.includes('markCatalogStateChanged'),
   'failure rollback is incorrectly counted as a configuration change');
@@ -322,11 +529,11 @@ expect(pathRow.includes('menuconfigBack') && pathRow.includes('menuconfigPanelTi
   !pathRow.includes('menuconfigSearch'), 'Advanced path row contains controls beyond back/breadcrumb');
 expect(css.includes('.menuconfig-header{display:grid') &&
   css.includes('.menuconfig-breadcrumb-current{min-width:0;overflow:hidden;text-overflow:ellipsis') &&
-  css.includes('font-size:var(--menuconfig-body-size)'),
+  css.includes('font-size:var(--font-description)'),
   'desktop/mobile menuconfig typography or overflow contract is missing');
 expect(!/\.build-contract-(?:key|chip)[^{]*\{[^}]*font(?:-size)?:\s*(?:12|13)px/.test(css),
   'build contract retains internal 12/13px typography');
-expect(/\.build-contract-body \.profile-package-manage\{[^}]*font-size:var\(--menuconfig-body-size\)/.test(css),
+expect(/\.build-contract-body \.profile-package-manage\{[^}]*font-size:var\(--font-description\)/.test(css),
   'expanded build-contract controls can render below the body token');
 const startup = project.catalogLoadPolicy?.startup || [];
 const idle = project.catalogLoadPolicy?.idle || [];
@@ -374,7 +581,7 @@ const contractHead = html.match(/<div class="build-contract-head">([\s\S]*?)<\/d
 expect(contractHead.includes('buildContractTitle') && contractHead.includes('build-contract-chevron') &&
   !contractHead.includes('buildContractCatalog') && !contractHead.includes('class="hint"'),
   'collapsed build contract repeats the Catalog commit');
-expect(css.includes('grid-template-columns:minmax(320px,1fr) clamp(210px,18vw,250px) max-content') &&
+expect(css.includes('grid-template-columns:minmax(0,1fr) max-content max-content') &&
   /@media\(min-width:641px\) and \(max-width:960px\)\{[\s\S]*?\.catalog-locator\{grid-column:1 \/ -1;grid-row:1[\s\S]*?\.build-contract-head\{grid-column:1;grid-row:2\}[\s\S]*?\.build-contract-controls\{grid-column:2;grid-row:2[\s\S]*?\.build-contract-body\{grid-column:1 \/ -1;grid-row:3\}/.test(css) &&
   /@media\(max-width:640px\)\{[\s\S]*?\.catalog-locator\{grid-column:1;grid-row:1\}[\s\S]*?\.build-contract-head\{grid-column:1;grid-row:2[\s\S]*?\.build-contract-controls\{grid-column:1;grid-row:3[\s\S]*?\.build-contract-body\{grid-column:1;grid-row:4\}/.test(css),
   'desktop/tablet/mobile build-contract layout contract drifted');
@@ -417,6 +624,15 @@ expect(catalogFileNameTokenMatch('master', 'firmware_master_backup.config'),
   'development branch token was not detected');
 expect(catalogFileNameTokenMatch('release-27.4', 'firmware-27.4-device.config', ['27.4']),
   'numeric branch alias was not detected');
+
+expect(
+  css.includes('.plugin-grid {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));\n  gap: 8px;\n  padding: 10px;\n}') &&
+  css.includes('border: 1px solid var(--select-card-border);') &&
+  css.includes('border-radius: var(--radius);') &&
+  css.includes('.plugin:hover {\n  background: var(--plugin-hover);\n  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));\n}') &&
+  css.includes('.plugin:has(input:checked) {\n  background: var(--plugin-selected);\n  border-color: var(--accent);') &&
+  !css.includes('.plugin { border-right: none; padding: 12px 14px; }'),
+  'plugin option cards lost their independent rounded boundary template');
 
 console.log('Catalog UI state and responsive DOM contracts passed');
 

@@ -21,10 +21,24 @@ function safeReleaseTag(value) {
 
 export function safeCatalogDataRef(value) {
   const ref = String(value || '').trim();
-  if (!/^catalog-(?:fix|dev|staging|data)$/.test(ref)) {
+  if (!/^catalog-(?:fix(?:-[A-Za-z0-9][A-Za-z0-9._-]{0,95})?|dev|staging|main)$/.test(ref)) {
     throw new Error(`invalid Catalog data branch: ${value}`);
   }
   return ref;
+}
+
+function catalogFixCodeRefMatches(codeRef, branch) {
+  const ref = String(codeRef || '').trim();
+  if (branch === 'catalog-fix') {
+    if (!/^fix\/[A-Za-z0-9._/-]+$/.test(ref)) return false;
+    return !/-[ABC]$/i.test(ref);
+  }
+  const suffix = /^catalog-fix-([A-Za-z0-9][A-Za-z0-9._-]{0,95})$/.exec(branch)?.[1] || '';
+  if (!suffix) return false;
+  if (ref === `fix-${suffix}`) return true;
+  if (!/^fix\/[A-Za-z0-9._/-]+$/.test(ref)) return false;
+  const legacyLane = /-([ABC])$/i.exec(ref)?.[1]?.toUpperCase() || '';
+  return Boolean(legacyLane) && suffix === legacyLane;
 }
 
 export function validateCatalogProvenance(index, dataRef, repository) {
@@ -44,14 +58,14 @@ export function validateCatalogProvenance(index, dataRef, repository) {
   if (typeof provenance.complete !== 'boolean') throw new Error('Catalog provenance complete must be boolean');
 
   const branch = safeCatalogDataRef(dataRef);
-  const validCodeRef = branch === 'catalog-fix' ? /^fix\/[A-Za-z0-9._/-]+$/.test(codeRef)
+  const validCodeRef = branch.startsWith('catalog-fix') ? catalogFixCodeRefMatches(codeRef, branch)
     : branch === 'catalog-dev' ? codeRef === 'dev'
       : branch === 'catalog-staging' ? codeRef === 'staging'
         : codeRef === 'main';
   if (!validCodeRef) {
     throw new Error(`Catalog provenance codeRef ${codeRef || '(missing)'} does not match ${branch}`);
   }
-  if (branch === 'catalog-data' && provenance.complete !== true) {
+  if (branch === 'catalog-main' && provenance.complete !== true) {
     throw new Error('Production Catalog provenance must be complete');
   }
   return { repository: actualRepository, codeRef, codeSha, complete: provenance.complete };
@@ -349,8 +363,8 @@ export function formatCatalogDiagnostics(diagnostics = []) {
 export function createCatalogLoader({
   repository,
   releaseTag = 'menuconfig-catalog-complete',
-  dataRef = 'catalog-data',
-  allowReleaseFallback = dataRef === 'catalog-data',
+  dataRef = 'catalog-main',
+  allowReleaseFallback = dataRef === 'catalog-main',
   engine,
   fetchImpl = globalThis.fetch,
   cacheStorage = globalThis.caches,
@@ -368,6 +382,8 @@ export function createCatalogLoader({
   const compatibilityPromises = new Map();
   const applicationsMemory = new Map();
   const applicationsPromises = new Map();
+  const coreMemory = new Map();
+  const corePromises = new Map();
 
   async function fetchIndex({ signal, forceRefresh = false, diagnostics = [] } = {}) {
     if (!forceRefresh && lastIndexResult) return { ...lastIndexResult, diagnostics };
@@ -478,6 +494,81 @@ export function createCatalogLoader({
       }
     }
     throw loaderError(`Catalog asset unavailable: ${safeAsset}\n${errors.join('\n')}`, diagnostics);
+  }
+
+  async function fetchCore({
+    sourceId,
+    branchName,
+    signal,
+    forceRefresh = false,
+    preferredAssetProvider = '',
+  } = {}) {
+    const diagnostics = [];
+    const indexResult = await fetchIndex({ signal, forceRefresh, diagnostics });
+    const index = indexResult.index;
+    const { source, branch } = branchFromIndex(index, sourceId, branchName);
+    if (!source || !branch || branch.state === 'unavailable') {
+      throw loaderError(`Catalog branch unavailable: ${sourceId}/${branchName}`, diagnostics);
+    }
+
+    const coreContract = branch.assets?.core;
+    if (!coreContract?.asset) {
+      const bundle = await fetchBundle({ sourceId, branchName, signal, forceRefresh, preferredAssetProvider });
+      return {
+        data: bundle.data,
+        index: bundle.index,
+        indexProvider: bundle.indexProvider,
+        provider: bundle.provider,
+        branch: bundle.branch,
+        source: bundle.source,
+        url: bundle.url,
+        diagnostics: bundle.diagnostics,
+        legacyBundle: true,
+      };
+    }
+
+    const key = `${sourceId}\0${branchName}\0${String(coreContract.hash || coreContract.asset)}`;
+    if (!forceRefresh && coreMemory.has(key)) {
+      const loaded = coreMemory.get(key);
+      diagnostic(diagnostics, 'core-memory', 'memory', true, `schema ${loaded.data?.schema || '-'}`, key);
+      return { ...loaded, diagnostics };
+    }
+    if (!forceRefresh && corePromises.has(key)) return corePromises.get(key);
+
+    const run = (async () => {
+      const result = await fetchAssetDocument({
+        asset: coreContract.asset,
+        contract: coreContract,
+        index,
+        signal,
+        diagnostics,
+        preferredAssetProvider: preferredAssetProvider || indexResult.provider,
+        forceRefresh,
+        stage: 'core-only',
+      });
+      if (Number(result.data?.schema || 0) < 6) {
+        throw loaderError(`Catalog core schema ${result.data?.schema || 0}; required 6`, diagnostics);
+      }
+      const expectedCommit = String(branch.commit || '');
+      const actualCommit = String(result.data?.source?.commit || '');
+      if (expectedCommit && actualCommit !== expectedCommit) {
+        throw loaderError(`Catalog source commit mismatch: ${actualCommit || '(missing)'} != ${expectedCommit}`, diagnostics);
+      }
+      const loaded = {
+        data: result.data,
+        index,
+        indexProvider: indexResult.provider,
+        provider: result.provider,
+        branch,
+        source,
+        url: result.url,
+        legacyBundle: false,
+      };
+      coreMemory.set(key, loaded);
+      return { ...loaded, diagnostics };
+    })().finally(() => corePromises.delete(key));
+    corePromises.set(key, run);
+    return run;
   }
 
   async function fetchBundle({
@@ -665,8 +756,10 @@ export function createCatalogLoader({
     compatibilityPromises.clear();
     applicationsMemory.clear();
     applicationsPromises.clear();
+    coreMemory.clear();
+    corePromises.clear();
     if (cacheStorage?.delete) await cacheStorage.delete(CATALOG_CACHE_NAME).catch(() => false);
   }
 
-  return { fetchIndex, fetchBundle, fetchCompatibility, fetchApplications, clearCache, dataRef: exactDataRef };
+  return { fetchIndex, fetchCore, fetchBundle, fetchCompatibility, fetchApplications, clearCache, dataRef: exactDataRef };
 }

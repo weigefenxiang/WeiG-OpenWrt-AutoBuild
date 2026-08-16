@@ -106,12 +106,16 @@ assert(validateCatalogProvenance({}, 'catalog-dev', 'owner/catalog') === null,
   'legacy index without provenance lost backward compatibility');
 assert(validateCatalogProvenance({ provenance: { ...provenanceBase.provenance, codeRef: 'fix/demo' } },
   'catalog-fix', 'owner/catalog')?.codeRef === 'fix/demo', 'catalog-fix provenance did not validate');
+assert(validateCatalogProvenance({ provenance: { ...provenanceBase.provenance, codeRef: 'fix-F' } },
+  'catalog-fix-F', 'owner/catalog')?.codeRef === 'fix-F', 'canonical catalog-fix-F provenance did not validate');
+assertThrows(() => validateCatalogProvenance({ provenance: { ...provenanceBase.provenance, codeRef: 'fix-G' } },
+  'catalog-fix-F', 'owner/catalog'), /does not match catalog-fix-F/);
 assertThrows(() => validateCatalogProvenance({ provenance: { ...provenanceBase.provenance, codeRef: 'main' } },
   'catalog-dev', 'owner/catalog'), /does not match catalog-dev/);
 assertThrows(() => validateCatalogProvenance({ provenance: { ...provenanceBase.provenance, repository: 'other/catalog' } },
   'catalog-dev', 'owner/catalog'), /repository mismatch/);
 assertThrows(() => validateCatalogProvenance({ provenance: { ...provenanceBase.provenance, codeRef: 'main', complete: false } },
-  'catalog-data', 'owner/catalog'), /must be complete/);
+  'catalog-main', 'owner/catalog'), /must be complete/);
 assertThrows(() => validateCatalogProvenance({ provenance: { ...provenanceBase.provenance, codeSha: 'short' } },
   'catalog-dev', 'owner/catalog'), /full codeSha/);
 

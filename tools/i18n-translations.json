@@ -223,7 +223,9 @@
   "submit.download.title": "僅下載 .config",
   "submit.download.desc": "只儲存目前的完整設定，不開啟 GitHub，也不會啟動雲端編譯。",
   "generation.error.title": "產生失敗",
-  "generation.error.hint": "可點右下角「自我檢測」查明原因"
+  "generation.error.hint": "可點右下角「自我檢測」查明原因",
+  "btn.import.short": "載入",
+  "btn.submit.short": "送出"
  },
  "en": {
   "app.title": "OpenWrt Firmware Customizer",
@@ -449,7 +451,9 @@
   "submit.download.title": "Download .config only",
   "submit.download.desc": "Save the complete current configuration without opening GitHub or starting a cloud build.",
   "generation.error.title": "Generation failed",
-  "generation.error.hint": "Use “Self-test” at the bottom right to diagnose."
+  "generation.error.hint": "Use “Self-test” at the bottom right to diagnose.",
+  "btn.import.short": "Load",
+  "btn.submit.short": "Submit"
  },
  "ru": {
   "app.title": "Онлайн-конструктор прошивок OpenWrt",
@@ -675,7 +679,9 @@
   "submit.download.title": "Только скачать .config",
   "submit.download.desc": "Сохранить полную текущую конфигурацию, не открывая GitHub и не запуская облачную сборку.",
   "generation.error.title": "Ошибка создания",
-  "generation.error.hint": "Для диагностики нажмите «Диагностика» в правом нижнем углу."
+  "generation.error.hint": "Для диагностики нажмите «Диагностика» в правом нижнем углу.",
+  "btn.import.short": "Загрузить",
+  "btn.submit.short": "Отправить"
  },
  "es": {
   "app.title": "Personaliza tu firmware OpenWrt en línea",
@@ -901,7 +907,9 @@
   "submit.download.title": "Descargar solo .config",
   "submit.download.desc": "Guarda la configuración completa actual sin abrir GitHub ni iniciar una compilación en la nube.",
   "generation.error.title": "Error al generar",
-  "generation.error.hint": "Usa «Autodiagnóstico» abajo a la derecha para revisar."
+  "generation.error.hint": "Usa «Autodiagnóstico» abajo a la derecha para revisar.",
+  "btn.import.short": "Cargar",
+  "btn.submit.short": "Enviar"
  },
  "pt": {
   "app.title": "Firmware OpenWrt personalizado online",
@@ -1127,7 +1135,9 @@
   "submit.download.title": "Baixar apenas o .config",
   "submit.download.desc": "Salva a configuração completa atual sem abrir o GitHub nem iniciar uma compilação na nuvem.",
   "generation.error.title": "Falha ao gerar",
-  "generation.error.hint": "Clique em “Autoteste” no canto inferior direito para investigar."
+  "generation.error.hint": "Clique em “Autoteste” no canto inferior direito para investigar.",
+  "btn.import.short": "Carregar",
+  "btn.submit.short": "Enviar"
  },
  "ja": {
   "app.title": "OpenWrt ファームウェアのオンラインカスタマイズ",
@@ -1353,7 +1363,9 @@
   "submit.download.title": ".config のみダウンロード",
   "submit.download.desc": "GitHub を開かずクラウドビルドも開始せず、現在の完全な設定だけを保存します。",
   "generation.error.title": "生成に失敗しました",
-  "generation.error.hint": "右下の「自己診断」で確認できます。"
+  "generation.error.hint": "右下の「自己診断」で確認できます。",
+  "btn.import.short": "読込",
+  "btn.submit.short": "送信"
  },
  "ko": {
   "app.title": "OpenWrt 펌웨어 온라인 커스터마이징",
@@ -1579,7 +1591,9 @@
   "submit.download.title": ".config만 다운로드",
   "submit.download.desc": "GitHub를 열거나 클라우드 빌드를 시작하지 않고 현재 전체 설정만 저장합니다.",
   "generation.error.title": "생성 실패",
-  "generation.error.hint": "오른쪽 아래의 ‘자체 점검’으로 확인할 수 있어요."
+  "generation.error.hint": "오른쪽 아래의 ‘자체 점검’으로 확인할 수 있어요.",
+  "btn.import.short": "불러오기",
+  "btn.submit.short": "제출"
  },
  "de": {
   "app.title": "OpenWrt-Firmware online konfigurieren",
@@ -1805,7 +1819,9 @@
   "submit.download.title": "Nur .config herunterladen",
   "submit.download.desc": "Speichert die vollständige aktuelle Konfiguration, ohne GitHub zu öffnen oder einen Cloud-Build zu starten.",
   "generation.error.title": "Erstellen fehlgeschlagen",
-  "generation.error.hint": "Unten rechts mit „Selbsttest“ prüfen."
+  "generation.error.hint": "Unten rechts mit „Selbsttest“ prüfen.",
+  "btn.import.short": "Laden",
+  "btn.submit.short": "Senden"
  },
  "fr": {
   "app.title": "Firmware OpenWrt personnalisé en ligne",
@@ -2031,7 +2047,9 @@
   "submit.download.title": "Télécharger uniquement le .config",
   "submit.download.desc": "Enregistre la configuration complète actuelle sans ouvrir GitHub ni lancer de compilation cloud.",
   "generation.error.title": "Échec de la génération",
-  "generation.error.hint": "Utilisez « Diagnostic » en bas à droite pour rechercher la cause."
+  "generation.error.hint": "Utilisez « Diagnostic » en bas à droite pour rechercher la cause.",
+  "btn.import.short": "Charger",
+  "btn.submit.short": "Envoyer"
  },
  "vi": {
   "app.title": "Tùy chỉnh firmware OpenWrt trực tuyến",
@@ -2257,6 +2275,8 @@
   "submit.download.title": "Chỉ tải .config",
   "submit.download.desc": "Chỉ lưu cấu hình đầy đủ hiện tại, không mở GitHub và không bắt đầu biên dịch đám mây.",
   "generation.error.title": "Tạo thất bại",
-  "generation.error.hint": "Nhấn “Tự kiểm tra” ở góc dưới bên phải để kiểm tra."
+  "generation.error.hint": "Nhấn “Tự kiểm tra” ở góc dưới bên phải để kiểm tra.",
+  "btn.import.short": "Tải",
+  "btn.submit.short": "Gửi"
  }
 }

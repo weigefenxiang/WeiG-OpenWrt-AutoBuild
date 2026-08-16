@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   artifactBuildRef,
   catalogDataBranch,
@@ -13,6 +16,7 @@ import {
   normalizeDeploymentIdentity,
   parseBuildIssueTitleIdentity,
 } from '../site/wrt/lib/build-identity.js';
+import { validateCatalogProvenance } from '../site/wrt/lib/catalog-loader.js';
 
 assert.equal(normalizeBuildEnvironment('refs/heads/dev'), 'dev');
 assert.equal(normalizeBuildEnvironment('origin/staging'), 'staging');
@@ -23,16 +27,48 @@ assert.equal(normalizeBuildEnvironment('bad branch'), '');
 assert.equal(normalizeBuildEnvironment('../main'), '');
 
 const catalogChannels = {
-  fix: 'catalog-fix', dev: 'catalog-dev', staging: 'catalog-staging', main: 'catalog-data',
+  fixPrefix: 'catalog-fix-', legacyFix: 'catalog-fix',
+  dev: 'catalog-dev', staging: 'catalog-staging', main: 'catalog-main',
 };
+assert.equal(catalogDataBranch('fix-F', catalogChannels), 'catalog-fix-F');
+assert.equal(catalogDataBranch('fix-next.test', catalogChannels), 'catalog-fix-next.test');
+assert.equal(catalogDataBranch('fix-a', catalogChannels), 'catalog-fix-a');
+assert.throws(() => catalogDataBranch('fix-F', { ...catalogChannels, fixPrefix: 'catalog-other-' }),
+  /invalid Catalog data branch/);
+// Historical slash-style branches remain read-compatible but are not the standard authority.
 assert.equal(catalogDataBranch('fix/catalog-compatibility', catalogChannels), 'catalog-fix');
+assert.equal(catalogDataBranch('fix/catalog-compatibility-A', catalogChannels), 'catalog-fix-A');
+assert.equal(catalogDataBranch('fix/catalog-compatibility-B', catalogChannels), 'catalog-fix-B');
+assert.equal(catalogDataBranch('fix/catalog-compatibility-C', catalogChannels), 'catalog-fix-C');
 assert.equal(catalogDataBranch('dev', catalogChannels), 'catalog-dev');
 assert.equal(catalogDataBranch('staging', catalogChannels), 'catalog-staging');
-assert.equal(catalogDataBranch('main', catalogChannels), 'catalog-data');
-assert.equal(catalogDataBranch('', catalogChannels), 'catalog-data');
-assert.equal(catalogDataBranch('feature/unpublished', catalogChannels), 'catalog-data');
-assert.throws(() => catalogDataBranch('dev', { ...catalogChannels, dev: 'catalog-data' }),
+assert.equal(catalogDataBranch('main', catalogChannels), 'catalog-main');
+assert.equal(catalogDataBranch('', catalogChannels), 'catalog-main');
+assert.equal(catalogDataBranch('feature/unpublished', catalogChannels), 'catalog-main');
+assert.throws(() => catalogDataBranch('dev', { ...catalogChannels, dev: 'catalog-main' }),
   /invalid Catalog data branch/);
+
+const catalogProvenanceSha = 'f'.repeat(40);
+const catalogProvenance = (codeRef) => ({
+  provenance: {
+    repository: 'owner/catalog', codeRef, codeSha: catalogProvenanceSha, complete: true,
+  },
+});
+assert.equal(validateCatalogProvenance(catalogProvenance('fix-F'), 'catalog-fix-F', 'owner/catalog')?.codeRef,
+  'fix-F');
+assert.equal(validateCatalogProvenance(catalogProvenance('fix-next.test'), 'catalog-fix-next.test', 'owner/catalog')?.codeRef,
+  'fix-next.test');
+assert.throws(() => validateCatalogProvenance(catalogProvenance('fix-F'), 'catalog-fix-G', 'owner/catalog'),
+  /does not match catalog-fix-G/);
+// Historical slash-style A/B/C provenance remains compatible.
+assert.equal(validateCatalogProvenance(catalogProvenance('fix/demo-A'), 'catalog-fix-A', 'owner/catalog')?.codeRef,
+  'fix/demo-A');
+assert.equal(validateCatalogProvenance(catalogProvenance('fix/demo-b'), 'catalog-fix-B', 'owner/catalog')?.codeRef,
+  'fix/demo-b');
+assert.throws(() => validateCatalogProvenance(catalogProvenance('fix/demo-A'), 'catalog-fix-B', 'owner/catalog'),
+  /does not match catalog-fix-B/);
+assert.throws(() => validateCatalogProvenance(catalogProvenance('fix/demo-A'), 'catalog-fix', 'owner/catalog'),
+  /does not match catalog-fix/);
 
 assert.equal(normalizeBuildCommit('005e435f91b2c2891cf46468e2cb46e36519df8b'), '005e435f91b2c2891cf46468e2cb46e36519df8b');
 assert.equal(normalizeBuildCommit('005E435F91B2C2891CF46468E2CB46E36519DF8B'), '005e435f91b2c2891cf46468e2cb46e36519df8b');
@@ -241,3 +277,24 @@ assert.deepEqual(
 );
 
 console.log('Build identity tests passed / 构建环境身份测试通过');
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const buildIdentitySource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'build-identity.js'), 'utf8');
+const feedbackSource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'ui-feedback.js'), 'utf8');
+const feedbackCss = readFileSync(join(ROOT, 'site', 'wrt', 'ui-feedback.css'), 'utf8');
+const appSource = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
+assert(buildIdentitySource.includes("new URL('./ui-feedback.js', import.meta.url)") &&
+  buildIdentitySource.includes('await import(feedbackUrl.href)'),
+  'mandatory browser startup module does not await the shared UI feedback adapter');
+assert(feedbackSource.includes("new URL('../ui-feedback.css', moduleUrl)") &&
+  feedbackSource.includes('stylesheet.dataset.uiFeedbackStyle') &&
+  feedbackSource.includes('function renderNotice(message, options = {})') &&
+  feedbackSource.includes('globalThis.confirmModal ='),
+  'UI feedback adapter does not own one release-scoped Notice/Modal presentation layer');
+assert(feedbackSource.includes("t('import.ok', { id: marker })") &&
+  feedbackSource.includes("[source, branch, system, profile]") &&
+  feedbackCss.includes('.toast[data-kind=error]') && feedbackCss.includes('.modal.confirm-dialog') &&
+  feedbackCss.includes('128px + env(safe-area-inset-bottom)'),
+  'UI feedback does not preserve human-readable import details or mobile action-bar avoidance');
+assert((appSource.match(/\bconfirm\(/g) || []).length === 4 && (appSource.match(/\balert\(/g) || []).length === 1,
+  'native popup callsite count changed; route new feedback through the shared adapter instead');

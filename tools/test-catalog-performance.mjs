@@ -6,7 +6,7 @@ import { performance } from 'node:perf_hooks';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
-import { createCatalogModel, resolveKconfigDefault } from '../site/wrt/lib/catalog-engine.js';
+import { createCatalogModel } from '../site/wrt/lib/catalog-engine.js';
 import { createRuntimeMenu, mergeHiddenShard, mergeMenuShards } from '../site/wrt/lib/catalog-schema6.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -104,65 +104,59 @@ assert.ok(appSource.includes('if (catalogAutoloadReady) loadCatalog(') &&
   appSource.includes('startCatalogAfterFirstPaint();'),
 'Catalog autoload is not gated behind the first-paint scheduler');
 
-const baselineSource = [
-  appFunctionSource(appSource, 'initializeCatalogBaseline', 'snapshotCatalogBaseline'),
-  appFunctionSource(appSource, 'simpleKconfigDefault', 'catalogValidationContext'),
-].join('\n');
+const baselineSource = appFunctionSource(appSource, 'initializeCatalogBaseline', 'snapshotCatalogBaseline');
 let baselineContextBuilds = 0;
-let baselineConditionEvals = 0;
+let baselineValueReads = 0;
 const baselineOptions = [
-  { symbol: 'C', type: 'bool', defaults: ['y if B'], hidden: false },
-  { symbol: 'B', type: 'bool', defaults: ['y if A'], hidden: false },
-  { symbol: 'A', type: 'bool', defaults: ['y'], hidden: false },
-  { symbol: 'TARGETED', type: 'bool', defaults: ['y if TARGET_FIXTURE'], hidden: false },
-  { symbol: 'MODULE', type: 'tristate', defaults: ['m if C'], hidden: false },
-  { symbol: 'HIDDEN', type: 'bool', defaults: ['y'], hidden: true },
-  { symbol: 'CHOICE_A', type: 'bool', defaults: [], hidden: false, choice: 'FIXTURE_CHOICE' },
-  { symbol: 'CHOICE_B', type: 'bool', defaults: [], hidden: false, choice: 'FIXTURE_CHOICE' },
+  { symbol: 'C', type: 'bool', hidden: false },
+  { symbol: 'B', type: 'bool', hidden: false },
+  { symbol: 'A', type: 'bool', hidden: false },
+  { symbol: 'TARGETED', type: 'bool', hidden: false },
+  { symbol: 'MODULE', type: 'tristate', hidden: false },
+  { symbol: 'HIDDEN', type: 'bool', hidden: true },
+  { symbol: 'CHOICE_A', type: 'bool', hidden: false, choice: 'FIXTURE_CHOICE' },
+  { symbol: 'CHOICE_B', type: 'bool', hidden: false, choice: 'FIXTURE_CHOICE' },
 ];
+const baselineEntries = new Map([
+  ['A', { value: 'y' }], ['B', { value: 'y' }], ['C', { value: 'y' }],
+  ['TARGETED', { value: 'y' }], ['MODULE', { value: 'm' }], ['HIDDEN', { value: 'y' }],
+  ['CHOICE_A', { value: 'n' }], ['CHOICE_B', { value: 'y' }],
+]);
 const baselineContext = {
-  CATALOG_ENGINE: {
-    resolveKconfigDefault(option, values, options) {
-      baselineConditionEvals++;
-      return resolveKconfigDefault(option, values, options);
-    },
+  nativeProfileBaselineEntries() { return baselineEntries; },
+  normalizeImportedKconfigValue(entry, type, fallback) {
+    baselineValueReads++;
+    return entry?.value ?? fallback;
   },
-  catalogValidationContext(inputValues) {
+  catalogValidationContext() {
     baselineContextBuilds++;
-    const values = new Map(inputValues);
-    values.set('TARGET_FIXTURE', 'y');
-    return {
-      values,
-      changes: [{ symbol: 'TARGET_FIXTURE', from: 'n', to: 'y' }],
-      validationOptions: { contextComplete: true, deferred: 'ignore' },
-    };
+    throw new Error('Native Profile initialization must not rebuild a Kconfig validation context');
   },
   menuValues: new Map(), menuTouched: new Set(), catalogBaselineValues: new Map(),
   catalogBaselineOrigins: new Map(), catalogRecommendedValues: new Map(),
   catalogDependencySymbols: new Set(), catalogImportedSymbols: new Set(),
   catalogUserOverrides: new Map(), state: { sel: new Set(), removed: new Set() },
-  menuSearchOptions: baselineOptions, menuTargetSymbols: new Set(['TARGET_FIXTURE']),
-  MENU_CATALOG: { menu: { choices: [{ id: 'FIXTURE_CHOICE', defaults: ['CHOICE_B'] }] } },
-  menuChoiceOptions: new Map([['FIXTURE_CHOICE', baselineOptions.filter((row) => row.choice === 'FIXTURE_CHOICE')]]),
-  menuOptionBySymbol: new Map(baselineOptions.map((row) => [row.symbol, row])),
-  catalogContextCacheBypass: false,
+  menuSearchOptions: baselineOptions,
   markCatalogStateChanged() {}, snapshotCatalogBaseline() {},
-  kconfigExpr() { throw new Error('engine evaluator should be used'); },
-  Map, Set, String,
+  Map, Set, String, Error,
 };
 vm.runInNewContext(baselineSource, baselineContext, { filename: 'app-baseline-fixture.js' });
+const baselineStartTime = performance.now();
 baselineContext.initializeCatalogBaseline();
+const baselineElapsed = performance.now() - baselineStartTime;
 assert.equal(baselineContext.menuValues.get('A'), 'y');
 assert.equal(baselineContext.menuValues.get('B'), 'y');
 assert.equal(baselineContext.menuValues.get('C'), 'y');
 assert.equal(baselineContext.menuValues.get('TARGETED'), 'y');
 assert.equal(baselineContext.menuValues.get('MODULE'), 'm');
 assert.equal(baselineContext.menuValues.get('CHOICE_B'), 'y');
-assert.equal(baselineContext.menuValues.has('HIDDEN'), false);
-assert.ok(baselineContextBuilds > 0 && baselineContextBuilds <= 8,
-  `baseline context rebuilt ${baselineContextBuilds} times; expected at most once per fixed-point pass`);
-assert.ok(baselineConditionEvals > baselineContextBuilds,
-  `baseline context builds ${baselineContextBuilds} were not amortized across ${baselineConditionEvals} condition evaluations`);
+assert.equal(baselineContext.menuValues.get('HIDDEN'), 'y');
+assert.equal(baselineContext.menuValues.get('CHOICE_A'), 'n');
+assert.equal(baselineContextBuilds, 0,
+  'Native Profile initialization unexpectedly rebuilt a Kconfig validation context');
+assert.equal(baselineValueReads, baselineOptions.length,
+  'Native Profile initialization did not read each loaded option exactly once');
+assert.ok(baselineElapsed < 1000, `Native Profile baseline seeding took ${baselineElapsed.toFixed(1)}ms`);
 
 const workerSource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-search-worker.js'), 'utf8');
 const messages = [];
@@ -200,5 +194,6 @@ console.log(JSON.stringify({
   searchIndexMs: Number(indexElapsed.toFixed(1)),
   searchQueryMs: Number(queryElapsed.toFixed(1)),
   baselineContextBuilds,
-  baselineConditionEvals,
+  baselineValueReads,
+  baselineMs: Number(baselineElapsed.toFixed(1)),
 }));
