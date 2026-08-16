@@ -1,7 +1,7 @@
 from pathlib import Path
 
 css_path = Path('site/wrt/app.css')
-css = css_path.read_text()
+css = css_path.read_text().replace('\r\n', '\n').replace('\r', '\n')
 
 root_old = '''  --plugin-muted: #f3f5f8;
   --radius: 10px;
@@ -44,9 +44,14 @@ dark_new = '''  --plugin-muted: #1d2430;
   --select-card-lift: -1px;
   --shadow: none;
 '''
-if css.count(dark_old) != 2:
-    raise SystemExit(f'dark selectable-card token anchor count={css.count(dark_old)}')
-css = css.replace(dark_old, dark_new)
+if css.count(dark_old) != 1:
+    raise SystemExit(f'explicit dark selectable-card token anchor count={css.count(dark_old)}')
+css = css.replace(dark_old, dark_new, 1)
+auto_dark_old = dark_old.replace('  --', '    --')
+auto_dark_new = dark_new.replace('  --', '    --')
+if css.count(auto_dark_old) != 1:
+    raise SystemExit(f'auto dark selectable-card token anchor count={css.count(auto_dark_old)}')
+css = css.replace(auto_dark_old, auto_dark_new, 1)
 
 local_tokens = '''.plugin-grid {
   --plugin-card-highlight: rgba(255, 255, 255, .68);
@@ -121,7 +126,7 @@ old_test = '''expect(css.includes('--plugin-card-shadow: 0 1px 2px') &&
   css.includes('box-shadow: none;') &&
   css.includes('@media (prefers-reduced-motion: reduce) {'),
   'plugin card elevation, press feedback, disabled flattening, or reduced-motion fallback regressed');'''
-new_test = '''expect(css.includes('/* 可勾选卡片立体模板 / shared selectable-card elevation template */') &&
+new_test = r'''expect(css.includes('/* 可勾选卡片立体模板 / shared selectable-card elevation template */') &&
   css.includes('--select-card-border: color-mix(in srgb, var(--border) 46%, #8ea0b7 54%);') &&
   css.includes('--select-card-shadow: 0 1px 1px rgba(15, 23, 42, .10), 0 4px 9px rgba(55, 75, 104, .15)') &&
   css.includes('--select-card-shadow-hover: 0 2px 2px rgba(15, 23, 42, .11), 0 7px 14px rgba(55, 75, 104, .18)') &&
@@ -141,4 +146,9 @@ new_test = '''expect(css.includes('/* 可勾选卡片立体模板 / shared selec
   'shared light/dark selectable-card template, elevation, press feedback, disabled flattening, or reduced-motion fallback regressed');'''
 if test.count(old_test) != 1:
     raise SystemExit(f'plugin elevation test anchor count={test.count(old_test)}')
-test_path.write_text(test.replace(old_test, new_test))
+test = test.replace(old_test, new_test, 1)
+old_boundary = "css.includes('border: 1px solid color-mix(in srgb, var(--border) 72%, var(--text3));')"
+new_boundary = "css.includes('border: 1px solid var(--select-card-border);')"
+if test.count(old_boundary) != 1:
+    raise SystemExit(f'independent plugin card border contract count={test.count(old_boundary)}')
+test_path.write_text(test.replace(old_boundary, new_boundary, 1))
