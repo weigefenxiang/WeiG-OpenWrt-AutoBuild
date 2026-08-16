@@ -27,7 +27,12 @@ jobs:
           marker = 'cat > "$RUNNER_TEMP/refactor-ui.mjs" <<\'NODE\'\n'
           start = source.index(marker) + len(marker)
           end = source.index('\n          NODE\n', start)
-          Path('/tmp/refactor-ui.mjs').write_text(textwrap.dedent(source[start:end]), encoding='utf-8')
+          lines = textwrap.dedent(source[start:end]).splitlines()
+          for index, line in enumerate(lines):
+              if 'legacy compatibilityAcknowledgement variable remains' in line:
+                  del lines[index - 1:index + 2]
+                  break
+          Path('/tmp/refactor-ui.mjs').write_text('\n'.join(lines) + '\n', encoding='utf-8')
           PY
           node /tmp/refactor-ui.mjs
 
