@@ -10,7 +10,7 @@ on:
       - ".github/workflows/fix-f-apply.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: fix-f-runtime-patch
@@ -20,6 +20,8 @@ jobs:
   export:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    outputs:
+      verified_commit: ${{ steps.detached.outputs.commit }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -63,3 +65,52 @@ jobs:
           include-hidden-files: true
           retention-days: 1
           if-no-files-found: error
+      - name: Create detached verified commit
+        id: detached
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const baseCommit = context.sha;
+            const { data: base } = await github.rest.git.getCommit({ owner, repo, commit_sha: baseCommit });
+            const files = [
+              '.github/workflows/custom-build.yml',
+              'VERSION',
+              'site/wrt/app.js',
+              'site/wrt/data/site-version.json',
+              'tools/check-all.mjs',
+              'tools/test-catalog-performance.mjs',
+              'tools/test-catalog-ui-contract.mjs',
+            ];
+            const tree = [];
+            for (const path of files) {
+              const content = fs.readFileSync(path, 'utf8');
+              const { data: blob } = await github.rest.git.createBlob({
+                owner, repo, content, encoding: 'utf-8',
+              });
+              tree.push({ path, mode: '100644', type: 'blob', sha: blob.sha });
+            }
+            for (const path of [
+              '.github/workflows/fix-f-apply.yml',
+              'tools/fix-f-apply.mjs',
+              'tools/fix-f-apply-v2.mjs',
+            ]) {
+              tree.push({ path, mode: '100644', type: 'blob', sha: null });
+            }
+            const { data: nextTree } = await github.rest.git.createTree({
+              owner, repo, base_tree: base.tree.sha, tree,
+            });
+            const { data: commit } = await github.rest.git.createCommit({
+              owner, repo,
+              message: 'build: consume native profile baselines',
+              tree: nextTree.sha,
+              parents: [baseCommit],
+            });
+            core.setOutput('commit', commit.sha);
+            core.notice(`Detached verified commit: ${commit.sha}`);
+            await core.summary.addHeading('Verified fix-F runtime commit')
+              .addCodeBlock(commit.sha)
+              .addRaw('Created after dev-assistant prepare, retired-authority grep, and git diff --check. The workflow intentionally does not move the branch ref.')
+              .write();
