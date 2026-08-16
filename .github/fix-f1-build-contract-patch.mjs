@@ -14,34 +14,104 @@ function replaceRange(source, startMarker, endMarker, after, label) {
   return source.slice(0, start) + after + source.slice(end);
 }
 
-const spdx = `/*\n * SPDX-FileCopyrightText: 2026 weigefenxiang <weigefenxiang@gmail.com>\n * SPDX-License-Identifier: GPL-3.0-or-later\n */\n`;
-writeFileSync('site/wrt/lib/build-contract-ui.js', spdx + `\nexport function createBuildContractUi({ get } = {}) {\n  if (typeof get !== 'function') throw new Error('build contract UI requires an element getter');\n  let expanded = false;\n  let initialized = false;\n\n  const renderList = (element, model = {}) => {\n    if (!element) return;\n    element.textContent = '';\n    const heading = document.createElement('strong');\n    heading.textContent = String(model.title || '');\n    element.appendChild(heading);\n    const content = document.createElement('div');\n    content.className = 'build-contract-chips';\n    const items = Array.isArray(model.items) ? model.items : [];\n    if (!items.length) {\n      const none = document.createElement('span');\n      none.className = 'hint';\n      none.textContent = String(model.empty || '');\n      content.appendChild(none);\n    } else {\n      for (const item of items) {\n        const chip = document.createElement('code');\n        chip.className = 'build-contract-chip';\n        chip.textContent = String(item);\n        chip.title = String(item);\n        content.appendChild(chip);\n      }\n    }\n    element.appendChild(content);\n  };\n\n  const renderProfilePackages = (element, model = {}) => {\n    if (!element) return;\n    element.textContent = '';\n    const head = document.createElement('div');\n    head.className = 'build-contract-list-head';\n    const title = document.createElement('strong');\n    title.textContent = String(model.title || '');\n    const manage = document.createElement('button');\n    manage.type = 'button';\n    manage.className = 'text-btn profile-package-manage';\n    manage.textContent = String(model.manageLabel || '');\n    if (typeof model.onManage === 'function') manage.addEventListener('click', model.onManage);\n    head.append(title, manage);\n    element.appendChild(head);\n    const content = document.createElement('div');\n    content.className = 'build-contract-chips';\n    const rows = Array.isArray(model.rows) ? model.rows : [];\n    if (!rows.length) {\n      const none = document.createElement('span');\n      none.className = 'hint';\n      none.textContent = String(model.empty || '');\n      content.appendChild(none);\n    } else {\n      for (const row of rows) {\n        const chip = document.createElement('code');\n        const mode = ['follow', 'include', 'exclude'].includes(row.mode) ? row.mode : 'follow';\n        chip.className = `build-contract-chip profile-package-chip mode-${mode}`;\n        const upstream = row.upstream === 'exclude' ? '−' : '+';\n        const explicit = mode === 'follow' ? '' : mode === 'include' ? ' → +' : ' → −';\n        chip.textContent = `${upstream}${row.name}${explicit}`;\n        chip.title = `${row.name}\\n${model.help || ''}`;\n        content.appendChild(chip);\n      }\n    }\n    element.appendChild(content);\n  };\n\n  const setExpanded = (value) => {\n    expanded = value === true;\n    const toggle = get('buildContractToggle');\n    const body = get('buildContractBody');\n    if (!toggle || !body) return;\n    toggle.setAttribute('aria-expanded', String(expanded));\n    body.hidden = !expanded;\n  };\n\n  const init = () => {\n    if (initialized) return;\n    initialized = true;\n    const toggle = get('buildContractToggle');\n    if (!toggle) return;\n    setExpanded(false);\n    toggle.addEventListener('click', () => setExpanded(!expanded));\n  };\n\n  const render = (model = {}) => {\n    init();\n    const box = get('buildContract');\n    const controls = get('buildContractControls');\n    if (!box || !controls) return;\n    if (model.visible !== true) {\n      box.hidden = true;\n      controls.hidden = true;\n      return;\n    }\n    const title = String(model.title || '');\n    get('buildContractTitle').textContent = title;\n    const toggle = get('buildContractToggle');\n    toggle.title = String(model.commitHint || '');\n    toggle.setAttribute('aria-label', `${title}; ${model.commitHint || ''}`);\n    const grid = get('buildContractGrid');\n    grid.textContent = '';\n    for (const [label, value] of Array.isArray(model.rows) ? model.rows : []) {\n      const row = document.createElement('div');\n      row.className = 'build-contract-row';\n      const key = document.createElement('span');\n      key.className = 'build-contract-key';\n      key.textContent = String(label);\n      const result = document.createElement('code');\n      result.textContent = String(value);\n      result.title = String(value);\n      row.append(key, result);\n      grid.appendChild(row);\n    }\n    renderProfilePackages(get('buildContractProfilePackages'), model.profilePackages);\n    renderList(get('buildContractSelection'), model.selection);\n    setExpanded(expanded);\n    box.hidden = false;\n    controls.hidden = false;\n  };\n\n  return Object.freeze({ init, render, setExpanded });\n}\n`);
-
 let html = readFileSync('site/wrt/index.html', 'utf8');
 html = replaceOnce(html,
-`  const [session, components, pageShell] = await Promise.all([\n    import(window.__WEIG_RELEASE_URL__('lib/ui-session-state.js')),\n    import(window.__WEIG_RELEASE_URL__('lib/ui-components.js')),\n    import(window.__WEIG_RELEASE_URL__('lib/page-shell-ui.js')),\n  ]);\n  window.__WEIG_UI_RUNTIME__ = Object.freeze({ session, components, pageShell });`,
-`  const [session, components, pageShell, buildContract] = await Promise.all([\n    import(window.__WEIG_RELEASE_URL__('lib/ui-session-state.js')),\n    import(window.__WEIG_RELEASE_URL__('lib/ui-components.js')),\n    import(window.__WEIG_RELEASE_URL__('lib/page-shell-ui.js')),\n    import(window.__WEIG_RELEASE_URL__('lib/build-contract-ui.js')),\n  ]);\n  window.__WEIG_UI_RUNTIME__ = Object.freeze({ session, components, pageShell, buildContract });`,
+`  const [session, components, pageShell] = await Promise.all([
+    import(window.__WEIG_RELEASE_URL__('lib/ui-session-state.js')),
+    import(window.__WEIG_RELEASE_URL__('lib/ui-components.js')),
+    import(window.__WEIG_RELEASE_URL__('lib/page-shell-ui.js')),
+  ]);
+  window.__WEIG_UI_RUNTIME__ = Object.freeze({ session, components, pageShell });`,
+`  const [session, components, pageShell, buildContract] = await Promise.all([
+    import(window.__WEIG_RELEASE_URL__('lib/ui-session-state.js')),
+    import(window.__WEIG_RELEASE_URL__('lib/ui-components.js')),
+    import(window.__WEIG_RELEASE_URL__('lib/page-shell-ui.js')),
+    import(window.__WEIG_RELEASE_URL__('lib/build-contract-ui.js')),
+  ]);
+  window.__WEIG_UI_RUNTIME__ = Object.freeze({ session, components, pageShell, buildContract });`,
 'UI runtime build-contract import');
 writeFileSync('site/wrt/index.html', html, 'utf8');
 
 let app = readFileSync('site/wrt/app.js', 'utf8');
 app = replaceOnce(app,
-`if (!UI_RUNTIME?.session?.createUiSessionState || !UI_RUNTIME?.components?.createUiCheckboxControl ||\n    !UI_RUNTIME?.pageShell?.installPageShellUi) {`,
-`if (!UI_RUNTIME?.session?.createUiSessionState || !UI_RUNTIME?.components?.createUiCheckboxControl ||\n    !UI_RUNTIME?.pageShell?.installPageShellUi || !UI_RUNTIME?.buildContract?.createBuildContractUi) {`,
+`if (!UI_RUNTIME?.session?.createUiSessionState || !UI_RUNTIME?.components?.createUiCheckboxControl ||
+    !UI_RUNTIME?.pageShell?.installPageShellUi) {`,
+`if (!UI_RUNTIME?.session?.createUiSessionState || !UI_RUNTIME?.components?.createUiCheckboxControl ||
+    !UI_RUNTIME?.pageShell?.installPageShellUi || !UI_RUNTIME?.buildContract?.createBuildContractUi) {`,
 'build-contract runtime gate');
 app = replaceOnce(app,
-`const PAGE_SHELL_UI = UI_RUNTIME.pageShell;\n`,
-`const PAGE_SHELL_UI = UI_RUNTIME.pageShell;\nconst BUILD_CONTRACT_MODULE = UI_RUNTIME.buildContract;\nlet BUILD_CONTRACT_UI = null;\n`,
+`const PAGE_SHELL_UI = UI_RUNTIME.pageShell;
+`,
+`const PAGE_SHELL_UI = UI_RUNTIME.pageShell;
+const BUILD_CONTRACT_MODULE = UI_RUNTIME.buildContract;
+let BUILD_CONTRACT_UI = null;
+`,
 'build-contract module binding');
-app = replaceOnce(app, `let buildContractExpanded = false;\n`, '', 'legacy build-contract expanded state');
+app = replaceOnce(app, `let buildContractExpanded = false;
+`, '', 'legacy build-contract expanded state');
 app = replaceRange(app, 'function renderContractList(', 'function profilePackageRows(', 'function profilePackageRows(', 'legacy build-contract list renderer');
 app = replaceRange(app, 'function renderProfilePackageContract(', 'function profilePackageOption(', 'function profilePackageOption(', 'legacy profile-package contract renderer');
-app = replaceRange(app, 'function setBuildContractExpanded(', 'function renderBuildContract()', `function initBuildContractControls() {\n  if (!BUILD_CONTRACT_UI) BUILD_CONTRACT_UI = BUILD_CONTRACT_MODULE.createBuildContractUi({ get: $ });\n  BUILD_CONTRACT_UI.init();\n}\nfunction renderBuildContract()`, 'legacy build-contract expansion controller');
+app = replaceRange(app, 'function setBuildContractExpanded(', 'function renderBuildContract()',
+`function initBuildContractControls() {
+  if (!BUILD_CONTRACT_UI) BUILD_CONTRACT_UI = BUILD_CONTRACT_MODULE.createBuildContractUi({ get: $ });
+  BUILD_CONTRACT_UI.init();
+}
+function renderBuildContract()`, 'legacy build-contract expansion controller');
 
 const renderStart = app.indexOf('function renderBuildContract() {');
 const renderEnd = app.indexOf('\n\nfunction resetCatalogSelectionLayers()', renderStart);
 if (renderStart < 0 || renderEnd < 0) throw new Error('renderBuildContract range missing');
-const renderReplacement = `function renderBuildContract() {\n  if (!BUILD_CONTRACT_UI) initBuildContractControls();\n  if (!BUILD_CONTRACT_UI) return;\n  const target = state.device?.id === 'catalog-target' ? state.device.target : null;\n  if (!target || !MENU_CATALOG) {\n    BUILD_CONTRACT_UI.render({ visible: false });\n    return;\n  }\n  const source = selectedCatalogSource();\n  const branch = selectedCatalogBranch(source);\n  const selected = effectiveSelection();\n  const selectedNames = selected.all.map((item) => item.id);\n  const commit = String(MENU_CATALOG.source?.commit || '').trim() || 'unknown';\n  const contractTitle = contractText('当前构建契约', 'Current build contract');\n  const commitHint = \\`${contractText('Catalog 提交', 'Catalog commit')} \\${commit}\\`;\n  const profileAdd = target.profilePackagesAdd?.length || 0;\n  const profileRemove = target.profilePackagesRemove?.length || 0;\n  const rows = [\n    [contractText('源码', 'Source'), source?.label || state.source?.id || '-'],\n    [contractText('分支', 'Branch'), branch?.branch || state.version?.branch || '-'],\n    [contractText('Target', 'Target'), target.systemLabel || target.system || '-'],\n    [contractText('Subtarget', 'Subtarget'), target.subtargetLabel || target.subtarget || '-'],\n    [contractText('Profile', 'Profile'), target.profileLabel || target.profileSymbol || '-'],\n    [contractText('软件包', 'Packages'), \\`${profileAdd} add / \\${profileRemove} remove\\`],\n    [contractText('Catalog', 'Catalog'), commit],\n    [contractText('架构', 'Architecture'), target.arch || target.archPackages || contractText('Catalog 未提供', 'Missing from Catalog')],\n  ];\n  const shownSelected = selectedNames.slice(0, 24);\n  if (selectedNames.length > shownSelected.length) shownSelected.push(\\`+\\${selectedNames.length - shownSelected.length}\\`);\n  BUILD_CONTRACT_UI.render({\n    visible: true,\n    title: contractTitle,\n    commitHint,\n    rows,\n    profilePackages: {\n      title: contractText('Profile 软件包', 'Profile packages'),\n      manageLabel: contractText('管理', 'Manage'),\n      empty: contractText('上游未声明额外 Profile 软件包', 'No additional Profile packages declared upstream'),\n      help: contractText('默认跟随上游；可在管理中显式加入或排除', 'Follows upstream by default; Manage can explicitly include or exclude it'),\n      rows: profilePackageRows(target).map((row) => ({ ...row, mode: profilePackageMode(row.name) })),\n      onManage: openProfilePackageModal,\n    },\n    selection: {\n      title: contractText('已选插件', 'Selected plugins'),\n      items: shownSelected,\n      empty: contractText('尚未选择插件', 'No plugins selected'),\n    },\n  });\n}`.replaceAll('\\`', '`').replaceAll('\\${', '${');
+const renderReplacement = [
+  'function renderBuildContract() {',
+  '  if (!BUILD_CONTRACT_UI) initBuildContractControls();',
+  '  if (!BUILD_CONTRACT_UI) return;',
+  "  const target = state.device?.id === 'catalog-target' ? state.device.target : null;",
+  '  if (!target || !MENU_CATALOG) {',
+  '    BUILD_CONTRACT_UI.render({ visible: false });',
+  '    return;',
+  '  }',
+  '  const source = selectedCatalogSource();',
+  '  const branch = selectedCatalogBranch(source);',
+  '  const selected = effectiveSelection();',
+  '  const selectedNames = selected.all.map((item) => item.id);',
+  "  const commit = String(MENU_CATALOG.source?.commit || '').trim() || 'unknown';",
+  "  const contractTitle = contractText('当前构建契约', 'Current build contract');",
+  "  const commitHint = `${contractText('Catalog 提交', 'Catalog commit')} ${commit}`;",
+  '  const profileAdd = target.profilePackagesAdd?.length || 0;',
+  '  const profileRemove = target.profilePackagesRemove?.length || 0;',
+  '  const rows = [',
+  "    [contractText('源码', 'Source'), source?.label || state.source?.id || '-'],",
+  "    [contractText('分支', 'Branch'), branch?.branch || state.version?.branch || '-'],",
+  "    [contractText('Target', 'Target'), target.systemLabel || target.system || '-'],",
+  "    [contractText('Subtarget', 'Subtarget'), target.subtargetLabel || target.subtarget || '-'],",
+  "    [contractText('Profile', 'Profile'), target.profileLabel || target.profileSymbol || '-'],",
+  "    [contractText('软件包', 'Packages'), `${profileAdd} add / ${profileRemove} remove`],",
+  "    [contractText('Catalog', 'Catalog'), commit],",
+  "    [contractText('架构', 'Architecture'), target.arch || target.archPackages || contractText('Catalog 未提供', 'Missing from Catalog')],",
+  '  ];',
+  '  const shownSelected = selectedNames.slice(0, 24);',
+  '  if (selectedNames.length > shownSelected.length) shownSelected.push(`+${selectedNames.length - shownSelected.length}`);',
+  '  BUILD_CONTRACT_UI.render({',
+  '    visible: true,',
+  '    title: contractTitle,',
+  '    commitHint,',
+  '    rows,',
+  '    profilePackages: {',
+  "      title: contractText('Profile 软件包', 'Profile packages'),",
+  "      manageLabel: contractText('管理', 'Manage'),",
+  "      empty: contractText('上游未声明额外 Profile 软件包', 'No additional Profile packages declared upstream'),",
+  "      help: contractText('默认跟随上游；可在管理中显式加入或排除', 'Follows upstream by default; Manage can explicitly include or exclude it'),",
+  '      rows: profilePackageRows(target).map((row) => ({ ...row, mode: profilePackageMode(row.name) })),',
+  '      onManage: openProfilePackageModal,',
+  '    },',
+  '    selection: {',
+  "      title: contractText('已选插件', 'Selected plugins'),",
+  '      items: shownSelected,',
+  "      empty: contractText('尚未选择插件', 'No plugins selected'),",
+  '    },',
+  '  });',
+  '}',
+].join('\n');
 app = app.slice(0, renderStart) + renderReplacement + app.slice(renderEnd);
 if (app.includes('buildContractExpanded')) throw new Error('legacy build-contract expanded state remains');
 if (app.includes("row.className = 'build-contract-row'")) throw new Error('build-contract row renderer remains in app.js');
@@ -49,15 +119,30 @@ writeFileSync('site/wrt/app.js', app, 'utf8');
 
 let moduleTest = readFileSync('tools/test-ui-modules.mjs', 'utf8');
 moduleTest = replaceOnce(moduleTest,
-`const shell = readFileSync(new URL('../site/wrt/lib/page-shell-ui.js', import.meta.url), 'utf8');\n`,
-`const shell = readFileSync(new URL('../site/wrt/lib/page-shell-ui.js', import.meta.url), 'utf8');\nconst buildContract = readFileSync(new URL('../site/wrt/lib/build-contract-ui.js', import.meta.url), 'utf8');\n`,
+`const shell = readFileSync(new URL('../site/wrt/lib/page-shell-ui.js', import.meta.url), 'utf8');
+`,
+`const shell = readFileSync(new URL('../site/wrt/lib/page-shell-ui.js', import.meta.url), 'utf8');
+const buildContract = readFileSync(new URL('../site/wrt/lib/build-contract-ui.js', import.meta.url), 'utf8');
+`,
 'build-contract test reader');
 moduleTest = replaceOnce(moduleTest,
-`assert.match(html, /lib\\/page-shell-ui\\.js/);\n`,
-`assert.match(html, /lib\\/page-shell-ui\\.js/);\nassert.match(html, /lib\\/build-contract-ui\\.js/);\n`,
+`assert.match(html, /lib\/page-shell-ui\.js/);
+`,
+`assert.match(html, /lib\/page-shell-ui\.js/);
+assert.match(html, /lib\/build-contract-ui\.js/);
+`,
 'build-contract import contract');
 moduleTest = replaceOnce(moduleTest,
-`assert.match(app, /PAGE_SHELL_UI\\.installPageShellUi/);\n`,
-`assert.match(app, /PAGE_SHELL_UI\\.installPageShellUi/);\nassert.match(app, /BUILD_CONTRACT_MODULE\\.createBuildContractUi/);\nassert.match(app, /BUILD_CONTRACT_UI\\.render/);\nassert.doesNotMatch(app, /let buildContractExpanded/);\nassert.doesNotMatch(app, /row\\.className = 'build-contract-row'/);\nassert.match(buildContract, /export function createBuildContractUi/);\nassert.match(buildContract, /row\\.className = 'build-contract-row'/);\nassert.match(buildContract, /profile-package-chip mode-/);\n`,
+`assert.match(app, /PAGE_SHELL_UI\.installPageShellUi/);
+`,
+`assert.match(app, /PAGE_SHELL_UI\.installPageShellUi/);
+assert.match(app, /BUILD_CONTRACT_MODULE\.createBuildContractUi/);
+assert.match(app, /BUILD_CONTRACT_UI\.render/);
+assert.doesNotMatch(app, /let buildContractExpanded/);
+assert.doesNotMatch(app, /row\.className = 'build-contract-row'/);
+assert.match(buildContract, /export function createBuildContractUi/);
+assert.match(buildContract, /row\.className = 'build-contract-row'/);
+assert.match(buildContract, /profile-package-chip mode-/);
+`,
 'build-contract module assertions');
 writeFileSync('tools/test-ui-modules.mjs', moduleTest, 'utf8');
