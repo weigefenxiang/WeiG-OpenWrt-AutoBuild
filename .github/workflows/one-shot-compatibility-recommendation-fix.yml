@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   apply:
-    if: github.event.head_commit.message == 'chore: stage compatibility recommendation fix'
+    if: "${{ github.event.head_commit.message == 'chore: stage compatibility recommendation fix' }}"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout fix-F
