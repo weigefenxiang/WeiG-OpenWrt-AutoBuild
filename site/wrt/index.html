@@ -167,7 +167,7 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
   </div>
 
   <div id="form" hidden>
-    <section class="step device-step" id="deviceStep">
+    <section class="step device-step" id="deviceStep" data-floating-boundary>
       <h2><span class="stepnum">①</span> <span data-i18n="step.device">选择构建参数</span> <span class="hint" data-i18n="step.device.hint"></span>
         <button class="fold-btn" id="deviceFold" type="button" aria-expanded="true" aria-controls="devicePicker" data-i18n="fold.hide">隐藏</button>
       </h2>
@@ -188,7 +188,9 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
         </div>
         <div class="catalog-overview-row">
           <div class="catalog-locator">
-            <input type="search" id="catalogLocator" autocomplete="off"
+            <input type="search" id="catalogLocator" autocomplete="off" role="combobox" aria-autocomplete="list"
+              aria-controls="catalogLocatorResults" aria-expanded="false" data-floating-dropdown
+              data-floating-min-width="360" data-floating-max-width="920" data-floating-height="390"
               placeholder="… Subtarget / Target Profile"
               aria-label="Search Source, Branch, Target System, Subtarget or Target Profile"
               title="Search Source, Branch, Target System, Subtarget or Target Profile">
@@ -209,10 +211,6 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
             </div>
           </section>
           <div class="build-contract-controls" id="buildContractControls" hidden>
-            <label class="defconfig-switch" id="defconfigSwitch" title="">
-              <input type="checkbox" id="defconfigToggle" checked>
-              <span id="defconfigLabel">Defconfig</span>
-            </label>
             <label class="build-contract-selected-filter" title="Selected only">
               <input type="checkbox" id="menuconfigSelectedOnly">
               <span>Selected only</span>
@@ -233,11 +231,17 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
         </div>
         <div class="menuconfig-box" id="menuconfigBox" hidden>
           <div class="menuconfig-header">
-            <button class="menuconfig-toggle" id="menuconfigToggle" type="button" aria-expanded="false" aria-controls="menuconfigBody">
-              <strong>Advanced menuconfig</strong>
-              <span class="hint" id="menuconfigStatus"></span>
-              <span class="menuconfig-chevron" aria-hidden="true">⌄</span>
-            </button>
+            <div class="menuconfig-title-group">
+              <button class="menuconfig-toggle" id="menuconfigToggle" type="button" aria-expanded="false" aria-controls="menuconfigBody">
+                <strong>Advanced menuconfig</strong>
+                <span class="hint" id="menuconfigStatus"></span>
+                <span class="menuconfig-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <label class="defconfig-switch menuconfig-defconfig" id="defconfigSwitch">
+                <input type="checkbox" id="defconfigToggle" aria-label="Defconfig">
+                <span id="defconfigLabel">D</span>
+              </label>
+            </div>
             <div class="menuconfig-search-group">
               <input type="search" id="menuconfigSearch" placeholder="Search option name / CONFIG symbol">
               <button class="menuconfig-state-help" id="menuconfigStateHelp" type="button">N/M/Y</button>
@@ -247,7 +251,7 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
             <div class="menuconfig-overview-row" id="menuconfigOverviewRow" hidden>
               <button class="menuconfig-selected-toggle" id="menuconfigSelectedToggle" type="button"
                 aria-expanded="false" aria-controls="menuconfigWorkspace" hidden>
-                <span><strong>Selected options</strong> <small id="menuconfigSelectedCount">0</small></span>
+                <span class="menuconfig-selected-label"><strong>Selected options</strong> <small id="menuconfigSelectedCount">0</small></span>
                 <span class="menuconfig-chevron" aria-hidden="true">⌄</span>
               </button>
               <div class="import-summary" id="importSummary" hidden>
@@ -325,7 +329,7 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
       <div id="groups"></div>
     </section>
 
-    <section class="step">
+    <section class="step" data-floating-boundary>
       <h2><span class="stepnum">③</span> <span data-i18n="step.submit">提交设置</span></h2>
       <div class="submit-primary-fields">
         <div>
@@ -345,7 +349,9 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
       <p class="hint" id="loginInfo"></p>
       <p class="hint rootpw-warning"><strong data-i18n="rootpw.public">⚠️ 提交内容公开可见,密码公开！！</strong><span data-i18n="rootpw.hint">临时登录密码,刷机后必须立即修改! (lede 源 填 @empty 清成空密码）</span></p>
       <div class="firmware-settings">
-        <label><span data-i18n="fw.timezone">时区</span><span class="timezone-combo" id="timezoneCombo"><input type="search" id="timezoneBox" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="timezoneMenu" autocomplete="off" spellcheck="false"><span class="timezone-menu" id="timezoneMenu" role="listbox" hidden></span></span></label>
+        <label><span data-i18n="fw.timezone">时区</span><span class="timezone-combo" id="timezoneCombo"><input type="search" id="timezoneBox" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="timezoneMenu"
+          data-floating-dropdown data-floating-min-width="360" data-floating-max-width="620" data-floating-height="280"
+          autocomplete="off" spellcheck="false"><span class="timezone-menu" id="timezoneMenu" role="listbox" hidden></span></span></label>
         <label><span data-i18n="fw.theme">固件主题</span><select id="fwThemeBox"></select></label>
         <label><span data-i18n="fw.ntp">NTP 服务器</span><select id="ntpBox"></select></label>
         <label><span data-i18n="fw.packageMirror">软件包镜像（APK / OPKG）</span><select id="packageMirrorBox"></select></label>
@@ -365,7 +371,11 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
     </section>
   </div>
 </main>
-<div class="menu-tooltip" id="menuTooltip" role="tooltip" hidden></div>
+<div class="ui-tooltip" id="uiTooltip" role="tooltip" hidden>
+  <strong class="ui-tooltip-title" id="uiTooltipTitle" hidden></strong>
+  <div class="ui-tooltip-emphasis" id="uiTooltipEmphasis" hidden></div>
+  <div class="ui-tooltip-body" id="uiTooltipBody" hidden></div>
+</div>
 
 <div class="actionbar" id="actionbar" hidden>
   <div class="wrap actionbar-row">
@@ -374,22 +384,27 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
       <div class="cap" id="capBox" data-i18n-title="bar.capacity.title"><div class="cap-fill" id="capFill"></div></div>
       <button type="button" class="cap-text cap-info" id="capText" disabled></button>
     </div>
-    <div class="actions">
-      <input id="configImport" type="file" accept=".json,.config,.buildinfo,text/plain,application/json" hidden>
-      <button type="button" class="btn" id="importBtn" data-i18n="btn.import">加载配置</button>
-      <button type="button" class="btn" id="importLogBtn" data-i18n="import.downloadLog" hidden>下载加载日志</button>
-      <button type="button" class="btn btn-primary" id="submitBtn" data-i18n="btn.submit" disabled aria-disabled="true">提交云编译</button>
-    </div>
     <div class="site-version-action build-info" id="buildInfo">
       <button type="button" class="site-version" id="siteVersion" aria-expanded="false" aria-controls="buildInfoCard">--------</button>
       <div class="build-info-card" id="buildInfoCard" role="dialog" aria-label="Build Information">
-        <div class="build-info-title">Build Information</div>
+        <div class="build-info-head">
+          <div class="build-info-title">Build Information</div>
+          <button type="button" class="icon-btn build-info-close" id="buildInfoClose" data-i18n-aria="btn.close">✕</button>
+        </div>
         <dl>
-          <div><dt>Version</dt><dd class="site-version-value">v----------</dd></div>
-          <div><dt>Commit</dt><dd><button type="button" class="build-info-commit" id="buildInfoCommit" aria-label="Commit">—</button></dd></div>
+          <div><dt>Web Version</dt><dd class="site-version-value">v----------</dd></div>
+          <div><dt>Web Commit</dt><dd><button type="button" class="build-info-commit" id="buildInfoCommit" aria-label="Commit">—</button></dd></div>
+          <div><dt>Catalog Code</dt><dd><button type="button" class="build-info-commit" id="buildInfoCatalogCode" aria-label="Catalog code commit">—</button></dd></div>
+          <div><dt>Catalog Data</dt><dd><button type="button" class="build-info-commit" id="buildInfoCatalogData" aria-label="Catalog data revision">—</button></dd></div>
           <div><dt>Built</dt><dd id="buildInfoBuilt">—</dd></div>
         </dl>
       </div>
+    </div>
+    <div class="actions">
+      <input id="configImport" type="file" accept=".json,.config,.buildinfo,text/plain,application/json" hidden>
+      <button type="button" class="btn" id="importBtn" data-i18n-aria="btn.import"><span class="action-label-full" data-i18n="btn.import">加载配置</span><span class="action-label-short" data-i18n="btn.import.short">加载</span></button>
+      <button type="button" class="btn" id="importLogBtn" data-i18n="import.downloadLog" hidden>下载加载日志</button>
+      <button type="button" class="btn btn-primary" id="submitBtn" data-i18n-aria="btn.submit" disabled aria-disabled="true"><span class="action-label-full" data-i18n="btn.submit">提交云编译</span><span class="action-label-short" data-i18n="btn.submit.short">提交</span></button>
     </div>
   </div>
 </div>
@@ -410,11 +425,6 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
      <a href="https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog" target="_blank" rel="noopener">Menuconfig Catalog</a></p>
 </footer>
 
-<div class="popover" id="popover" hidden role="tooltip">
-  <p class="pop-title" id="popTitle"></p>
-  <p class="pop-body" id="popBody"></p>
-</div>
-
 <div class="modal-mask" id="modal" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-head">
@@ -432,11 +442,19 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
 
 <noscript><p class="wrap" style="padding:2rem 0">本页面需要启用 JavaScript 才能使用。/ JavaScript is required.</p></noscript>
 <script>
-window.__WEIG_RELEASE_PROMISE__.then(() => {
+window.__WEIG_RELEASE_PROMISE__.then(async () => {
+  const [session, components, pageShell] = await Promise.all([
+    import(window.__WEIG_RELEASE_URL__('lib/ui-session-state.js')),
+    import(window.__WEIG_RELEASE_URL__('lib/ui-components.js')),
+    import(window.__WEIG_RELEASE_URL__('lib/page-shell-ui.js')),
+  ]);
+  window.__WEIG_UI_RUNTIME__ = Object.freeze({ session, components, pageShell });
   const script = document.createElement('script');
   script.src = window.__WEIG_RELEASE_URL__('app.js');
   script.async = false;
   document.body.appendChild(script);
+}).catch((error) => {
+  console.error('Application UI bootstrap failed / 页面 UI 模块加载失败', error);
 });
 </script>
 </body>

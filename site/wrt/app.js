@@ -15,6 +15,15 @@ if (!/^[a-f0-9]{64}$/.test(SITE_RELEASE_SHA) || typeof globalThis.__WEIG_RELEASE
   throw new Error('Missing validated site release bootstrap / 缺少已验证的站点发布身份');
 }
 const releaseAssetUrl = (path) => globalThis.__WEIG_RELEASE_URL__(path);
+const UI_RUNTIME = globalThis.__WEIG_UI_RUNTIME__;
+if (!UI_RUNTIME?.session?.createUiSessionState || !UI_RUNTIME?.components?.createUiCheckboxControl ||
+    !UI_RUNTIME?.pageShell?.installPageShellUi) {
+  throw new Error('Missing standardized UI runtime modules / 缺少标准 UI 运行模块');
+}
+const UI_SESSION = UI_RUNTIME.session.createUiSessionState();
+const UI_COMPONENTS = UI_RUNTIME.components;
+const PAGE_SHELL_UI = UI_RUNTIME.pageShell;
+let PAGE_SHELL_CONTROLLER = null;
 function releaseScopedUrl(url) {
   const resolved = new URL(url, document.baseURI);
   resolved.searchParams.set('r', SITE_RELEASE_SHA);
@@ -77,7 +86,7 @@ const state = {
   rootpwAuto: false,
   timezone: '',
   theme: '@base',
-  useDefconfig: true,
+  useDefconfig: false,
   ntp: 'cn',
   packageMirror: 'source-default',
   siteVersion: 'v----------',
@@ -90,6 +99,8 @@ let PLUGINS = { groups: [], plugins: [] }, I18N = null, TIMEZONES = null;
 let PACKAGE_MIRRORS = { schema: 2, presets: [{ id: 'source-default', label: { 'zh-CN': '跟随源码默认', en: 'Follow source default' }, sources: [] }] };
 let MENU_INDEX = null, MENU_CATALOG = null, CATALOG_ENGINE = null, CATALOG_MODEL = null;
 let CATALOG_LOADER_MODULE = null, CATALOG_SCHEMA6_MODULE = null, BUILD_IDENTITY_MODULE = null, CATALOG_LOADER = null;
+let PROFILE_BASELINE_MODULE = null, PROFILE_BASELINE_STORE = null, ACTIVE_PROFILE_BASELINE = null;
+let profileBaselineKey = '', catalogProfileBaselineLoadingPromise = null;
 let MENU_CATALOG_DATA_REF = 'catalog-data';
 let catalogShardLoader = null, catalogMenuLoadingPromise = null;
 let catalogHiddenLoadingPromise = null, catalogHelpLoadingPromise = null, packageMirrorsPromise = null;
@@ -131,7 +142,7 @@ let catalogSearchWorker = null, catalogSearchGeneration = 0, catalogSearchReques
 let catalogSearchWorkerReady = false, catalogSearchPending = new Set(), catalogSearchResults = new Map();
 let catalogLocatorEntryCache = null;
 let catalogStateRevision = 0, catalogContextCache = new Map(), catalogContextCacheBypass = false;
-let compatibilityPrefetchTimer = null, compatibilityAcknowledgement = null;
+let compatibilityPrefetchTimer = null;
 let catalogApplicationsPromise = null, catalogApplicationsDocument = null;
 let catalogApplicationsLoadState = 'loading', catalogApplicationsError = '';
 let selfTestViewToken = 0;
@@ -362,15 +373,22 @@ function applyI18n() {
     $('menuconfigStateHelp').setAttribute('aria-label',
       uiText('N、M、Y 状态说明', 'N、M、Y 狀態說明', 'N, M, and Y state help'));
   }
+  const defconfigEmphasis = uiText(
+    '⚠ 当前版本加载时已完成基准配置解析。通常直接在现有结果上增减即可，无需开启 D。',
+    '⚠ 目前版本載入時已完成基準設定解析。通常直接在現有結果上增減即可，無需開啟 D。',
+    '⚠ The current version baseline is already resolved when loaded. Normally you can adjust the existing result directly without enabling D.');
   const defconfigHelp = uiText(
-    '根据当前 Target / Subtarget / Profile 解析 Kconfig 默认值和依赖，补齐设备基准配置（驱动、分区、UBI 等），降低缺失配置导致构建失败或固件不可用的风险。仍须确认机型，不能保证绝对防砖。',
-    '依目前 Target / Subtarget / Profile 解析 Kconfig 默认值与依赖，补齐设备基准设定（驱动、分区、UBI 等），降低设定缺失导致建置失败或固件不可用的风险。仍须确认机型，不能保证绝对防砖。',
-    'Resolve Kconfig defaults and dependencies for the selected Target / Subtarget / Profile to fill the device baseline (drivers, partitions, UBI, and more). This lowers the risk of missing settings, but you must still verify the device; it cannot guarantee safe flashing.');
-  if ($('defconfigLabel')) $('defconfigLabel').textContent = 'Defconfig';
+    '开启 D 会在构建前重新执行 Defconfig，按当前选择补齐 Kconfig 默认值和依赖，可能把你手工删减的默认项重新补回。',
+    '開啟 D 會在建置前重新執行 Defconfig，依目前選擇補齊 Kconfig 預設值與相依性，可能把你手動刪減的預設項目重新補回。',
+    'Enabling D reruns Defconfig before the build, refilling Kconfig defaults and dependencies from the current selection and potentially restoring defaults you removed manually.');
+  if ($('defconfigLabel')) $('defconfigLabel').textContent = 'D';
   if ($('defconfigSwitch')) {
-    $('defconfigSwitch').title = defconfigHelp;
-    $('defconfigSwitch').dataset.help = defconfigHelp;
-    $('defconfigSwitch').setAttribute('aria-label', defconfigHelp);
+    $('defconfigSwitch').removeAttribute('title');
+    $('defconfigSwitch').dataset.uiTooltipTitle = 'D · Defconfig';
+    $('defconfigSwitch').dataset.uiTooltipEmphasis = defconfigEmphasis;
+    $('defconfigSwitch').dataset.uiTooltipBody = defconfigHelp;
+    $('defconfigSwitch').setAttribute('aria-describedby', 'uiTooltip');
+    $('defconfigSwitch').setAttribute('aria-label', `${defconfigEmphasis} ${defconfigHelp}`);
   }
   renderCatalogLoadState();
   $('advLabel').title = t('adv.title');
@@ -388,7 +406,7 @@ function applyI18n() {
     hint.appendChild(document.createTextNode(t('mode.self.hint') + ' '));
   }
   hint.appendChild(mkA('https://github.com/' + OFFICIAL_REPO + '#fork-自建', t('mode.self.tutorial')));
-  applyThemeIcon();
+  PAGE_SHELL_CONTROLLER?.refreshThemeControl();
   if (PLUGINS) {
     renderDevices();
     if (state.device && state.source) {
@@ -470,25 +488,161 @@ function showToast(msg, kind = '') {
   toastTimer = setTimeout(() => { el.classList.remove('show', 'toast-device'); el.hidden = true; }, 2800);
 }
 
-/* ============ 气泡说明 / Info popover ============ */
-const popover = $('popover');
-function showPopover(anchor, title, body) {
-  $('popTitle').textContent = title;
-  $('popBody').textContent = body;
-  popover.hidden = false;
-  const r = anchor.getBoundingClientRect();
-  const pw = Math.min(320, window.innerWidth - 24);
-  let left = r.left + window.scrollX;
-  if (left + pw > window.scrollX + window.innerWidth - 12) left = window.scrollX + window.innerWidth - pw - 12;
-  popover.style.left = left + 'px';
-  popover.style.top = (r.bottom + window.scrollY + 8) + 'px';
+/* ============ 统一悬浮说明 / Shared tooltip ============ */
+const uiTooltip = $('uiTooltip');
+const UI_TOOLTIP_SELECTOR = '[data-ui-tooltip-title],[data-ui-tooltip-emphasis],[data-ui-tooltip-body]';
+let uiTooltipTarget = null;
+let uiTooltipPinned = false;
+
+function uiTooltipBoundary(target) {
+  const margin = 8;
+  const viewport = { left: margin, top: margin, right: innerWidth - margin, bottom: innerHeight - margin };
+  const wrap = target?.closest?.('.wrap') || $('app');
+  if (!wrap) return viewport;
+  const rect = wrap.getBoundingClientRect();
+  return {
+    left: Math.max(viewport.left, rect.left),
+    top: viewport.top,
+    right: Math.min(viewport.right, rect.right),
+    bottom: viewport.bottom,
+  };
 }
-function hidePopover() { popover.hidden = true; }
-document.addEventListener('click', (e) => {
-  if (!popover.hidden && !popover.contains(e.target) && !e.target.closest('.info')) hidePopover();
+function renderUiTooltip({ title = '', emphasis = '', body = '' } = {}) {
+  const titleEl = $('uiTooltipTitle');
+  const emphasisEl = $('uiTooltipEmphasis');
+  const bodyEl = $('uiTooltipBody');
+  titleEl.textContent = title;
+  emphasisEl.textContent = emphasis;
+  bodyEl.textContent = body;
+  titleEl.hidden = !title;
+  emphasisEl.hidden = !emphasis;
+  bodyEl.hidden = !body;
+}
+function positionUiTooltip(target, event = null) {
+  if (!uiTooltip || uiTooltip.hidden || !target) return;
+  const boundary = uiTooltipBoundary(target);
+  const gap = 9;
+  const margin = 8;
+  const anchor = target.getBoundingClientRect();
+  const pointerX = Number.isFinite(event?.clientX) ? event.clientX : anchor.right;
+  const pointerY = Number.isFinite(event?.clientY) ? event.clientY : anchor.bottom;
+
+  const actionbar = $('actionbar');
+  const actionbarRect = actionbar && !actionbar.hidden ? actionbar.getBoundingClientRect() : null;
+  const actionbarVisible = Boolean(actionbarRect && actionbarRect.top < innerHeight && actionbarRect.bottom > 0);
+  const safeBottom = actionbarVisible
+    ? Math.max(boundary.top, Math.min(boundary.bottom, actionbarRect.top - margin))
+    : boundary.bottom;
+  const safeBoundary = { ...boundary, bottom: safeBottom };
+  const availableWidth = Math.max(1, safeBoundary.right - safeBoundary.left);
+  const availableHeight = Math.max(1, safeBoundary.bottom - safeBoundary.top);
+  uiTooltip.style.maxWidth = `${Math.min(400, availableWidth)}px`;
+  uiTooltip.style.maxHeight = `${Math.min(360, availableHeight)}px`;
+  const rect = uiTooltip.getBoundingClientRect();
+
+  const candidates = [
+    { left: pointerX + gap, top: pointerY + gap },
+    { left: pointerX - rect.width - gap, top: pointerY + gap },
+    { left: pointerX + gap, top: pointerY - rect.height - gap },
+    { left: pointerX - rect.width - gap, top: pointerY - rect.height - gap },
+  ];
+  const fits = (candidate) => candidate.left >= safeBoundary.left &&
+    candidate.top >= safeBoundary.top &&
+    candidate.left + rect.width <= safeBoundary.right &&
+    candidate.top + rect.height <= safeBoundary.bottom;
+  const visibleArea = (candidate) => {
+    const left = Math.max(candidate.left, safeBoundary.left);
+    const right = Math.min(candidate.left + rect.width, safeBoundary.right);
+    const top = Math.max(candidate.top, safeBoundary.top);
+    const bottom = Math.min(candidate.top + rect.height, safeBoundary.bottom);
+    return Math.max(0, right - left) * Math.max(0, bottom - top);
+  };
+
+  let chosen = candidates.find(fits);
+  if (!chosen) {
+    chosen = candidates.reduce((best, candidate) => {
+      const area = visibleArea(candidate);
+      const distance = Math.hypot(candidate.left - (pointerX + gap), candidate.top - (pointerY + gap));
+      if (!best || area > best.area || (area === best.area && distance < best.distance)) {
+        return { candidate, area, distance };
+      }
+      return best;
+    }, null).candidate;
+  }
+
+  const maxLeft = Math.max(safeBoundary.left, safeBoundary.right - rect.width);
+  const maxTop = Math.max(safeBoundary.top, safeBoundary.bottom - rect.height);
+  const left = Math.min(Math.max(safeBoundary.left, chosen.left), maxLeft);
+  const top = Math.min(Math.max(safeBoundary.top, chosen.top), maxTop);
+  uiTooltip.style.left = `${left}px`;
+  uiTooltip.style.top = `${top}px`;
+}
+function showUiTooltip(target, { title = '', emphasis = '', body = '', event = null, pinned = false } = {}) {
+  if (!uiTooltip || !target || (!title && !emphasis && !body)) return;
+  uiTooltipTarget = target;
+  uiTooltipPinned = Boolean(pinned);
+  renderUiTooltip({ title, emphasis, body });
+  uiTooltip.hidden = false;
+  positionUiTooltip(target, event);
+}
+function showDatasetTooltip(target, event = null, pinned = false) {
+  if (!target) return;
+  showUiTooltip(target, {
+    title: target.dataset.uiTooltipTitle || '',
+    emphasis: target.dataset.uiTooltipEmphasis || '',
+    body: target.dataset.uiTooltipBody || '',
+    event,
+    pinned,
+  });
+}
+function hideUiTooltip(force = false) {
+  if (!uiTooltip || (!force && uiTooltipPinned)) return;
+  uiTooltip.hidden = true;
+  uiTooltipTarget = null;
+  uiTooltipPinned = false;
+  renderUiTooltip();
+  uiTooltip.style.removeProperty('left');
+  uiTooltip.style.removeProperty('top');
+  uiTooltip.style.removeProperty('max-width');
+  uiTooltip.style.removeProperty('max-height');
+}
+function showPopover(anchor, title, body) {
+  showUiTooltip(anchor, { title, body, pinned: true });
+}
+function hidePopover() { hideUiTooltip(true); }
+
+document.addEventListener('pointerover', (event) => {
+  const target = event.target.closest?.(UI_TOOLTIP_SELECTOR);
+  if (!target || matchMedia('(hover: none)').matches) return;
+  showDatasetTooltip(target, event);
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hidePopover(); closeModal(); } });
-window.addEventListener('scroll', hidePopover, { passive: true });
+document.addEventListener('pointermove', (event) => {
+  if (!uiTooltipTarget || uiTooltipPinned || uiTooltip.hidden) return;
+  const target = event.target.closest?.(UI_TOOLTIP_SELECTOR);
+  if (target === uiTooltipTarget) positionUiTooltip(target, event);
+});
+document.addEventListener('pointerout', (event) => {
+  const target = event.target.closest?.(UI_TOOLTIP_SELECTOR);
+  if (!target || uiTooltipPinned) return;
+  if (!event.relatedTarget?.closest?.(UI_TOOLTIP_SELECTOR) || event.relatedTarget.closest(UI_TOOLTIP_SELECTOR) !== target) {
+    hideUiTooltip();
+  }
+});
+document.addEventListener('focusin', (event) => {
+  const target = event.target.closest?.(UI_TOOLTIP_SELECTOR);
+  if (target) showDatasetTooltip(target);
+});
+document.addEventListener('focusout', (event) => {
+  const target = event.target.closest?.(UI_TOOLTIP_SELECTOR);
+  if (target && !event.relatedTarget?.closest?.(UI_TOOLTIP_SELECTOR)) hideUiTooltip();
+});
+document.addEventListener('click', (event) => {
+  if (uiTooltipPinned && uiTooltipTarget && !uiTooltipTarget.contains(event.target)) hideUiTooltip(true);
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') { hideUiTooltip(true); closeModal(); }
+});
+window.addEventListener('scroll', () => hideUiTooltip(true), { passive: true });
 
 function makePill(label, infoTitle, infoBody, onSelect) {
   const pill = document.createElement('button');
@@ -529,38 +683,92 @@ async function loadDeploymentIdentity() {
   return BUILD_IDENTITY_MODULE.normalizeDeploymentIdentity(RELEASE_BOOTSTRAP.stamp, RELEASE_BOOTSTRAP.meta);
 }
 
-function renderBuildInfo() {
-  const trigger = $('siteVersion');
-  const panel = $('buildInfo');
-  const commit = $('buildInfoCommit');
-  trigger.textContent = shortSiteVersion(state.siteVersion);
-  document.querySelectorAll('.site-version-value').forEach((node) => { node.textContent = state.siteVersion; });
-  const meta = state.buildMeta;
-  if (meta?.commit) {
-    commit.textContent = meta.commit.length > 12 ? `${meta.commit.slice(0, 12)}…` : meta.commit;
-    commit.title = meta.commit;
-    commit.disabled = false;
-    commit.onclick = async () => {
-      try { await navigator.clipboard.writeText(meta.commit); }
+function renderBuildInfoSha(id, value) {
+  const button = $(id);
+  if (!button) return;
+  const sha = String(value || '').trim().toLowerCase();
+  if (/^[a-f0-9]{40}$/.test(sha)) {
+    button.textContent = sha;
+    button.title = sha;
+    button.disabled = false;
+    button.onclick = async () => {
+      try { await navigator.clipboard.writeText(sha); }
       catch (e) { /* clipboard permission can be unavailable on plain HTTP */ }
     };
   } else {
-    commit.textContent = '—';
-    commit.title = '';
-    commit.disabled = true;
-    commit.onclick = null;
+    button.textContent = '—';
+    button.title = '';
+    button.disabled = true;
+    button.onclick = null;
   }
+}
+function renderCatalogBuildInfo() {
+  renderBuildInfoSha('buildInfoCatalogCode', MENU_INDEX?.provenance?.codeSha);
+  renderBuildInfoSha('buildInfoCatalogData', MENU_INDEX?.assetRef);
+}
+
+function positionBuildInfoPanel(trigger, card) {
+  const gutter = 8;
+  const gap = 9;
+  const triggerRect = trigger.getBoundingClientRect();
+  const cardRect = card.getBoundingClientRect();
+  const centeredLeft = triggerRect.left + (triggerRect.width / 2) - (cardRect.width / 2);
+  const left = Math.max(gutter, Math.min(centeredLeft, window.innerWidth - cardRect.width - gutter));
+  const top = Math.max(gutter, triggerRect.top - cardRect.height - gap);
+  const anchor = Math.max(18, Math.min(cardRect.width - 18, triggerRect.left + (triggerRect.width / 2) - left));
+  card.style.left = `${Math.round(left)}px`;
+  card.style.top = `${Math.round(top)}px`;
+  card.style.setProperty('--build-info-anchor-x', `${Math.round(anchor)}px`);
+}
+
+const BUILD_INFO_INTERACTIVE_SELECTOR = [
+  'a[href]', 'button', 'input', 'select', 'textarea', 'label', 'summary',
+  '[contenteditable="true"]', '[role="button"]', '[role="checkbox"]', '[role="radio"]',
+  '[role="option"]', '[role="menuitem"]', '[role="menuitemcheckbox"]', '[role="menuitemradio"]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+function buildInfoInteractiveTarget(target) {
+  const element = target instanceof Element ? target : target?.parentElement;
+  return element?.closest(BUILD_INFO_INTERACTIVE_SELECTOR) || null;
+}
+
+function renderBuildInfo() {
+  const trigger = $('siteVersion');
+  const panel = $('buildInfo');
+  const card = $('buildInfoCard');
+  const closeButton = $('buildInfoClose');
+  trigger.textContent = shortSiteVersion(state.siteVersion);
+  document.querySelectorAll('.site-version-value').forEach((node) => { node.textContent = state.siteVersion; });
+  const meta = state.buildMeta;
+  renderBuildInfoSha('buildInfoCommit', meta?.commit);
+  renderCatalogBuildInfo();
   $('buildInfoBuilt').textContent = formatBuildTime(meta?.builtAt);
+  const setOpen = (open) => {
+    panel.classList.toggle('is-open', open);
+    trigger.setAttribute('aria-expanded', String(open));
+    if (open) requestAnimationFrame(() => positionBuildInfoPanel(trigger, card));
+  };
   trigger.addEventListener('click', (event) => {
     event.stopPropagation();
-    const open = panel.classList.toggle('is-open');
-    trigger.setAttribute('aria-expanded', String(open));
+    setOpen(!panel.classList.contains('is-open'));
+  });
+  closeButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setOpen(false);
   });
   document.addEventListener('click', (event) => {
-    if (!panel.contains(event.target)) { panel.classList.remove('is-open'); trigger.setAttribute('aria-expanded', 'false'); }
+    if (!panel.classList.contains('is-open') || panel.contains(event.target)) return;
+    if (buildInfoInteractiveTarget(event.target)) setOpen(false);
+  });
+  document.addEventListener('dblclick', (event) => {
+    if (panel.classList.contains('is-open') && !panel.contains(event.target)) setOpen(false);
   });
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') { panel.classList.remove('is-open'); trigger.setAttribute('aria-expanded', 'false'); }
+    if (event.key === 'Escape') setOpen(false);
+  });
+  window.addEventListener('resize', () => {
+    if (panel.classList.contains('is-open')) positionBuildInfoPanel(trigger, card);
   });
 }
 
@@ -987,6 +1195,7 @@ async function refreshMenuIndex() {
       index.catalogRepo = MENU_CATALOG_REPO;
       index.loadedFrom = remote.url;
       MENU_INDEX = index;
+      renderCatalogBuildInfo();
       if (!importingConfig) {
         const activeSource = index.sources.find((item) => item.id === previousSourceId);
         const activeBranch = activeSource?.branches?.find((item) => item.id === previousBranchId);
@@ -1116,9 +1325,9 @@ function applyMenuTranslation(element, chinese, usageChinese = '', mobileChip = 
   }
   return element;
 }
-function showMenuTooltip(element) {
+function showMenuTooltip(element, event = null) {
   if (state.lang === 'en' || !element?.dataset.translation) return;
-  showMenuPopup(element, element.dataset.translation);
+  showMenuPopup(element, element.dataset.translation, event);
 }
 function menuOptionPopupText(element) {
   if (!element?.dataset.symbol) return '';
@@ -1132,43 +1341,20 @@ function menuOptionPopupText(element) {
     element.dataset.path || '',
   ].filter(Boolean).join('\n\n');
 }
-function showMenuOptionTooltip(element) {
+function showMenuOptionTooltip(element, event = null) {
   const text = menuOptionPopupText(element);
-  if (text) showMenuPopup(element, text);
+  if (text) showMenuPopup(element, text, event);
 }
-function showMenuHelp(element) {
+function showMenuHelp(element, event = null) {
   if (!element?.dataset.help) return;
-  showMenuPopup(element, element.dataset.help);
+  showMenuPopup(element, element.dataset.help, event);
 }
-function showMenuPopup(element, text) {
-  const tooltip = $('menuTooltip');
-  if (!tooltip || !text) return;
-  const margin = 8;
-  const optionRow = element.closest('.menuconfig-option');
-  const actions = optionRow?.querySelector('.menuconfig-option-actions');
-  const rowRect = optionRow?.getBoundingClientRect();
-  const rightLimit = actions ? actions.getBoundingClientRect().left - margin : innerWidth - margin;
-  const leftLimit = Math.max(margin, rowRect?.left || margin);
-  tooltip.style.maxWidth = `${Math.max(180, Math.min(520, rightLimit - leftLimit))}px`;
-  tooltip.textContent = text;
-  tooltip.hidden = false;
-  const rect = element.getBoundingClientRect();
-  const tipRect = tooltip.getBoundingClientRect();
-  const left = Math.min(Math.max(leftLimit, rect.left), Math.max(leftLimit, rightLimit - tipRect.width));
-  const below = rect.bottom + margin;
-  const top = below + tipRect.height <= innerHeight - margin
-    ? below : Math.max(margin, rect.top - tipRect.height - margin);
-  tooltip.style.left = `${left}px`;
-  tooltip.style.top = `${top}px`;
+function showMenuPopup(element, text, event = null) {
+  if (!element || !text) return;
+  showUiTooltip(element, { body: text, event });
 }
 function hideMenuTooltip() {
-  const tooltip = $('menuTooltip');
-  if (!tooltip) return;
-  tooltip.hidden = true;
-  tooltip.textContent = '';
-  tooltip.style.removeProperty('left');
-  tooltip.style.removeProperty('top');
-  tooltip.style.removeProperty('max-width');
+  hideUiTooltip(true);
 }
 function catalogDiagnosticsText() {
   const source = selectedCatalogSource();
@@ -1265,7 +1451,7 @@ function addMenuIndex(map, key, value) {
 }
 function markCatalogStateChanged() {
   catalogStateRevision++;
-  compatibilityAcknowledgement = null;
+  UI_SESSION.compatibility.clearAcknowledgement();
   clearCatalogDerivedCaches();
 }
 function clearCatalogDerivedCaches() {
@@ -1634,6 +1820,61 @@ function buildMenuIndexes(catalog) {
   if (catalog.menu?.displayLoaded || menuExpanded) startCatalogSearchWorker();
   else stopCatalogSearchWorker();
 }
+async function ensureProfileBaselineModule() {
+  if (!PROFILE_BASELINE_MODULE) {
+    PROFILE_BASELINE_MODULE = await import(releaseAssetUrl('./lib/profile-baseline.js'));
+  }
+  return PROFILE_BASELINE_MODULE;
+}
+async function ensureCatalogProfileBaselines(source = selectedCatalogSource(), branch = selectedCatalogBranch(source)) {
+  const revision = String(MENU_INDEX?.assetRef || '').trim().toLowerCase();
+  const key = [source?.id, branch?.branch || branch?.id, branch?.commit, revision].join('|');
+  if (PROFILE_BASELINE_STORE && profileBaselineKey === key) return PROFILE_BASELINE_STORE;
+  if (catalogProfileBaselineLoadingPromise?.key === key) return catalogProfileBaselineLoadingPromise.promise;
+  const contract = branch?.assets?.profileBaselines;
+  if (!source || !branch || !catalogShardLoader || !contract?.asset) {
+    throw new Error('Catalog Native Profile baseline is unavailable');
+  }
+  const promise = (async () => {
+    const module = await ensureProfileBaselineModule();
+    const document = await catalogShardLoader('profileBaselines');
+    if (!document) throw new Error('Catalog Native Profile baseline shard is unavailable');
+    const store = module.createProfileBaselineStore(document, {
+      sourceId: source.id,
+      branch: branch.branch,
+      commit: branch.commit,
+      schema: contract.schema,
+      encoding: contract.encoding,
+      profiles: contract.profiles,
+      configGroups: contract.configGroups,
+    });
+    PROFILE_BASELINE_STORE = store;
+    profileBaselineKey = key;
+    return store;
+  })();
+  catalogProfileBaselineLoadingPromise = { key, promise };
+  try { return await promise; }
+  finally {
+    if (catalogProfileBaselineLoadingPromise?.promise === promise) catalogProfileBaselineLoadingPromise = null;
+  }
+}
+function resolveActiveProfileBaseline(target = state.device?.target) {
+  if (!PROFILE_BASELINE_STORE || !target) return null;
+  return PROFILE_BASELINE_STORE.resolve({
+    system: target.system,
+    subtarget: target.subtarget,
+    profile: target.profile,
+    profileSymbol: target.profileSymbol,
+    profileSelector: target.profileSelector,
+  });
+}
+function nativeProfileBaselineEntries() {
+  if (!ACTIVE_PROFILE_BASELINE || !PROFILE_BASELINE_MODULE) {
+    throw new Error('Native Profile baseline has not been resolved for the selected Target Profile');
+  }
+  return parseConfigEntries(PROFILE_BASELINE_MODULE.serializeConfigMap(ACTIVE_PROFILE_BASELINE.values));
+}
+
 async function loadCatalog(source, branch, applyDefault = true, requested = null, options = {}) {
   if (!source || !branch) return null;
   const key = `${source.id}/${branch.branch}`;
@@ -1655,11 +1896,16 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
     catalog.loadedFrom = remote.url;
     if (seq !== menuCatalogSeq || abortController.signal.aborted) return null;
     MENU_INDEX = remote.index;
+    renderCatalogBuildInfo();
     const active = catalogBranchFromIndex(remote.index, source.id, branch.branch);
     const activeSource = active.source || source;
     const activeBranch = active.branch || branch;
     CATALOG_MODEL = remote.model;
     catalogShardLoader = remote.loadShard || null;
+    PROFILE_BASELINE_STORE = null;
+    ACTIVE_PROFILE_BASELINE = null;
+    profileBaselineKey = "";
+    await ensureCatalogProfileBaselines(activeSource, activeBranch);
     if (catalog.splitAssets) catalog.menu = CATALOG_SCHEMA6_MODULE.createRuntimeMenu(CATALOG_MODEL);
     MENU_CATALOG = catalog;
     menuCatalogKey = key;
@@ -1876,6 +2122,11 @@ async function applyCatalogTarget() {
     await switchDevice(device, false);
   }
   state.device = device;
+  await ensureCatalogProfileBaselines(sourceRow, branchRow);
+  ACTIVE_PROFILE_BASELINE = resolveActiveProfileBaseline(device.target);
+  if (!ACTIVE_PROFILE_BASELINE) {
+    throw new Error(`Native Profile baseline does not contain ${device.target.system}/${device.target.subtarget}/${device.target.profileSymbol}`);
+  }
   const needsBaseline = targetChanged || !catalogBaselineValues.size;
   if (needsBaseline) initializeCatalogBaseline();
   syncCatalogApplications();
@@ -2156,49 +2407,21 @@ function initializeCatalogBaseline() {
   catalogUserOverrides.clear();
   state.sel.clear();
   state.removed.clear();
-  // Defaults can reference other defaults. Iterate to a stable point after the Target/Profile
-  // context exists; deferred conditions are never treated as enabled. Bypass the revision
-  // cache while this batch mutates menuValues, then publish one new revision at the end.
-  catalogContextCacheBypass = true;
-  try {
-    const needsDefaultContext = menuSearchOptions.some((option) =>
-      !option.hidden && (option.defaults || []).length > 0);
-    for (let pass = 0; pass < 8; pass++) {
-      let changed = false;
-      const passContext = needsDefaultContext
-        ? catalogValidationContext(menuValues, 'interactive') : null;
-      const contextOwnedSymbols = new Set([
-        ...(passContext?.changes || []).map((change) => change.symbol),
-        ...menuTargetSymbols,
-        'TARGET_BOARD', 'TARGET_SUBTARGET', 'TARGET_PROFILE', 'TARGET_ARCH_PACKAGES',
-        'ARCH_PACKAGES', 'ARCH',
-      ]);
-      for (const option of menuSearchOptions) {
-        if (option.hidden) continue;
-        const value = simpleKconfigDefault(option, passContext);
-        if (value === '' || menuValues.get(option.symbol) === value) continue;
-        menuValues.set(option.symbol, value);
-        if (passContext && !contextOwnedSymbols.has(option.symbol)) {
-          passContext.values.set(option.symbol, value);
-        }
-        changed = true;
-      }
-      if (!changed) break;
+  const entries = nativeProfileBaselineEntries();
+  for (const option of menuSearchOptions) {
+    const entry = entries.get(option.symbol);
+    if (!entry) continue;
+    const fallback = option.type === 'string' ? '' : 'n';
+    const value = normalizeImportedKconfigValue(entry, option.type, fallback);
+    if (value === undefined) {
+      throw new Error(`Native Profile baseline value cannot be normalized: CONFIG_${option.symbol}`);
     }
-    for (const choice of MENU_CATALOG?.menu?.choices || []) {
-      const selected = (menuChoiceOptions.get(choice.id) || []).some((item) =>
-        item.choice === choice.id && menuValues.get(item.symbol) === 'y');
-      const preferred = String(choice.defaults?.[0] || '').split(/\s+/)[0];
-      if (!selected && preferred && menuOptionBySymbol.has(preferred)) {
-        menuValues.set(preferred, 'y');
-      }
-    }
-  } finally {
-    catalogContextCacheBypass = false;
+    menuValues.set(option.symbol, value);
   }
   markCatalogStateChanged();
   snapshotCatalogBaseline();
 }
+
 function snapshotCatalogBaseline() {
   catalogBaselineValues.clear();
   for (const option of menuSearchOptions) {
@@ -2222,40 +2445,26 @@ function backfillCatalogBaselineForLoadedOptions() {
   const missing = menuSearchOptions.filter((option) =>
     option?.symbol && !catalogBaselineValues.has(option.symbol));
   if (!missing.length) return;
-  const baselineValues = new Map(catalogBaselineValues);
-  // Resolve only from the upstream Target/Profile baseline. Current menuValues/user overrides
-  // are intentionally excluded so late hidden defaults never appear as user Probe changes.
-  for (let pass = 0; pass < 8; pass++) {
-    const context = catalogValidationContext(baselineValues, 'interactive');
-    let changed = false;
-    for (const option of missing) {
-      const contextual = context.values.get(option.symbol);
-      const resolved = contextual !== undefined
-        ? contextual
-        : CATALOG_ENGINE.resolveKconfigDefault(
-          option, context.values, context.validationOptions,
-        ).value;
-      const value = normalizeCatalogBaselineValue(option, resolved);
-      if (baselineValues.get(option.symbol) === value) continue;
-      baselineValues.set(option.symbol, value);
-      changed = true;
-    }
-    if (!changed) break;
-  }
-  const resolvedContext = catalogValidationContext(baselineValues, 'interactive');
+  const entries = nativeProfileBaselineEntries();
   for (const option of missing) {
-    const value = normalizeCatalogBaselineValue(
-      option,
-      resolvedContext.values.get(option.symbol) ?? baselineValues.get(option.symbol),
-    );
+    const entry = entries.get(option.symbol);
+    if (!entry) continue;
+    const fallback = option.type === 'string' ? '' : 'n';
+    const value = normalizeImportedKconfigValue(entry, option.type, fallback);
+    if (value === undefined) continue;
     catalogBaselineValues.set(option.symbol, value);
+    if (!menuTouched.has(option.symbol) && !catalogUserOverrides.has(option.symbol) &&
+        !catalogImportedSymbols.has(option.symbol)) {
+      menuValues.set(option.symbol, value);
+    }
     if (value !== 'n' && value !== '') {
       catalogBaselineOrigins.set(option.symbol, {
-        kind: 'kconfig-default', detail: 'Kconfig default',
+        kind: 'kconfig-default', detail: 'Native Profile baseline',
       });
     }
   }
 }
+
 function catalogInheritedValue(symbol) {
   if (state.importedConfig && menuImportedOriginal.has(symbol)) return menuImportedOriginal.get(symbol);
   if (catalogRecommendedValues.has(symbol)) return catalogRecommendedValues.get(symbol);
@@ -2678,7 +2887,7 @@ function snapshotCatalogUiState() {
     userOverrides: new Map(catalogUserOverrides), recommended: new Map(catalogRecommendedValues),
     imported: new Set(catalogImportedSymbols), theme: state.theme,
     revision: catalogStateRevision,
-    compatibilityAcknowledgement,
+    compatibilityAcknowledgement: UI_SESSION.compatibility.getAcknowledgement(),
   };
 }
 function restoreMap(target, source) {
@@ -2700,7 +2909,7 @@ function restoreCatalogUiState(snapshot) {
   restoreSet(catalogImportedSymbols, snapshot.imported);
   state.theme = snapshot.theme;
   catalogStateRevision = snapshot.revision;
-  compatibilityAcknowledgement = snapshot.compatibilityAcknowledgement;
+  UI_SESSION.compatibility.setAcknowledgement(snapshot.compatibilityAcknowledgement);
   clearCatalogDerivedCaches();
 }
 function renderCatalogUiAfterIntent(openChildren = false, option = null, value = 'n') {
@@ -2918,16 +3127,22 @@ async function ensureCompatibilityRules() {
   let evaluation = await loadCompatibilityEvaluation();
   if (!evaluation.warnings.length) return null;
   const signature = compatibilitySignature(evaluation);
-  if (compatibilityAcknowledgement?.signature === signature) return compatibilityAcknowledgement.audit;
+  const acknowledged = UI_SESSION.compatibility.getAcknowledgement();
+  if (acknowledged?.signature === signature) return acknowledged.audit;
   const forced = new Set();
+  const remembered = new Set();
   while (true) {
     evaluation = evaluateLoadedCompatibility(evaluation.loaded);
     const pending = evaluation.warnings.filter((warning) => !forced.has(warning.rule.id));
     if (!pending.length) {
       const audit = forcedCompatibilityAudit(evaluation, forced);
-      if (audit) compatibilityAcknowledgement = {
-        signature: compatibilitySignature(evaluation), audit,
-      };
+      if (audit && forced.size && remembered.size === forced.size) {
+        UI_SESSION.compatibility.setAcknowledgement({
+          signature: compatibilitySignature(evaluation), audit,
+        });
+      } else {
+        UI_SESSION.compatibility.clearAcknowledgement();
+      }
       return audit;
     }
     const warning = pending[0];
@@ -2944,8 +3159,14 @@ async function ensureCompatibilityRules() {
       error.name = 'CompatibilityCancelledError';
       throw error;
     }
-    if (action === 'forced') forced.add(warning.rule.id);
-    else forced.clear();
+    if (action === 'forced' || action === 'forced-remember') {
+      forced.add(warning.rule.id);
+      if (action === 'forced-remember') remembered.add(warning.rule.id);
+      else remembered.delete(warning.rule.id);
+    } else {
+      forced.clear();
+      remembered.clear();
+    }
   }
 }
 
@@ -3083,19 +3304,29 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       modalCancelHandler = renderChoice;
       const body = renderModalShell(uiText('确认强制继续', '確認強制繼續', 'Confirm force continuation'));
       appendCompatibilitySummary(body, { confirmation: true });
-      const actions = document.createElement('div');
-      actions.className = 'modal-actions compatibility-actions compatibility-confirm-actions';
-      const backButton = document.createElement('button');
-      backButton.type = 'button';
-      backButton.className = 'btn compatibility-close';
-      backButton.textContent = uiText('返回修改', '返回修改', 'Back to edit');
-      backButton.onclick = renderChoice;
-      const confirmForceButton = document.createElement('button');
-      confirmForceButton.type = 'button';
-      confirmForceButton.className = 'btn compatibility-force-confirm';
-      confirmForceButton.textContent = uiText('确认强制继续', '確認強制繼續', 'Confirm and force');
-      confirmForceButton.onclick = () => finish('forced');
-      actions.append(backButton, confirmForceButton);
+      const actions = UI_COMPONENTS.createUiActionRow(
+        'modal-actions compatibility-actions compatibility-confirm-actions');
+      const { root: rememberChoice, input: rememberInput } = UI_COMPONENTS.createUiCheckboxControl({
+        className: 'compatibility-remember',
+        label: uiText('记住选择', '記住選擇', 'Remember choice'),
+        checked: false,
+        tooltipTitle: uiText('记住选择', '記住選擇', 'Remember choice'),
+        tooltipBody: uiText(
+          '仅当前页面有效；刷新或重新打开网页、清除站点数据后失效。',
+          '僅目前頁面有效；重新整理或重新開啟網頁、清除網站資料後失效。',
+          'Valid only on this page. Refreshing or reopening the page, or clearing site data, resets it.'),
+      });
+      const backButton = UI_COMPONENTS.createUiButton({
+        text: uiText('返回修改', '返回修改', 'Back to edit'),
+        className: 'btn compatibility-close',
+        onClick: renderChoice,
+      });
+      const confirmForceButton = UI_COMPONENTS.createUiButton({
+        text: uiText('确认强制继续', '確認強制繼續', 'Confirm and force'),
+        className: 'btn compatibility-force-confirm',
+        onClick: () => finish(rememberInput.checked ? 'forced-remember' : 'forced'),
+      });
+      actions.append(rememberChoice, backButton, confirmForceButton);
       body.appendChild(actions);
     };
 
@@ -3403,17 +3634,17 @@ function initMenuconfigControls() {
   document.addEventListener('pointerover', (event) => {
     const optionLabel = event.target.closest('.menuconfig-option-label');
     if (optionLabel?.dataset.symbol && !matchMedia('(hover: none)').matches) {
-      showMenuOptionTooltip(optionLabel);
+      showMenuOptionTooltip(optionLabel, event);
       return;
     }
     const help = event.target.closest('.menuconfig-state-help');
     if (help && !matchMedia('(hover: none)').matches) {
-      showMenuHelp(help);
+      showMenuHelp(help, event);
       return;
     }
     const translated = event.target.closest('.menu-translation');
     if (state.lang !== 'en' && translated && !matchMedia('(hover: none)').matches) {
-      showMenuTooltip(translated);
+      showMenuTooltip(translated, event);
     }
   });
   document.addEventListener('pointerout', (event) => {
@@ -3483,7 +3714,7 @@ function renderMenuOption(option) {
   description.dataset.path = path;
   description.tabIndex = 0;
   summary.append(id);
-  if (origin.kind !== 'inactive') {
+  if (origin.kind !== 'inactive' && origin.kind !== 'user') {
     const badge = document.createElement('small');
     badge.className = `catalog-origin catalog-origin-${origin.kind}`;
     badge.textContent = origin.label;
@@ -3947,13 +4178,16 @@ function renderImportedWorkspace() {
     return value !== 'n' && value !== '0' && value !== '""';
   }).length;
   const modified = menuTouched.size + importedUnknownEdits.size;
-  $('importSummaryText').textContent = uiText(
+  const summaryText = uiText(
     `已识别 ${menuImportedOriginal.size} 项 · 仅导入 ${importedUnknownOriginal.size} 项` +
-      `（启用 ${activeUnknown}）· 用户插件操作 ${state.sel.size + state.removed.size} 项 · 已修改 ${modified} 项`,
+      `（启用 ${activeUnknown}）· 插件操作 ${state.sel.size + state.removed.size} 项 · 已修改 ${modified} 项`,
     `已識別 ${menuImportedOriginal.size} 項 · 僅匯入 ${importedUnknownOriginal.size} 項` +
-      `（啟用 ${activeUnknown}）· 使用者外掛操作 ${state.sel.size + state.removed.size} 項 · 已修改 ${modified} 項`,
+      `（啟用 ${activeUnknown}）· 外掛操作 ${state.sel.size + state.removed.size} 項 · 已修改 ${modified} 項`,
     `Recognized ${menuImportedOriginal.size} · import-only ${importedUnknownOriginal.size}` +
-      ` (enabled ${activeUnknown}) · user plugin actions ${state.sel.size + state.removed.size} · modified ${modified}`);
+      ` (enabled ${activeUnknown}) · plugin actions ${state.sel.size + state.removed.size} · modified ${modified}`);
+  const summaryTextElement = $('importSummaryText');
+  summaryTextElement.textContent = summaryText;
+  summaryTextElement.title = summaryText;
   const targetCard = $('importTargetCard');
   targetCard.hidden = importedTargetVerified;
   workspace.hidden = importedTargetVerified;
@@ -4019,8 +4253,8 @@ function renderImportedWorkspace() {
 function clearImportedWorkspace() {
   state.importedConfig = null;
   state.importedConfigId = '';
-  state.useDefconfig = true;
-  if ($('defconfigToggle')) $('defconfigToggle').checked = true;
+  state.useDefconfig = false;
+  if ($('defconfigToggle')) $('defconfigToggle').checked = false;
   importedConfigValues.clear();
   importedUnknownOriginal.clear();
   importedUnknownEdits.clear();
@@ -4173,11 +4407,10 @@ function initCatalogLocator() {
   });
 }
 function activateTargetRecord(record) {
-  const previousSource = state.source;
   state.source = record.source;
   state.version = record.version;
   state.variant = record.variant;
-  applySourceDefaults(previousSource);
+  applySourceDefaults();
   renderGroups();
   updateStats();
   updateLoginInfo();
@@ -4250,14 +4483,14 @@ function initDeviceFold() {
   $('deviceSummary').addEventListener('click', () => setDeviceFold(false));
 }
 
-function applySourceDefaults(previousSource) {
+function applySourceDefaults() {
   const box = $('rootpwBox');
   if (state.source.id === 'lede') {
     if (!box.value || state.rootpwAuto) {
       box.value = state.rootpw = '@empty';
       state.rootpwAuto = true;
     }
-  } else if (state.rootpwAuto && (!previousSource || previousSource.id === 'lede')) {
+  } else if (state.rootpwAuto) {
     box.value = state.rootpw = '';
     state.rootpwAuto = false;
   }
@@ -4271,7 +4504,6 @@ function renderSources() {
   const preferred = state.device.sources.find((s) => previousSource && s.id === previousSource.id) || state.device.sources[0];
   state.device.sources.forEach((s) => {
     const pill = makePill(s.label, s.label + ' · ' + s.repo, s.desc, () => {
-      const previousSource = state.source;
       state.source = s;
       setActive(row, pill);
       renderVersions();
@@ -4279,13 +4511,13 @@ function renderSources() {
       renderGroups();
       updateStats();
       updateLoginInfo();
-      applySourceDefaults(previousSource);
+      applySourceDefaults();
     });
     row.appendChild(pill);
     if (s.id === preferred.id) setActive(row, pill);
   });
   state.source = preferred;
-  applySourceDefaults(previousSource);
+  applySourceDefaults();
   renderVersions();
   renderVariants();
 }
@@ -4824,26 +5056,28 @@ function renderPlugin(p) {
     '由当前 Target / Profile 基础配置锁定', '由目前 Target / Profile 基礎設定鎖定',
     'Locked by the current Target / Profile baseline');
   cb.setAttribute('aria-label', pName(p));
-  cb.addEventListener('change', () => {
+  const applyChecked = (checked) => {
+    cb.checked = checked;
     if (catalogOption) {
-      setMenuValue(catalogOption, cb.checked ? 'y' : 'n');
-      return;
+      const applied = setMenuValue(catalogOption, checked ? 'y' : 'n');
+      if (!applied) cb.checked = curatedPluginChecked(p, st, catalogOption);
+      return applied;
     }
     const selectedBefore = new Set(state.sel);
     if (st === 'builtin') {
-      if (cb.checked) {
+      if (checked) {
         state.removed.delete(p.id);
       } else {
         state.removed.add(p.id);
         if (p.warn) showToast(t(p.warn));   // 取消高风险内置项时同样提示 / warn when removing a risky builtin too
       }
-    } else if (cb.checked) {
+    } else if (checked) {
       state.sel.add(p.id);
       if (p.warn) showToast(t(p.warn));   // 资源警告(如 Docker)勾选即弹 / resource warning pops right on ticking
     } else {
       state.sel.delete(p.id);
     }
-    syncCuratedToMenu(p, cb.checked ? 'y' : 'n');
+    syncCuratedToMenu(p, checked ? 'y' : 'n');
     for (const id of state.sel) {
       if (!selectedBefore.has(id)) {
         const required = byId(id);
@@ -4851,7 +5085,9 @@ function renderPlugin(p) {
       }
     }
     updateStats();
-  });
+    return true;
+  };
+  cb.addEventListener('change', () => { applyChecked(cb.checked); });
   item.appendChild(cb);
 
   const nameBtn = document.createElement('button');
@@ -4884,7 +5120,7 @@ function renderPlugin(p) {
       required.textContent = t('plugin.required');
       nameBtn.appendChild(required);
     }
-    if (origin.kind !== 'inactive') {
+    if (origin.kind !== 'inactive' && origin.kind !== 'user') {
       const f = document.createElement('span');
       f.className = `flag flag-origin flag-origin-${origin.kind}`;
       f.textContent = origin.label;
@@ -4899,13 +5135,26 @@ function renderPlugin(p) {
       ? `\n${uiText('来源', '來源', 'Origin')}: ${catalogOrigin.label}` : '') +
     (p.warn ? '\n' + t(p.warn) : '');
   const pkg = p.pkgs?.[state.source.id] || p.pkg || p.catalogCandidates?.[0] || p.id;
-  nameBtn.title = detail;
+  const size = p.sizeBytes === null ? uiText('大小未知', '大小未知', 'Size unknown')
+    : t('drawer.size', { n: fmtSize(p.sizeBytes) });
+  const tooltipBody = detail + '\n' + pkg + ' · ' + size;
+  item.dataset.uiTooltipTitle = pName(p);
+  item.dataset.uiTooltipBody = tooltipBody;
+  item.setAttribute('aria-describedby', 'uiTooltip');
+  nameBtn.removeAttribute('title');
   nameBtn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-  const size = p.sizeBytes === null ? uiText('大小未知', '大小未知', 'Size unknown')
-    : t('drawer.size', { n: fmtSize(p.sizeBytes) });
-  showPopover(nameBtn, pName(p), detail + '\n' + pkg + ' · ' + size);
+    if (e.detail > 1) return;
+    showPopover(nameBtn, pName(p), tooltipBody);
+  });
+  item.addEventListener('dblclick', (event) => {
+    if (event.target.closest('a,select,textarea,input:not([type="checkbox"]),button:not(.plugin-name)')) return;
+    if (cb.disabled) return;
+    event.preventDefault();
+    event.stopPropagation();
+    hideUiTooltip(true);
+    applyChecked(!cb.checked);
   });
   item.appendChild(nameBtn);
   return item;
@@ -5090,7 +5339,7 @@ function updateStats() {
     $('capBox').hidden = true;
     capText.disabled = false;
     capText.classList.add('rootfs-capacity');
-    capText.textContent = `RootFS ${rootfs.value} MiB`;
+    capText.textContent = `${rootfs.value} MiB`;
     capText.title = uiText('查看 RootFS 容量与修改位置', '查看 RootFS 容量與修改位置', 'View RootFS capacity and where to modify it');
   } else {
     $('capBox').hidden = false;
@@ -5232,35 +5481,12 @@ function applyImportedUnknownEdits(text) {
   return text;
 }
 function catalogTargetConfig() {
-  const target = state.device.target;
-  const targetSelector = target.targetSelector ||
-    `TARGET_${target.system}${target.subtarget ? `_${target.subtarget}` : ''}`;
-  const profileSymbol = target.profileSymbol || (target.profile ? `DEVICE_${target.profile}` : '');
-  const profileSelector = target.profileSelector || `${targetSelector}_${profileSymbol}`;
-  const boardSelector = target.boardSelector || `TARGET_${target.system}`;
-  const arch = String(target.arch || '').trim();
-  const archPackages = String(target.archPackages || '').trim();
-  if (!arch || !/^[A-Za-z0-9_+-]+$/.test(arch)) {
-    throw new Error('Catalog target is missing a valid build architecture');
+  if (!ACTIVE_PROFILE_BASELINE || !PROFILE_BASELINE_MODULE) {
+    throw new Error('Native Profile baseline has not finished loading');
   }
-  if (!archPackages || !/^[A-Za-z0-9._+-]+$/.test(archPackages)) {
-    throw new Error('Catalog target is missing a valid package architecture');
-  }
-  const lines = [
-    ...(boardSelector && boardSelector !== targetSelector ? [`CONFIG_${boardSelector}=y`] : []),
-    `CONFIG_${targetSelector}=y`,
-    `CONFIG_${profileSelector}=y`,
-    `CONFIG_${arch}=y`,
-    `CONFIG_ARCH="${arch}"`,
-    `CONFIG_TARGET_BOARD="${target.system}"`,
-    `CONFIG_TARGET_ARCH_PACKAGES="${archPackages}"`,
-  ];
-  if (target.subtarget) lines.push(`CONFIG_TARGET_SUBTARGET="${target.subtarget}"`);
-  if (profileSymbol) lines.push(`CONFIG_TARGET_PROFILE="${profileSymbol}"`);
-  lines.push('');
-  let text = lines.join('\n');
-  return applyMenuConfig(text);
+  return applyMenuConfig(PROFILE_BASELINE_MODULE.serializeConfigMap(ACTIVE_PROFILE_BASELINE.values));
 }
+
 function applyProfilePackageOverrides(text) {
   for (const [packageName, mode] of profilePackageOverrides) {
     if (!/^[A-Za-z0-9._+@-]+$/.test(packageName)) {
@@ -5806,7 +6032,7 @@ function restoreSelections(config, payload) {
   markCatalogStateChanged();
   const importedConfigEntries = parseConfigEntries(config);
   for (const [symbol, entry] of importedConfigEntries) importedConfigValues.set(symbol, entry.value);
-  const explicit = payload && Array.isArray(payload.plugins) ? payload.plugins : null;
+  const explicit = payload && payload.schema !== 6 && Array.isArray(payload.plugins) ? payload.plugins : null;
   let skipped = 0;
   for (const p of PLUGINS.plugins) {
     const pkg = p.pkgs?.[state.source.id] || p.pkg;
@@ -5832,7 +6058,7 @@ function restoreSelections(config, payload) {
         menuValues.set(option.symbol, value);
         catalogImportedSymbols.add(option.symbol);
         menuImportedOriginal.set(option.symbol, value);
-        let defaultValue = simpleKconfigDefault(option);
+        let defaultValue = catalogBaselineValues.get(option.symbol) ?? simpleKconfigDefault(option);
         if ((option.type === 'bool' || option.type === 'tristate') && !defaultValue) defaultValue = 'n';
         if (String(value) !== String(defaultValue)) menuImportedNonDefault.add(option.symbol);
       }
@@ -5957,6 +6183,42 @@ function parseImportedJson(text) {
   }
 }
 
+async function reconstructSchema6Import(payload) {
+  if (!payload || payload.schema !== 6 || !Array.isArray(payload.overrides) || !payload.customTarget) return null;
+  const revision = String(payload.catalog?.revision || '').trim().toLowerCase();
+  if (!/^[a-f0-9]{40}$/.test(revision) || revision !== String(MENU_INDEX?.assetRef || '').trim().toLowerCase()) {
+    throw new Error('This build request uses a different immutable Catalog snapshot; load the matching page release before importing it');
+  }
+  const source = MENU_INDEX?.sources?.find((item) => item.id === payload.source);
+  const branch = source?.branches?.find((item) =>
+    item.id === payload.version && (!payload.branch || item.branch === payload.branch));
+  if (!source || !branch || branch.state === 'unavailable') throw new Error('Build request Source/Branch is unavailable');
+  if (payload.catalog?.sourceCommit && String(branch.commit || '').toLowerCase() !== String(payload.catalog.sourceCommit).toLowerCase()) {
+    throw new Error('Build request upstream commit does not match the immutable Catalog snapshot');
+  }
+  const target = payload.customTarget;
+  const request = {
+    sourceId: source.id,
+    branchId: branch.id,
+    system: target.system,
+    subtarget: target.subtarget,
+    profileSymbol: target.profileSymbol || (target.profile ? `DEVICE_${target.profile}` : ''),
+  };
+  await loadCatalog(source, branch, false, request);
+  renderCatalogPicker(false, request);
+  await applyCatalogTarget();
+  if (!ACTIVE_PROFILE_BASELINE) throw new Error('Native Profile baseline could not be resolved for this build request');
+  const allowedSymbols = CATALOG_MODEL?.bySymbol instanceof Map
+    ? new Set(CATALOG_MODEL.bySymbol.keys()) : new Set();
+  const values = PROFILE_BASELINE_MODULE.applyProfileOverrides(
+    ACTIVE_PROFILE_BASELINE, payload.overrides, { allowedSymbols },
+  );
+  return {
+    config: PROFILE_BASELINE_MODULE.serializeConfigMap(values),
+    configId: ['catalog-target', source.id, branch.id, state.variant.id].join('/'),
+  };
+}
+
 async function importConfigFile(file) {
   const seq = ++configImportSeq;
   importingConfig = true;
@@ -5979,14 +6241,21 @@ async function importConfigFile(file) {
       } catch (e) {
         throw new Error(t('import.jsonInvalid', { msg: e.message }));
       }
-      if (typeof payload.config !== 'string') throw new Error(t('import.jsonNoConfig'));
-      text = payload.config;
+      if (payload.schema === 6) {
+        const restored = await reconstructSchema6Import(payload);
+        if (!restored) throw new Error(t('import.jsonInvalid', { msg: 'invalid schema 6 request' }));
+        text = restored.config;
+        payload.__restoredConfigId = restored.configId;
+      } else {
+        if (typeof payload.config !== 'string') throw new Error(t('import.jsonNoConfig'));
+        text = payload.config;
+      }
     }
     text = text.replace(/\r\n/g, '\n');
     state.useDefconfig = payload && typeof payload.use_defconfig === 'boolean'
       ? payload.use_defconfig : false;
     if ($('defconfigToggle')) $('defconfigToggle').checked = state.useDefconfig;
-    const configId = await selectImportedTarget(text, file.name, payload);
+    const configId = payload?.__restoredConfigId || await selectImportedTarget(text, file.name, payload);
     if (seq !== configImportSeq) return;
     if (!configId) {
       finishImportLog('cancelled');
@@ -6049,6 +6318,7 @@ function submitReadiness() {
     ['target', Boolean(state.device && state.source && state.version && state.variant)],
     ['catalog', !isCatalog || Boolean(MENU_CATALOG && catalogLoadMode === 'idle')],
     ['menuconfig', !isCatalog || Boolean(MENU_CATALOG && menuOptionBySymbol.size)],
+    ['profile-baseline', !isCatalog || Boolean(ACTIVE_PROFILE_BASELINE && PROFILE_BASELINE_STORE)],
     ['theme', Boolean($('fwThemeBox')?.options?.length && $('fwThemeBox')?.value)],
     ['defconfig', typeof state.useDefconfig === 'boolean'],
     ['identity', Boolean(state.buildMeta && state.buildMeta.version === state.siteVersion &&
@@ -6117,12 +6387,38 @@ $('modal').addEventListener('keydown', (e) => {
 async function generateResolvedConfigText(options = {}) {
   return generateConfigText(options);
 }
+function buildRequestOverrides(configText) {
+  if (!ACTIVE_PROFILE_BASELINE || !PROFILE_BASELINE_MODULE) {
+    throw new Error('Native Profile baseline has not finished loading');
+  }
+  const finalValues = PROFILE_BASELINE_MODULE.parseConfigMap(configText);
+  const allowedSymbols = CATALOG_MODEL?.bySymbol instanceof Map
+    ? new Set(CATALOG_MODEL.bySymbol.keys()) : new Set();
+  return PROFILE_BASELINE_MODULE.diffProfileBaseline(
+    ACTIVE_PROFILE_BASELINE, finalValues, { allowedSymbols },
+  );
+}
 
 function buildAudit(compatibility = null) {
   return {
     defconfig: { enabled: state.useDefconfig === true },
     ...(compatibility?.forced?.length ? { compatibility } : {}),
   };
+}
+
+function schema6TargetIdentity(target = state.device?.target) {
+  const profileSymbol = String(target?.profileSymbol ||
+    (target?.profile ? `DEVICE_${target.profile}` : ''));
+  const identity = {
+    system: String(target?.system || ''),
+    subtarget: String(target?.subtarget || ''),
+    profileSymbol,
+    profileSelector: String(target?.profileSelector || ''),
+  };
+  if (!identity.system || !identity.profileSymbol || !identity.profileSelector) {
+    throw new Error('Catalog Target identity is incomplete');
+  }
+  return identity;
 }
 
 function openSubmitModal() {
@@ -6201,8 +6497,9 @@ function openSubmitModal() {
         await ensurePackageMirrors();
         const forcedCompatibility = await ensureCompatibilityRules();
         const config = await generateResolvedConfigText();
+        const overrides = buildRequestOverrides(config);
         const payload = {
-          schema: 5,
+          schema: 6,
           generatedAt: new Date().toISOString(),
           requestId: requestStamp,
           sourceEnv,
@@ -6211,13 +6508,15 @@ function openSubmitModal() {
           configId: [state.device.id, state.source.id, state.version.id, state.variant.id].join('/'),
           device: state.device.id, source: state.source.id, version: state.version.id,
           branch: state.version.branch,
-          variant: state.variant.id, plugins, tag, lanip: state.lanip, config,
+          variant: state.variant.id, plugins, tag, lanip: state.lanip, overrides,
           use_defconfig: state.useDefconfig === true,
           audit: buildAudit(forcedCompatibility),
           firmware: configFirmwareSettings(config),
           catalog: currentCatalogContract(),
         };
-        if (['custom-target', 'catalog-target'].includes(state.device.id)) payload.customTarget = state.device.target;
+        if (['custom-target', 'catalog-target'].includes(state.device.id)) {
+          payload.customTarget = schema6TargetIdentity();
+        }
         if (state.rootpw) payload.rootpw = state.rootpw;
         const filename = [requestStamp, requestTargetProfilePart(true), safeDownloadNamePart(state.source.id, 'source'),
           safeDownloadNamePart(state.version.id, 'branch'), safeDownloadNamePart(selectedTargetProfileName())].join('-') + '.json';
@@ -6802,26 +7101,71 @@ async function runSelfTest() {
     };
   }
 
+  const src = state.source;
   const d1 = addRow(t('st.browser'));
+  const d2 = addRow(t('st.data'));
+  const d3 = addRow(t('st.config') + (src ? ' (' + src.label + ')' : ''));
+  const d4 = addRow(t('st.gen'));
+  const d5 = addRow(t('st.github'));
+
+  // Paint every ordinary check before network or config work starts. / 在网络与配置检查前先画出全部普通检查项。
+  const nextFrame = window.requestAnimationFrame
+    ? (callback) => window.requestAnimationFrame(callback)
+    : (callback) => window.setTimeout(callback, 0);
+  await new Promise((resolve) => {
+    let settled = false, fallbackTimer = null;
+    const finishPaint = () => {
+      if (settled) return;
+      settled = true;
+      if (fallbackTimer !== null) window.clearTimeout(fallbackTimer);
+      resolve();
+    };
+    fallbackTimer = window.setTimeout(finishPaint, 150);
+    nextFrame(() => nextFrame(finishPaint));
+  });
+  if (viewToken !== selfTestViewToken) return;
+
+  let loadedCompatibility = null;
+  let compatibilityError = null;
+  let catalogDataStatus = null;
+  const refreshCatalogDataStatus = () => {
+    if (!catalogDataStatus || viewToken !== selfTestViewToken) return;
+    const rules = loadedCompatibility?.compatibility?.rules;
+    const suffix = Array.isArray(rules) ? ` · ${rules.length} compatibility rules` : '';
+    d2(catalogDataStatus.status, `${catalogDataStatus.message}${suffix}`);
+  };
+  const compatibilityDownload = Promise.resolve()
+    .then(() => CATALOG_LOADER.fetchCompatibility())
+    .then((compatibility) => {
+      loadedCompatibility = compatibility;
+      refreshCatalogDataStatus();
+      return compatibility;
+    })
+    .catch((error) => {
+      compatibilityError = error;
+      return null;
+    });
+
   const missing = ['fetch', 'URL', 'Blob', 'AbortController', 'localStorage'].filter((k) => !(k in window));
   d1(missing.length ? 'fail' : 'ok', missing.length ? t('st.browser.fail', { list: missing.join('、') }) : t('st.browser.ok'));
 
-  const d2 = addRow(t('st.data'));
   try {
-    const [applications, compatibility] = await Promise.all([
+    const [applications] = await Promise.all([
       ensureCatalogApplications(),
-      CATALOG_LOADER.fetchCompatibility(),
       ensurePackageMirrors(),
     ]);
     if (viewToken !== selfTestViewToken) return;
-    d2(applications.items.length ? 'ok' : 'fail',
-      `${MENU_CATALOG_DATA_REF} · ${applications.items.length} curated applications · ${compatibility.compatibility.rules.length} compatibility rules`);
+    catalogDataStatus = {
+      status: applications.items.length ? 'ok' : 'fail',
+      message: `${MENU_CATALOG_DATA_REF} · ${applications.items.length} curated applications`,
+    };
+    refreshCatalogDataStatus();
   } catch (error) {
-    d2('fail', error.message);
+    if (viewToken !== selfTestViewToken) return;
+    catalogDataStatus = { status: 'fail', message: error.message };
+    refreshCatalogDataStatus();
   }
 
-  const src = state.source;
-  const d3 = addRow(t('st.config') + (src ? ' (' + src.label + ')' : ''));
   let cfgText = null, tierHit = '';
   if (!src) d3('fail', t('st.config.noData'));
   else if (state.device?.id === 'catalog-target') {
@@ -6842,11 +7186,11 @@ async function runSelfTest() {
     d3('fail', t('st.config.noData'));
   }
 
-  const d4 = addRow(t('st.gen'));
   if (!src || !cfgText || !PLUGINS) d4('fail', t('st.gen.skip'));
   else {
     try {
       const text = await generateResolvedConfigText();
+      if (viewToken !== selfTestViewToken) return;
       const headerOk = text.includes(`# page-version=${state.siteVersion}`) &&
         text.includes(`# device=${state.device.id} source=${state.source.id} version=${state.version.id}`);
       const targets = targetLines(text);
@@ -6859,129 +7203,69 @@ async function runSelfTest() {
           `Real generation passed · ${configLines.length} settings · ${targets.length} target signatures`)
         : `${t('st.gen.fail')} · header=${headerOk} target=${targets.length} config=${configLines.length}`);
     } catch (error) {
+      if (viewToken !== selfTestViewToken) return;
       d4('fail', `${t('st.gen.fail')} · ${error.message}`);
     }
   }
 
-  const d5 = addRow(t('st.github'));
   const gh = await timedFetch('https://api.github.com/', 6000);
   if (viewToken !== selfTestViewToken) return;
   d5(gh.ok ? 'ok' : 'warn', gh.ok ? t('st.github.ok', { ms: gh.ms }) : t('st.github.fail', { msg: gh.msg }));
+
+  const d6 = addRow(t('st.compatibility'));
+  loadedCompatibility = await compatibilityDownload;
+  if (viewToken !== selfTestViewToken) return;
+  if (!loadedCompatibility) {
+    d6('fail', t('st.compatibility.fail', { msg: compatibilityError?.message || t('st.data.allFail') }));
+    return;
+  }
+  let evaluation;
+  try {
+    evaluation = evaluateLoadedCompatibility(loadedCompatibility);
+  } catch (error) {
+    d6('fail', t('st.compatibility.fail', { msg: error.message }));
+    return;
+  }
+  if (!evaluation.warnings.length) {
+    d6('ok', t('st.compatibility.ok'));
+    return;
+  }
+
+  const activeRuleIds = evaluation.warnings.map((warning) => warning.rule.id).join(' · ');
+  d6('warn', t('st.compatibility.warn', { rules: activeRuleIds }));
+  const savedResults = document.createDocumentFragment();
+  while (mb.firstChild) savedResults.appendChild(mb.firstChild);
+  try {
+    const forced = await ensureCompatibilityRules();
+    const current = evaluateLoadedCompatibility(loadedCompatibility);
+    if (!current.warnings.length) d6('ok', t('st.compatibility.ok'));
+    else if (forced) d6('warn', t('st.compatibility.forced', {
+      rules: current.warnings.map((warning) => warning.rule.id).join(' · '),
+    }));
+    else d6('warn', t('st.compatibility.warn', {
+      rules: current.warnings.map((warning) => warning.rule.id).join(' · '),
+    }));
+  } catch (error) {
+    if (error?.name === 'CompatibilityCancelledError') {
+      d6('warn', t('st.compatibility.cancelled', { rules: activeRuleIds }));
+    } else {
+      d6('fail', t('st.compatibility.fail', { msg: error.message }));
+    }
+  }
+  selfTestViewToken += 1;
+  modalCancelHandler = null;
+  openModal(t('st.title'));
+  probe.textContent = uiText('插件兼容探针', '外掛相容性探針', 'Package compatibility probe');
+  probe.hidden = false;
+  mb.textContent = '';
+  mb.appendChild(savedResults);
 }
 $('selfTestBtn').addEventListener('click', () => { runSelfTest().catch((e) => showToast(t('toast.selfTestError', { msg: e.message }))); });
 
-/* ============ V11:Aa 字号面板(整页缩放),替代旧密度切换 / V11: Aa font-size panel (whole-page zoom), replaces the old density toggle ============ */
-const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;
-let fontPx = parseInt(localStorage.getItem('wrt_font'), 10);
-if (!fontPx && localStorage.getItem('wrt_density') === '1') { fontPx = 16; safeSet('wrt_font', '16'); }   // 旧紧凑档用户迁移为 16px / legacy compact-density users migrate to 16px
-try { localStorage.removeItem('wrt_density'); } catch (e) { /* 隐私模式可能抛错,忽略 / may throw in private mode; ignore */ }
-if (!(fontPx >= FONT_MIN && fontPx <= FONT_MAX)) fontPx = FONT_DEF;
-function applyFont(px, save) {
-  fontPx = Math.min(FONT_MAX, Math.max(FONT_MIN, Math.round(Number(px)) || FONT_DEF));
-  document.body.style.zoom = fontPx === FONT_DEF ? '' : String(fontPx / FONT_DEF);   // 17px = 原始大小 / 17px = original size
-  $('fontInput').value = fontPx;
-  if (save) safeSet('wrt_font', String(fontPx));
-  fitPluginNames();   // 缩放改变有效布局宽度,重测名称适配 / zoom changes the effective layout width; re-fit names
-}
-function toggleFontPanel(show) {
-  const open = show !== undefined ? show : $('fontPanel').hidden;
-  if (!open && $('fontPanel').contains(document.activeElement)) $('densityBtn').focus();   // 关闭时焦点还给 Aa / hand focus back to Aa on close
-  $('fontPanel').hidden = !open;
-  $('densityBtn').setAttribute('aria-expanded', String(open));
-  if (open) $('fontDec').focus();
-}
-$('densityBtn').addEventListener('click', (e) => { e.stopPropagation(); toggleFontPanel(); });
-$('fontDec').addEventListener('click', () => applyFont(fontPx - 1, true));
-$('fontInc').addEventListener('click', () => applyFont(fontPx + 1, true));
-$('fontReset').addEventListener('click', () => applyFont(FONT_DEF, true));
-$('fontInput').addEventListener('change', () => applyFont($('fontInput').value, true));
-document.addEventListener('click', (e) => {
-  if (!$('fontPanel').hidden && !$('fontPanel').contains(e.target)) toggleFontPanel(false);   // 点外部关闭 / close on outside click
+/* ============ 页面壳层 / Page shell ============ */
+PAGE_SHELL_CONTROLLER = PAGE_SHELL_UI.installPageShellUi({
+  get: $, t, safeSet, openModal, fitPluginNames,
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleFontPanel(false); });
-applyFont(fontPx, false);
-
-/* ============ 使用说明弹窗:序号徽章 + 引号关键词高亮 / Help modal: numbered badges + quoted-keyword highlights ============ */
-$('helpBtn').addEventListener('click', () => {
-  openModal(t('help.title'));
-  $('modal').querySelector('.modal').classList.add('modal-wide', 'recommended-config');
-  const mb = $('modalBody');
-  mb.textContent = '';
-  for (const line of t('help.body').split('\n')) {
-    const m = line.match(/^([①②③④⑤⑥⑦⑧⑨⑩]|\d+\.)\s*(.*)$/);
-    const row = document.createElement('div');
-    row.className = 'help-item';
-    const num = document.createElement('span');
-    num.className = 'help-num';
-    num.textContent = m ? m[1].replace('.', '') : '·';
-    row.appendChild(num);
-    const body = document.createElement('span');
-    body.className = 'help-text';
-    // 中英引号里的词高亮为主题蓝 / words inside quotes get accent-colored
-    const text = m ? m[2] : line;
-    let last = 0;
-    for (const q of text.matchAll(/"([^"]+)"|'([^']+)'|“([^”]+)”/g)) {
-      body.appendChild(document.createTextNode(text.slice(last, q.index)));
-      const em = document.createElement('em');
-      em.textContent = q[1] || q[2] || q[3];
-      body.appendChild(em);
-      last = q.index + q[0].length;
-    }
-    body.appendChild(document.createTextNode(text.slice(last)));
-    row.appendChild(body);
-    mb.appendChild(row);
-  }
-  const links = document.createElement('div');
-  links.className = 'help-links';
-  const addHelpLink = (href, label) => {
-    const link = document.createElement('a');
-    link.href = href;
-    link.target = '_blank';
-    link.rel = 'noopener';
-    link.textContent = label;
-    links.appendChild(link);
-  };
-  addHelpLink('https://openwrt.org/docs/guide-user/installation/generic.sysupgrade', t('help.link.ubi'));
-  mb.appendChild(links);
-});
-
-/* ============ 悬浮坞收起/展开(记忆状态;手机首次默认只留 ⚙) / dock collapse toggle (persisted; first mobile visit starts as gear only) ============ */
-const savedDock = localStorage.getItem('wrt_dock');
-if (savedDock === '1' || (savedDock === null && matchMedia('(max-width: 560px)').matches)) {
-  $('sideDock').classList.add('collapsed');
-}
-$('dockToggle').setAttribute('aria-expanded', String(!$('sideDock').classList.contains('collapsed')));
-$('dockToggle').addEventListener('click', () => {
-  const collapsed = $('sideDock').classList.toggle('collapsed');
-  $('dockToggle').setAttribute('aria-expanded', String(!collapsed));
-  safeSet('wrt_dock', collapsed ? '1' : '0');
-});
-
-/* ============ 风险横幅 / Risk banner ============ */
-$('riskOk').addEventListener('click', () => { $('riskBar').hidden = true; safeSet('wrt_risk', 'ok'); });
-
-/* ============ 主题三态 / Tri-state theme ============ */
-let themeMode = localStorage.getItem('wrt_theme') || 'auto';
-const THEME_ICON = { auto: '◐', light: '☀', dark: '☾' };
-function applyThemeIcon() {
-  $('themeBtn').textContent = THEME_ICON[themeMode];
-  $('themeBtn').title = t('theme.' + themeMode);
-  $('themeBtn').setAttribute('aria-label', t('theme.' + themeMode));
-}
-function applyTheme(mode) {
-  themeMode = (mode === 'light' || mode === 'dark') ? mode : 'auto';
-  if (typeof globalThis.__WEIG_APPLY_THEME__ === 'function') {
-    themeMode = globalThis.__WEIG_APPLY_THEME__(themeMode);
-  } else if (themeMode === 'auto') delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = themeMode;
-  applyThemeIcon();
-  if (themeMode === 'auto') { try { localStorage.removeItem('wrt_theme'); } catch (e) { /* 隐私模式下 localStorage 可能抛错,忽略 / localStorage may throw in private mode; ignore */ } }
-  else safeSet('wrt_theme', themeMode);
-}
-$('themeBtn').addEventListener('click', () => {
-  applyTheme(themeMode === 'auto' ? 'light' : themeMode === 'light' ? 'dark' : 'auto');
-});
-applyTheme(themeMode);
 
 init();
 updateSubmitGate();

@@ -1,5 +1,27 @@
 // Shared build-environment naming rules for the browser and GitHub Actions request parser.
 
+// The browser already imports this module during its mandatory startup gate. Keep the
+// presentation adapter release-scoped and await it before the application continues.
+if (typeof document !== 'undefined') {
+  const releaseSearch = new URL(import.meta.url).search;
+  const feedbackUrl = new URL('./ui-feedback.js', import.meta.url);
+  feedbackUrl.search = releaseSearch;
+  await import(feedbackUrl.href);
+
+  const loadClassic = (relativeUrl) => new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    const url = new URL(relativeUrl, import.meta.url);
+    url.search = releaseSearch;
+    script.src = url.href;
+    script.async = false;
+    script.addEventListener('load', resolve, { once: true });
+    script.addEventListener('error', () => reject(new Error(`Failed to load ${relativeUrl}`)), { once: true });
+    document.head.appendChild(script);
+  });
+  await loadClassic('./package-probe-v3-core.js');
+  await loadClassic('./package-probe-v3-ui.js');
+}
+
 const REQUEST_ID_RE = /^\d{6}_\d{4}$/;
 const BRANCH_RE = /^[A-Za-z0-9._/-]{1,160}$/;
 const DISPLAY_RE = /^[A-Za-z0-9._-]{1,160}$/;
@@ -14,11 +36,29 @@ function isValidBuildTag(value) {
 }
 const SITE_SHA256_RE = /^[a-f0-9]{64}$/;
 const CATALOG_DATA_BRANCHES = Object.freeze({
-  fix: 'catalog-fix',
+  fixPrefix: 'catalog-fix-',
+  legacyFix: 'catalog-fix',
   dev: 'catalog-dev',
   staging: 'catalog-staging',
-  main: 'catalog-data',
+  main: 'catalog-main',
 });
+const CANONICAL_FIX_RE = /^fix-([A-Za-z0-9][A-Za-z0-9._-]{0,95})$/;
+
+function configuredCatalogChannel(configured, key) {
+  const mapping = configured && typeof configured === 'object' ? configured : {};
+  const expected = CATALOG_DATA_BRANCHES[key];
+  const branch = String(mapping[key] || expected || '').trim();
+  if (!expected || branch !== expected) throw new Error(`invalid Catalog data branch for ${key}`);
+  return branch;
+}
+
+// Frozen compatibility only for historical slash-style fix branches.
+function legacyFixDataBranch(environment) {
+  const ref = String(environment || '');
+  if (!/^fix\/[A-Za-z0-9._/-]+$/.test(ref)) return '';
+  const lane = /-([ABC])$/i.exec(ref)?.[1]?.toUpperCase() || '';
+  return lane ? `catalog-fix-${lane}` : 'catalog-fix';
+}
 
 export function normalizeBuildEnvironment(value) {
   let environment = String(value || '').trim();
@@ -37,14 +77,17 @@ export function normalizeBuildCommit(value) {
 
 export function catalogDataBranch(value, configured = CATALOG_DATA_BRANCHES) {
   const environment = normalizeBuildEnvironment(value) || 'main';
-  const channel = environment.startsWith('fix/') ? 'fix'
-    : ['dev', 'staging', 'main'].includes(environment) ? environment : 'main';
-  const mapping = configured && typeof configured === 'object' ? configured : {};
-  const branch = String(mapping[channel] || CATALOG_DATA_BRANCHES[channel] || '').trim();
-  if (branch !== CATALOG_DATA_BRANCHES[channel]) {
-    throw new Error(`invalid Catalog data branch for ${channel}`);
+  const canonicalFix = CANONICAL_FIX_RE.exec(environment)?.[1] || '';
+  if (canonicalFix) {
+    return `${configuredCatalogChannel(configured, 'fixPrefix')}${canonicalFix}`;
   }
-  return branch;
+  const legacyFix = legacyFixDataBranch(environment);
+  if (legacyFix) {
+    if (legacyFix === 'catalog-fix') configuredCatalogChannel(configured, 'legacyFix');
+    return legacyFix;
+  }
+  const channel = ['dev', 'staging', 'main'].includes(environment) ? environment : 'main';
+  return configuredCatalogChannel(configured, channel);
 }
 
 export function normalizeDeploymentIdentity(siteStamp, buildMeta) {

@@ -25,9 +25,10 @@
     "idleDelayMs": 15000
   },
   "catalogDataBranches": {
-    "fix": "catalog-fix",
+    "fixPrefix": "catalog-fix-",
+    "legacyFix": "catalog-fix",
     "dev": "catalog-dev",
     "staging": "catalog-staging",
-    "main": "catalog-data"
+    "main": "catalog-main"
   }
 }

@@ -114,6 +114,12 @@
   "st.github.fail": "直连失败({msg});提交 issue 时可能需要代理,或换网络重试",
   "st.timeout": "超时",
   "st.connFail": "连接失败",
+  "st.compatibility": "构建兼容性",
+  "st.compatibility.ok": "未命中已知兼容性规则",
+  "st.compatibility.warn": "命中规则 {rules}，完成其他检查后需要处理",
+  "st.compatibility.forced": "已确认保留规则 {rules} 的风险",
+  "st.compatibility.cancelled": "规则 {rules} 尚未处理",
+  "st.compatibility.fail": "兼容性检查失败：{msg}",
   "footer.thanksLabel": "【鸣谢】",
   "footer.pluginAuthors": "全部插件作者",
   "footer.actionsPrefix": "固件在",
@@ -218,6 +224,8 @@
   "warn.dnsmasqFull": "⚠️ 路由器唯一的 DNS/DHCP 服务:取消内置且不补装基础版 dnsmasq,内网设备将拿不到 IP、无法上网;多数魔法插件强依赖完整版",
   "warn.blockMount": "⚠️ 取消后 U 盘不再自动挂载;不用 USB 存储可放心取消",
   "generation.error.title": "生成失败",
-  "generation.error.hint": "可点右下角“自检”排查"
+  "generation.error.hint": "可点右下角“自检”排查",
+  "btn.import.short": "加载",
+  "btn.submit.short": "提交"
  }
 }

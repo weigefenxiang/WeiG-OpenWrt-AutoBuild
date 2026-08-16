@@ -70,8 +70,10 @@ const scripts = [
 for (const path of scripts) run(`syntax ${relative(ROOT, path)}`, process.execPath, ['--check', path]);
 
 const regressionTests = [
+  'check-public-terminology.mjs',
   'test-site-release.mjs',
   'test-theme-bootstrap.mjs',
+  'test-ui-modules.mjs',
   'test-build-identity.mjs',
   'test-build-admission.mjs',
   'test-preview-server.mjs',
@@ -81,10 +83,14 @@ const regressionTests = [
   'test-catalog-loader.mjs',
   'test-catalog-engine.mjs',
   'test-catalog-ui-contract.mjs',
+  'test-package-probe-v3.mjs',
+  'test-catalog-core-loader.mjs',
   'test-catalog-performance.mjs',
   'test-menuconfig-scalar.mjs',
   'test-kconfig-serializer.mjs',
+  'test-profile-baseline.mjs',
   'test-package-mirror.mjs',
+  'test-artifact-publish.mjs',
 ];
 for (const name of regressionTests) run(name, process.execPath, [join(ROOT, 'tools', name)]);
 
@@ -152,8 +158,10 @@ const app = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
 const html = readFileSync(join(ROOT, 'site', 'wrt', 'index.html'), 'utf8');
 const loader = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.js'), 'utf8');
 const engine = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.js'), 'utf8');
+const profileBaseline = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'profile-baseline.js'), 'utf8');
 const parser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
 const requestAudit = readFileSync(join(ROOT, 'tools', 'request-audit.mjs'), 'utf8');
+const customBuildWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8');
 const project = parsed.get('site/wrt/data/project.json');
 const automationPolicy = parsed.get('.github/automation-policy.json');
 const architecture = readFileSync(join(ROOT, 'ARCHITECTURE.md'), 'utf8');
@@ -183,10 +191,32 @@ const catalogOnly =
   engine.includes('compatibility document requires schema 2') && engine.includes('compatibilityPatternMatches') &&
   app.includes('ensureCatalogApplications') && app.includes('CATALOG_ENGINE.evaluateCompatibilityRules') &&
   app.includes('CATALOG_ENGINE.deriveCompatibilityPlans') && app.includes('CATALOG_ENGINE.applyUserIntent') &&
-  parser.includes('Catalog Source 缺少有效构建工具') && parser.includes('schema 5 only accepts a Catalog target') &&
+  parser.includes('Catalog Source 缺少有效构建工具') && parser.includes('schema 6 only accepts a Catalog target') &&
+  parser.includes('createProfileBaselineStore') && parser.includes('applyProfileOverrides') &&
+  parser.includes('loadCatalogKconfigSymbols') && parser.includes('createCatalogModel') &&
+  parser.includes('allowedSymbols: catalogKconfigSymbols') &&
+  profileBaseline.includes('branch-common-plus-exact-config-groups-v1') &&
+  profileBaseline.includes('allowedSymbols instanceof Set') &&
+  !parser.includes(['submitted', 'config'].join('.')) &&
   !parser.includes('devices.json') && !parser.includes('config-manifest.json');
 if (catalogOnly) pass('Source/Branch/build tools, Kconfig, applications and schema-2 compatibility are Catalog-driven');
 else fail('Catalog-only execution contract');
+
+const minimalSchema6Target =
+  app.includes('function schema6TargetIdentity(target = state.device?.target) {') &&
+  app.includes('payload.customTarget = schema6TargetIdentity();') &&
+  !app.includes('payload.customTarget = state.device.target') &&
+  parser.includes("const CUSTOM_TARGET_FIELDS = Object.freeze(['profileSelector', 'profileSymbol', 'subtarget', 'system']);") &&
+  parser.includes('customTarget 只接受最小 Target/Profile 身份字段') &&
+  !parser.includes('targetContract.arch') && !parser.includes('targetContract.archPackages') &&
+  !parser.includes('targetContract.profilePackagesAdd') &&
+  !parser.includes('catalog_arch=') && !parser.includes('catalog_arch_packages=') &&
+  !parser.includes('catalog_profile_packages=') &&
+  !customBuildWorkflow.includes('steps.req.outputs.catalog_arch') &&
+  !customBuildWorkflow.includes('steps.req.outputs.catalog_arch_packages') &&
+  !customBuildWorkflow.includes('steps.req.outputs.catalog_profile_packages');
+if (minimalSchema6Target) pass('schema6 carries only immutable Target/Profile identity; derived Catalog metadata stays out of the request and Worker outputs');
+else fail('schema6 minimal Target/Profile identity contract');
 
 if (html.includes('id="modalProbe"') && html.includes('<button type="button" class="modal-probe-link"') &&
     app.includes('function openPackageProbeModal()') && app.includes("template: 'package-probe.yml'") &&

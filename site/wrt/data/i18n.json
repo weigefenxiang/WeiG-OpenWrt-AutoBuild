@@ -1528,6 +1528,84 @@
    "fr": "Échec de connexion",
    "vi": "Kết nối thất bại"
   },
+  "st.compatibility": {
+   "zh-CN": "构建兼容性",
+   "zh-TW": "建置相容性",
+   "en": "Build compatibility",
+   "ru": "Совместимость сборки",
+   "es": "Compatibilidad de compilación",
+   "pt": "Compatibilidade da compilação",
+   "ja": "ビルド互換性",
+   "ko": "빌드 호환성",
+   "de": "Build-Kompatibilität",
+   "fr": "Compatibilité de la compilation",
+   "vi": "Khả năng tương thích khi build"
+  },
+  "st.compatibility.ok": {
+   "zh-CN": "未命中已知兼容性规则",
+   "zh-TW": "未命中已知相容性規則",
+   "en": "No known compatibility rules matched",
+   "ru": "Известные правила совместимости не сработали",
+   "es": "No se activó ninguna regla de compatibilidad conocida",
+   "pt": "Nenhuma regra de compatibilidade conhecida foi acionada",
+   "ja": "既知の互換性ルールには該当しません",
+   "ko": "알려진 호환성 규칙에 해당하지 않습니다",
+   "de": "Keine bekannte Kompatibilitätsregel wurde ausgelöst",
+   "fr": "Aucune règle de compatibilité connue ne s’applique",
+   "vi": "Không khớp quy tắc tương thích đã biết nào"
+  },
+  "st.compatibility.warn": {
+   "zh-CN": "命中规则 {rules}，完成其他检查后需要处理",
+   "zh-TW": "命中規則 {rules}，完成其他檢查後需要處理",
+   "en": "Rules {rules} matched and require attention after the other checks finish",
+   "ru": "Сработали правила {rules}; их нужно обработать после остальных проверок",
+   "es": "Se activaron las reglas {rules}; deben resolverse al terminar las demás comprobaciones",
+   "pt": "As regras {rules} foram acionadas e precisam ser tratadas após as outras verificações",
+   "ja": "ルール {rules} に該当しました。他の検査完了後に対応が必要です",
+   "ko": "규칙 {rules}에 해당하며 다른 검사가 끝난 뒤 처리해야 합니다",
+   "de": "Die Regeln {rules} wurden ausgelöst und müssen nach den übrigen Prüfungen behandelt werden",
+   "fr": "Les règles {rules} s’appliquent et doivent être traitées après les autres vérifications",
+   "vi": "Đã khớp quy tắc {rules}; cần xử lý sau khi hoàn tất các kiểm tra khác"
+  },
+  "st.compatibility.forced": {
+   "zh-CN": "已确认保留规则 {rules} 的风险",
+   "zh-TW": "已確認保留規則 {rules} 的風險",
+   "en": "Risk accepted for keeping rules {rules}",
+   "ru": "Риск сохранения правил {rules} подтверждён",
+   "es": "Se aceptó el riesgo de conservar las reglas {rules}",
+   "pt": "O risco de manter as regras {rules} foi aceito",
+   "ja": "ルール {rules} を維持するリスクを確認済みです",
+   "ko": "규칙 {rules}을 유지할 위험을 확인했습니다",
+   "de": "Das Risiko, die Regeln {rules} beizubehalten, wurde bestätigt",
+   "fr": "Le risque de conserver les règles {rules} a été accepté",
+   "vi": "Đã chấp nhận rủi ro khi giữ quy tắc {rules}"
+  },
+  "st.compatibility.cancelled": {
+   "zh-CN": "规则 {rules} 尚未处理",
+   "zh-TW": "規則 {rules} 尚未處理",
+   "en": "Rules {rules} remain unresolved",
+   "ru": "Правила {rules} ещё не обработаны",
+   "es": "Las reglas {rules} siguen sin resolverse",
+   "pt": "As regras {rules} continuam sem tratamento",
+   "ja": "ルール {rules} は未対応です",
+   "ko": "규칙 {rules}이 아직 처리되지 않았습니다",
+   "de": "Die Regeln {rules} sind noch nicht behandelt",
+   "fr": "Les règles {rules} ne sont pas encore traitées",
+   "vi": "Quy tắc {rules} vẫn chưa được xử lý"
+  },
+  "st.compatibility.fail": {
+   "zh-CN": "兼容性检查失败：{msg}",
+   "zh-TW": "相容性檢查失敗：{msg}",
+   "en": "Compatibility check failed: {msg}",
+   "ru": "Проверка совместимости не удалась: {msg}",
+   "es": "Falló la comprobación de compatibilidad: {msg}",
+   "pt": "Falha na verificação de compatibilidade: {msg}",
+   "ja": "互換性チェックに失敗しました：{msg}",
+   "ko": "호환성 검사 실패: {msg}",
+   "de": "Kompatibilitätsprüfung fehlgeschlagen: {msg}",
+   "fr": "Échec de la vérification de compatibilité : {msg}",
+   "vi": "Kiểm tra tương thích thất bại: {msg}"
+  },
   "footer.thanksLabel": {
    "zh-CN": "【鸣谢】",
    "zh-TW": "【鳴謝】",
@@ -2892,6 +2970,32 @@
    "de": "Unten rechts mit „Selbsttest“ prüfen.",
    "fr": "Utilisez « Diagnostic » en bas à droite pour rechercher la cause.",
    "vi": "Nhấn “Tự kiểm tra” ở góc dưới bên phải để kiểm tra."
+  },
+  "btn.import.short": {
+   "zh-CN": "加载",
+   "zh-TW": "載入",
+   "en": "Load",
+   "ru": "Загрузить",
+   "es": "Cargar",
+   "pt": "Carregar",
+   "ja": "読込",
+   "ko": "불러오기",
+   "de": "Laden",
+   "fr": "Charger",
+   "vi": "Tải"
+  },
+  "btn.submit.short": {
+   "zh-CN": "提交",
+   "zh-TW": "送出",
+   "en": "Submit",
+   "ru": "Отправить",
+   "es": "Enviar",
+   "pt": "Enviar",
+   "ja": "送信",
+   "ko": "제출",
+   "de": "Senden",
+   "fr": "Envoyer",
+   "vi": "Gửi"
   }
  }
 }
