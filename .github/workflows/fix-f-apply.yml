@@ -60,5 +60,6 @@ jobs:
         with:
           name: fix-F-verified-runtime-patch
           path: verified/
+          include-hidden-files: true
           retention-days: 1
           if-no-files-found: error
