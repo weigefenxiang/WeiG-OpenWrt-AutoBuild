@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BLOG = join(ROOT, '..', 'weige-share-blog');
 const command = process.argv[2] || 'status';
+const keepVersion = process.argv.includes('--keep-version');
 
 function run(program, args, options = {}) {
   const result = spawnSync(program, args, { cwd: options.cwd || ROOT, encoding: 'utf8', stdio: options.capture ? 'pipe' : 'inherit', shell: false });
@@ -43,7 +44,7 @@ function prepare() {
   verifyGitState();
   run(process.execPath, ['tools/canonicalize-site-release.mjs']);
   run(process.execPath, ['tools/check-text-format.mjs', 'site/wrt', '--all']);
-  run(process.execPath, ['tools/stamp-site-version.mjs']);
+  run(process.execPath, ['tools/stamp-site-version.mjs', ...(keepVersion ? ['--keep-version'] : [])]);
   run(process.execPath, ['tools/check-text-format.mjs', '.', '--changed']);
   run(process.execPath, ['tools/check-all.mjs']);
   diffCheck();
@@ -79,6 +80,7 @@ function syncBlog(checkOnly = false, ref = '') {
 }
 
 try {
+  if (keepVersion && command !== 'prepare') throw new Error('--keep-version is only valid with prepare');
   if (command === 'prepare') prepare();
   else if (command === 'verify') verify();
   else if (command === 'status') status();
