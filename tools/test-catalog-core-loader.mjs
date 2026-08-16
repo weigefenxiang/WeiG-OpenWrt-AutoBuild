@@ -17,6 +17,7 @@ const sharedSnapshot = [
   ['catalog-fix-F', 'fix-F'],
   ['catalog-dev', 'dev'],
   ['catalog-staging', 'staging'],
+  ['catalog-main', 'main'],
 ].map(([dataRef, codeRef]) => ({
   dataRef,
   index: {
@@ -35,5 +36,5 @@ for (const { dataRef, index } of sharedSnapshot) {
     `${dataRef} must validate its own channel provenance while sharing the snapshot assetRef`);
 }
 assert.equal(new Set(sharedSnapshot.map(({ index }) => index.assetRef)).size, 1,
-  'fix/dev/staging promotion must allow one immutable Catalog snapshot to be mapped across channels');
-console.log('Catalog core-only loader and immutable promotion contract passed.');
+  'fix/dev/staging/main promotion must allow one immutable Catalog snapshot to be mapped across channels');
+console.log('Catalog core-only loader and immutable promotion contract passed through main.');
