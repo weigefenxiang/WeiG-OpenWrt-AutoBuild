@@ -548,6 +548,15 @@ expect(catalogFileNameTokenMatch('master', 'firmware_master_backup.config'),
 expect(catalogFileNameTokenMatch('release-27.4', 'firmware-27.4-device.config', ['27.4']),
   'numeric branch alias was not detected');
 
+expect(
+  css.includes('.plugin-grid {\n  display: grid;\n  grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));\n  gap: 8px;\n  padding: 10px;\n}') &&
+  css.includes('border: 1px solid color-mix(in srgb, var(--border) 72%, var(--text3));') &&
+  css.includes('border-radius: var(--radius);') &&
+  css.includes('.plugin:hover {\n  background: var(--plugin-hover);\n  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));\n}') &&
+  css.includes('.plugin:has(input:checked) {\n  background: var(--plugin-selected);\n  border-color: var(--accent);') &&
+  !css.includes('.plugin { border-right: none; padding: 12px 14px; }'),
+  'plugin option cards lost their independent rounded boundary template');
+
 console.log('Catalog UI state and responsive DOM contracts passed');
 
 expect(!app.includes('probe-request.json'), 'removed Probe request file protocol returned');
