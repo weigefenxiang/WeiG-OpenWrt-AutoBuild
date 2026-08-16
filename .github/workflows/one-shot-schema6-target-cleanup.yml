@@ -83,20 +83,16 @@ jobs:
           });
 
           edit('.github/workflows/custom-build.yml', (input) => {
-            let text = input;
-            text = replaceOnce(text,
-              `            echo "- 构建契约 / build contract: build arch \\`${{ steps.req.outputs.catalog_arch }}\\`; package arch \\`${{ steps.req.outputs.catalog_arch_packages }}\\`; profile packages \\`${{ steps.req.outputs.catalog_profile_packages }}\\`"\n`,
-              ``,
-              'workflow derived build contract summary');
-            for (const line of [
-              `            echo "catalog_arch=${{ steps.req.outputs.catalog_arch }}"\n`,
-              `            echo "catalog_arch_packages=${{ steps.req.outputs.catalog_arch_packages }}"\n`,
-              `            echo "catalog_profile_packages=${{ steps.req.outputs.catalog_profile_packages }}"\n`,
-            ]) {
-              if (!text.includes(line)) throw new Error(`missing workflow metadata line: ${line.trim()}`);
-              text = text.replace(line, '');
+            const lines = input.split('\n');
+            const filtered = lines.filter((line) =>
+              !line.includes('构建契约 / build contract:') &&
+              !line.includes('echo "catalog_arch=') &&
+              !line.includes('echo "catalog_arch_packages=') &&
+              !line.includes('echo "catalog_profile_packages='));
+            if (lines.length - filtered.length !== 4) {
+              throw new Error(`workflow derived metadata cleanup expected 4 lines, removed ${lines.length - filtered.length}`);
             }
-            return text;
+            return filtered.join('\n');
           });
 
           edit('tools/test-catalog-ui-contract.mjs', (input) => {
