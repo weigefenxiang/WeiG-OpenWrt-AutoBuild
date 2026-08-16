@@ -1,0 +1,21 @@
+name: Compute dev release identity once
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - '.dev-restamp-once.py'
+
+permissions:
+  contents: read
+
+jobs:
+  compute:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - name: Compute clean dev release identity
+        run: python3 .dev-restamp-once.py
