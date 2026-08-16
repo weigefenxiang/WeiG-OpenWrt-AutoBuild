@@ -1,0 +1,138 @@
+name: One-shot schema6 target cleanup
+
+on:
+  push:
+    branches:
+      - fix-F
+    paths:
+      - .github/workflows/one-shot-schema6-target-cleanup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: "${{ github.event.head_commit.message == 'chore: stage schema6 target cleanup' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fix-F
+        uses: actions/checkout@v6
+        with:
+          ref: fix-F
+          fetch-depth: 0
+
+      - name: Minimize schema6 Target identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const { readFileSync, writeFileSync } = require('node:fs');
+
+          function edit(path, transform) {
+            const before = readFileSync(path, 'utf8');
+            const after = transform(before);
+            if (after === before) throw new Error(`No change produced for ${path}`);
+            writeFileSync(path, after);
+          }
+          function replaceOnce(text, before, after, label) {
+            const count = text.split(before).length - 1;
+            if (count !== 1) throw new Error(`${label}: expected 1 match, found ${count}`);
+            return text.replace(before, after);
+          }
+
+          edit('site/wrt/app.js', (input) => {
+            let text = input;
+            text = replaceOnce(text,
+              `  const values = PROFILE_BASELINE_MODULE.applyProfileOverrides(ACTIVE_PROFILE_BASELINE, payload.overrides);`,
+              `  const allowedSymbols = CATALOG_MODEL?.bySymbol instanceof Map\n    ? new Set(CATALOG_MODEL.bySymbol.keys()) : new Set();\n  const values = PROFILE_BASELINE_MODULE.applyProfileOverrides(\n    ACTIVE_PROFILE_BASELINE, payload.overrides, { allowedSymbols },\n  );`,
+              'schema6 import Catalog allowlist');
+            text = replaceOnce(text,
+              `function buildAudit(compatibility = null) {\n  return {\n    defconfig: { enabled: state.useDefconfig === true },\n    ...(compatibility?.forced?.length ? { compatibility } : {}),\n  };\n}\n\nfunction openSubmitModal() {`,
+              `function buildAudit(compatibility = null) {\n  return {\n    defconfig: { enabled: state.useDefconfig === true },\n    ...(compatibility?.forced?.length ? { compatibility } : {}),\n  };\n}\n\nfunction schema6TargetIdentity(target = state.device?.target) {\n  const profileSymbol = String(target?.profileSymbol ||\n    (target?.profile ? \`DEVICE_\${target.profile}\` : ''));\n  const identity = {\n    system: String(target?.system || ''),\n    subtarget: String(target?.subtarget || ''),\n    profileSymbol,\n    profileSelector: String(target?.profileSelector || ''),\n  };\n  if (!identity.system || !identity.profileSymbol || !identity.profileSelector) {\n    throw new Error('Catalog Target identity is incomplete');\n  }\n  return identity;\n}\n\nfunction openSubmitModal() {`,
+              'schema6 target identity helper');
+            text = replaceOnce(text,
+              `        if (['custom-target', 'catalog-target'].includes(state.device.id)) payload.customTarget = state.device.target;`,
+              `        if (['custom-target', 'catalog-target'].includes(state.device.id)) {\n          payload.customTarget = schema6TargetIdentity();\n        }`,
+              'schema6 customTarget serializer');
+            return text;
+          });
+
+          edit('tools/parse-request.mjs', (input) => {
+            let text = input;
+            text = replaceOnce(text,
+              `const targetContract = req.customTarget && typeof req.customTarget === 'object' && !Array.isArray(req.customTarget)\n  ? req.customTarget : null;\nif (!targetContract) fail('Catalog Target 请求缺少 customTarget 身份契约');\nconst expectedBoard = String(targetContract.system || '');\nconst expectedSubtarget = String(targetContract.subtarget || '');\nconst expectedProfile = String(targetContract.profileSymbol ||\n  (targetContract.profile ? \`DEVICE_\${targetContract.profile}\` : ''));\nconst expectedSelector = String(targetContract.profileSelector || '');`,
+              `const targetContract = req.customTarget && typeof req.customTarget === 'object' && !Array.isArray(req.customTarget)\n  ? req.customTarget : null;\nif (!targetContract) fail('Catalog Target 请求缺少 customTarget 身份契约');\nconst CUSTOM_TARGET_FIELDS = Object.freeze(['profileSelector', 'profileSymbol', 'subtarget', 'system']);\nconst receivedTargetFields = Object.keys(targetContract).sort();\nif (receivedTargetFields.length !== CUSTOM_TARGET_FIELDS.length ||\n    receivedTargetFields.some((field, index) => field !== CUSTOM_TARGET_FIELDS[index])) {\n  fail(\`customTarget 只接受最小 Target/Profile 身份字段: \${CUSTOM_TARGET_FIELDS.join(',')}\`);\n}\nif (CUSTOM_TARGET_FIELDS.some((field) => typeof targetContract[field] !== 'string')) {\n  fail('customTarget Target/Profile 身份字段必须是字符串');\n}\nconst expectedBoard = String(targetContract.system || '');\nconst expectedSubtarget = String(targetContract.subtarget || '');\nconst expectedProfile = String(targetContract.profileSymbol || '');\nconst expectedSelector = String(targetContract.profileSelector || '');`,
+              'worker minimal customTarget contract');
+            text = replaceOnce(text,
+              `  profileSymbol: expectedProfile,\n  profile: targetContract.profile,\n  profileSelector: expectedSelector,`,
+              `  profileSymbol: expectedProfile,\n  profileSelector: expectedSelector,`,
+              'worker profile fallback removal');
+            text = replaceOnce(text,
+              `\nconst catalogArch = String(targetContract.arch || '');\nconst catalogArchPackages = String(targetContract.archPackages || '');\nconst catalogProfilePackages = Array.isArray(targetContract.profilePackagesAdd)\n  ? [...new Set(targetContract.profilePackagesAdd.map(String))] : [];\n`,
+              `\n`,
+              'worker derived Catalog metadata removal');
+            for (const line of [
+              `  \`catalog_arch=\${catalogArch}\`,\n`,
+              `  \`catalog_arch_packages=\${catalogArchPackages}\`,\n`,
+              `  \`catalog_profile_packages=\${catalogProfilePackages.join(' ')}\`,\n`,
+            ]) {
+              if (!text.includes(line)) throw new Error(`missing output line: ${line.trim()}`);
+              text = text.replace(line, '');
+            }
+            return text;
+          });
+
+          edit('.github/workflows/custom-build.yml', (input) => {
+            let text = input;
+            text = replaceOnce(text,
+              `            echo "- 构建契约 / build contract: build arch \\`${{ steps.req.outputs.catalog_arch }}\\`; package arch \\`${{ steps.req.outputs.catalog_arch_packages }}\\`; profile packages \\`${{ steps.req.outputs.catalog_profile_packages }}\\`"\n`,
+              ``,
+              'workflow derived build contract summary');
+            for (const line of [
+              `            echo "catalog_arch=${{ steps.req.outputs.catalog_arch }}"\n`,
+              `            echo "catalog_arch_packages=${{ steps.req.outputs.catalog_arch_packages }}"\n`,
+              `            echo "catalog_profile_packages=${{ steps.req.outputs.catalog_profile_packages }}"\n`,
+            ]) {
+              if (!text.includes(line)) throw new Error(`missing workflow metadata line: ${line.trim()}`);
+              text = text.replace(line, '');
+            }
+            return text;
+          });
+
+          edit('tools/test-catalog-ui-contract.mjs', (input) => {
+            const anchor = `const defconfigTogglePosition = html.indexOf('id="defconfigToggle"');`;
+            if (!input.includes(anchor)) throw new Error('UI contract schema6 insertion anchor missing');
+            const block = `expect(app.includes('function schema6TargetIdentity(target = state.device?.target) {') &&\n  app.includes('payload.customTarget = schema6TargetIdentity();') &&\n  !app.includes('payload.customTarget = state.device.target') &&\n  app.includes('ACTIVE_PROFILE_BASELINE, payload.overrides, { allowedSymbols }') &&\n  app.includes('const allowedSymbols = CATALOG_MODEL?.bySymbol instanceof Map'),\n  'schema6 request Target identity is not minimal or schema6 import lost the active Catalog symbol allowlist');\n\n`;
+            return input.replace(anchor, block + anchor);
+          });
+
+          edit('tools/check-all.mjs', (input) => {
+            let text = input;
+            text = replaceOnce(text,
+              `const requestAudit = readFileSync(join(ROOT, 'tools', 'request-audit.mjs'), 'utf8');\nconst project = parsed.get('site/wrt/data/project.json');`,
+              `const requestAudit = readFileSync(join(ROOT, 'tools', 'request-audit.mjs'), 'utf8');\nconst customBuildWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8');\nconst project = parsed.get('site/wrt/data/project.json');`,
+              'check-all custom build workflow source');
+            const anchor = `if (catalogOnly) pass('Source/Branch/build tools, Kconfig, applications and schema-2 compatibility are Catalog-driven');\nelse fail('Catalog-only execution contract');\n`;
+            if (!text.includes(anchor)) throw new Error('check-all schema6 anchor missing');
+            const block = `${anchor}\nconst minimalSchema6Target =\n  app.includes('function schema6TargetIdentity(target = state.device?.target) {') &&\n  app.includes('payload.customTarget = schema6TargetIdentity();') &&\n  !app.includes('payload.customTarget = state.device.target') &&\n  parser.includes("const CUSTOM_TARGET_FIELDS = Object.freeze(['profileSelector', 'profileSymbol', 'subtarget', 'system']);") &&\n  parser.includes('customTarget 只接受最小 Target/Profile 身份字段') &&\n  !parser.includes('targetContract.arch') && !parser.includes('targetContract.archPackages') &&\n  !parser.includes('targetContract.profilePackagesAdd') &&\n  !parser.includes('catalog_arch=') && !parser.includes('catalog_arch_packages=') &&\n  !parser.includes('catalog_profile_packages=') &&\n  !customBuildWorkflow.includes('steps.req.outputs.catalog_arch') &&\n  !customBuildWorkflow.includes('steps.req.outputs.catalog_arch_packages') &&\n  !customBuildWorkflow.includes('steps.req.outputs.catalog_profile_packages');\nif (minimalSchema6Target) pass('schema6 carries only immutable Target/Profile identity; derived Catalog metadata stays out of the request and Worker outputs');\nelse fail('schema6 minimal Target/Profile identity contract');\n`;
+            return text.replace(anchor, block);
+          });
+          NODE
+
+          git rm .github/workflows/one-shot-schema6-target-cleanup.yml
+          node tools/dev-assistant.mjs prepare
+          node tools/test-profile-baseline.mjs
+          node tools/test-catalog-ui-contract.mjs
+          node tools/check-all.mjs
+          git diff --check
+          git status --short
+
+      - name: Commit and push fix-F
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: minimize schema 6 target identity'
+          git push origin HEAD:fix-F
