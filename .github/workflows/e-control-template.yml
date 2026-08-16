@@ -21,6 +21,18 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
+      - name: Normalize one-shot helper output
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.e-control-template.py')
+          text = path.read_text(encoding='utf-8')
+          old = "css = css.rstrip() + control_css + '\\n'"
+          new = "css = css.rstrip() + control_css.rstrip() + '\\n'"
+          if text.count(old) != 1:
+              raise SystemExit(f'helper EOF anchor count={text.count(old)}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
       - name: Apply shared control template
         run: python3 .e-control-template.py
       - name: Remove one-shot control files before fingerprinting
