@@ -1,5 +1,5 @@
-name: Apply guarded fix-F runtime patch
-run-name: Apply guarded fix-F runtime patch · ${{ github.run_number }}
+name: Export verified fix-F runtime patch
+run-name: Export verified fix-F runtime patch · ${{ github.run_number }}
 
 on:
   push:
@@ -10,14 +10,14 @@ on:
       - ".github/workflows/fix-f-apply.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: fix-f-runtime-patch
   cancel-in-progress: false
 
 jobs:
-  apply:
+  export:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -37,17 +37,28 @@ jobs:
               echo 'Retired submitted.config authority is still referenced.'
               exit 1
             }
-      - name: Commit verified patch
-        run: |
-          set -euo pipefail
           test ! -e tools/fix-f-apply.mjs
           test ! -e tools/fix-f-apply-v2.mjs
           test ! -e tools/fix-f-runtime.mjs
           test ! -e .github/workflows/fix-f-apply.yml
           git diff --check
-          git config user.name github-actions[bot]
-          git config user.email 4189822+github-actions[bot]@users.noreply.github.com
-          git add -A
-          git diff --cached --quiet && { echo 'No patch changes to commit.'; exit 1; }
-          git commit -m "build: consume native profile baselines"
-          git push origin HEAD:fix-F
+      - name: Package verified files
+        run: |
+          set -euo pipefail
+          mkdir -p verified/.github/workflows verified/site/wrt/data verified/site/wrt verified/tools
+          cp .github/workflows/custom-build.yml verified/.github/workflows/custom-build.yml
+          cp VERSION verified/VERSION
+          cp site/wrt/app.js verified/site/wrt/app.js
+          cp site/wrt/data/site-version.json verified/site/wrt/data/site-version.json
+          cp tools/check-all.mjs verified/tools/check-all.mjs
+          cp tools/test-catalog-performance.mjs verified/tools/test-catalog-performance.mjs
+          cp tools/test-catalog-ui-contract.mjs verified/tools/test-catalog-ui-contract.mjs
+          git diff --name-status HEAD > verified/NAME-STATUS.txt
+          git diff --binary HEAD > verified/verified.patch
+      - name: Upload verified patch
+        uses: actions/upload-artifact@v7
+        with:
+          name: fix-F-verified-runtime-patch
+          path: verified/
+          retention-days: 1
+          if-no-files-found: error
