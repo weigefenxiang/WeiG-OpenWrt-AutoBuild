@@ -62,6 +62,19 @@ expect(html.includes('data-i18n="btn.import.short"') && html.includes('data-i18n
 const defconfigTogglePosition = html.indexOf('id="defconfigToggle"');
 const menuconfigHeaderPosition = html.indexOf('<div class="menuconfig-header">');
 const menuconfigBodyPosition = html.indexOf('<div id="menuconfigBody"');
+expect(app.includes('let compatibilityRememberDefault = false;') &&
+  app.includes("rememberChoice.className = 'compatibility-remember'") &&
+  app.includes("rememberInput.checked = compatibilityRememberDefault") &&
+  app.includes("finish(rememberInput.checked ? 'forced-remember' : 'forced')") &&
+  app.includes('remembered.size === forced.size') &&
+  app.includes("rememberDefault.className = 'st-option compatibility-remember'") &&
+  app.includes('compatibilityRememberDefault = rememberDefaultInput.checked') &&
+  app.includes('仅当前页面有效；刷新或重新打开网页、清除站点数据后失效。') &&
+  !app.includes('wrt_compatibility_remember') &&
+  css.includes('.compatibility-remember{display:inline-flex;') &&
+  css.includes('.st-option.compatibility-remember{width:100%;'),
+  'force-confirm remember-choice control, page-session default, tooltip, or non-persistence regressed');
+
 expect(app.includes('useDefconfig: false,') &&
   app.includes("if ($('defconfigLabel')) $('defconfigLabel').textContent = 'D';") &&
   app.includes("state.useDefconfig = false;\n  if ($('defconfigToggle')) $('defconfigToggle').checked = false;") &&

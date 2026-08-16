@@ -324,17 +324,20 @@ export function serializeConfigMap(input) {
   return `${lines.join('\n')}\n`;
 }
 
-export function diffProfileBaseline(baseline, finalValues) {
+export function diffProfileBaseline(baseline, finalValues, { allowedSymbols = null } = {}) {
   const base = baseline?.values instanceof Map ? baseline.values : new Map();
   const finalMap = finalValues instanceof Map ? finalValues : new Map(Object.entries(finalValues || {}));
   const protectedSymbols = baseline?.protectedSymbols instanceof Set ? baseline.protectedSymbols : new Set();
+  const allowed = allowedSymbols instanceof Set ? allowedSymbols : new Set(allowedSymbols || []);
   const overrides = [];
   for (const symbol of [...new Set([...base.keys(), ...finalMap.keys()])].sort()) {
     const before = base.has(symbol) ? base.get(symbol) : null;
     const after = finalMap.has(symbol) ? finalMap.get(symbol) : null;
     if (before === after) continue;
     if (protectedSymbols.has(symbol)) throw new Error(`Target/Profile identity cannot be overridden: ${symbol}`);
-    if (!base.has(symbol)) throw new Error(`Kconfig symbol is not present in the Native Profile baseline: ${symbol}`);
+    if (!base.has(symbol) && !allowed.has(symbol)) {
+      throw new Error(`Kconfig symbol is outside the active Catalog: ${symbol}`);
+    }
     if (after == null || !String(after) || /[\r\n\0]/.test(String(after))) {
       throw new Error(`invalid Kconfig override for ${symbol}`);
     }
@@ -343,10 +346,11 @@ export function diffProfileBaseline(baseline, finalValues) {
   return overrides;
 }
 
-export function applyProfileOverrides(baseline, overrides) {
+export function applyProfileOverrides(baseline, overrides, { allowedSymbols = null } = {}) {
   if (!baseline?.values || !(baseline.values instanceof Map)) throw new Error('Native Profile baseline is required');
   if (!Array.isArray(overrides)) throw new Error('Kconfig overrides must be an array');
   const values = new Map(baseline.values);
+  const allowed = allowedSymbols instanceof Set ? allowedSymbols : new Set(allowedSymbols || []);
   const seen = new Set();
   for (const pair of overrides) {
     if (!Array.isArray(pair) || pair.length !== 2) throw new Error('invalid Kconfig override row');
@@ -355,8 +359,10 @@ export function applyProfileOverrides(baseline, overrides) {
     if (!SYMBOL_RE.test(symbol) || seen.has(symbol) || !value || /[\r\n\0]/.test(value)) {
       throw new Error(`invalid Kconfig override: ${symbol || '(missing)'}`);
     }
-    if (!values.has(symbol)) throw new Error(`Kconfig override is outside the Native Profile baseline: ${symbol}`);
     if (baseline.protectedSymbols?.has(symbol)) throw new Error(`Target/Profile identity cannot be overridden: ${symbol}`);
+    if (!values.has(symbol) && !allowed.has(symbol)) {
+      throw new Error(`Kconfig override is outside the active Catalog: ${symbol}`);
+    }
     seen.add(symbol);
     values.set(symbol, value);
   }

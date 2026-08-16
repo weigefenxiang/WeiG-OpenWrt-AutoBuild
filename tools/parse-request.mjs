@@ -12,6 +12,7 @@ import {
   artifactBuildRef, buildEnvironmentIdentity, normalizeBuildCommit, normalizeBuildEnvironment,
   parseBuildIssueTitleIdentity,
 } from '../site/wrt/lib/build-identity.js';
+import { createCatalogModel } from '../site/wrt/lib/catalog-engine.js';
 import {
   applyProfileOverrides, createProfileBaselineStore, serializeConfigMap,
 } from '../site/wrt/lib/profile-baseline.js';
@@ -135,6 +136,43 @@ function profileBaselineContract(branch) {
     profiles: Number(contract.profiles),
     configGroups: Number(contract.configGroups),
   };
+}
+
+function graphContract(branch) {
+  const contract = branch?.assets?.graph;
+  if (!contract || typeof contract !== 'object' ||
+      !/^[A-Za-z0-9._-]+\.graph\.json\.gz$/.test(String(contract.asset || '')) ||
+      !SHA256_RE.test(String(contract.hash || '').toLowerCase()) ||
+      !Number.isSafeInteger(Number(contract.bytes)) || Number(contract.bytes) <= 0) {
+    fail('固定 Catalog index 缺少有效 Kconfig graph 契约');
+  }
+  return {
+    asset: String(contract.asset),
+    hash: String(contract.hash).toLowerCase(),
+    bytes: Number(contract.bytes),
+  };
+}
+
+async function loadCatalogKconfigSymbols(catalogContract, catalogBranch) {
+  const contract = graphContract(catalogBranch);
+  const compressed = await fetchCatalogResource(catalogContract.revision, contract.asset, { binary: true });
+  if (compressed.byteLength !== contract.bytes) {
+    fail(`Catalog Kconfig graph bytes 不一致:${compressed.byteLength} != ${contract.bytes}`);
+  }
+  if (sha256(compressed) !== contract.hash) fail('Catalog Kconfig graph compressed SHA-256 不一致');
+  let document;
+  try { document = JSON.parse(gunzipSync(compressed).toString('utf8')); }
+  catch (error) { fail(`Catalog Kconfig graph 无法解压/解析:${error.message}`); }
+  const actualCommit = String(document?.source?.commit || '').toLowerCase();
+  if (actualCommit && actualCommit !== catalogContract.sourceCommit) {
+    fail(`Catalog Kconfig graph source commit 不一致:${actualCommit} != ${catalogContract.sourceCommit}`);
+  }
+  let model;
+  try { model = createCatalogModel({ schema: 6, relations: document?.relations }); }
+  catch (error) { fail(`Catalog Kconfig graph 契约无效:${error.message}`); }
+  const symbols = new Set(model.bySymbol.keys());
+  if (!symbols.size) fail('Catalog Kconfig graph 不包含任何 Kconfig symbol');
+  return { symbols, contract };
 }
 
 async function loadNativeProfileStore(catalogContract, catalogSource, catalogBranch) {
@@ -286,8 +324,13 @@ device.name = [baseline.board || 'Target', baseline.subtarget, baseline.profile]
 const rawOverrides = req.overrides;
 if (!Array.isArray(rawOverrides)) fail('schema 6 overrides 必须是数组');
 if (rawOverrides.length > 50000) fail('Kconfig override 数量超过 50000，拒绝');
+const { symbols: catalogKconfigSymbols } = await loadCatalogKconfigSymbols(catalogContract, catalogBranch);
 let reconstructedValues;
-try { reconstructedValues = applyProfileOverrides(baseline, rawOverrides); }
+try {
+  reconstructedValues = applyProfileOverrides(
+    baseline, rawOverrides, { allowedSymbols: catalogKconfigSymbols },
+  );
+}
 catch (error) { fail(`Kconfig overrides 无法应用:${error.message}`); }
 const baselineConfig = serializeConfigMap(baseline.values);
 const reconstructedConfig = serializeConfigMap(reconstructedValues);

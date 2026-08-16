@@ -134,6 +134,7 @@ let catalogSearchWorkerReady = false, catalogSearchPending = new Set(), catalogS
 let catalogLocatorEntryCache = null;
 let catalogStateRevision = 0, catalogContextCache = new Map(), catalogContextCacheBypass = false;
 let compatibilityPrefetchTimer = null, compatibilityAcknowledgement = null;
+let compatibilityRememberDefault = false;
 let catalogApplicationsPromise = null, catalogApplicationsDocument = null;
 let catalogApplicationsLoadState = 'loading', catalogApplicationsError = '';
 let selfTestViewToken = 0;
@@ -3120,14 +3121,19 @@ async function ensureCompatibilityRules() {
   const signature = compatibilitySignature(evaluation);
   if (compatibilityAcknowledgement?.signature === signature) return compatibilityAcknowledgement.audit;
   const forced = new Set();
+  const remembered = new Set();
   while (true) {
     evaluation = evaluateLoadedCompatibility(evaluation.loaded);
     const pending = evaluation.warnings.filter((warning) => !forced.has(warning.rule.id));
     if (!pending.length) {
       const audit = forcedCompatibilityAudit(evaluation, forced);
-      if (audit) compatibilityAcknowledgement = {
-        signature: compatibilitySignature(evaluation), audit,
-      };
+      if (audit && forced.size && remembered.size === forced.size) {
+        compatibilityAcknowledgement = {
+          signature: compatibilitySignature(evaluation), audit,
+        };
+      } else {
+        compatibilityAcknowledgement = null;
+      }
       return audit;
     }
     const warning = pending[0];
@@ -3144,8 +3150,14 @@ async function ensureCompatibilityRules() {
       error.name = 'CompatibilityCancelledError';
       throw error;
     }
-    if (action === 'forced') forced.add(warning.rule.id);
-    else forced.clear();
+    if (action === 'forced' || action === 'forced-remember') {
+      forced.add(warning.rule.id);
+      if (action === 'forced-remember') remembered.add(warning.rule.id);
+      else remembered.delete(warning.rule.id);
+    } else {
+      forced.clear();
+      remembered.clear();
+    }
   }
 }
 
@@ -3285,6 +3297,19 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       appendCompatibilitySummary(body, { confirmation: true });
       const actions = document.createElement('div');
       actions.className = 'modal-actions compatibility-actions compatibility-confirm-actions';
+      const rememberChoice = document.createElement('label');
+      rememberChoice.className = 'compatibility-remember';
+      rememberChoice.dataset.uiTooltipTitle = uiText('记住选择', '記住選擇', 'Remember choice');
+      rememberChoice.dataset.uiTooltipBody = uiText(
+        '仅当前页面有效；刷新或重新打开网页、清除站点数据后失效。',
+        '僅目前頁面有效；重新整理或重新開啟網頁、清除網站資料後失效。',
+        'Valid only on this page. Refreshing or reopening the page, or clearing site data, resets it.');
+      const rememberInput = document.createElement('input');
+      rememberInput.type = 'checkbox';
+      rememberInput.checked = compatibilityRememberDefault;
+      const rememberText = document.createElement('span');
+      rememberText.textContent = uiText('记住选择', '記住選擇', 'Remember choice');
+      rememberChoice.append(rememberInput, rememberText);
       const backButton = document.createElement('button');
       backButton.type = 'button';
       backButton.className = 'btn compatibility-close';
@@ -3294,8 +3319,8 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       confirmForceButton.type = 'button';
       confirmForceButton.className = 'btn compatibility-force-confirm';
       confirmForceButton.textContent = uiText('确认强制继续', '確認強制繼續', 'Confirm and force');
-      confirmForceButton.onclick = () => finish('forced');
-      actions.append(backButton, confirmForceButton);
+      confirmForceButton.onclick = () => finish(rememberInput.checked ? 'forced-remember' : 'forced');
+      actions.append(rememberChoice, backButton, confirmForceButton);
       body.appendChild(actions);
     };
 
@@ -6359,7 +6384,11 @@ function buildRequestOverrides(configText) {
     throw new Error('Native Profile baseline has not finished loading');
   }
   const finalValues = PROFILE_BASELINE_MODULE.parseConfigMap(configText);
-  return PROFILE_BASELINE_MODULE.diffProfileBaseline(ACTIVE_PROFILE_BASELINE, finalValues);
+  const allowedSymbols = CATALOG_MODEL?.bySymbol instanceof Map
+    ? new Set(CATALOG_MODEL.bySymbol.keys()) : new Set();
+  return PROFILE_BASELINE_MODULE.diffProfileBaseline(
+    ACTIVE_PROFILE_BASELINE, finalValues, { allowedSymbols },
+  );
 }
 
 function buildAudit(compatibility = null) {
@@ -7024,6 +7053,25 @@ async function runSelfTest() {
   intro.className = 'hint';
   intro.textContent = t('st.intro');
   mb.appendChild(intro);
+  const rememberDefault = document.createElement('label');
+  rememberDefault.className = 'st-option compatibility-remember';
+  rememberDefault.dataset.uiTooltipTitle = uiText('本页记住强制兼容选择', '本頁記住強制相容選擇', 'Remember forced compatibility choices on this page');
+  rememberDefault.dataset.uiTooltipBody = uiText(
+    '开启后，后续强制确认框中的“记住选择”默认勾选；第一次遇到新的兼容性风险仍需手动确认。刷新或重新打开网页后失效。',
+    '開啟後，後續強制確認框中的「記住選擇」預設勾選；第一次遇到新的相容性風險仍需手動確認。重新整理或重新開啟網頁後失效。',
+    'When enabled, future force-confirmation dialogs default “Remember choice” to checked. A new compatibility risk still requires an explicit first confirmation. Refreshing or reopening the page resets it.');
+  const rememberDefaultInput = document.createElement('input');
+  rememberDefaultInput.type = 'checkbox';
+  rememberDefaultInput.checked = compatibilityRememberDefault;
+  const rememberDefaultText = document.createElement('span');
+  rememberDefaultText.textContent = uiText(
+    '本页默认记住强制兼容选择', '本頁預設記住強制相容選擇',
+    'Default to remember forced compatibility choices on this page');
+  rememberDefaultInput.addEventListener('change', () => {
+    compatibilityRememberDefault = rememberDefaultInput.checked;
+  });
+  rememberDefault.append(rememberDefaultInput, rememberDefaultText);
+  mb.appendChild(rememberDefault);
 
   function addRow(name) {
     const row = document.createElement('div');

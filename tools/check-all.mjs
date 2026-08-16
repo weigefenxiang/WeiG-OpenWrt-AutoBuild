@@ -191,7 +191,10 @@ const catalogOnly =
   app.includes('CATALOG_ENGINE.deriveCompatibilityPlans') && app.includes('CATALOG_ENGINE.applyUserIntent') &&
   parser.includes('Catalog Source 缺少有效构建工具') && parser.includes('schema 6 only accepts a Catalog target') &&
   parser.includes('createProfileBaselineStore') && parser.includes('applyProfileOverrides') &&
+  parser.includes('loadCatalogKconfigSymbols') && parser.includes('createCatalogModel') &&
+  parser.includes('allowedSymbols: catalogKconfigSymbols') &&
   profileBaseline.includes('branch-common-plus-exact-config-groups-v1') &&
+  profileBaseline.includes('allowedSymbols instanceof Set') &&
   !parser.includes(['submitted', 'config'].join('.')) &&
   !parser.includes('devices.json') && !parser.includes('config-manifest.json');
 if (catalogOnly) pass('Source/Branch/build tools, Kconfig, applications and schema-2 compatibility are Catalog-driven');

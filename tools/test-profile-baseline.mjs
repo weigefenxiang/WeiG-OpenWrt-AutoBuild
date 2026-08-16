@@ -78,6 +78,16 @@ assert.deepEqual(delta, [['FEATURE', 'n'], ['ROOTFS_SIZE', '512']]);
 const reconstructed = applyProfileOverrides(a, delta);
 assert.deepEqual([...reconstructed], [...edited]);
 
+const allowedSymbols = new Set([...a.values.keys(), 'DYNAMIC_OPTION']);
+const expanded = new Map(edited);
+expanded.set('DYNAMIC_OPTION', 'y');
+const expandedDelta = diffProfileBaseline(a, expanded, { allowedSymbols });
+assert.deepEqual(expandedDelta, [['DYNAMIC_OPTION', 'y'], ['FEATURE', 'n'], ['ROOTFS_SIZE', '512']]);
+const expandedReconstructed = applyProfileOverrides(a, expandedDelta, { allowedSymbols });
+assert.deepEqual([...expandedReconstructed], [...expanded]);
+assert.throws(() => diffProfileBaseline(a, expanded), /outside the active Catalog/);
+assert.throws(() => applyProfileOverrides(a, [['UNKNOWN_OPTION', 'y']], { allowedSymbols }), /outside the active Catalog/);
+
 const text = serializeConfigMap(reconstructed);
 assert.match(text, /^# CONFIG_FEATURE is not set$/m);
 assert.match(text, /^CONFIG_ROOTFS_SIZE=512$/m);
@@ -92,4 +102,4 @@ assert.throws(() => validateProfileBaselineDocument({
   ...document, metrics: { reconstructionMismatches: 1 },
 }), /parity/);
 
-console.log('Native Profile baseline checks passed: schema3 groups, target identity, exact delta, reconstruction, serialization, identity protection.');
+console.log('Native Profile baseline checks passed: schema3 groups, target identity, exact delta, Catalog-authorized dynamic symbols, reconstruction, serialization, identity protection.');
