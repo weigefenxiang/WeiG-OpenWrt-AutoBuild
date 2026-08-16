@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -44,12 +44,15 @@ const tracked = execFileSync('git', ['ls-files', '-z'], { cwd: ROOT })
 const issues = [];
 
 for (const path of tracked) {
+  const absolutePath = resolve(ROOT, path);
+  if (!existsSync(absolutePath)) continue;
+
   for (const token of tokens(path)) {
     const hash = blockedToken(token);
     if (hash) issues.push(`${path}:path:${hash.slice(0, 12)}`);
   }
 
-  const bytes = readFileSync(resolve(ROOT, path));
+  const bytes = readFileSync(absolutePath);
   if (bytes.includes(0)) continue;
   const lines = bytes.toString('utf8').split(/\r?\n/);
   for (let index = 0; index < lines.length; index++) {
