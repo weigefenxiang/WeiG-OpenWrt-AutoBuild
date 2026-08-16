@@ -13,6 +13,10 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = readFileSync(join(root, 'site', 'wrt', 'app.js'), 'utf8');
 const html = readFileSync(join(root, 'site', 'wrt', 'index.html'), 'utf8');
 const css = readFileSync(join(root, 'site', 'wrt', 'app.css'), 'utf8');
+const uiSession = readFileSync(join(root, 'site', 'wrt', 'lib', 'ui-session-state.js'), 'utf8');
+const uiComponents = readFileSync(join(root, 'site', 'wrt', 'lib', 'ui-components.js'), 'utf8');
+const pageShell = readFileSync(join(root, 'site', 'wrt', 'lib', 'page-shell-ui.js'), 'utf8');
+const uiComponentsCss = readFileSync(join(root, 'site', 'wrt', 'ui-components.css'), 'utf8');
 const project = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
 const expect = (condition, message) => { if (!condition) throw new Error(message); };
 
@@ -59,9 +63,41 @@ expect(html.includes('data-i18n="btn.import.short"') && html.includes('data-i18n
   css.includes('.cap-info.rootfs-capacity::before { content: ""; }'),
   'mobile one-line action bar labels or compact RootFS capacity regressed');
 
+expect(app.includes('function schema6TargetIdentity(target = state.device?.target) {') &&
+  app.includes('payload.customTarget = schema6TargetIdentity();') &&
+  !app.includes('payload.customTarget = state.device.target') &&
+  app.includes('ACTIVE_PROFILE_BASELINE, payload.overrides, { allowedSymbols }') &&
+  app.includes('const allowedSymbols = CATALOG_MODEL?.bySymbol instanceof Map'),
+  'schema6 request Target identity is not minimal or schema6 import lost the active Catalog symbol allowlist');
+
 const defconfigTogglePosition = html.indexOf('id="defconfigToggle"');
 const menuconfigHeaderPosition = html.indexOf('<div class="menuconfig-header">');
 const menuconfigBodyPosition = html.indexOf('<div id="menuconfigBody"');
+expect(!uiSession.includes('compatibilityRememberDefault') &&
+  uiSession.includes('let compatibilityAcknowledgement = null;') &&
+  !uiSession.includes('getRememberDefault') && !uiSession.includes('setRememberDefault') &&
+  uiSession.includes('clearAcknowledgement() { compatibilityAcknowledgement = null; }') &&
+  app.includes('UI_COMPONENTS.createUiCheckboxControl({') &&
+  app.includes('checked: false,') &&
+  !app.includes('本页默认记住强制兼容选择') &&
+  !app.includes('getRememberDefault') && !app.includes('setRememberDefault') &&
+  app.includes("finish(rememberInput.checked ? 'forced-remember' : 'forced')") &&
+  app.includes('remembered.size === forced.size') &&
+  app.includes('仅当前页面有效；刷新或重新打开网页、清除站点数据后失效。') &&
+  !app.includes('wrt_compatibility_remember') && !uiSession.includes('localStorage') &&
+  uiComponents.includes('export function createUiCheckboxControl') &&
+  uiComponentsCss.includes('.ui-checkbox-control{display:inline-flex;') &&
+  css.includes('.compatibility-remember{display:inline-flex;') &&
+  !css.includes('.st-option.compatibility-remember'),
+  'force-confirm remember-choice control, page-session default, tooltip, or non-persistence regressed');
+
+expect(app.includes('function applySourceDefaults() {') &&
+  app.includes("if (state.source.id === 'lede') {") &&
+  app.includes('} else if (state.rootpwAuto) {') &&
+  !app.includes("previousSource.id === 'lede'") &&
+  !app.includes('applySourceDefaults(previousSource)'),
+  'source-derived LEDE initial-password default can leak across Source changes');
+
 expect(app.includes('useDefconfig: false,') &&
   app.includes("if ($('defconfigLabel')) $('defconfigLabel').textContent = 'D';") &&
   app.includes("state.useDefconfig = false;\n  if ($('defconfigToggle')) $('defconfigToggle').checked = false;") &&
@@ -104,7 +140,8 @@ expect(
   css.includes('color:var(--accent);font:var(--font-emphasis) ui-monospace,Consolas,monospace') &&
   css.includes('.menuconfig-scroll{max-height:clamp(280px,55vh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior-y:auto;') &&
   !css.includes('.menuconfig-scroll{max-height:clamp(280px,55vh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior:contain;') &&
-  app.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;'),
+  pageShell.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;') &&
+  !app.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;'),
   'shared typography scale, build-contract hierarchy, native menuconfig scroll chaining, responsive tokens, or retired density cleanup regressed');
 
 const sharedTooltipContract = app.match(/\/\* ============ 统一悬浮说明[\s\S]*?function makePill/)?.[0] || '';
@@ -320,11 +357,14 @@ const lateBaselineContract = app.match(/function backfillCatalogBaselineForLoade
 expect(hiddenLoadContract.includes('buildMenuIndexes(catalog)') &&
   hiddenLoadContract.includes('backfillCatalogBaselineForLoadedOptions()') &&
   hiddenLoadContract.indexOf('buildMenuIndexes(catalog)') < hiddenLoadContract.indexOf('backfillCatalogBaselineForLoadedOptions()') &&
-  lateBaselineContract.includes('const baselineValues = new Map(catalogBaselineValues)') &&
-  lateBaselineContract.includes("catalogValidationContext(baselineValues, 'interactive')") &&
+  lateBaselineContract.includes('nativeProfileBaselineEntries()') &&
+  lateBaselineContract.includes('normalizeImportedKconfigValue') &&
   lateBaselineContract.includes('catalogBaselineValues.set(option.symbol, value)') &&
+  lateBaselineContract.includes('!menuTouched.has(option.symbol)') &&
+  lateBaselineContract.includes('!catalogUserOverrides.has(option.symbol)') &&
+  !lateBaselineContract.includes('catalogValidationContext') &&
   !lateBaselineContract.includes('new Map(menuValues)'),
-  'late hidden PACKAGE defaults can be misclassified as Probe user selections');
+  'late hidden PACKAGE values must come only from the immutable Native Profile baseline');
 const probeIssueTitleContract = app.match(/function probeIssueTitle\(request\) \{[\s\S]*?\n\}/)?.[0] || '';
 const probeIssueTitleForTest = Function(`${probeIssueTitleContract}\nreturn probeIssueTitle;`)();
 const titleRequest = {
@@ -421,7 +461,7 @@ expect(snapshotContract.includes('revision: catalogStateRevision') &&
   snapshotContract.includes('compatibilityAcknowledgement'),
   'Catalog rollback snapshot does not preserve revision/acknowledgement');
 expect(restoreContract.includes('catalogStateRevision = snapshot.revision') &&
-  restoreContract.includes('compatibilityAcknowledgement = snapshot.compatibilityAcknowledgement') &&
+  restoreContract.includes('UI_SESSION.compatibility.setAcknowledgement(snapshot.compatibilityAcknowledgement)') &&
   restoreContract.includes('clearCatalogDerivedCaches()') &&
   !restoreContract.includes('markCatalogStateChanged'),
   'failure rollback is incorrectly counted as a configuration change');

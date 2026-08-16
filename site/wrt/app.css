@@ -1042,6 +1042,9 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
 .compatibility-custom{border-color:color-mix(in srgb,var(--accent) 34%,var(--border));background:color-mix(in srgb,var(--accent) 11%,var(--card));color:var(--accent-text)}
 .compatibility-force{border-color:color-mix(in srgb,var(--warn) 45%,var(--border));background:color-mix(in srgb,var(--warn) 11%,var(--card));color:var(--warn)}
 .compatibility-force-confirm{border-color:color-mix(in srgb,var(--warn) 65%,var(--border));background:color-mix(in srgb,var(--warn) 18%,var(--card));color:var(--text);font-weight:700}
+.compatibility-remember{display:inline-flex;align-items:center;gap:7px;min-height:42px;margin-right:auto;padding:7px 9px;border:1px solid transparent;border-radius:8px;color:var(--text2);font-size:var(--font-description);cursor:help;user-select:none}
+.compatibility-remember:hover,.compatibility-remember:focus-within{border-color:color-mix(in srgb,var(--accent) 28%,var(--border));background:color-mix(in srgb,var(--accent) 7%,var(--card2));color:var(--text)}
+.compatibility-remember input{width:17px;height:17px;margin:0;accent-color:var(--accent)}
 .compatibility-close{border-color:color-mix(in srgb,var(--text3) 30%,var(--border));background:color-mix(in srgb,var(--text3) 7%,var(--card));color:var(--text2)}
 .compatibility-custom:hover,.compatibility-force:hover,.compatibility-close:hover{filter:brightness(1.05)}
 .compatibility-recommended:disabled{filter:none}

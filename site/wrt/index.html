@@ -442,11 +442,19 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
 
 <noscript><p class="wrap" style="padding:2rem 0">本页面需要启用 JavaScript 才能使用。/ JavaScript is required.</p></noscript>
 <script>
-window.__WEIG_RELEASE_PROMISE__.then(() => {
+window.__WEIG_RELEASE_PROMISE__.then(async () => {
+  const [session, components, pageShell] = await Promise.all([
+    import(window.__WEIG_RELEASE_URL__('lib/ui-session-state.js')),
+    import(window.__WEIG_RELEASE_URL__('lib/ui-components.js')),
+    import(window.__WEIG_RELEASE_URL__('lib/page-shell-ui.js')),
+  ]);
+  window.__WEIG_UI_RUNTIME__ = Object.freeze({ session, components, pageShell });
   const script = document.createElement('script');
   script.src = window.__WEIG_RELEASE_URL__('app.js');
   script.async = false;
   document.body.appendChild(script);
+}).catch((error) => {
+  console.error('Application UI bootstrap failed / 页面 UI 模块加载失败', error);
 });
 </script>
 </body>

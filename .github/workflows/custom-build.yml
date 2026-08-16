@@ -248,7 +248,9 @@ jobs:
         id: req
         env:
           REQUEST_MANIFEST: request-attachments.json
-          SUBMITTED_CONFIG_OUT: submitted.config
+          PROFILE_BASELINE_CONFIG_OUT: profile-baseline.config
+          RECONSTRUCTED_CONFIG_OUT: reconstructed.config
+          REQUEST_OVERRIDES_OUT: request-overrides.json
           REQUEST_AUDIT_OUT: request-audit.json
           ISSUE_TITLE: ${{ inputs.issue_title }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
@@ -338,7 +340,6 @@ jobs:
             echo "- 上游源码 / upstream: \`$(git log -1 --format='%h %ad' --date=short)\` (${{ steps.req.outputs.repo }} @ ${{ steps.req.outputs.branch }})"
             echo "- Catalog: \`${{ steps.req.outputs.catalog_revision }}\` · \`${{ steps.req.outputs.catalog_asset }}\`"
             echo "- 参数 / inputs: \`${{ steps.req.outputs.device }} · ${{ steps.req.outputs.source }} · ${{ steps.req.outputs.version }} · ${{ steps.req.outputs.variant }}\`"
-            echo "- 构建契约 / build contract: build arch \`${{ steps.req.outputs.catalog_arch }}\`; package arch \`${{ steps.req.outputs.catalog_arch_packages }}\`; profile packages \`${{ steps.req.outputs.catalog_profile_packages }}\`"
             echo "- 插件 / plugins: \`${{ steps.req.outputs.plugins }}\`"
             echo "- 标识 / tag: \`${{ steps.req.outputs.tag }}\`"
             echo "- 构建编号 / build reference: \`${{ steps.req.outputs.build_ref }}\`"
@@ -407,8 +408,8 @@ jobs:
 
       - name: Prepare authoritative .config / 准备权威配置
         run: |
-          cp submitted.config openwrt/.config
-          cp submitted.config openwrt/pre-defconfig.config
+          cp reconstructed.config openwrt/.config
+          cp reconstructed.config openwrt/pre-defconfig.config
           if [ "${{ steps.req.outputs.use_defconfig }}" = "1" ]; then
             cd openwrt
             echo "Defconfig enabled / 官方补全已启用: make defconfig"
@@ -418,7 +419,7 @@ jobs:
             diff -u pre-defconfig.config "$GITHUB_WORKSPACE/defconfig.config" > "$GITHUB_WORKSPACE/defconfig.diff" || true
             cd ..
           else
-            cp submitted.config defconfig.config
+            cp reconstructed.config defconfig.config
             : > defconfig.diff
             : > defconfig.log
           fi
@@ -490,9 +491,6 @@ jobs:
             echo "source=${{ steps.req.outputs.source }}"
             echo "version=${{ steps.req.outputs.version }}"
             echo "variant=${{ steps.req.outputs.variant }}"
-            echo "catalog_arch=${{ steps.req.outputs.catalog_arch }}"
-            echo "catalog_arch_packages=${{ steps.req.outputs.catalog_arch_packages }}"
-            echo "catalog_profile_packages=${{ steps.req.outputs.catalog_profile_packages }}"
             echo "request_mode=${{ steps.req.outputs.request_mode }}"
             echo "use_defconfig=${{ steps.req.outputs.use_defconfig }}"
             if [ "${{ steps.req.outputs.use_defconfig }}" = "1" ]; then
@@ -501,7 +499,7 @@ jobs:
               echo "config_policy=authoritative-no-defconfig"
             fi
             echo "config_id=${{ steps.req.outputs.config_id }}"
-            echo "submitted_sha256=${{ steps.req.outputs.submitted_sha256 }}"
+            echo "reconstructed_sha256=${{ steps.req.outputs.reconstructed_sha256 }}"
             echo "plugins=${{ steps.req.outputs.plugins }}"
             echo "tag=${{ steps.req.outputs.tag }}"
             echo "build_ref=${{ steps.req.outputs.build_ref }}"
@@ -533,7 +531,9 @@ jobs:
           name: ${{ steps.req.outputs.artifact_ref }}-CONFIG
           path: |
             openwrt/.config
-            submitted.config
+            profile-baseline.config
+            reconstructed.config
+            request-overrides.json
             pre-defconfig.config
             defconfig.config
             defconfig.diff
@@ -675,7 +675,7 @@ jobs:
           mkdir -p failure-logs
           cp download.log failure-logs/ 2>/dev/null || true
           cp build-metadata.txt failure-logs/ 2>/dev/null || true
-          cp submitted.config request-audit.json package-mirror-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig.log build.config failure-logs/ 2>/dev/null || true
+          cp profile-baseline.config reconstructed.config request-overrides.json request-audit.json package-mirror-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig.log build.config failure-logs/ 2>/dev/null || true
           cp openwrt/.config failure-logs/final.config 2>/dev/null || true
 
           PARALLEL_OUTCOME="${{ steps.compile.outcome }}"

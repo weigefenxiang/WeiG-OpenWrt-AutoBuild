@@ -15,6 +15,15 @@ if (!/^[a-f0-9]{64}$/.test(SITE_RELEASE_SHA) || typeof globalThis.__WEIG_RELEASE
   throw new Error('Missing validated site release bootstrap / 缺少已验证的站点发布身份');
 }
 const releaseAssetUrl = (path) => globalThis.__WEIG_RELEASE_URL__(path);
+const UI_RUNTIME = globalThis.__WEIG_UI_RUNTIME__;
+if (!UI_RUNTIME?.session?.createUiSessionState || !UI_RUNTIME?.components?.createUiCheckboxControl ||
+    !UI_RUNTIME?.pageShell?.installPageShellUi) {
+  throw new Error('Missing standardized UI runtime modules / 缺少标准 UI 运行模块');
+}
+const UI_SESSION = UI_RUNTIME.session.createUiSessionState();
+const UI_COMPONENTS = UI_RUNTIME.components;
+const PAGE_SHELL_UI = UI_RUNTIME.pageShell;
+let PAGE_SHELL_CONTROLLER = null;
 function releaseScopedUrl(url) {
   const resolved = new URL(url, document.baseURI);
   resolved.searchParams.set('r', SITE_RELEASE_SHA);
@@ -90,6 +99,8 @@ let PLUGINS = { groups: [], plugins: [] }, I18N = null, TIMEZONES = null;
 let PACKAGE_MIRRORS = { schema: 2, presets: [{ id: 'source-default', label: { 'zh-CN': '跟随源码默认', en: 'Follow source default' }, sources: [] }] };
 let MENU_INDEX = null, MENU_CATALOG = null, CATALOG_ENGINE = null, CATALOG_MODEL = null;
 let CATALOG_LOADER_MODULE = null, CATALOG_SCHEMA6_MODULE = null, BUILD_IDENTITY_MODULE = null, CATALOG_LOADER = null;
+let PROFILE_BASELINE_MODULE = null, PROFILE_BASELINE_STORE = null, ACTIVE_PROFILE_BASELINE = null;
+let profileBaselineKey = '', catalogProfileBaselineLoadingPromise = null;
 let MENU_CATALOG_DATA_REF = 'catalog-data';
 let catalogShardLoader = null, catalogMenuLoadingPromise = null;
 let catalogHiddenLoadingPromise = null, catalogHelpLoadingPromise = null, packageMirrorsPromise = null;
@@ -131,7 +142,7 @@ let catalogSearchWorker = null, catalogSearchGeneration = 0, catalogSearchReques
 let catalogSearchWorkerReady = false, catalogSearchPending = new Set(), catalogSearchResults = new Map();
 let catalogLocatorEntryCache = null;
 let catalogStateRevision = 0, catalogContextCache = new Map(), catalogContextCacheBypass = false;
-let compatibilityPrefetchTimer = null, compatibilityAcknowledgement = null;
+let compatibilityPrefetchTimer = null;
 let catalogApplicationsPromise = null, catalogApplicationsDocument = null;
 let catalogApplicationsLoadState = 'loading', catalogApplicationsError = '';
 let selfTestViewToken = 0;
@@ -395,7 +406,7 @@ function applyI18n() {
     hint.appendChild(document.createTextNode(t('mode.self.hint') + ' '));
   }
   hint.appendChild(mkA('https://github.com/' + OFFICIAL_REPO + '#fork-自建', t('mode.self.tutorial')));
-  applyThemeIcon();
+  PAGE_SHELL_CONTROLLER?.refreshThemeControl();
   if (PLUGINS) {
     renderDevices();
     if (state.device && state.source) {
@@ -1440,7 +1451,7 @@ function addMenuIndex(map, key, value) {
 }
 function markCatalogStateChanged() {
   catalogStateRevision++;
-  compatibilityAcknowledgement = null;
+  UI_SESSION.compatibility.clearAcknowledgement();
   clearCatalogDerivedCaches();
 }
 function clearCatalogDerivedCaches() {
@@ -1809,6 +1820,61 @@ function buildMenuIndexes(catalog) {
   if (catalog.menu?.displayLoaded || menuExpanded) startCatalogSearchWorker();
   else stopCatalogSearchWorker();
 }
+async function ensureProfileBaselineModule() {
+  if (!PROFILE_BASELINE_MODULE) {
+    PROFILE_BASELINE_MODULE = await import(releaseAssetUrl('./lib/profile-baseline.js'));
+  }
+  return PROFILE_BASELINE_MODULE;
+}
+async function ensureCatalogProfileBaselines(source = selectedCatalogSource(), branch = selectedCatalogBranch(source)) {
+  const revision = String(MENU_INDEX?.assetRef || '').trim().toLowerCase();
+  const key = [source?.id, branch?.branch || branch?.id, branch?.commit, revision].join('|');
+  if (PROFILE_BASELINE_STORE && profileBaselineKey === key) return PROFILE_BASELINE_STORE;
+  if (catalogProfileBaselineLoadingPromise?.key === key) return catalogProfileBaselineLoadingPromise.promise;
+  const contract = branch?.assets?.profileBaselines;
+  if (!source || !branch || !catalogShardLoader || !contract?.asset) {
+    throw new Error('Catalog Native Profile baseline is unavailable');
+  }
+  const promise = (async () => {
+    const module = await ensureProfileBaselineModule();
+    const document = await catalogShardLoader('profileBaselines');
+    if (!document) throw new Error('Catalog Native Profile baseline shard is unavailable');
+    const store = module.createProfileBaselineStore(document, {
+      sourceId: source.id,
+      branch: branch.branch,
+      commit: branch.commit,
+      schema: contract.schema,
+      encoding: contract.encoding,
+      profiles: contract.profiles,
+      configGroups: contract.configGroups,
+    });
+    PROFILE_BASELINE_STORE = store;
+    profileBaselineKey = key;
+    return store;
+  })();
+  catalogProfileBaselineLoadingPromise = { key, promise };
+  try { return await promise; }
+  finally {
+    if (catalogProfileBaselineLoadingPromise?.promise === promise) catalogProfileBaselineLoadingPromise = null;
+  }
+}
+function resolveActiveProfileBaseline(target = state.device?.target) {
+  if (!PROFILE_BASELINE_STORE || !target) return null;
+  return PROFILE_BASELINE_STORE.resolve({
+    system: target.system,
+    subtarget: target.subtarget,
+    profile: target.profile,
+    profileSymbol: target.profileSymbol,
+    profileSelector: target.profileSelector,
+  });
+}
+function nativeProfileBaselineEntries() {
+  if (!ACTIVE_PROFILE_BASELINE || !PROFILE_BASELINE_MODULE) {
+    throw new Error('Native Profile baseline has not been resolved for the selected Target Profile');
+  }
+  return parseConfigEntries(PROFILE_BASELINE_MODULE.serializeConfigMap(ACTIVE_PROFILE_BASELINE.values));
+}
+
 async function loadCatalog(source, branch, applyDefault = true, requested = null, options = {}) {
   if (!source || !branch) return null;
   const key = `${source.id}/${branch.branch}`;
@@ -1836,6 +1902,10 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
     const activeBranch = active.branch || branch;
     CATALOG_MODEL = remote.model;
     catalogShardLoader = remote.loadShard || null;
+    PROFILE_BASELINE_STORE = null;
+    ACTIVE_PROFILE_BASELINE = null;
+    profileBaselineKey = "";
+    await ensureCatalogProfileBaselines(activeSource, activeBranch);
     if (catalog.splitAssets) catalog.menu = CATALOG_SCHEMA6_MODULE.createRuntimeMenu(CATALOG_MODEL);
     MENU_CATALOG = catalog;
     menuCatalogKey = key;
@@ -2052,6 +2122,11 @@ async function applyCatalogTarget() {
     await switchDevice(device, false);
   }
   state.device = device;
+  await ensureCatalogProfileBaselines(sourceRow, branchRow);
+  ACTIVE_PROFILE_BASELINE = resolveActiveProfileBaseline(device.target);
+  if (!ACTIVE_PROFILE_BASELINE) {
+    throw new Error(`Native Profile baseline does not contain ${device.target.system}/${device.target.subtarget}/${device.target.profileSymbol}`);
+  }
   const needsBaseline = targetChanged || !catalogBaselineValues.size;
   if (needsBaseline) initializeCatalogBaseline();
   syncCatalogApplications();
@@ -2332,49 +2407,21 @@ function initializeCatalogBaseline() {
   catalogUserOverrides.clear();
   state.sel.clear();
   state.removed.clear();
-  // Defaults can reference other defaults. Iterate to a stable point after the Target/Profile
-  // context exists; deferred conditions are never treated as enabled. Bypass the revision
-  // cache while this batch mutates menuValues, then publish one new revision at the end.
-  catalogContextCacheBypass = true;
-  try {
-    const needsDefaultContext = menuSearchOptions.some((option) =>
-      !option.hidden && (option.defaults || []).length > 0);
-    for (let pass = 0; pass < 8; pass++) {
-      let changed = false;
-      const passContext = needsDefaultContext
-        ? catalogValidationContext(menuValues, 'interactive') : null;
-      const contextOwnedSymbols = new Set([
-        ...(passContext?.changes || []).map((change) => change.symbol),
-        ...menuTargetSymbols,
-        'TARGET_BOARD', 'TARGET_SUBTARGET', 'TARGET_PROFILE', 'TARGET_ARCH_PACKAGES',
-        'ARCH_PACKAGES', 'ARCH',
-      ]);
-      for (const option of menuSearchOptions) {
-        if (option.hidden) continue;
-        const value = simpleKconfigDefault(option, passContext);
-        if (value === '' || menuValues.get(option.symbol) === value) continue;
-        menuValues.set(option.symbol, value);
-        if (passContext && !contextOwnedSymbols.has(option.symbol)) {
-          passContext.values.set(option.symbol, value);
-        }
-        changed = true;
-      }
-      if (!changed) break;
+  const entries = nativeProfileBaselineEntries();
+  for (const option of menuSearchOptions) {
+    const entry = entries.get(option.symbol);
+    if (!entry) continue;
+    const fallback = option.type === 'string' ? '' : 'n';
+    const value = normalizeImportedKconfigValue(entry, option.type, fallback);
+    if (value === undefined) {
+      throw new Error(`Native Profile baseline value cannot be normalized: CONFIG_${option.symbol}`);
     }
-    for (const choice of MENU_CATALOG?.menu?.choices || []) {
-      const selected = (menuChoiceOptions.get(choice.id) || []).some((item) =>
-        item.choice === choice.id && menuValues.get(item.symbol) === 'y');
-      const preferred = String(choice.defaults?.[0] || '').split(/\s+/)[0];
-      if (!selected && preferred && menuOptionBySymbol.has(preferred)) {
-        menuValues.set(preferred, 'y');
-      }
-    }
-  } finally {
-    catalogContextCacheBypass = false;
+    menuValues.set(option.symbol, value);
   }
   markCatalogStateChanged();
   snapshotCatalogBaseline();
 }
+
 function snapshotCatalogBaseline() {
   catalogBaselineValues.clear();
   for (const option of menuSearchOptions) {
@@ -2398,40 +2445,26 @@ function backfillCatalogBaselineForLoadedOptions() {
   const missing = menuSearchOptions.filter((option) =>
     option?.symbol && !catalogBaselineValues.has(option.symbol));
   if (!missing.length) return;
-  const baselineValues = new Map(catalogBaselineValues);
-  // Resolve only from the upstream Target/Profile baseline. Current menuValues/user overrides
-  // are intentionally excluded so late hidden defaults never appear as user Probe changes.
-  for (let pass = 0; pass < 8; pass++) {
-    const context = catalogValidationContext(baselineValues, 'interactive');
-    let changed = false;
-    for (const option of missing) {
-      const contextual = context.values.get(option.symbol);
-      const resolved = contextual !== undefined
-        ? contextual
-        : CATALOG_ENGINE.resolveKconfigDefault(
-          option, context.values, context.validationOptions,
-        ).value;
-      const value = normalizeCatalogBaselineValue(option, resolved);
-      if (baselineValues.get(option.symbol) === value) continue;
-      baselineValues.set(option.symbol, value);
-      changed = true;
-    }
-    if (!changed) break;
-  }
-  const resolvedContext = catalogValidationContext(baselineValues, 'interactive');
+  const entries = nativeProfileBaselineEntries();
   for (const option of missing) {
-    const value = normalizeCatalogBaselineValue(
-      option,
-      resolvedContext.values.get(option.symbol) ?? baselineValues.get(option.symbol),
-    );
+    const entry = entries.get(option.symbol);
+    if (!entry) continue;
+    const fallback = option.type === 'string' ? '' : 'n';
+    const value = normalizeImportedKconfigValue(entry, option.type, fallback);
+    if (value === undefined) continue;
     catalogBaselineValues.set(option.symbol, value);
+    if (!menuTouched.has(option.symbol) && !catalogUserOverrides.has(option.symbol) &&
+        !catalogImportedSymbols.has(option.symbol)) {
+      menuValues.set(option.symbol, value);
+    }
     if (value !== 'n' && value !== '') {
       catalogBaselineOrigins.set(option.symbol, {
-        kind: 'kconfig-default', detail: 'Kconfig default',
+        kind: 'kconfig-default', detail: 'Native Profile baseline',
       });
     }
   }
 }
+
 function catalogInheritedValue(symbol) {
   if (state.importedConfig && menuImportedOriginal.has(symbol)) return menuImportedOriginal.get(symbol);
   if (catalogRecommendedValues.has(symbol)) return catalogRecommendedValues.get(symbol);
@@ -2854,7 +2887,7 @@ function snapshotCatalogUiState() {
     userOverrides: new Map(catalogUserOverrides), recommended: new Map(catalogRecommendedValues),
     imported: new Set(catalogImportedSymbols), theme: state.theme,
     revision: catalogStateRevision,
-    compatibilityAcknowledgement,
+    compatibilityAcknowledgement: UI_SESSION.compatibility.getAcknowledgement(),
   };
 }
 function restoreMap(target, source) {
@@ -2876,7 +2909,7 @@ function restoreCatalogUiState(snapshot) {
   restoreSet(catalogImportedSymbols, snapshot.imported);
   state.theme = snapshot.theme;
   catalogStateRevision = snapshot.revision;
-  compatibilityAcknowledgement = snapshot.compatibilityAcknowledgement;
+  UI_SESSION.compatibility.setAcknowledgement(snapshot.compatibilityAcknowledgement);
   clearCatalogDerivedCaches();
 }
 function renderCatalogUiAfterIntent(openChildren = false, option = null, value = 'n') {
@@ -3094,16 +3127,22 @@ async function ensureCompatibilityRules() {
   let evaluation = await loadCompatibilityEvaluation();
   if (!evaluation.warnings.length) return null;
   const signature = compatibilitySignature(evaluation);
-  if (compatibilityAcknowledgement?.signature === signature) return compatibilityAcknowledgement.audit;
+  const acknowledged = UI_SESSION.compatibility.getAcknowledgement();
+  if (acknowledged?.signature === signature) return acknowledged.audit;
   const forced = new Set();
+  const remembered = new Set();
   while (true) {
     evaluation = evaluateLoadedCompatibility(evaluation.loaded);
     const pending = evaluation.warnings.filter((warning) => !forced.has(warning.rule.id));
     if (!pending.length) {
       const audit = forcedCompatibilityAudit(evaluation, forced);
-      if (audit) compatibilityAcknowledgement = {
-        signature: compatibilitySignature(evaluation), audit,
-      };
+      if (audit && forced.size && remembered.size === forced.size) {
+        UI_SESSION.compatibility.setAcknowledgement({
+          signature: compatibilitySignature(evaluation), audit,
+        });
+      } else {
+        UI_SESSION.compatibility.clearAcknowledgement();
+      }
       return audit;
     }
     const warning = pending[0];
@@ -3120,8 +3159,14 @@ async function ensureCompatibilityRules() {
       error.name = 'CompatibilityCancelledError';
       throw error;
     }
-    if (action === 'forced') forced.add(warning.rule.id);
-    else forced.clear();
+    if (action === 'forced' || action === 'forced-remember') {
+      forced.add(warning.rule.id);
+      if (action === 'forced-remember') remembered.add(warning.rule.id);
+      else remembered.delete(warning.rule.id);
+    } else {
+      forced.clear();
+      remembered.clear();
+    }
   }
 }
 
@@ -3259,19 +3304,29 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       modalCancelHandler = renderChoice;
       const body = renderModalShell(uiText('确认强制继续', '確認強制繼續', 'Confirm force continuation'));
       appendCompatibilitySummary(body, { confirmation: true });
-      const actions = document.createElement('div');
-      actions.className = 'modal-actions compatibility-actions compatibility-confirm-actions';
-      const backButton = document.createElement('button');
-      backButton.type = 'button';
-      backButton.className = 'btn compatibility-close';
-      backButton.textContent = uiText('返回修改', '返回修改', 'Back to edit');
-      backButton.onclick = renderChoice;
-      const confirmForceButton = document.createElement('button');
-      confirmForceButton.type = 'button';
-      confirmForceButton.className = 'btn compatibility-force-confirm';
-      confirmForceButton.textContent = uiText('确认强制继续', '確認強制繼續', 'Confirm and force');
-      confirmForceButton.onclick = () => finish('forced');
-      actions.append(backButton, confirmForceButton);
+      const actions = UI_COMPONENTS.createUiActionRow(
+        'modal-actions compatibility-actions compatibility-confirm-actions');
+      const { root: rememberChoice, input: rememberInput } = UI_COMPONENTS.createUiCheckboxControl({
+        className: 'compatibility-remember',
+        label: uiText('记住选择', '記住選擇', 'Remember choice'),
+        checked: false,
+        tooltipTitle: uiText('记住选择', '記住選擇', 'Remember choice'),
+        tooltipBody: uiText(
+          '仅当前页面有效；刷新或重新打开网页、清除站点数据后失效。',
+          '僅目前頁面有效；重新整理或重新開啟網頁、清除網站資料後失效。',
+          'Valid only on this page. Refreshing or reopening the page, or clearing site data, resets it.'),
+      });
+      const backButton = UI_COMPONENTS.createUiButton({
+        text: uiText('返回修改', '返回修改', 'Back to edit'),
+        className: 'btn compatibility-close',
+        onClick: renderChoice,
+      });
+      const confirmForceButton = UI_COMPONENTS.createUiButton({
+        text: uiText('确认强制继续', '確認強制繼續', 'Confirm and force'),
+        className: 'btn compatibility-force-confirm',
+        onClick: () => finish(rememberInput.checked ? 'forced-remember' : 'forced'),
+      });
+      actions.append(rememberChoice, backButton, confirmForceButton);
       body.appendChild(actions);
     };
 
@@ -4352,11 +4407,10 @@ function initCatalogLocator() {
   });
 }
 function activateTargetRecord(record) {
-  const previousSource = state.source;
   state.source = record.source;
   state.version = record.version;
   state.variant = record.variant;
-  applySourceDefaults(previousSource);
+  applySourceDefaults();
   renderGroups();
   updateStats();
   updateLoginInfo();
@@ -4429,14 +4483,14 @@ function initDeviceFold() {
   $('deviceSummary').addEventListener('click', () => setDeviceFold(false));
 }
 
-function applySourceDefaults(previousSource) {
+function applySourceDefaults() {
   const box = $('rootpwBox');
   if (state.source.id === 'lede') {
     if (!box.value || state.rootpwAuto) {
       box.value = state.rootpw = '@empty';
       state.rootpwAuto = true;
     }
-  } else if (state.rootpwAuto && (!previousSource || previousSource.id === 'lede')) {
+  } else if (state.rootpwAuto) {
     box.value = state.rootpw = '';
     state.rootpwAuto = false;
   }
@@ -4450,7 +4504,6 @@ function renderSources() {
   const preferred = state.device.sources.find((s) => previousSource && s.id === previousSource.id) || state.device.sources[0];
   state.device.sources.forEach((s) => {
     const pill = makePill(s.label, s.label + ' · ' + s.repo, s.desc, () => {
-      const previousSource = state.source;
       state.source = s;
       setActive(row, pill);
       renderVersions();
@@ -4458,13 +4511,13 @@ function renderSources() {
       renderGroups();
       updateStats();
       updateLoginInfo();
-      applySourceDefaults(previousSource);
+      applySourceDefaults();
     });
     row.appendChild(pill);
     if (s.id === preferred.id) setActive(row, pill);
   });
   state.source = preferred;
-  applySourceDefaults(previousSource);
+  applySourceDefaults();
   renderVersions();
   renderVariants();
 }
@@ -5428,35 +5481,12 @@ function applyImportedUnknownEdits(text) {
   return text;
 }
 function catalogTargetConfig() {
-  const target = state.device.target;
-  const targetSelector = target.targetSelector ||
-    `TARGET_${target.system}${target.subtarget ? `_${target.subtarget}` : ''}`;
-  const profileSymbol = target.profileSymbol || (target.profile ? `DEVICE_${target.profile}` : '');
-  const profileSelector = target.profileSelector || `${targetSelector}_${profileSymbol}`;
-  const boardSelector = target.boardSelector || `TARGET_${target.system}`;
-  const arch = String(target.arch || '').trim();
-  const archPackages = String(target.archPackages || '').trim();
-  if (!arch || !/^[A-Za-z0-9_+-]+$/.test(arch)) {
-    throw new Error('Catalog target is missing a valid build architecture');
+  if (!ACTIVE_PROFILE_BASELINE || !PROFILE_BASELINE_MODULE) {
+    throw new Error('Native Profile baseline has not finished loading');
   }
-  if (!archPackages || !/^[A-Za-z0-9._+-]+$/.test(archPackages)) {
-    throw new Error('Catalog target is missing a valid package architecture');
-  }
-  const lines = [
-    ...(boardSelector && boardSelector !== targetSelector ? [`CONFIG_${boardSelector}=y`] : []),
-    `CONFIG_${targetSelector}=y`,
-    `CONFIG_${profileSelector}=y`,
-    `CONFIG_${arch}=y`,
-    `CONFIG_ARCH="${arch}"`,
-    `CONFIG_TARGET_BOARD="${target.system}"`,
-    `CONFIG_TARGET_ARCH_PACKAGES="${archPackages}"`,
-  ];
-  if (target.subtarget) lines.push(`CONFIG_TARGET_SUBTARGET="${target.subtarget}"`);
-  if (profileSymbol) lines.push(`CONFIG_TARGET_PROFILE="${profileSymbol}"`);
-  lines.push('');
-  let text = lines.join('\n');
-  return applyMenuConfig(text);
+  return applyMenuConfig(PROFILE_BASELINE_MODULE.serializeConfigMap(ACTIVE_PROFILE_BASELINE.values));
 }
+
 function applyProfilePackageOverrides(text) {
   for (const [packageName, mode] of profilePackageOverrides) {
     if (!/^[A-Za-z0-9._+@-]+$/.test(packageName)) {
@@ -6002,7 +6032,7 @@ function restoreSelections(config, payload) {
   markCatalogStateChanged();
   const importedConfigEntries = parseConfigEntries(config);
   for (const [symbol, entry] of importedConfigEntries) importedConfigValues.set(symbol, entry.value);
-  const explicit = payload && Array.isArray(payload.plugins) ? payload.plugins : null;
+  const explicit = payload && payload.schema !== 6 && Array.isArray(payload.plugins) ? payload.plugins : null;
   let skipped = 0;
   for (const p of PLUGINS.plugins) {
     const pkg = p.pkgs?.[state.source.id] || p.pkg;
@@ -6028,7 +6058,7 @@ function restoreSelections(config, payload) {
         menuValues.set(option.symbol, value);
         catalogImportedSymbols.add(option.symbol);
         menuImportedOriginal.set(option.symbol, value);
-        let defaultValue = simpleKconfigDefault(option);
+        let defaultValue = catalogBaselineValues.get(option.symbol) ?? simpleKconfigDefault(option);
         if ((option.type === 'bool' || option.type === 'tristate') && !defaultValue) defaultValue = 'n';
         if (String(value) !== String(defaultValue)) menuImportedNonDefault.add(option.symbol);
       }
@@ -6153,6 +6183,42 @@ function parseImportedJson(text) {
   }
 }
 
+async function reconstructSchema6Import(payload) {
+  if (!payload || payload.schema !== 6 || !Array.isArray(payload.overrides) || !payload.customTarget) return null;
+  const revision = String(payload.catalog?.revision || '').trim().toLowerCase();
+  if (!/^[a-f0-9]{40}$/.test(revision) || revision !== String(MENU_INDEX?.assetRef || '').trim().toLowerCase()) {
+    throw new Error('This build request uses a different immutable Catalog snapshot; load the matching page release before importing it');
+  }
+  const source = MENU_INDEX?.sources?.find((item) => item.id === payload.source);
+  const branch = source?.branches?.find((item) =>
+    item.id === payload.version && (!payload.branch || item.branch === payload.branch));
+  if (!source || !branch || branch.state === 'unavailable') throw new Error('Build request Source/Branch is unavailable');
+  if (payload.catalog?.sourceCommit && String(branch.commit || '').toLowerCase() !== String(payload.catalog.sourceCommit).toLowerCase()) {
+    throw new Error('Build request upstream commit does not match the immutable Catalog snapshot');
+  }
+  const target = payload.customTarget;
+  const request = {
+    sourceId: source.id,
+    branchId: branch.id,
+    system: target.system,
+    subtarget: target.subtarget,
+    profileSymbol: target.profileSymbol || (target.profile ? `DEVICE_${target.profile}` : ''),
+  };
+  await loadCatalog(source, branch, false, request);
+  renderCatalogPicker(false, request);
+  await applyCatalogTarget();
+  if (!ACTIVE_PROFILE_BASELINE) throw new Error('Native Profile baseline could not be resolved for this build request');
+  const allowedSymbols = CATALOG_MODEL?.bySymbol instanceof Map
+    ? new Set(CATALOG_MODEL.bySymbol.keys()) : new Set();
+  const values = PROFILE_BASELINE_MODULE.applyProfileOverrides(
+    ACTIVE_PROFILE_BASELINE, payload.overrides, { allowedSymbols },
+  );
+  return {
+    config: PROFILE_BASELINE_MODULE.serializeConfigMap(values),
+    configId: ['catalog-target', source.id, branch.id, state.variant.id].join('/'),
+  };
+}
+
 async function importConfigFile(file) {
   const seq = ++configImportSeq;
   importingConfig = true;
@@ -6175,14 +6241,21 @@ async function importConfigFile(file) {
       } catch (e) {
         throw new Error(t('import.jsonInvalid', { msg: e.message }));
       }
-      if (typeof payload.config !== 'string') throw new Error(t('import.jsonNoConfig'));
-      text = payload.config;
+      if (payload.schema === 6) {
+        const restored = await reconstructSchema6Import(payload);
+        if (!restored) throw new Error(t('import.jsonInvalid', { msg: 'invalid schema 6 request' }));
+        text = restored.config;
+        payload.__restoredConfigId = restored.configId;
+      } else {
+        if (typeof payload.config !== 'string') throw new Error(t('import.jsonNoConfig'));
+        text = payload.config;
+      }
     }
     text = text.replace(/\r\n/g, '\n');
     state.useDefconfig = payload && typeof payload.use_defconfig === 'boolean'
       ? payload.use_defconfig : false;
     if ($('defconfigToggle')) $('defconfigToggle').checked = state.useDefconfig;
-    const configId = await selectImportedTarget(text, file.name, payload);
+    const configId = payload?.__restoredConfigId || await selectImportedTarget(text, file.name, payload);
     if (seq !== configImportSeq) return;
     if (!configId) {
       finishImportLog('cancelled');
@@ -6245,6 +6318,7 @@ function submitReadiness() {
     ['target', Boolean(state.device && state.source && state.version && state.variant)],
     ['catalog', !isCatalog || Boolean(MENU_CATALOG && catalogLoadMode === 'idle')],
     ['menuconfig', !isCatalog || Boolean(MENU_CATALOG && menuOptionBySymbol.size)],
+    ['profile-baseline', !isCatalog || Boolean(ACTIVE_PROFILE_BASELINE && PROFILE_BASELINE_STORE)],
     ['theme', Boolean($('fwThemeBox')?.options?.length && $('fwThemeBox')?.value)],
     ['defconfig', typeof state.useDefconfig === 'boolean'],
     ['identity', Boolean(state.buildMeta && state.buildMeta.version === state.siteVersion &&
@@ -6313,12 +6387,38 @@ $('modal').addEventListener('keydown', (e) => {
 async function generateResolvedConfigText(options = {}) {
   return generateConfigText(options);
 }
+function buildRequestOverrides(configText) {
+  if (!ACTIVE_PROFILE_BASELINE || !PROFILE_BASELINE_MODULE) {
+    throw new Error('Native Profile baseline has not finished loading');
+  }
+  const finalValues = PROFILE_BASELINE_MODULE.parseConfigMap(configText);
+  const allowedSymbols = CATALOG_MODEL?.bySymbol instanceof Map
+    ? new Set(CATALOG_MODEL.bySymbol.keys()) : new Set();
+  return PROFILE_BASELINE_MODULE.diffProfileBaseline(
+    ACTIVE_PROFILE_BASELINE, finalValues, { allowedSymbols },
+  );
+}
 
 function buildAudit(compatibility = null) {
   return {
     defconfig: { enabled: state.useDefconfig === true },
     ...(compatibility?.forced?.length ? { compatibility } : {}),
   };
+}
+
+function schema6TargetIdentity(target = state.device?.target) {
+  const profileSymbol = String(target?.profileSymbol ||
+    (target?.profile ? `DEVICE_${target.profile}` : ''));
+  const identity = {
+    system: String(target?.system || ''),
+    subtarget: String(target?.subtarget || ''),
+    profileSymbol,
+    profileSelector: String(target?.profileSelector || ''),
+  };
+  if (!identity.system || !identity.profileSymbol || !identity.profileSelector) {
+    throw new Error('Catalog Target identity is incomplete');
+  }
+  return identity;
 }
 
 function openSubmitModal() {
@@ -6397,8 +6497,9 @@ function openSubmitModal() {
         await ensurePackageMirrors();
         const forcedCompatibility = await ensureCompatibilityRules();
         const config = await generateResolvedConfigText();
+        const overrides = buildRequestOverrides(config);
         const payload = {
-          schema: 5,
+          schema: 6,
           generatedAt: new Date().toISOString(),
           requestId: requestStamp,
           sourceEnv,
@@ -6407,13 +6508,15 @@ function openSubmitModal() {
           configId: [state.device.id, state.source.id, state.version.id, state.variant.id].join('/'),
           device: state.device.id, source: state.source.id, version: state.version.id,
           branch: state.version.branch,
-          variant: state.variant.id, plugins, tag, lanip: state.lanip, config,
+          variant: state.variant.id, plugins, tag, lanip: state.lanip, overrides,
           use_defconfig: state.useDefconfig === true,
           audit: buildAudit(forcedCompatibility),
           firmware: configFirmwareSettings(config),
           catalog: currentCatalogContract(),
         };
-        if (['custom-target', 'catalog-target'].includes(state.device.id)) payload.customTarget = state.device.target;
+        if (['custom-target', 'catalog-target'].includes(state.device.id)) {
+          payload.customTarget = schema6TargetIdentity();
+        }
         if (state.rootpw) payload.rootpw = state.rootpw;
         const filename = [requestStamp, requestTargetProfilePart(true), safeDownloadNamePart(state.source.id, 'source'),
           safeDownloadNamePart(state.version.id, 'branch'), safeDownloadNamePart(selectedTargetProfileName())].join('-') + '.json';
@@ -7159,118 +7262,10 @@ async function runSelfTest() {
 }
 $('selfTestBtn').addEventListener('click', () => { runSelfTest().catch((e) => showToast(t('toast.selfTestError', { msg: e.message }))); });
 
-/* ============ V11:Aa 字号面板(整页缩放),替代旧密度切换 / V11: Aa font-size panel (whole-page zoom), replaces the old density toggle ============ */
-const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;
-let fontPx = parseInt(localStorage.getItem('wrt_font'), 10);
-if (!fontPx && localStorage.getItem('wrt_density') === '1') { fontPx = 16; safeSet('wrt_font', '16'); }   // 旧紧凑档用户迁移为 16px / legacy compact-density users migrate to 16px
-try { localStorage.removeItem('wrt_density'); } catch (e) { /* 隐私模式可能抛错,忽略 / may throw in private mode; ignore */ }
-if (!(fontPx >= FONT_MIN && fontPx <= FONT_MAX)) fontPx = FONT_DEF;
-function applyFont(px, save) {
-  fontPx = Math.min(FONT_MAX, Math.max(FONT_MIN, Math.round(Number(px)) || FONT_DEF));
-  document.body.style.zoom = fontPx === FONT_DEF ? '' : String(fontPx / FONT_DEF);   // 17px = 原始大小 / 17px = original size
-  $('fontInput').value = fontPx;
-  if (save) safeSet('wrt_font', String(fontPx));
-  fitPluginNames();   // 缩放改变有效布局宽度,重测名称适配 / zoom changes the effective layout width; re-fit names
-}
-function toggleFontPanel(show) {
-  const open = show !== undefined ? show : $('fontPanel').hidden;
-  if (!open && $('fontPanel').contains(document.activeElement)) $('densityBtn').focus();   // 关闭时焦点还给 Aa / hand focus back to Aa on close
-  $('fontPanel').hidden = !open;
-  $('densityBtn').setAttribute('aria-expanded', String(open));
-  if (open) $('fontDec').focus();
-}
-$('densityBtn').addEventListener('click', (e) => { e.stopPropagation(); toggleFontPanel(); });
-$('fontDec').addEventListener('click', () => applyFont(fontPx - 1, true));
-$('fontInc').addEventListener('click', () => applyFont(fontPx + 1, true));
-$('fontReset').addEventListener('click', () => applyFont(FONT_DEF, true));
-$('fontInput').addEventListener('change', () => applyFont($('fontInput').value, true));
-document.addEventListener('click', (e) => {
-  if (!$('fontPanel').hidden && !$('fontPanel').contains(e.target)) toggleFontPanel(false);   // 点外部关闭 / close on outside click
+/* ============ 页面壳层 / Page shell ============ */
+PAGE_SHELL_CONTROLLER = PAGE_SHELL_UI.installPageShellUi({
+  get: $, t, safeSet, openModal, fitPluginNames,
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleFontPanel(false); });
-applyFont(fontPx, false);
-
-/* ============ 使用说明弹窗:序号徽章 + 引号关键词高亮 / Help modal: numbered badges + quoted-keyword highlights ============ */
-$('helpBtn').addEventListener('click', () => {
-  openModal(t('help.title'));
-  $('modal').querySelector('.modal').classList.add('modal-wide', 'recommended-config');
-  const mb = $('modalBody');
-  mb.textContent = '';
-  for (const line of t('help.body').split('\n')) {
-    const m = line.match(/^([①②③④⑤⑥⑦⑧⑨⑩]|\d+\.)\s*(.*)$/);
-    const row = document.createElement('div');
-    row.className = 'help-item';
-    const num = document.createElement('span');
-    num.className = 'help-num';
-    num.textContent = m ? m[1].replace('.', '') : '·';
-    row.appendChild(num);
-    const body = document.createElement('span');
-    body.className = 'help-text';
-    // 中英引号里的词高亮为主题蓝 / words inside quotes get accent-colored
-    const text = m ? m[2] : line;
-    let last = 0;
-    for (const q of text.matchAll(/"([^"]+)"|'([^']+)'|“([^”]+)”/g)) {
-      body.appendChild(document.createTextNode(text.slice(last, q.index)));
-      const em = document.createElement('em');
-      em.textContent = q[1] || q[2] || q[3];
-      body.appendChild(em);
-      last = q.index + q[0].length;
-    }
-    body.appendChild(document.createTextNode(text.slice(last)));
-    row.appendChild(body);
-    mb.appendChild(row);
-  }
-  const links = document.createElement('div');
-  links.className = 'help-links';
-  const addHelpLink = (href, label) => {
-    const link = document.createElement('a');
-    link.href = href;
-    link.target = '_blank';
-    link.rel = 'noopener';
-    link.textContent = label;
-    links.appendChild(link);
-  };
-  addHelpLink('https://openwrt.org/docs/guide-user/installation/generic.sysupgrade', t('help.link.ubi'));
-  mb.appendChild(links);
-});
-
-/* ============ 悬浮坞收起/展开(记忆状态;手机首次默认只留 ⚙) / dock collapse toggle (persisted; first mobile visit starts as gear only) ============ */
-const savedDock = localStorage.getItem('wrt_dock');
-if (savedDock === '1' || (savedDock === null && matchMedia('(max-width: 560px)').matches)) {
-  $('sideDock').classList.add('collapsed');
-}
-$('dockToggle').setAttribute('aria-expanded', String(!$('sideDock').classList.contains('collapsed')));
-$('dockToggle').addEventListener('click', () => {
-  const collapsed = $('sideDock').classList.toggle('collapsed');
-  $('dockToggle').setAttribute('aria-expanded', String(!collapsed));
-  safeSet('wrt_dock', collapsed ? '1' : '0');
-});
-
-/* ============ 风险横幅 / Risk banner ============ */
-$('riskOk').addEventListener('click', () => { $('riskBar').hidden = true; safeSet('wrt_risk', 'ok'); });
-
-/* ============ 主题三态 / Tri-state theme ============ */
-let themeMode = localStorage.getItem('wrt_theme') || 'auto';
-const THEME_ICON = { auto: '◐', light: '☀', dark: '☾' };
-function applyThemeIcon() {
-  $('themeBtn').textContent = THEME_ICON[themeMode];
-  $('themeBtn').title = t('theme.' + themeMode);
-  $('themeBtn').setAttribute('aria-label', t('theme.' + themeMode));
-}
-function applyTheme(mode) {
-  themeMode = (mode === 'light' || mode === 'dark') ? mode : 'auto';
-  if (typeof globalThis.__WEIG_APPLY_THEME__ === 'function') {
-    themeMode = globalThis.__WEIG_APPLY_THEME__(themeMode);
-  } else if (themeMode === 'auto') delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = themeMode;
-  applyThemeIcon();
-  if (themeMode === 'auto') { try { localStorage.removeItem('wrt_theme'); } catch (e) { /* 隐私模式下 localStorage 可能抛错,忽略 / localStorage may throw in private mode; ignore */ } }
-  else safeSet('wrt_theme', themeMode);
-}
-$('themeBtn').addEventListener('click', () => {
-  applyTheme(themeMode === 'auto' ? 'light' : themeMode === 'light' ? 'dark' : 'auto');
-});
-applyTheme(themeMode);
 
 init();
 updateSubmitGate();

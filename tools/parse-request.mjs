@@ -1,51 +1,74 @@
 #!/usr/bin/env node
-// 解析构建请求并做白名单校验,输出 GitHub Actions outputs / Parses a build request, validates against the whitelist, emits GitHub Actions outputs.
-// 请求仅接受网页生成的 Issue 附件；环境变量传入路径，避免命令行注入。
-// Requests only accept authoritative Issue attachments, with paths passed through environment variables.
-// 插件项高级模式前缀:+id 强制开启该源没有的包,-id 取消该源内置项 / advanced plugin prefixes: +id force-enables a pkg the source lacks, -id drops a builtin.
-// 校验失败以非零码退出,workflow 据此回评并终止 / Any validation failure exits non-zero so the workflow can comment back and abort.
+// Parses one immutable build request. Catalog owns Source/Branch/Profile facts; this worker
+// reconstructs the authoritative .config from the exact Native Profile baseline plus the
+// browser's semantic override delta. It never replays browser click intent.
 
 import { readFileSync, appendFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { artifactBuildRef, buildEnvironmentIdentity, normalizeBuildCommit, normalizeBuildEnvironment, parseBuildIssueTitleIdentity } from '../site/wrt/lib/build-identity.js';
+import { gunzipSync } from 'node:zlib';
+import {
+  artifactBuildRef, buildEnvironmentIdentity, normalizeBuildCommit, normalizeBuildEnvironment,
+  parseBuildIssueTitleIdentity,
+} from '../site/wrt/lib/build-identity.js';
+import { createCatalogModel } from '../site/wrt/lib/catalog-engine.js';
+import {
+  applyProfileOverrides, createProfileBaselineStore, serializeConfigMap,
+} from '../site/wrt/lib/profile-baseline.js';
 import { normalizeRequestAudit } from './request-audit.mjs';
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PROJECT = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
 const PACKAGE_MIRROR_RULES = JSON.parse(
   readFileSync(join(ROOT, 'config', 'policies', 'package-mirrors.json'), 'utf8'));
+const SHA256_RE = /^[a-f0-9]{64}$/;
+const GIT_COMMIT_RE = /^[a-f0-9]{40}$/;
 
 function fail(msg) { console.error('校验失败: ' + msg); process.exit(1); }
-function configStringValue(text, symbol) {
-  const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return String(text).match(new RegExp(`^CONFIG_${escaped}="([^"]*)"$`, 'm'))?.[1] || '';
-}
-
 function normalizeAudit(raw) {
   try { return normalizeRequestAudit(raw); }
   catch (error) { fail(error.message); }
 }
-async function loadCatalogIndex(revision = 'catalog-data') {
+function sha256(value) { return createHash('sha256').update(value).digest('hex'); }
+function semanticHash(values) {
+  const lines = [...values]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([symbol, value]) => `CONFIG_${symbol}=${value}`);
+  return sha256(lines.length ? `${lines.join('\n')}\n` : '');
+}
+
+async function fetchCatalogResource(revision, path, { binary = false } = {}) {
   const repo = PROJECT.catalogRepository;
-  const ref = String(revision || 'catalog-data').trim().toLowerCase();
-  if (ref !== 'catalog-data' && !/^[a-f0-9]{40}$/.test(ref)) throw new Error(`Catalog index revision 非法:${ref}`);
+  const ref = String(revision || '').trim().toLowerCase();
+  if (!GIT_COMMIT_RE.test(ref)) throw new Error(`Catalog revision 非法:${ref}`);
+  const safePath = String(path || '').replace(/^\/+/, '');
+  if (!safePath || safePath.includes('..') || !/^[A-Za-z0-9._/-]+$/.test(safePath)) {
+    throw new Error(`Catalog asset 路径非法:${path}`);
+  }
   const urls = [
-    `https://raw.githubusercontent.com/${repo}/${ref}/index.json`,
-    `https://cdn.jsdelivr.net/gh/${repo}@${ref}/index.json`,
+    `https://raw.githubusercontent.com/${repo}/${ref}/${safePath}`,
+    `https://cdn.jsdelivr.net/gh/${repo}@${ref}/${safePath}`,
   ];
+  const errors = [];
   for (const url of urls) {
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const index = await response.json();
-      if (Number(index?.schema || 0) >= 2 && Array.isArray(index.sources)) return index;
-      throw new Error('invalid Catalog index schema');
+      return binary ? Buffer.from(await response.arrayBuffer()) : await response.json();
     } catch (error) {
-      console.warn(`Catalog index fallback / 目录索引回退: ${url}: ${error.message}`);
+      errors.push(`${url}: ${error.message}`);
     }
   }
-  throw new Error(`无法读取固定 Catalog index revision:${ref}`);
+  throw new Error(`无法读取固定 Catalog 资源 ${safePath}: ${errors.join(' | ')}`);
+}
+
+async function loadCatalogIndex(revision) {
+  const index = await fetchCatalogResource(revision, 'index.json');
+  if (Number(index?.schema || 0) < 2 || !Array.isArray(index.sources)) {
+    throw new Error('invalid Catalog index schema');
+  }
+  return index;
 }
 
 function legacyCatalogContract(branch) {
@@ -65,7 +88,7 @@ function legacyCatalogContract(branch) {
 }
 
 function normalizeCatalogContract(raw) {
-  if (!raw || typeof raw !== 'object') fail('schema 5 请求缺少 catalog 版本契约');
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail('schema 6 请求缺少 catalog 版本契约');
   const contract = {
     repository: String(raw.repository || ''),
     revision: String(raw.revision || '').toLowerCase(),
@@ -79,20 +102,109 @@ function normalizeCatalogContract(raw) {
   };
   const expectedRepo = String(PROJECT.catalogRepository || '');
   if (contract.repository !== expectedRepo) fail(`Catalog 仓库不在白名单:${contract.repository}`);
-  if (!/^[a-f0-9]{40}$/.test(contract.revision)) fail('Catalog revision 必须是完整 40 位 Git commit');
-  if (!/^[A-Za-z0-9._-]+\.json\.gz$/.test(contract.asset)) fail(`Catalog asset 非法:${contract.asset}`);
-  if (!/^[a-f0-9]{64}$/.test(contract.compressedSha256)) fail('Catalog compressedSha256 非法');
-  if (!Number.isSafeInteger(contract.compressedBytes) || contract.compressedBytes <= 0) fail('Catalog compressedBytes 非法');
-  if (contract.catalogSchema < 5 || contract.relationsSchema < 2) fail('请求需要 Catalog schema 5 / relations schema 2');
-  if (!/^[a-f0-9]{40}$/.test(contract.sourceCommit)) fail('Catalog sourceCommit 必须是完整 40 位 Git commit');
+  if (!GIT_COMMIT_RE.test(contract.revision)) fail('Catalog revision 必须是完整 40 位 Git commit');
+  if (contract.asset && !/^[A-Za-z0-9._-]+\.json\.gz$/.test(contract.asset)) fail(`Catalog asset 非法:${contract.asset}`);
+  if (contract.compressedSha256 && !SHA256_RE.test(contract.compressedSha256)) fail('Catalog compressedSha256 非法');
+  if (contract.compressedBytes && (!Number.isSafeInteger(contract.compressedBytes) || contract.compressedBytes <= 0)) {
+    fail('Catalog compressedBytes 非法');
+  }
+  if (contract.catalogSchema && contract.catalogSchema < 5) fail('Catalog schema 版本过旧');
+  if (contract.relationsSchema && contract.relationsSchema < 2) fail('Catalog relations schema 版本过旧');
+  if (!GIT_COMMIT_RE.test(contract.sourceCommit)) fail('Catalog sourceCommit 必须是完整 40 位 Git commit');
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(contract.sourceRepository)) fail('Catalog sourceRepository 非法');
   return contract;
 }
 
+function profileBaselineContract(branch) {
+  const contract = branch?.assets?.profileBaselines;
+  if (!contract || typeof contract !== 'object' ||
+      !/^[A-Za-z0-9._-]+\.profiles\.json\.gz$/.test(String(contract.asset || '')) ||
+      !SHA256_RE.test(String(contract.hash || '').toLowerCase()) ||
+      !Number.isSafeInteger(Number(contract.bytes)) || Number(contract.bytes) <= 0 ||
+      Number(contract.schema || 0) < 3 || !String(contract.encoding || '').trim() ||
+      !Number.isSafeInteger(Number(contract.profiles)) || Number(contract.profiles) <= 0 ||
+      !Number.isSafeInteger(Number(contract.configGroups)) || Number(contract.configGroups) <= 0) {
+    fail('固定 Catalog index 缺少有效 Native Profile baseline 契约');
+  }
+  return {
+    ...contract,
+    asset: String(contract.asset),
+    hash: String(contract.hash).toLowerCase(),
+    bytes: Number(contract.bytes),
+    schema: Number(contract.schema),
+    encoding: String(contract.encoding),
+    profiles: Number(contract.profiles),
+    configGroups: Number(contract.configGroups),
+  };
+}
+
+function graphContract(branch) {
+  const contract = branch?.assets?.graph;
+  if (!contract || typeof contract !== 'object' ||
+      !/^[A-Za-z0-9._-]+\.graph\.json\.gz$/.test(String(contract.asset || '')) ||
+      !SHA256_RE.test(String(contract.hash || '').toLowerCase()) ||
+      !Number.isSafeInteger(Number(contract.bytes)) || Number(contract.bytes) <= 0) {
+    fail('固定 Catalog index 缺少有效 Kconfig graph 契约');
+  }
+  return {
+    asset: String(contract.asset),
+    hash: String(contract.hash).toLowerCase(),
+    bytes: Number(contract.bytes),
+  };
+}
+
+async function loadCatalogKconfigSymbols(catalogContract, catalogBranch) {
+  const contract = graphContract(catalogBranch);
+  const compressed = await fetchCatalogResource(catalogContract.revision, contract.asset, { binary: true });
+  if (compressed.byteLength !== contract.bytes) {
+    fail(`Catalog Kconfig graph bytes 不一致:${compressed.byteLength} != ${contract.bytes}`);
+  }
+  if (sha256(compressed) !== contract.hash) fail('Catalog Kconfig graph compressed SHA-256 不一致');
+  let document;
+  try { document = JSON.parse(gunzipSync(compressed).toString('utf8')); }
+  catch (error) { fail(`Catalog Kconfig graph 无法解压/解析:${error.message}`); }
+  const actualCommit = String(document?.source?.commit || '').toLowerCase();
+  if (actualCommit && actualCommit !== catalogContract.sourceCommit) {
+    fail(`Catalog Kconfig graph source commit 不一致:${actualCommit} != ${catalogContract.sourceCommit}`);
+  }
+  let model;
+  try { model = createCatalogModel({ schema: 6, relations: document?.relations }); }
+  catch (error) { fail(`Catalog Kconfig graph 契约无效:${error.message}`); }
+  const symbols = new Set(model.bySymbol.keys());
+  if (!symbols.size) fail('Catalog Kconfig graph 不包含任何 Kconfig symbol');
+  return { symbols, contract };
+}
+
+async function loadNativeProfileStore(catalogContract, catalogSource, catalogBranch) {
+  const contract = profileBaselineContract(catalogBranch);
+  const compressed = await fetchCatalogResource(catalogContract.revision, contract.asset, { binary: true });
+  if (compressed.byteLength !== contract.bytes) {
+    fail(`Native Profile baseline bytes 不一致:${compressed.byteLength} != ${contract.bytes}`);
+  }
+  const compressedHash = sha256(compressed);
+  if (compressedHash !== contract.hash) fail('Native Profile baseline compressed SHA-256 不一致');
+  let document;
+  try { document = JSON.parse(gunzipSync(compressed).toString('utf8')); }
+  catch (error) { fail(`Native Profile baseline 无法解压/解析:${error.message}`); }
+  let store;
+  try {
+    store = createProfileBaselineStore(document, {
+      sourceId: catalogSource.id,
+      branch: catalogBranch.branch,
+      commit: catalogContract.sourceCommit,
+      schema: contract.schema,
+      encoding: contract.encoding,
+      profiles: contract.profiles,
+      configGroups: contract.configGroups,
+    });
+  } catch (error) {
+    fail(`Native Profile baseline 契约无效:${error.message}`);
+  }
+  return { store, contract };
+}
 
 let req;
 let requestMode = 'issue-json';
-let submittedConfig = '';
 let requestAttachmentName = '';
 let requestAudit = { defconfig: { enabled: false } };
 const requestManifest = String(process.env.REQUEST_MANIFEST || '').trim();
@@ -105,23 +217,22 @@ if (requestManifest) {
   const jsonFiles = manifest?.version === 1 && Array.isArray(manifest.files)
     ? manifest.files.filter((entry) => entry.type === 'json') : [];
   if (jsonFiles.length !== 1 || manifest.files.length !== 1) {
-    fail('请只上传一个 schema 5 build-request.json；.config/config.buildinfo 应先在网页导入');
+    fail('请只上传一个 schema 6 build-request.json；.config/config.buildinfo 应先在网页导入');
   }
   selectedFile = jsonFiles[0].path;
   requestAttachmentName = jsonFiles[0].name || '';
 }
-if (!selectedFile) fail('缺少 schema 5 build-request.json');
+if (!selectedFile) fail('缺少 schema 6 build-request.json');
 requestAttachmentName ||= basename(selectedFile);
 let raw;
 try { raw = readFileSync(selectedFile); } catch (error) { fail('无法读取 build-request.json: ' + error.message); }
 if (raw.length < 32 || raw.length > 2 * 1024 * 1024) fail(`build-request.json 大小非法: ${raw.length} bytes`);
 try { req = JSON.parse(raw.toString('utf8')); } catch (error) { fail('build-request.json 无法解析: ' + error.message); }
-if (req.schema !== 5) fail(`只接受 build-request schema 5，收到: ${JSON.stringify(req.schema)}`);
-submittedConfig = req.config;
+if (req.schema !== 6) fail(`只接受 build-request schema 6，收到: ${JSON.stringify(req.schema)}`);
+if (Object.hasOwn(req, 'config')) fail('schema 6 不接受浏览器整份 config；只接受 Native baseline + overrides');
 
 requestAudit = normalizeAudit(req.audit);
 const catalogContract = normalizeCatalogContract(req.catalog);
-
 const requestDefconfig = typeof req.use_defconfig === 'boolean' ? req.use_defconfig : null;
 const auditDefconfig = req.audit?.defconfig && typeof req.audit.defconfig.enabled === 'boolean'
   ? req.audit.defconfig.enabled : null;
@@ -130,18 +241,14 @@ if (requestDefconfig !== null && auditDefconfig !== null && requestDefconfig !==
 }
 const useDefconfig = requestDefconfig ?? auditDefconfig ?? false;
 const isCustomTarget = ['custom-target', 'catalog-target'].includes(req.device);
-if (!isCustomTarget) fail(`schema 5 only accepts a Catalog target: ${req.device}`);
-let device, source, version, variant;
-let catalogBranch;
+if (!isCustomTarget) fail(`schema 6 only accepts a Catalog target: ${req.device}`);
+
 let catalogIndex;
-try {
-  catalogIndex = await loadCatalogIndex(catalogContract.revision);
-} catch (error) {
-  fail(`无法读取固定 Catalog index: ${error.message}`);
-}
+try { catalogIndex = await loadCatalogIndex(catalogContract.revision); }
+catch (error) { fail(`无法读取固定 Catalog index: ${error.message}`); }
 const catalogSource = catalogIndex.sources.find((item) => item.id === req.source);
 const requestedBranch = String(req.branch || '');
-catalogBranch = catalogSource?.branches?.find((item) =>
+const catalogBranch = catalogSource?.branches?.find((item) =>
   item.id === String(req.version) && (!requestedBranch || item.branch === requestedBranch));
 if (!catalogSource || !catalogBranch || catalogBranch.state === 'unavailable') {
   fail(`Source/Branch 不在固定 Catalog 范围: ${req.source}/${req.version}/${requestedBranch}`);
@@ -151,130 +258,108 @@ if (!/^diy(?:2)?-[A-Za-z0-9._-]+\.sh$/.test(build.diy1 || '') ||
     !/^diy2-[A-Za-z0-9._-]+\.sh$/.test(build.diy2 || '')) {
   fail(`Catalog Source 缺少有效构建工具: ${catalogSource.id}`);
 }
-version = { id: catalogBranch.id, branch: catalogBranch.branch, label: catalogBranch.branch };
-source = {
+const version = { id: catalogBranch.id, branch: catalogBranch.branch, label: catalogBranch.branch };
+const source = {
   id: catalogSource.id, label: catalogSource.label || catalogSource.id, repo: catalogSource.repo,
   versions: [version], diy1: build.diy1, diy2: build.diy2, append: true,
 };
-variant = { id: String(req.variant || 'custom'), name: String(req.variant || 'Custom Target') };
+const variant = { id: String(req.variant || 'custom'), name: String(req.variant || 'Custom Target') };
 if (!/^[A-Za-z0-9._+-]{1,96}$/.test(variant.id)) fail(`Target Profile 非法: ${variant.id}`);
-device = { id: req.device, brand: 'Catalog', name: 'Catalog Target', sources: [source] };
+const device = { id: req.device, brand: 'Catalog', name: 'Catalog Target', sources: [source] };
 const configId = [device.id, source.id, version.id, variant.id].join('/');
-if (req.configId !== configId) {
-  fail(`configId 不匹配:收到 ${JSON.stringify(req.configId)},应为 ${configId}`);
-}
+if (req.configId !== configId) fail(`configId 不匹配:收到 ${JSON.stringify(req.configId)},应为 ${configId}`);
 
-let submittedSha256 = '';
-{  if (typeof submittedConfig !== 'string') fail('附件缺少完整 config 内容');
-  let config = submittedConfig.replace(/\r\n/g, '\n');
-  if (config.charCodeAt(0) === 0xFEFF) fail('config 不得带 UTF-8 BOM');
-  if (config.includes('\0')) fail('config 含 NUL 二进制字符');
-  const configBytes = Buffer.byteLength(config, 'utf8');
-  if (configBytes < 64 || configBytes > 1024 * 1024) fail(`config 大小非法:${configBytes} bytes(允许 64B~1MB)`);
-  const lines = config.split('\n');
-  const badLine = lines.findIndex((line) => line !== '' && !line.startsWith('#') && !/^CONFIG_[A-Za-z0-9_+.-]+=.*$/.test(line));
-  if (badLine >= 0) fail(`config 第 ${badLine + 1} 行不是合法 Kconfig/注释格式`);
-  const actualTarget = lines.filter((line) =>
-    /^CONFIG_TARGET_(?:BOARD|SUBTARGET|PROFILE)=/.test(line) ||
-    /^CONFIG_TARGET_.*_DEVICE_.*=y$/.test(line));
-  const actualDevices = actualTarget.filter((line) => /^CONFIG_TARGET_.*_DEVICE_.*=y$/.test(line)).sort();
-  if (!actualDevices.length && !actualTarget.some((line) => /^CONFIG_TARGET_BOARD=/.test(line))) {
-    fail('Catalog 配置缺少 CONFIG_TARGET_BOARD 或 CONFIG_TARGET_*_DEVICE_*=y');
-  }
-  const board = actualTarget.find((line) => /^CONFIG_TARGET_BOARD=/.test(line))?.split('=')[1]?.replaceAll('"', '') || '';
-  const subtarget = actualTarget.find((line) => /^CONFIG_TARGET_SUBTARGET=/.test(line))?.split('=')[1]?.replaceAll('"', '') || '';
-  const profile = actualTarget.find((line) => /^CONFIG_TARGET_PROFILE=/.test(line))?.split('=')[1]?.replaceAll('"', '') ||
-    actualDevices[0]?.match(/_DEVICE_(.+)=y$/)?.[1] || '';
-  device.name = [board || 'Target', subtarget, profile].filter(Boolean).join(' / ');
-  if (!config.endsWith('\n')) config += '\n';
-  submittedSha256 = createHash('sha256').update(config).digest('hex');
-  const submittedOut = String(process.env.SUBMITTED_CONFIG_OUT || 'submitted.config');
-  writeFileSync(submittedOut, config, 'utf8');
-}
-
-let catalogArch = '';
-let catalogArchPackages = '';
-let catalogProfilePackages = [];
-let activeCatalogRevision = '';
-let sourceCommit = '';
-if (catalogContract) {
-  if (!catalogIndex) {
-    try {
-      catalogIndex = await loadCatalogIndex(catalogContract.revision);
-    } catch (error) {
-      fail(`无法读取固定 Catalog index:${error.message}`);
-    }
-  }
-  const indexedSource = catalogIndex.sources.find((item) => item.id === source.id);
-  const indexedBranch = indexedSource?.branches?.find((item) =>
-    item.id === version.id && (!version.branch || item.branch === version.branch));
-  if (!indexedSource || !indexedBranch || indexedBranch.state === 'unavailable') {
-    fail(`固定 Catalog index 中没有可用源码/分支:${source.id}/${version.branch}`);
-  }
-  const indexedLegacy = legacyCatalogContract(indexedBranch);
+const indexedLegacy = legacyCatalogContract(catalogBranch);
+if (catalogContract.asset || catalogContract.compressedSha256 || catalogContract.compressedBytes) {
   if (!indexedLegacy || indexedLegacy.asset !== catalogContract.asset ||
-      indexedLegacy.hash !== catalogContract.compressedSha256 ||
-      indexedLegacy.bytes !== catalogContract.compressedBytes ||
-      indexedLegacy.catalogSchema !== catalogContract.catalogSchema ||
-      indexedLegacy.relationsSchema !== catalogContract.relationsSchema) {
+      indexedLegacy.hash !== catalogContract.compressedSha256 || indexedLegacy.bytes !== catalogContract.compressedBytes ||
+      indexedLegacy.catalogSchema !== catalogContract.catalogSchema || indexedLegacy.relationsSchema !== catalogContract.relationsSchema) {
     fail('固定 Catalog index 与请求的 legacy 契约不一致');
   }
-  if (String(indexedSource.repo || '') !== String(source.repo || '') ||
-      catalogContract.sourceRepository !== String(source.repo || '')) {
-    fail(`Catalog 上游仓库不匹配:request=${source.repo},contract=${catalogContract.sourceRepository}`);
-  }
-  const indexedCommit = String(indexedBranch.commit || indexedBranch.sourceCommit || '').toLowerCase();
-  if (indexedCommit && indexedCommit !== catalogContract.sourceCommit) {
-    fail(`Catalog sourceCommit 与固定 index 不一致:index=${indexedCommit},request=${catalogContract.sourceCommit}`);
-  }
-  sourceCommit = catalogContract.sourceCommit;
-  activeCatalogRevision = catalogContract.revision;
+}
+if (String(catalogSource.repo || '') !== String(source.repo || '') ||
+    catalogContract.sourceRepository !== String(source.repo || '')) {
+  fail(`Catalog 上游仓库不匹配:request=${source.repo},contract=${catalogContract.sourceRepository}`);
+}
+const indexedCommit = String(catalogBranch.commit || catalogBranch.sourceCommit || '').toLowerCase();
+if (indexedCommit && indexedCommit !== catalogContract.sourceCommit) {
+  fail(`Catalog sourceCommit 与固定 index 不一致:index=${indexedCommit},request=${catalogContract.sourceCommit}`);
+}
+const sourceCommit = catalogContract.sourceCommit;
+const activeCatalogRevision = catalogContract.revision;
+
+const targetContract = req.customTarget && typeof req.customTarget === 'object' && !Array.isArray(req.customTarget)
+  ? req.customTarget : null;
+if (!targetContract) fail('Catalog Target 请求缺少 customTarget 身份契约');
+const CUSTOM_TARGET_FIELDS = Object.freeze(['profileSelector', 'profileSymbol', 'subtarget', 'system']);
+const receivedTargetFields = Object.keys(targetContract).sort();
+if (receivedTargetFields.length !== CUSTOM_TARGET_FIELDS.length ||
+    receivedTargetFields.some((field, index) => field !== CUSTOM_TARGET_FIELDS[index])) {
+  fail(`customTarget 只接受最小 Target/Profile 身份字段: ${CUSTOM_TARGET_FIELDS.join(',')}`);
+}
+if (CUSTOM_TARGET_FIELDS.some((field) => typeof targetContract[field] !== 'string')) {
+  fail('customTarget Target/Profile 身份字段必须是字符串');
+}
+const expectedBoard = String(targetContract.system || '');
+const expectedSubtarget = String(targetContract.subtarget || '');
+const expectedProfile = String(targetContract.profileSymbol || '');
+const expectedSelector = String(targetContract.profileSelector || '');
+if (!expectedBoard || !expectedProfile || !expectedSelector) {
+  fail('customTarget 缺少 system/profile/profileSelector');
 }
 
-if (isCustomTarget) {
-  const contract = req.customTarget && typeof req.customTarget === 'object' ? req.customTarget : null;
-  if (!contract) fail('自定义 Target 请求缺少 customTarget 身份契约');
-  const actualBoard = configStringValue(submittedConfig, 'TARGET_BOARD');
-  const actualSubtarget = configStringValue(submittedConfig, 'TARGET_SUBTARGET');
-  const actualProfile = configStringValue(submittedConfig, 'TARGET_PROFILE');
-  const actualDeviceSymbols = [...submittedConfig.matchAll(
-    /^CONFIG_(TARGET_[A-Za-z0-9_.+-]+_DEVICE_[A-Za-z0-9_.+-]+)=y$/gm,
-  )].map((match) => match[1]);
-  const expectedBoard = String(contract.system || '');
-  const expectedSubtarget = String(contract.subtarget || '');
-  const expectedProfile = String(contract.profileSymbol || (contract.profile ? `DEVICE_${contract.profile}` : ''));
-  const expectedSelector = String(contract.profileSelector || '');
-  if (!expectedBoard || !expectedSubtarget || !expectedProfile || !expectedSelector) {
-    fail('customTarget 缺少 system/subtarget/profile/profileSelector');
-  }
-  if (actualBoard !== expectedBoard || actualSubtarget !== expectedSubtarget ||
-      (actualProfile && actualProfile !== expectedProfile) ||
-      actualDeviceSymbols.length !== 1 || actualDeviceSymbols[0] !== expectedSelector) {
-    fail(`Target/Profile 身份不一致:config=${actualBoard}/${actualSubtarget}/${actualProfile || actualDeviceSymbols[0] || '(missing)'},` +
-      ` request=${expectedBoard}/${expectedSubtarget}/${expectedProfile}`);
-  }
-  catalogArch = String(contract.arch || '');
-  catalogArchPackages = String(contract.archPackages || '');
-  catalogProfilePackages = Array.isArray(contract.profilePackagesAdd)
-    ? [...new Set(contract.profilePackagesAdd.map(String))] : [];
+const { store: profileStore, contract: baselineContract } = await loadNativeProfileStore(
+  catalogContract, catalogSource, catalogBranch,
+);
+const baseline = profileStore.resolve({
+  system: expectedBoard,
+  subtarget: expectedSubtarget,
+  profileSymbol: expectedProfile,
+  profileSelector: expectedSelector,
+});
+if (!baseline) fail(`Native Profile baseline 不包含请求 Target/Profile:${expectedBoard}/${expectedSubtarget}/${expectedProfile}`);
+if (baseline.board !== expectedBoard || baseline.subtarget !== expectedSubtarget ||
+    baseline.profile !== expectedProfile || baseline.selector !== expectedSelector) {
+  fail(`Native Profile baseline 身份不一致:baseline=${baseline.board}/${baseline.subtarget}/${baseline.profile}/${baseline.selector}`);
 }
+const actualNativeHash = semanticHash(baseline.values);
+if (actualNativeHash !== baseline.nativeHash) {
+  fail(`Native Profile baseline semantic hash 不一致:${actualNativeHash} != ${baseline.nativeHash}`);
+}
+device.name = [baseline.board || 'Target', baseline.subtarget, baseline.profile].filter(Boolean).join(' / ');
 
-if (!Array.isArray(req.plugins)) fail('plugins 必须是数组');
-if (req.plugins.length > 200) fail('插件数量超过 200，拒绝');
+const rawOverrides = req.overrides;
+if (!Array.isArray(rawOverrides)) fail('schema 6 overrides 必须是数组');
+if (rawOverrides.length > 50000) fail('Kconfig override 数量超过 50000，拒绝');
+const { symbols: catalogKconfigSymbols } = await loadCatalogKconfigSymbols(catalogContract, catalogBranch);
+let reconstructedValues;
+try {
+  reconstructedValues = applyProfileOverrides(
+    baseline, rawOverrides, { allowedSymbols: catalogKconfigSymbols },
+  );
+}
+catch (error) { fail(`Kconfig overrides 无法应用:${error.message}`); }
+const baselineConfig = serializeConfigMap(baseline.values);
+const reconstructedConfig = serializeConfigMap(reconstructedValues);
+const reconstructedSha256 = sha256(reconstructedConfig);
+writeFileSync(String(process.env.PROFILE_BASELINE_CONFIG_OUT || 'profile-baseline.config'), baselineConfig, 'utf8');
+writeFileSync(String(process.env.RECONSTRUCTED_CONFIG_OUT || 'reconstructed.config'), reconstructedConfig, 'utf8');
+writeFileSync(String(process.env.REQUEST_OVERRIDES_OUT || 'request-overrides.json'),
+  JSON.stringify({ schema: 1, overrides: rawOverrides }, null, 2) + '\n', 'utf8');
+
+
+const rawPlugins = Array.isArray(req.plugins) ? req.plugins : [];
+if (rawPlugins.length > 200) fail('插件显示列表数量超过 200，拒绝');
 const items = [];
-let advanced = 0;
-for (const rawPlugin of req.plugins) {
+for (const rawPlugin of rawPlugins) {
   if (typeof rawPlugin !== 'string' || !/^[+-]?[a-z0-9._-]{1,96}$/i.test(rawPlugin)) {
-    fail(`非法插件项: ${JSON.stringify(rawPlugin)}`);
+    fail(`非法插件显示项: ${JSON.stringify(rawPlugin)}`);
   }
-  if (/^[+-]/.test(rawPlugin)) advanced++;
   if (!items.includes(rawPlugin)) items.push(rawPlugin);
 }
 
-// tag 只保留中英文、数字、下划线和连字符// tag 只保留中英文、数字、下划线和连字符,用于 artifact 命名与展示,防注入 / tag keeps only CJK, word chars and hyphens — used in artifact names and display, keeps it injection-safe
 const tag = String(req.tag || '').replace(/[^\w一-龥-]/g, '').slice(0, 24) || 'anonymous';
-const cleanIdentity = (value) =>
-  String(value || '').replace(/[^\w一-龥-]/g, '').slice(0, 24);
+const cleanIdentity = (value) => String(value || '').replace(/[^\w一-龥-]/g, '').slice(0, 24);
 const titleIdentity = parseBuildIssueTitleIdentity(process.env.ISSUE_TITLE || '');
 const attachmentRef = requestAttachmentName.match(/^([A-Za-z0-9]+_[A-Za-z0-9]+)[.-]/)?.[1] || '';
 const requestedSourceEnv = String(req.sourceEnv || '').trim();
@@ -284,13 +369,11 @@ const sourceEnvIdentity = buildEnvironmentIdentity(normalizedSourceEnv);
 if (titleIdentity.sourceEnv && sourceEnvIdentity && titleIdentity.sourceEnv !== sourceEnvIdentity) {
   fail(`sourceEnv 与 Issue 标题不一致: request=${sourceEnvIdentity}, title=${titleIdentity.sourceEnv}`);
 }
-if (titleIdentity.sourceEnv && !normalizedSourceEnv) {
-  fail('非 main Issue 标题必须由 build-request.json 提供 sourceEnv');
-}
+if (titleIdentity.sourceEnv && !normalizedSourceEnv) fail('非 main Issue 标题必须由 build-request.json 提供 sourceEnv');
 const sourceEnv = normalizedSourceEnv;
 const requestCommitInput = String(req.requestCommit || '').trim();
-const requestCommit = /^[a-f0-9]{7,64}$/i.test(requestCommitInput) ? requestCommitInput.toLowerCase() : '';
-if (requestCommitInput && !requestCommit) fail(`非法 requestCommit: ${requestCommitInput}`);
+const requestCommit = normalizeBuildCommit(requestCommitInput);
+if (!requestCommit) fail(`requestCommit 必须是完整 40 位 Git commit:${requestCommitInput}`);
 const expectedSourceEnvInput = String(process.env.EXPECTED_REQUEST_BRANCH || '').trim();
 const expectedSourceEnv = normalizeBuildEnvironment(expectedSourceEnvInput);
 if (expectedSourceEnvInput && !expectedSourceEnv) fail(`非法 EXPECTED_REQUEST_BRANCH: ${expectedSourceEnvInput}`);
@@ -301,22 +384,18 @@ if (expectedSourceEnv && sourceEnv !== expectedSourceEnv) {
   fail(`sourceEnv 与实际 Worker 分支不一致: request=${sourceEnv || '(missing)'}, worker=${expectedSourceEnv}`);
 }
 if (expectedRequestCommit && requestCommit !== expectedRequestCommit) {
-  fail(`requestCommit 与实际 Worker 提交不一致: request=${requestCommit || '(missing)'}, worker=${expectedRequestCommit}`);
+  fail(`requestCommit 与实际 Worker 提交不一致: request=${requestCommit}, worker=${expectedRequestCommit}`);
 }
 const requestRef = cleanIdentity(req.requestId || attachmentRef || titleIdentity.requestId);
 const buildRef = requestRef ? `${requestRef}-${tag}` : tag;
 const artifactRef = artifactBuildRef(buildRef, sourceEnv, Number(process.env.ISSUE_NUMBER || 0));
 
-// 后台登录地址:仅内网 IPv4,非法即回落默认,防注入 / admin LAN IP: private IPv4 only, falls back to default — injection-safe
 const lanip = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/.test(String(req.lanip || ''))
   ? String(req.lanip) : '192.168.1.1';
-
-// 初始密码:严格白名单字符集防 shell 注入;@empty=清空;空=各源默认 / initial password: strict charset (shell-injection-safe); @empty blanks it; empty = source default
 const rp = String(req.rootpw || '');
 const rootpw = (rp === '@empty' || /^[A-Za-z0-9@#%^&*_+=.,:!?-]{4,32}$/.test(rp)) ? rp : '';
 
-// 固件运行参数:只允许前端列出的预设,不得把任意字符串传给 Shell / firmware runtime settings use closed presets only
-const fw = req.firmware && typeof req.firmware === 'object' ? req.firmware : {};
+const fw = req.firmware && typeof req.firmware === 'object' && !Array.isArray(req.firmware) ? req.firmware : {};
 const TIMEZONES = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'timezones.json'), 'utf8')).zones;
 const NTP = {
   cn: ['ntp.aliyun.com', 'time1.cloud.tencent.com', 'cn.ntp.org.cn', 'cn.pool.ntp.org'],
@@ -342,25 +421,12 @@ if (mirrorPreset.kind === 'mirror' && !mirrorPreset.roots?.[sourceFamily]) {
 const packageMirrorId = mirrorPreset.id;
 const theme = String(fw.theme || '');
 if (!/^luci-theme-[A-Za-z0-9._+-]{1,48}$/.test(theme)) fail('固件主题格式非法');
-const firmwareHeader = submittedConfig.match(
-  /^# firmware-settings: zonename=([^\s]+) timezone=([^\s]+) theme=([^\s]+) ntp=([^\s]+) (?:package-mirror|opkg)=([^\s]+)$/m);
-const hasFirmwareSnapshot = Boolean(req.firmware || firmwareHeader);
-if (firmwareHeader) {
-  const actual = [firmwareHeader[1], firmwareHeader[2], firmwareHeader[3], firmwareHeader[4], firmwareHeader[5]];
-  const expected = [zonename, timezone, theme, ntpId, packageMirrorId];
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-    fail(`固件设置快照不一致:config=${actual.join(' / ')},request=${expected.join(' / ')}`);
-  }
-}
+const hasFirmwareSnapshot = Boolean(req.firmware);
 let pageVersion = String(req.pageVersion || '');
-if (!pageVersion && typeof submittedConfig === 'string') {
-  const match = submittedConfig.match(/^# page-version=(v\d{8}(?:\d{2})?)$/m);
-  if (match) pageVersion = match[1];
-}
 if (!/^v\d{8}(?:\d{2})?$/.test(pageVersion)) pageVersion = 'unknown';
 
 const rawPkgs = Array.isArray(req.packages) ? req.packages : [];
-if (rawPkgs.length) fail('schema 5 已由完整 config 表达 Advanced menuconfig，不再接受第二套 packages 字段');
+if (rawPkgs.length) fail('schema 6 不接受第二套 packages 字段；Advanced menuconfig 只能由 overrides 表达');
 
 const out = [
   `device=${device.id}`,
@@ -370,9 +436,13 @@ const out = [
   `repo=${source.repo}`,
   `source_commit=${sourceCommit}`,
   `catalog_revision=${activeCatalogRevision}`,
-  `catalog_asset=${catalogContract?.asset || ''}`,
-  `catalog_hash=${catalogContract?.compressedSha256 || ''}`,
-  `catalog_bytes=${catalogContract?.compressedBytes || ''}`,
+  `catalog_asset=${catalogContract.asset || indexedLegacy?.asset || ''}`,
+  `catalog_hash=${catalogContract.compressedSha256 || indexedLegacy?.hash || ''}`,
+  `catalog_bytes=${catalogContract.compressedBytes || indexedLegacy?.bytes || ''}`,
+  `profile_baseline_asset=${baselineContract.asset}`,
+  `profile_baseline_hash=${baselineContract.hash}`,
+  `profile_native_hash=${baseline.nativeHash}`,
+  `override_count=${rawOverrides.length}`,
   `diy1=${source.diy1}`,
   `diy2=${source.diy2}`,
   `variant=${variant.id}`,
@@ -396,18 +466,12 @@ const out = [
   `package_mirror_id=${packageMirrorId}`,
   `firmware_snapshot=${hasFirmwareSnapshot ? 1 : 0}`,
   `use_defconfig=${useDefconfig ? 1 : 0}`,
-  `catalog_arch=${catalogArch}`,
-  `catalog_arch_packages=${catalogArchPackages}`,
-  `catalog_profile_packages=${catalogProfilePackages.join(' ')}`,
   `request_mode=${requestMode}`,
   `config_id=${configId}`,
-  `submitted_sha256=${submittedSha256}`,
-  `summary=${tag} · ${device.name} · ${source.label} ${version.label} · ${variant.name} · ${items.length} 个插件 · ${pageVersion}` +
-    (advanced ? `(含 ${advanced} 项高级模式操作)` : ''),
+  `reconstructed_sha256=${reconstructedSha256}`,
+  `summary=${tag} · ${device.name} · ${source.label} ${version.label} · ${variant.name} · ${rawOverrides.length} config overrides · ${pageVersion}`,
 ];
 const auditOut = String(process.env.REQUEST_AUDIT_OUT || 'request-audit.json');
 writeFileSync(auditOut, JSON.stringify(requestAudit) + '\n', 'utf8');
 if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, out.join('\n') + '\n');
-// rootpw is intentionally retained only in GITHUB_OUTPUT for the workflow;
-// never echo it into the public Actions log.
 console.log(out.filter((line) => !line.startsWith('rootpw=')).join('\n'));
