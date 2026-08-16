@@ -1,0 +1,44 @@
+name: fix-F1 build contract UI modularization
+
+on:
+  push:
+    branches: [fix-F1]
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Apply and verify build contract UI module
+        shell: bash
+        run: |
+          set -euo pipefail
+          node .github/fix-f1-build-contract-patch.mjs
+          git rm .github/fix-f1-build-contract-patch.mjs .github/workflows/fix-f1-build-contract-finalize.yml
+          node tools/dev-assistant.mjs prepare
+          node tools/test-ui-modules.mjs
+          node tools/check-all.mjs
+          mapfile -t changed < <(git status --porcelain | sed -E 's/^.. //' | sort)
+          printf '%s\n' "${changed[@]}"
+          allowed='^(\.github/fix-f1-build-contract-patch\.mjs|\.github/workflows/fix-f1-build-contract-finalize\.yml|VERSION|site/wrt/app\.js|site/wrt/index\.html|site/wrt/lib/build-contract-ui\.js|site/wrt/data/site-version\.json|tools/test-ui-modules\.mjs)$'
+          for path in "${changed[@]}"; do
+            [[ "$path" =~ $allowed ]] || { echo "Unexpected refactor path: $path"; exit 1; }
+          done
+
+      - name: Commit build contract UI module
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name weigefenxiang
+          git config user.email 119787190+weigefenxiang@users.noreply.github.com
+          git add -A
+          git commit -m "refactor: isolate build contract presentation" \
+            -m "Move Current build contract expansion state, row rendering, selected chips, and Profile package presentation into a dedicated release-scoped UI module. Keep Profile package intent, Catalog facts, Kconfig state, schema 6, and build request semantics in their existing authorities."
+          git push origin HEAD:fix-F1
