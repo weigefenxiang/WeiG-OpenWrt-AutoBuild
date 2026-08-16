@@ -59,6 +59,13 @@ expect(html.includes('data-i18n="btn.import.short"') && html.includes('data-i18n
   css.includes('.cap-info.rootfs-capacity::before { content: ""; }'),
   'mobile one-line action bar labels or compact RootFS capacity regressed');
 
+expect(app.includes('function schema6TargetIdentity(target = state.device?.target) {') &&
+  app.includes('payload.customTarget = schema6TargetIdentity();') &&
+  !app.includes('payload.customTarget = state.device.target') &&
+  app.includes('ACTIVE_PROFILE_BASELINE, payload.overrides, { allowedSymbols }') &&
+  app.includes('const allowedSymbols = CATALOG_MODEL?.bySymbol instanceof Map'),
+  'schema6 request Target identity is not minimal or schema6 import lost the active Catalog symbol allowlist');
+
 const defconfigTogglePosition = html.indexOf('id="defconfigToggle"');
 const menuconfigHeaderPosition = html.indexOf('<div class="menuconfig-header">');
 const menuconfigBodyPosition = html.indexOf('<div id="menuconfigBody"');

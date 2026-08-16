@@ -6204,7 +6204,11 @@ async function reconstructSchema6Import(payload) {
   renderCatalogPicker(false, request);
   await applyCatalogTarget();
   if (!ACTIVE_PROFILE_BASELINE) throw new Error('Native Profile baseline could not be resolved for this build request');
-  const values = PROFILE_BASELINE_MODULE.applyProfileOverrides(ACTIVE_PROFILE_BASELINE, payload.overrides);
+  const allowedSymbols = CATALOG_MODEL?.bySymbol instanceof Map
+    ? new Set(CATALOG_MODEL.bySymbol.keys()) : new Set();
+  const values = PROFILE_BASELINE_MODULE.applyProfileOverrides(
+    ACTIVE_PROFILE_BASELINE, payload.overrides, { allowedSymbols },
+  );
   return {
     config: PROFILE_BASELINE_MODULE.serializeConfigMap(values),
     configId: ['catalog-target', source.id, branch.id, state.variant.id].join('/'),
@@ -6398,6 +6402,21 @@ function buildAudit(compatibility = null) {
   };
 }
 
+function schema6TargetIdentity(target = state.device?.target) {
+  const profileSymbol = String(target?.profileSymbol ||
+    (target?.profile ? `DEVICE_${target.profile}` : ''));
+  const identity = {
+    system: String(target?.system || ''),
+    subtarget: String(target?.subtarget || ''),
+    profileSymbol,
+    profileSelector: String(target?.profileSelector || ''),
+  };
+  if (!identity.system || !identity.profileSymbol || !identity.profileSelector) {
+    throw new Error('Catalog Target identity is incomplete');
+  }
+  return identity;
+}
+
 function openSubmitModal() {
   const readiness = submitReadiness();
   if (!readiness.ok) {
@@ -6491,7 +6510,9 @@ function openSubmitModal() {
           firmware: configFirmwareSettings(config),
           catalog: currentCatalogContract(),
         };
-        if (['custom-target', 'catalog-target'].includes(state.device.id)) payload.customTarget = state.device.target;
+        if (['custom-target', 'catalog-target'].includes(state.device.id)) {
+          payload.customTarget = schema6TargetIdentity();
+        }
         if (state.rootpw) payload.rootpw = state.rootpw;
         const filename = [requestStamp, requestTargetProfilePart(true), safeDownloadNamePart(state.source.id, 'source'),
           safeDownloadNamePart(state.version.id, 'branch'), safeDownloadNamePart(selectedTargetProfileName())].join('-') + '.json';

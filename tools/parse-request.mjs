@@ -291,10 +291,18 @@ const activeCatalogRevision = catalogContract.revision;
 const targetContract = req.customTarget && typeof req.customTarget === 'object' && !Array.isArray(req.customTarget)
   ? req.customTarget : null;
 if (!targetContract) fail('Catalog Target 请求缺少 customTarget 身份契约');
+const CUSTOM_TARGET_FIELDS = Object.freeze(['profileSelector', 'profileSymbol', 'subtarget', 'system']);
+const receivedTargetFields = Object.keys(targetContract).sort();
+if (receivedTargetFields.length !== CUSTOM_TARGET_FIELDS.length ||
+    receivedTargetFields.some((field, index) => field !== CUSTOM_TARGET_FIELDS[index])) {
+  fail(`customTarget 只接受最小 Target/Profile 身份字段: ${CUSTOM_TARGET_FIELDS.join(',')}`);
+}
+if (CUSTOM_TARGET_FIELDS.some((field) => typeof targetContract[field] !== 'string')) {
+  fail('customTarget Target/Profile 身份字段必须是字符串');
+}
 const expectedBoard = String(targetContract.system || '');
 const expectedSubtarget = String(targetContract.subtarget || '');
-const expectedProfile = String(targetContract.profileSymbol ||
-  (targetContract.profile ? `DEVICE_${targetContract.profile}` : ''));
+const expectedProfile = String(targetContract.profileSymbol || '');
 const expectedSelector = String(targetContract.profileSelector || '');
 if (!expectedBoard || !expectedProfile || !expectedSelector) {
   fail('customTarget 缺少 system/profile/profileSelector');
@@ -307,7 +315,6 @@ const baseline = profileStore.resolve({
   system: expectedBoard,
   subtarget: expectedSubtarget,
   profileSymbol: expectedProfile,
-  profile: targetContract.profile,
   profileSelector: expectedSelector,
 });
 if (!baseline) fail(`Native Profile baseline 不包含请求 Target/Profile:${expectedBoard}/${expectedSubtarget}/${expectedProfile}`);
@@ -340,10 +347,6 @@ writeFileSync(String(process.env.RECONSTRUCTED_CONFIG_OUT || 'reconstructed.conf
 writeFileSync(String(process.env.REQUEST_OVERRIDES_OUT || 'request-overrides.json'),
   JSON.stringify({ schema: 1, overrides: rawOverrides }, null, 2) + '\n', 'utf8');
 
-const catalogArch = String(targetContract.arch || '');
-const catalogArchPackages = String(targetContract.archPackages || '');
-const catalogProfilePackages = Array.isArray(targetContract.profilePackagesAdd)
-  ? [...new Set(targetContract.profilePackagesAdd.map(String))] : [];
 
 const rawPlugins = Array.isArray(req.plugins) ? req.plugins : [];
 if (rawPlugins.length > 200) fail('插件显示列表数量超过 200，拒绝');
@@ -463,9 +466,6 @@ const out = [
   `package_mirror_id=${packageMirrorId}`,
   `firmware_snapshot=${hasFirmwareSnapshot ? 1 : 0}`,
   `use_defconfig=${useDefconfig ? 1 : 0}`,
-  `catalog_arch=${catalogArch}`,
-  `catalog_arch_packages=${catalogArchPackages}`,
-  `catalog_profile_packages=${catalogProfilePackages.join(' ')}`,
   `request_mode=${requestMode}`,
   `config_id=${configId}`,
   `reconstructed_sha256=${reconstructedSha256}`,

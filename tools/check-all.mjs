@@ -200,6 +200,19 @@ const catalogOnly =
 if (catalogOnly) pass('Source/Branch/build tools, Kconfig, applications and schema-2 compatibility are Catalog-driven');
 else fail('Catalog-only execution contract');
 
+const minimalSchema6Target =
+  app.includes('function schema6TargetIdentity(target = state.device?.target) {') &&
+  app.includes('payload.customTarget = schema6TargetIdentity();') &&
+  !app.includes('payload.customTarget = state.device.target') &&
+  parser.includes("const CUSTOM_TARGET_FIELDS = Object.freeze(['profileSelector', 'profileSymbol', 'subtarget', 'system']);") &&
+  parser.includes('customTarget 只接受最小 Target/Profile 身份字段') &&
+  !parser.includes('targetContract.arch') && !parser.includes('targetContract.archPackages') &&
+  !parser.includes('targetContract.profilePackagesAdd') &&
+  !parser.includes('catalog_arch=') && !parser.includes('catalog_arch_packages=') &&
+  !parser.includes('catalog_profile_packages=');
+if (minimalSchema6Target) pass('schema6 carries only immutable Target/Profile identity; derived Catalog metadata stays out of the request and Worker outputs');
+else fail('schema6 minimal Target/Profile identity contract');
+
 if (html.includes('id="modalProbe"') && html.includes('<button type="button" class="modal-probe-link"') &&
     app.includes('function openPackageProbeModal()') && app.includes("template: 'package-probe.yml'") &&
     !app.includes('probe-request.json') && app.includes('WEIG_PACKAGE_PROBE_STATE_V2:') &&
