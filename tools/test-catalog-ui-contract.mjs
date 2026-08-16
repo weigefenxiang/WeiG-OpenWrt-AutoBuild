@@ -171,6 +171,24 @@ expect(css.includes('/* 可勾选卡片立体模板 / shared selectable-card ele
   css.includes('@media (prefers-reduced-motion: reduce) {'),
   'shared light/dark selectable-card template, elevation, press feedback, disabled flattening, or reduced-motion fallback regressed');
 
+expect(css.includes('/* 统一交互控件立体模板 / shared elevated interactive-control template */') &&
+  css.includes('--control-border: color-mix(in srgb, var(--border) 52%, #91a0b4 48%);') &&
+  css.includes('--control-shadow: 0 1px 1px rgba(15, 23, 42, .08), 0 3px 7px rgba(55, 75, 104, .13)') &&
+  (css.match(/--control-shadow: 0 1px 2px rgba\(0, 0, 0, \.24\), 0 5px 12px rgba\(0, 0, 0, \.18\);/g) || []).length >= 2 &&
+  css.includes('/* 标准交互控件模板：以后新增输入/下拉/按钮/选择框优先复用 .control-field / .control-action / .control-choice */') &&
+  css.includes(':where(.control-field, input[type="search"], input[type="text"], input[type="password"], input[type="number"], select, textarea) {') &&
+  css.includes('.control-action, .control-choice, .btn, .icon-btn, .text-btn, .pill, .device-summary, .catalog-copy-diagnostics,') &&
+  css.includes('transform: translateY(var(--control-lift));') &&
+  css.includes('.defconfig-switch:has(input:checked),') &&
+  css.includes('.build-contract-selected-filter:has(input:checked),') &&
+  css.includes('.pill-active,') &&
+  css.includes('.build-contract-head {') &&
+  css.includes('.btn-primary:active { transform: translateY(0);') &&
+  css.includes(':where(.defconfig-switch, .build-contract-selected-filter, .adv-toggle) input[type="checkbox"] {') &&
+  css.includes('box-shadow: none;\n  transform: none;\n  cursor: not-allowed;') &&
+  css.includes('@media (prefers-reduced-motion: reduce) {'),
+  'shared light/dark form-control template, elevation, selected states, checkbox treatment, disabled flattening, or reduced-motion fallback regressed');
+
 expect(!app.includes('syncThemeFromMenu') && app.includes('syncFirmwareThemeFromMenu'),
   'Catalog intent still calls a missing theme coordinator');
 const modalHeader = html.match(/<div class="modal-head">([\s\S]*?)<\/div>\s*<div class="modal-body"/)?.[1] || '';
