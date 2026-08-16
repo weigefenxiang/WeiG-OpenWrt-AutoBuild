@@ -116,11 +116,11 @@ jobs:
           }
           .plugin:has(input:checked) {
             background: var(--plugin-selected);
+            border-color: var(--accent);
             background: linear-gradient(180deg,
               color-mix(in srgb, var(--plugin-selected) 90%, #fff 10%) 0%,
               var(--plugin-selected) 44%,
               color-mix(in srgb, var(--plugin-selected) 96%, var(--bg) 4%) 100%);
-            border-color: var(--accent);
             box-shadow: inset 0 1px 0 var(--plugin-card-highlight),
               0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent),
               var(--plugin-card-shadow-selected);
