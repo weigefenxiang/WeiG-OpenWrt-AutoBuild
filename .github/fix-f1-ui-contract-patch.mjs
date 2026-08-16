@@ -47,11 +47,22 @@ const newCompatibility = `expect(uiSession.includes('let compatibilityRememberDe
   css.includes('.compatibility-remember{display:inline-flex;') &&
   css.includes('.st-option.compatibility-remember{width:100%;'),
   'force-confirm remember-choice control, page-session default, tooltip, or non-persistence regressed');`;
-
 text = replaceOnce(text, oldCompatibility, newCompatibility, 'compatibility module contract');
 
 const oldFont = "  app.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;'),";
 const newFont = "  pageShell.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;') &&\n  !app.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;'),";
 text = replaceOnce(text, oldFont, newFont, 'page-shell font contract');
+
+const oldRollback = `expect(restoreContract.includes('catalogStateRevision = snapshot.revision') &&
+  restoreContract.includes('compatibilityAcknowledgement = snapshot.compatibilityAcknowledgement') &&
+  restoreContract.includes('clearCatalogDerivedCaches()') &&
+  !restoreContract.includes('markCatalogStateChanged'),
+  'failure rollback is incorrectly counted as a configuration change');`;
+const newRollback = `expect(restoreContract.includes('catalogStateRevision = snapshot.revision') &&
+  restoreContract.includes('UI_SESSION.compatibility.setAcknowledgement(snapshot.compatibilityAcknowledgement)') &&
+  restoreContract.includes('clearCatalogDerivedCaches()') &&
+  !restoreContract.includes('markCatalogStateChanged'),
+  'failure rollback is incorrectly counted as a configuration change');`;
+text = replaceOnce(text, oldRollback, newRollback, 'rollback session contract');
 
 writeFileSync(path, text, 'utf8');
