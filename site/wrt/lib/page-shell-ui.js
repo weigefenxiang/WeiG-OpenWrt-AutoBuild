@@ -113,4 +113,5 @@ export function installPageShellUi({ get, t, safeSet, openModal, fitPluginNames 
     applyTheme(themeMode === 'auto' ? 'light' : themeMode === 'light' ? 'dark' : 'auto');
   });
   applyTheme(themeMode);
+  return Object.freeze({ refreshThemeControl: applyThemeIcon });
 }

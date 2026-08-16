@@ -23,6 +23,7 @@ if (!UI_RUNTIME?.session?.createUiSessionState || !UI_RUNTIME?.components?.creat
 const UI_SESSION = UI_RUNTIME.session.createUiSessionState();
 const UI_COMPONENTS = UI_RUNTIME.components;
 const PAGE_SHELL_UI = UI_RUNTIME.pageShell;
+let PAGE_SHELL_CONTROLLER = null;
 function releaseScopedUrl(url) {
   const resolved = new URL(url, document.baseURI);
   resolved.searchParams.set('r', SITE_RELEASE_SHA);
@@ -405,7 +406,7 @@ function applyI18n() {
     hint.appendChild(document.createTextNode(t('mode.self.hint') + ' '));
   }
   hint.appendChild(mkA('https://github.com/' + OFFICIAL_REPO + '#fork-自建', t('mode.self.tutorial')));
-  applyThemeIcon();
+  PAGE_SHELL_CONTROLLER?.refreshThemeControl();
   if (PLUGINS) {
     renderDevices();
     if (state.device && state.source) {
@@ -7280,7 +7281,7 @@ async function runSelfTest() {
 $('selfTestBtn').addEventListener('click', () => { runSelfTest().catch((e) => showToast(t('toast.selfTestError', { msg: e.message }))); });
 
 /* ============ 页面壳层 / Page shell ============ */
-PAGE_SHELL_UI.installPageShellUi({
+PAGE_SHELL_CONTROLLER = PAGE_SHELL_UI.installPageShellUi({
   get: $, t, safeSet, openModal, fitPluginNames,
 });
 
