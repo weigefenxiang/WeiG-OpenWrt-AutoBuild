@@ -1,0 +1,70 @@
+name: One-shot compatibility recommendation fix
+
+on:
+  push:
+    branches:
+      - fix-F
+    paths:
+      - .github/workflows/one-shot-compatibility-recommendation-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'chore: stage compatibility recommendation fix'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fix-F
+        uses: actions/checkout@v4
+        with:
+          ref: fix-F
+          fetch-depth: 0
+
+      - name: Apply minimal compatibility recommendation fix
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { readFileSync, writeFileSync } = require('node:fs');
+
+          const enginePath = 'site/wrt/lib/catalog-engine.js';
+          let engine = readFileSync(enginePath, 'utf8');
+          const oldDataRefCheck = "      !/^catalog-(?:fix|dev|staging|data)$/.test(String(dataRef || '')) ||";
+          const newDataRefCheck = "      !/^catalog-(?:fix(?:-[A-Za-z0-9][A-Za-z0-9._-]{0,95})?|dev|staging|main|data)$/.test(String(dataRef || '')) ||";
+          if (!engine.includes(oldDataRefCheck)) {
+            throw new Error('Expected legacy compatibility dataRef check was not found');
+          }
+          engine = engine.replace(oldDataRefCheck, newDataRefCheck);
+          if ((engine.match(/compatibility acknowledgement context is invalid/g) || []).length !== 1) {
+            throw new Error('Unexpected compatibility acknowledgement structure');
+          }
+          writeFileSync(enginePath, engine);
+
+          const testPath = 'tools/test-catalog-engine.mjs';
+          let test = readFileSync(testPath, 'utf8');
+          const importAnchor = "} from '../site/wrt/lib/catalog-engine.js';\n";
+          if (!test.includes(importAnchor)) throw new Error('Catalog engine import anchor was not found');
+          test = test.replace(importAnchor,
+            `${importAnchor}import { safeCatalogDataRef } from '../site/wrt/lib/catalog-loader.js';\n`);
+
+          const oldAcknowledgement = `const acknowledgement = {\n  sha256: 'a'.repeat(64), dataRef: 'catalog-fix', sourceId: 'Demo', branchName: 'stable',\n  revision: 7, ruleIds: ['OWN-TEST', 'OWN-TIE'],\n};\nconst acknowledgementKey = compatibilityAcknowledgementKey(acknowledgement);`;
+          const newAcknowledgement = `const acknowledgement = {\n  sha256: 'a'.repeat(64), dataRef: 'catalog-fix-F', sourceId: 'Demo', branchName: 'stable',\n  revision: 7, ruleIds: ['OWN-TEST', 'OWN-TIE'],\n};\nfor (const dataRef of ['catalog-fix', 'catalog-fix-F', 'catalog-dev', 'catalog-staging', 'catalog-main']) {\n  assert(safeCatalogDataRef(dataRef) === dataRef, \`Catalog loader rejected canonical dataRef \${dataRef}\`);\n  compatibilityAcknowledgementKey({ ...acknowledgement, dataRef });\n}\ncompatibilityAcknowledgementKey({ ...acknowledgement, dataRef: 'catalog-data' });\nexpectThrow(() => safeCatalogDataRef('catalog-candidate'), /invalid Catalog data branch/,\n  'Catalog loader accepted the non-browser candidate channel');\nexpectThrow(() => compatibilityAcknowledgementKey({ ...acknowledgement, dataRef: 'catalog-candidate' }),\n  /compatibility acknowledgement context is invalid/,\n  'compatibility acknowledgement accepted the non-browser candidate channel');\nconst acknowledgementKey = compatibilityAcknowledgementKey(acknowledgement);`;
+          if (!test.includes(oldAcknowledgement)) {
+            throw new Error('Expected compatibility acknowledgement regression block was not found');
+          }
+          test = test.replace(oldAcknowledgement, newAcknowledgement);
+          writeFileSync(testPath, test);
+          NODE
+
+          git rm .github/workflows/one-shot-compatibility-recommendation-fix.yml
+          node tools/dev-assistant.mjs prepare
+          git diff --check
+
+      - name: Commit and push fix-F
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- site/wrt/lib/catalog-engine.js tools/test-catalog-engine.mjs VERSION site/wrt/data/site-version.json .github/workflows/one-shot-compatibility-recommendation-fix.yml
+          git commit -m 'fix: restore compatibility recommendation dialog'
+          git push origin HEAD:fix-F
