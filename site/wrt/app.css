@@ -400,7 +400,9 @@ input:focus-visible { border-color: var(--accent); }
 .menuconfig-scroll{max-height:clamp(280px,55vh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior-y:auto;scrollbar-gutter:stable;-webkit-overflow-scrolling:touch}
 .menuconfig-toolbar{display:block;margin-top:10px;padding-bottom:2px}
 .menuconfig-path-row{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:nowrap}
-.menuconfig-search-group{display:flex;flex:0 1 360px;align-items:center;gap:8px;min-width:260px;margin-left:auto}
+.menuconfig-search-group{position:relative;display:flex;flex:0 1 360px;align-items:center;gap:8px;min-width:260px;margin-left:auto}
+.menuconfig-search-group.is-searching::after{content:"";position:absolute;right:70px;width:15px;height:15px;border:2px solid color-mix(in srgb,var(--accent) 28%,transparent);border-top-color:var(--accent);border-radius:50%;animation:menu-search-spin .7s linear infinite;pointer-events:none}
+@keyframes menu-search-spin{to{transform:rotate(360deg)}}
 .menuconfig-back{flex:none;width:34px;height:34px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);cursor:pointer}
 .menuconfig-back:disabled{opacity:.42;cursor:default}
 .menuconfig-breadcrumb{display:flex;flex:1 1 auto;min-width:0;align-items:center;gap:4px 5px;flex-wrap:nowrap;overflow:hidden;padding-block:4px;font-size:var(--font-description);line-height:1.4;white-space:nowrap}
@@ -742,7 +744,7 @@ button.catalog-applications-state{cursor:pointer}
 .plugin input[type="checkbox"]:disabled:checked {
   border-color: var(--text3); background: var(--text3);
 }
-/* 名字是按钮:单击固定统一说明,悬浮整卡跟随鼠标;V11 默认单行省略号,JS 按 缩1px→两行→再缩1px 三步适配 / name button pins the shared tooltip while card hover follows the pointer; V11 name fitting remains unchanged */
+/* 名字是按钮:悬浮临时说明、双击固定;V11 默认单行省略号,JS 按 缩1px→两行→再缩1px 三步适配 / name buttons show transient hover help and pin it on double-click; V11 name fitting remains unchanged */
 .plugin-name {
   min-width: 0; text-align: left;
   border: none; background: none; padding: 4px 0;

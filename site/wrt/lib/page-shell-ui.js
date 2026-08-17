@@ -96,7 +96,7 @@ export function installPageShellUi({ get, t, safeSet, openModal, fitPluginNames 
   const icons = Object.freeze({ auto: '◐', light: '☀', dark: '☾' });
   const applyThemeIcon = () => {
     $('themeBtn').textContent = icons[themeMode];
-    $('themeBtn').title = t('theme.' + themeMode);
+    $('themeBtn').dataset.uiTooltipBody = t('theme.' + themeMode);
     $('themeBtn').setAttribute('aria-label', t('theme.' + themeMode));
   };
   const applyTheme = (mode) => {

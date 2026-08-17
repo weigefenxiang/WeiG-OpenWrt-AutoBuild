@@ -16,6 +16,7 @@ const css = readFileSync(join(root, 'site', 'wrt', 'app.css'), 'utf8');
 const uiSession = readFileSync(join(root, 'site', 'wrt', 'lib', 'ui-session-state.js'), 'utf8');
 const uiComponents = readFileSync(join(root, 'site', 'wrt', 'lib', 'ui-components.js'), 'utf8');
 const pageShell = readFileSync(join(root, 'site', 'wrt', 'lib', 'page-shell-ui.js'), 'utf8');
+const packageProbeV3 = readFileSync(join(root, 'site', 'wrt', 'lib', 'package-probe-v3-ui.js'), 'utf8');
 const uiComponentsCss = readFileSync(join(root, 'site', 'wrt', 'ui-components.css'), 'utf8');
 const project = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
 const expect = (condition, message) => { if (!condition) throw new Error(message); };
@@ -116,9 +117,15 @@ expect(html.includes('id="menuconfigFilterTrigger"') &&
   html.includes('id="menuconfigOriginFilter"') &&
   html.includes('name="menuconfigOrigin" value="all" checked') &&
   html.includes('id="menuconfigSelectedOnly"') &&
-  html.includes('id="menuconfigUserSettable" checked') &&
-  app.includes('let menuUserSettableOnly = true;') &&
+  html.includes('id="menuconfigUserSettable"') &&
+  !html.includes('id="menuconfigUserSettable" checked') &&
+  html.includes('<span id="menuconfigFilterSummary">Filter</span>') &&
+  app.includes('let menuUserSettableOnly = false;') &&
   app.includes('function refreshMenuconfigFilterSummary()') &&
+  app.includes("? menuFilterText('selectedOnly')") &&
+  app.includes(": userSettableOnly ? menuFilterText('userSettable') : menuFilterText('filter')") &&
+  app.includes("filter: '筛选'") &&
+  !app.includes('userSettable（可直接设置）') &&
   app.includes("!menuUserSettableOnly || option.userSettable !== false") &&
   app.includes("event.target.closest('input[name=\"menuconfigOrigin\"]')") &&
   !app.includes("$('menuconfigOriginFilter').options") &&
@@ -176,10 +183,13 @@ expect(html.includes('class="ui-tooltip" id="uiTooltip"') &&
   sharedTooltipContract.includes("const actionbar = $('actionbar');") &&
   sharedTooltipContract.includes('actionbarRect.top - margin') &&
   sharedTooltipContract.includes('const safeBoundary = { ...boundary, bottom: safeBottom };') &&
-  sharedTooltipContract.includes('uiTooltip.style.maxHeight = `${Math.min(360, availableHeight)}px`;') &&
+  sharedTooltipContract.includes('function uiTooltipAvoidanceTarget(target)') &&
+  sharedTooltipContract.includes('verticalSpace >= 72 ? verticalSpace : availableHeight') &&
   sharedTooltipContract.includes('const candidates = [') &&
-  sharedTooltipContract.includes('const visibleArea = (candidate) => {') &&
-  sharedTooltipContract.includes('area > best.area || (area === best.area && distance < best.distance)') &&
+  sharedTooltipContract.includes('top: anchor.bottom + gap') &&
+  sharedTooltipContract.includes('top: anchor.top - rect.height - gap') &&
+  sharedTooltipContract.includes('const overlapArea = (candidate) => {') &&
+  sharedTooltipContract.includes('overlapArea(left) - overlapArea(right)') &&
   sharedTooltipContract.includes("uiTooltip.style.removeProperty('max-height');") &&
   sharedTooltipContract.includes("uiTooltip.classList.toggle('is-pinned', uiTooltipPinned)") &&
   sharedTooltipContract.includes("uiTooltip.classList.remove('is-pinned')") &&
@@ -187,6 +197,9 @@ expect(html.includes('class="ui-tooltip" id="uiTooltip"') &&
   sharedTooltipContract.includes("document.addEventListener('pointermove'") &&
   sharedTooltipContract.includes("document.addEventListener('dblclick'") &&
   sharedTooltipContract.includes('showDatasetTooltip(target, event, true)') &&
+  sharedTooltipContract.includes('function connectedUiTooltipTarget(target)') &&
+  sharedTooltipContract.includes('now - uiTooltipClickAt <= 500') &&
+  sharedTooltipContract.includes('target.dataset.uiTooltipKey = identity') &&
   sharedTooltipContract.includes("event.pointerType !== 'touch'") &&
   sharedTooltipContract.includes('now - uiTooltipTouchAt <= 500') &&
   sharedTooltipContract.includes('positionUiTooltip(target, event)') &&
@@ -195,6 +208,13 @@ expect(html.includes('class="ui-tooltip" id="uiTooltip"') &&
   css.includes('.ui-tooltip.is-pinned{pointer-events:auto;user-select:text;cursor:text}') &&
   css.includes(':is([data-ui-tooltip-title],[data-ui-tooltip-emphasis],[data-ui-tooltip-body]){touch-action:manipulation}') &&
   app.includes("bindUiTooltipContent($('menuconfigStateHelp'), { body: help })") &&
+  app.includes('key: `CONFIG_${option.symbol}:${stateValue}`') &&
+  app.includes('if (value === stateValue) return;') &&
+  (app.match(/\.title\s*=/g) || []).length === 1 &&
+  !html.includes(' title="') &&
+  !pageShell.includes('.title =') &&
+  !uiComponents.includes('.title =') &&
+  !packageProbeV3.includes('.title =') &&
   !app.includes('function showMenuPopup(') && !app.includes('function showPopover('),
   'shared pointer-following tooltip template or content-bound positioning regressed');
 expect(app.includes("dataset.uiTooltipTitle = 'D · Defconfig'") &&
@@ -328,9 +348,10 @@ const normalizeMenuSearchQueryContract = app.match(/function normalizeMenuSearch
 expect(normalizeMenuSearchQueryContract.includes("replace(/^config_/, '')"),
   'shared Advanced/Probe search does not normalize CONFIG_ before candidate lookup');
 const normalizeMenuSearchIdentityContract = app.match(/function normalizeMenuSearchIdentity\(value\) \{[\s\S]*?\n\}/)?.[0] || '';
+const menuSearchPathRankContract = app.match(/function menuSearchPathRank\(option\) \{[\s\S]*?\n\}/)?.[0] || '';
 const menuSearchRankContract = app.match(/function menuSearchRank\(option, query\) \{[\s\S]*?\n\}/)?.[0] || '';
 const rankMenuSearchOptionsContract = app.match(/function rankMenuSearchOptions\(options, query\) \{[\s\S]*?\n\}/)?.[0] || '';
-const sharedSearch = Function(`${normalizeMenuSearchQueryContract}\n${normalizeMenuSearchIdentityContract}\n${menuSearchRankContract}\n${rankMenuSearchOptionsContract}\nreturn { normalizeMenuSearchQuery, normalizeMenuSearchIdentity, menuSearchRank, rankMenuSearchOptions };`)();
+const sharedSearch = Function(`${normalizeMenuSearchQueryContract}\n${normalizeMenuSearchIdentityContract}\n${menuSearchPathRankContract}\n${menuSearchRankContract}\n${rankMenuSearchOptionsContract}\nreturn { normalizeMenuSearchQuery, normalizeMenuSearchIdentity, menuSearchRank, rankMenuSearchOptions };`)();
 const oscamSearchRows = [
   { symbol: 'OSCAM_WITH_DEBUG' },
   { symbol: 'PACKAGE_oscam' },
@@ -352,6 +373,20 @@ for (const query of ['oscam', 'luci-app-oscam', 'PACKAGE_luci-app-oscam', 'CONFI
 expect(JSON.stringify(sharedSearch.rankMenuSearchOptions(oscamSearchRows, 'oscam').map((row) => row.symbol)) ===
   JSON.stringify(expectedOscamOrder),
   'shared Advanced/Probe search ranking is not luci-app -> exact package -> other package -> Kconfig');
+const luciSearchRows = [
+  { symbol: 'PACKAGE_misc-luci-reference', path: ['Network'] },
+  { symbol: 'PACKAGE_luci-app-firewall', path: ['LuCI', '3. Applications'] },
+  { symbol: 'PACKAGE_luci-mod-admin-full', path: ['LuCI', '2. Modules'] },
+  { symbol: 'PACKAGE_luci-collection-base', path: ['LuCI', '1. Collections'] },
+  { symbol: 'PACKAGE_luci-base', path: ['LuCI'] },
+  { symbol: 'PACKAGE_luci', path: ['LuCI'] },
+  { symbol: 'LUCI_REFERENCE', path: ['LuCI', 'Libraries'] },
+];
+expect(JSON.stringify(sharedSearch.rankMenuSearchOptions(luciSearchRows, 'CONFIG_PACKAGE_luci')
+  .map((row) => row.symbol)) === JSON.stringify([
+  'PACKAGE_luci', 'PACKAGE_luci-base', 'PACKAGE_luci-collection-base', 'PACKAGE_luci-mod-admin-full',
+  'PACKAGE_luci-app-firewall', 'LUCI_REFERENCE', 'PACKAGE_misc-luci-reference',
+]), 'LuCI search is not exact/core -> numbered Catalog path -> unnumbered LuCI -> non-LuCI');
 expect(!app.includes('function resolvePackageSelectionOption(') &&
   !app.includes('resolvePackageSelectionOption(option)'),
   'package selection must not reverse-map a dependency to a luci-app package');
@@ -402,6 +437,19 @@ expect(searchMenuOptionsContract.includes('rankMenuSearchOptions') &&
   probeChoices.includes('searchMenuOptionsSync(normalized)') &&
   !app.includes('function normalizeProbeSearch(') && !app.includes('function probeChoiceMatches('),
   'Advanced and Probe still maintain separate search ranking/matching implementations');
+const workerStartContract = app.match(/function startCatalogSearchWorker\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
+const workerRequestContract = app.match(/function requestCatalogSearch\(query\) \{([\s\S]*?)\n\}/)?.[1] || '';
+expect(workerStartContract.includes("normalizeMenuSearchQuery($('menuconfigSearch')?.value)") &&
+  workerStartContract.includes('catalogSearchRequests.get(query) !== message.requestId') &&
+  workerStartContract.includes("normalizeMenuSearchQuery($('menuconfigSearch')?.value) === query") &&
+  workerRequestContract.includes('const normalized = normalizeMenuSearchQuery(query)') &&
+  workerRequestContract.includes('catalogSearchRequests.set(normalized, requestId)') &&
+  app.includes('const MENU_SEARCH_PAGE_SIZE = 60;') &&
+  app.includes('menuVisibleLimit += currentMenuPageSize()') &&
+  html.includes('id="menuconfigSearch" placeholder="Search option name / CONFIG symbol" aria-busy="false"') &&
+  app.includes("input?.setAttribute('aria-busy', String(active))") &&
+  css.includes('.menuconfig-search-group.is-searching::after{'),
+  'normalized worker keys, stale-result protection, incremental search rendering, or busy feedback regressed');
 expect(probeContract.includes('const selectable = choice.isPackage && choice.userSettable') &&
   probeContract.includes("row.classList.toggle('is-reference', !selectable)") &&
   probeContract.includes("if (!selectable) row.setAttribute('aria-disabled', 'true')") &&
@@ -588,7 +636,7 @@ expect(html.includes('class="menuconfig-selected-label"') &&
   css.includes('.import-summary strong{overflow-x:auto;') &&
   css.includes('.import-summary{align-items:center;flex-direction:row}') &&
   !css.includes('.import-summary{align-items:flex-start;flex-direction:column}') &&
-  app.includes('summaryTextElement.title = summaryText') &&
+  app.includes('bindUiTooltipContent(summaryTextElement, { body: summaryText })') &&
   css.includes('.menuconfig-workspace{width:100%') &&
   /@media\(max-width:640px\)\{[\s\S]*?\.menuconfig-overview-row\{grid-template-columns:minmax\(0,1fr\)\}/.test(css),
   'Selected options/import summary can wrap, hide full details, or lose full-width/mobile access');
@@ -654,7 +702,7 @@ expect(css.includes('grid-template-columns:minmax(0,1fr) max-content max-content
   /@media\(max-width:640px\)\{[\s\S]*?\.catalog-locator\{grid-column:1;grid-row:1\}[\s\S]*?\.build-contract-head\{grid-column:1;grid-row:2[\s\S]*?\.build-contract-controls\{grid-column:1;grid-row:3[\s\S]*?\.build-contract-body\{grid-column:1;grid-row:4\}/.test(css),
   'desktop/tablet/mobile build-contract layout contract drifted');
 expect(css.includes('.menuconfig-header{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,360px)') &&
-  css.includes('.menuconfig-search-group{display:flex;flex:0 1 360px'),
+  css.includes('.menuconfig-search-group{position:relative;display:flex;flex:0 1 360px'),
   'top contract compaction changed the Advanced menuconfig search');
 
 const sources = [{ id: 'anonymous-default' }, { id: 'anonymous-user' }, { id: 'anonymous-state' }];

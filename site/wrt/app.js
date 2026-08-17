@@ -127,7 +127,7 @@ const catalogUserOverrides = new Map();
 const profilePackageOverrides = new Map();
 let profilePackageModalOpen = false;
 let menuOriginFilter = 'all';
-let menuUserSettableOnly = true;
+let menuUserSettableOnly = false;
 const menuImportedOriginal = new Map();
 const menuImportedNonDefault = new Set();
 const importedConfigValues = new Map();
@@ -141,6 +141,7 @@ let menuSearchText = new Map(), menuSearchOptions = [];
 const ROOTFS_PARTSIZE_SYMBOL = 'TARGET_ROOTFS_PARTSIZE';
 let catalogSearchWorker = null, catalogSearchGeneration = 0, catalogSearchRequestId = 0;
 let catalogSearchWorkerReady = false, catalogSearchPending = new Set(), catalogSearchResults = new Map();
+let catalogSearchRequests = new Map();
 let catalogLocatorEntryCache = null;
 let catalogStateRevision = 0, catalogContextCache = new Map(), catalogContextCacheBypass = false;
 let compatibilityPrefetchTimer = null;
@@ -152,6 +153,7 @@ let menuVisibilityRevision = -1, menuVisibilityCache = new Map(), menuSelectable
 let menuStateConstraintsCache = new Map();
 let MENU_CATALOG_REPO = 'weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog';
 const MENU_PAGE_SIZE = 80;
+const MENU_SEARCH_PAGE_SIZE = 60;
 const LANG_SHORT = {
   'zh-CN': '简', 'zh-TW': '繁', en: 'EN', ru: 'RU', es: 'ES', pt: 'PT',
   ja: '日', ko: '한', de: 'DE', fr: 'FR', vi: 'VI',
@@ -202,17 +204,17 @@ const MENU_UI_I18N = {
 };
 const menuUi = (key) => MENU_UI_I18N[key]?.[state.lang] || MENU_UI_I18N[key]?.en || key;
 const MENU_FILTER_I18N = {
-  'zh-CN': { origin: '来源', display: '显示', all: '全部来源', user: '用户选择', excluded: '明确排除', default: '上游默认', recommended: '网页推荐', dependency: '自动依赖', imported: '导入配置', selectedOnly: '仅看已选', userSettable: 'userSettable（可直接设置）' },
-  'zh-TW': { origin: '來源', display: '顯示', all: '全部來源', user: '使用者選擇', excluded: '明確排除', default: '上游預設', recommended: '網頁推薦', dependency: '自動相依', imported: '匯入設定', selectedOnly: '僅看已選', userSettable: 'userSettable（可直接設定）' },
-  en: { origin: 'Origin', display: 'Display', all: 'All origins', user: 'User selected', excluded: 'Explicitly excluded', default: 'Upstream defaults', recommended: 'Recommended', dependency: 'Dependencies', imported: 'Imported', selectedOnly: 'Selected only', userSettable: 'userSettable' },
-  ru: { origin: 'Источник', display: 'Отображение', all: 'Все источники', user: 'Выбрано пользователем', excluded: 'Явно исключено', default: 'По умолчанию upstream', recommended: 'Рекомендуемое', dependency: 'Зависимости', imported: 'Импортировано', selectedOnly: 'Только выбранные', userSettable: 'userSettable' },
-  es: { origin: 'Origen', display: 'Mostrar', all: 'Todos los orígenes', user: 'Selección del usuario', excluded: 'Excluido explícitamente', default: 'Valores upstream', recommended: 'Recomendado', dependency: 'Dependencias', imported: 'Importado', selectedOnly: 'Solo seleccionados', userSettable: 'userSettable' },
-  pt: { origin: 'Origem', display: 'Exibição', all: 'Todas as origens', user: 'Selecionado pelo usuário', excluded: 'Excluído explicitamente', default: 'Padrões upstream', recommended: 'Recomendado', dependency: 'Dependências', imported: 'Importado', selectedOnly: 'Somente selecionados', userSettable: 'userSettable' },
-  ja: { origin: '由来', display: '表示', all: 'すべての由来', user: 'ユーザー選択', excluded: '明示的に除外', default: '上流の既定値', recommended: '推奨', dependency: '依存関係', imported: 'インポート', selectedOnly: '選択済みのみ', userSettable: 'userSettable' },
-  ko: { origin: '출처', display: '표시', all: '모든 출처', user: '사용자 선택', excluded: '명시적 제외', default: '업스트림 기본값', recommended: '권장', dependency: '종속성', imported: '가져옴', selectedOnly: '선택 항목만', userSettable: 'userSettable' },
-  de: { origin: 'Ursprung', display: 'Anzeige', all: 'Alle Ursprünge', user: 'Benutzerauswahl', excluded: 'Explizit ausgeschlossen', default: 'Upstream-Standardwerte', recommended: 'Empfohlen', dependency: 'Abhängigkeiten', imported: 'Importiert', selectedOnly: 'Nur ausgewählte', userSettable: 'userSettable' },
-  fr: { origin: 'Origine', display: 'Affichage', all: 'Toutes les origines', user: 'Choix utilisateur', excluded: 'Exclu explicitement', default: 'Valeurs upstream', recommended: 'Recommandé', dependency: 'Dépendances', imported: 'Importé', selectedOnly: 'Sélection uniquement', userSettable: 'userSettable' },
-  vi: { origin: 'Nguồn', display: 'Hiển thị', all: 'Tất cả nguồn', user: 'Người dùng chọn', excluded: 'Loại trừ rõ ràng', default: 'Mặc định upstream', recommended: 'Đề xuất', dependency: 'Phụ thuộc', imported: 'Đã nhập', selectedOnly: 'Chỉ mục đã chọn', userSettable: 'userSettable' },
+  'zh-CN': { origin: '来源', display: '显示', filter: '筛选', all: '全部来源', user: '用户选择', excluded: '明确排除', default: '上游默认', recommended: '网页推荐', dependency: '自动依赖', imported: '导入配置', selectedOnly: '仅看已选', userSettable: 'userSettable' },
+  'zh-TW': { origin: '來源', display: '顯示', filter: '篩選', all: '全部來源', user: '使用者選擇', excluded: '明確排除', default: '上游預設', recommended: '網頁推薦', dependency: '自動相依', imported: '匯入設定', selectedOnly: '僅看已選', userSettable: 'userSettable' },
+  en: { origin: 'Origin', display: 'Display', filter: 'Filter', all: 'All origins', user: 'User selected', excluded: 'Explicitly excluded', default: 'Upstream defaults', recommended: 'Recommended', dependency: 'Dependencies', imported: 'Imported', selectedOnly: 'Selected only', userSettable: 'userSettable' },
+  ru: { origin: 'Источник', display: 'Отображение', filter: 'Фильтр', all: 'Все источники', user: 'Выбрано пользователем', excluded: 'Явно исключено', default: 'По умолчанию upstream', recommended: 'Рекомендуемое', dependency: 'Зависимости', imported: 'Импортировано', selectedOnly: 'Только выбранные', userSettable: 'userSettable' },
+  es: { origin: 'Origen', display: 'Mostrar', filter: 'Filtro', all: 'Todos los orígenes', user: 'Selección del usuario', excluded: 'Excluido explícitamente', default: 'Valores upstream', recommended: 'Recomendado', dependency: 'Dependencias', imported: 'Importado', selectedOnly: 'Solo seleccionados', userSettable: 'userSettable' },
+  pt: { origin: 'Origem', display: 'Exibição', filter: 'Filtro', all: 'Todas as origens', user: 'Selecionado pelo usuário', excluded: 'Excluído explicitamente', default: 'Padrões upstream', recommended: 'Recomendado', dependency: 'Dependências', imported: 'Importado', selectedOnly: 'Somente selecionados', userSettable: 'userSettable' },
+  ja: { origin: '由来', display: '表示', filter: '絞り込み', all: 'すべての由来', user: 'ユーザー選択', excluded: '明示的に除外', default: '上流の既定値', recommended: '推奨', dependency: '依存関係', imported: 'インポート', selectedOnly: '選択済みのみ', userSettable: 'userSettable' },
+  ko: { origin: '출처', display: '표시', filter: '필터', all: '모든 출처', user: '사용자 선택', excluded: '명시적 제외', default: '업스트림 기본값', recommended: '권장', dependency: '종속성', imported: '가져옴', selectedOnly: '선택 항목만', userSettable: 'userSettable' },
+  de: { origin: 'Ursprung', display: 'Anzeige', filter: 'Filter', all: 'Alle Ursprünge', user: 'Benutzerauswahl', excluded: 'Explizit ausgeschlossen', default: 'Upstream-Standardwerte', recommended: 'Empfohlen', dependency: 'Abhängigkeiten', imported: 'Importiert', selectedOnly: 'Nur ausgewählte', userSettable: 'userSettable' },
+  fr: { origin: 'Origine', display: 'Affichage', filter: 'Filtrer', all: 'Toutes les origines', user: 'Choix utilisateur', excluded: 'Exclu explicitement', default: 'Valeurs upstream', recommended: 'Recommandé', dependency: 'Dépendances', imported: 'Importé', selectedOnly: 'Sélection uniquement', userSettable: 'userSettable' },
+  vi: { origin: 'Nguồn', display: 'Hiển thị', filter: 'Bộ lọc', all: 'Tất cả nguồn', user: 'Người dùng chọn', excluded: 'Loại trừ rõ ràng', default: 'Mặc định upstream', recommended: 'Đề xuất', dependency: 'Phụ thuộc', imported: 'Đã nhập', selectedOnly: 'Chỉ mục đã chọn', userSettable: 'userSettable' },
 };
 const menuFilterText = (key) => MENU_FILTER_I18N[state.lang]?.[key] || MENU_FILTER_I18N.en[key] || key;
 const MENU_ORIGIN_FILTER_VALUES = ['all', 'user', 'excluded', 'default', 'recommended', 'dependency', 'imported'];
@@ -342,7 +344,10 @@ function applyI18n() {
     // 缺词条时保留 HTML 中的人类可读兜底,绝不把 adv.grey.toggle 之类内部键名显示给用户 / Keep the human-readable HTML fallback when a key is missing; never expose internal keys such as adv.grey.toggle
     if (value !== el.dataset.i18n) el.textContent = value;
   });
-  document.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = t(el.dataset.i18nTitle); });
+  document.querySelectorAll('[data-i18n-title]').forEach((el) => {
+    el.removeAttribute('title');
+    bindUiTooltipContent(el, { body: t(el.dataset.i18nTitle) });
+  });
   document.querySelectorAll('[data-i18n-aria]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
   document.querySelectorAll('[data-i18n-ph]').forEach((el) => { el.placeholder = t(el.dataset.i18nPh); });
   const meta = document.querySelector('meta[name="description"]');
@@ -392,7 +397,7 @@ function applyI18n() {
     $('defconfigSwitch').setAttribute('aria-label', `${defconfigEmphasis} ${defconfigHelp}`);
   }
   renderCatalogLoadState();
-  $('advLabel').title = t('adv.title');
+  bindUiTooltipContent($('advLabel'), { body: t('adv.title') });
   // Fork 提示内嵌两个链接,不能整段 textContent,需拆分文案后用 DOM 节点拼装 / The fork hint embeds two links, so the text is split and assembled from DOM nodes instead of one textContent
   const hint = $('selfHint');
   hint.textContent = '';
@@ -496,8 +501,10 @@ let uiTooltipTarget = null;
 let uiTooltipPinned = false;
 let uiTooltipTouchTarget = null;
 let uiTooltipTouchAt = 0;
+let uiTooltipClickTarget = null;
+let uiTooltipClickAt = 0;
 
-function bindUiTooltipContent(target, { title = '', emphasis = '', body = '' } = {}) {
+function bindUiTooltipContent(target, { title = '', emphasis = '', body = '', key = '' } = {}) {
   if (!target) return target;
   const rows = [
     ['uiTooltipTitle', title],
@@ -510,9 +517,28 @@ function bindUiTooltipContent(target, { title = '', emphasis = '', body = '' } =
     else delete target.dataset[key];
   }
   const described = rows.some(([key]) => target.dataset[key]);
+  const identity = String(key || '').trim();
+  if (identity) target.dataset.uiTooltipKey = identity;
+  else delete target.dataset.uiTooltipKey;
   if (described) target.setAttribute('aria-describedby', 'uiTooltip');
   else target.removeAttribute('aria-describedby');
   return target;
+}
+
+function uiTooltipIdentity(target) {
+  return target?.dataset?.uiTooltipKey || target || null;
+}
+function connectedUiTooltipTarget(target) {
+  if (target?.isConnected) return target;
+  const key = target?.dataset?.uiTooltipKey;
+  if (!key) return null;
+  return [...document.querySelectorAll(UI_TOOLTIP_SELECTOR)]
+    .find((candidate) => candidate.dataset.uiTooltipKey === key) || null;
+}
+function uiTooltipAvoidanceTarget(target) {
+  return target?.closest?.(
+    '.menuconfig-option,.menuconfig-choice,.menuconfig-category,.probe-package-row,.plugin,.build-contract-row,.group-head',
+  ) || target;
 }
 
 function uiTooltipBoundary(target) {
@@ -544,9 +570,7 @@ function positionUiTooltip(target, event = null) {
   const boundary = uiTooltipBoundary(target);
   const gap = 9;
   const margin = 8;
-  const anchor = target.getBoundingClientRect();
-  const pointerX = Number.isFinite(event?.clientX) ? event.clientX : anchor.right;
-  const pointerY = Number.isFinite(event?.clientY) ? event.clientY : anchor.bottom;
+  const anchor = uiTooltipAvoidanceTarget(target).getBoundingClientRect();
 
   const actionbar = $('actionbar');
   const actionbarRect = actionbar && !actionbar.hidden ? actionbar.getBoundingClientRect() : null;
@@ -557,46 +581,42 @@ function positionUiTooltip(target, event = null) {
   const safeBoundary = { ...boundary, bottom: safeBottom };
   const availableWidth = Math.max(1, safeBoundary.right - safeBoundary.left);
   const availableHeight = Math.max(1, safeBoundary.bottom - safeBoundary.top);
+  const aboveSpace = Math.max(0, anchor.top - safeBoundary.top - gap);
+  const belowSpace = Math.max(0, safeBoundary.bottom - anchor.bottom - gap);
+  const rightSpace = Math.max(0, safeBoundary.right - anchor.right - gap);
+  const leftSpace = Math.max(0, anchor.left - safeBoundary.left - gap);
+  const verticalSpace = Math.max(aboveSpace, belowSpace);
   uiTooltip.style.maxWidth = `${Math.min(400, availableWidth)}px`;
-  uiTooltip.style.maxHeight = `${Math.min(360, availableHeight)}px`;
+  uiTooltip.style.maxHeight = `${Math.max(72, Math.min(360,
+    verticalSpace >= 72 ? verticalSpace : availableHeight))}px`;
   const rect = uiTooltip.getBoundingClientRect();
 
   const candidates = [
-    { left: pointerX + gap, top: pointerY + gap },
-    { left: pointerX - rect.width - gap, top: pointerY + gap },
-    { left: pointerX + gap, top: pointerY - rect.height - gap },
-    { left: pointerX - rect.width - gap, top: pointerY - rect.height - gap },
+    { left: anchor.left, top: anchor.bottom + gap, room: belowSpace },
+    { left: anchor.right - rect.width, top: anchor.bottom + gap, room: belowSpace },
+    { left: anchor.left, top: anchor.top - rect.height - gap, room: aboveSpace },
+    { left: anchor.right - rect.width, top: anchor.top - rect.height - gap, room: aboveSpace },
+    { left: anchor.right + gap, top: anchor.top, room: rightSpace },
+    { left: anchor.left - rect.width - gap, top: anchor.top, room: leftSpace },
   ];
-  const fits = (candidate) => candidate.left >= safeBoundary.left &&
-    candidate.top >= safeBoundary.top &&
-    candidate.left + rect.width <= safeBoundary.right &&
-    candidate.top + rect.height <= safeBoundary.bottom;
-  const visibleArea = (candidate) => {
-    const left = Math.max(candidate.left, safeBoundary.left);
-    const right = Math.min(candidate.left + rect.width, safeBoundary.right);
-    const top = Math.max(candidate.top, safeBoundary.top);
-    const bottom = Math.min(candidate.top + rect.height, safeBoundary.bottom);
+  const clamp = (candidate) => ({
+    left: Math.min(Math.max(safeBoundary.left, candidate.left),
+      Math.max(safeBoundary.left, safeBoundary.right - rect.width)),
+    top: Math.min(Math.max(safeBoundary.top, candidate.top),
+      Math.max(safeBoundary.top, safeBoundary.bottom - rect.height)),
+    room: candidate.room,
+  });
+  const overlapArea = (candidate) => {
+    const left = Math.max(candidate.left, anchor.left);
+    const right = Math.min(candidate.left + rect.width, anchor.right);
+    const top = Math.max(candidate.top, anchor.top);
+    const bottom = Math.min(candidate.top + rect.height, anchor.bottom);
     return Math.max(0, right - left) * Math.max(0, bottom - top);
   };
-
-  let chosen = candidates.find(fits);
-  if (!chosen) {
-    chosen = candidates.reduce((best, candidate) => {
-      const area = visibleArea(candidate);
-      const distance = Math.hypot(candidate.left - (pointerX + gap), candidate.top - (pointerY + gap));
-      if (!best || area > best.area || (area === best.area && distance < best.distance)) {
-        return { candidate, area, distance };
-      }
-      return best;
-    }, null).candidate;
-  }
-
-  const maxLeft = Math.max(safeBoundary.left, safeBoundary.right - rect.width);
-  const maxTop = Math.max(safeBoundary.top, safeBoundary.bottom - rect.height);
-  const left = Math.min(Math.max(safeBoundary.left, chosen.left), maxLeft);
-  const top = Math.min(Math.max(safeBoundary.top, chosen.top), maxTop);
-  uiTooltip.style.left = `${left}px`;
-  uiTooltip.style.top = `${top}px`;
+  const chosen = candidates.map(clamp).sort((left, right) =>
+    overlapArea(left) - overlapArea(right) || right.room - left.room)[0];
+  uiTooltip.style.left = `${chosen.left}px`;
+  uiTooltip.style.top = `${chosen.top}px`;
 }
 function showUiTooltip(target, { title = '', emphasis = '', body = '', event = null, pinned = false } = {}) {
   if (!uiTooltip || !target || (!title && !emphasis && !body)) return;
@@ -661,6 +681,20 @@ document.addEventListener('click', (event) => {
     return;
   }
   const target = event.target.closest?.(UI_TOOLTIP_SELECTOR);
+  if (target) {
+    const identity = uiTooltipIdentity(target);
+    const now = performance.now();
+    const repeated = uiTooltipClickTarget === identity && now - uiTooltipClickAt <= 500;
+    uiTooltipClickTarget = identity;
+    uiTooltipClickAt = now;
+    if (repeated) {
+      const connected = connectedUiTooltipTarget(target);
+      if (connected) showDatasetTooltip(connected, event, true);
+      uiTooltipClickTarget = null;
+      uiTooltipClickAt = 0;
+      return;
+    }
+  }
   if (target && !uiTooltipPinned && matchMedia('(hover: none)').matches) {
     showDatasetTooltip(target, event);
   }
@@ -677,11 +711,13 @@ document.addEventListener('pointerup', (event) => {
   const target = event.target.closest?.(UI_TOOLTIP_SELECTOR);
   if (!target) return;
   const now = performance.now();
-  const repeated = uiTooltipTouchTarget === target && now - uiTooltipTouchAt <= 500;
-  uiTooltipTouchTarget = target;
+  const identity = uiTooltipIdentity(target);
+  const repeated = uiTooltipTouchTarget === identity && now - uiTooltipTouchAt <= 500;
+  uiTooltipTouchTarget = identity;
   uiTooltipTouchAt = now;
   if (repeated) {
-    showDatasetTooltip(target, event, true);
+    const connected = connectedUiTooltipTarget(target);
+    if (connected) showDatasetTooltip(connected, event, true);
     uiTooltipTouchTarget = null;
     uiTooltipTouchAt = 0;
   }
@@ -739,7 +775,7 @@ function renderBuildInfoSha(id, value) {
   const sha = String(value || '').trim().toLowerCase();
   if (/^[a-f0-9]{40}$/.test(sha)) {
     button.textContent = sha;
-    button.title = sha;
+    bindUiTooltipContent(button, { body: sha });
     button.disabled = false;
     button.onclick = async () => {
       try { await navigator.clipboard.writeText(sha); }
@@ -747,7 +783,7 @@ function renderBuildInfoSha(id, value) {
     };
   } else {
     button.textContent = '—';
-    button.title = '';
+    bindUiTooltipContent(button);
     button.disabled = true;
     button.onclick = null;
   }
@@ -1319,7 +1355,7 @@ function showCatalogStatus(branch, catalog = MENU_CATALOG) {
   const status = $('menuconfigStatus');
   const stateName = branch?.state || (catalog?.source?.commit === 'local-demo' ? 'fallback' : 'fresh');
   status.className = `hint catalog-${stateName}`;
-  status.title = branch?.runUrl || '';
+  bindUiTooltipContent(status, { body: branch?.runUrl || '' });
   if (stateName === 'unavailable') {
     status.textContent = `Unavailable · failed at ${branch.errorStage || 'unknown'}`;
   } else if (stateName === 'stale') {
@@ -1425,7 +1461,7 @@ function renderCatalogLoadState() {
   box.hidden = catalogLoadMode === 'idle';
   box.disabled = !failed;
   box.dataset.state = catalogLoadMode;
-  box.title = failed ? catalogLoadError : '';
+  bindUiTooltipContent(box, { body: failed ? catalogLoadError : '' });
   $('targetPicker')?.setAttribute('aria-busy', String(catalogLoadMode === 'loading'));
   if ($('catalogLoadText')) {
     $('catalogLoadText').textContent = failed
@@ -1521,6 +1557,7 @@ function catalogSearchText(option) {
     packageName, splitName(packageName),
     option?.prompt || '', option?.promptEn || '', option?.promptZh || '',
     ...Object.values(option?.promptI18n || {}),
+    ...(option?.path || []),
   ];
   return [...new Set(names.map((value) => String(value || '').trim()).filter(Boolean))].join(' ').toLowerCase();
 }
@@ -1534,6 +1571,7 @@ function stopCatalogSearchWorker() {
   catalogSearchWorkerReady = false;
   catalogSearchPending.clear();
   catalogSearchResults.clear();
+  catalogSearchRequests.clear();
 }
 function startCatalogSearchWorker() {
   stopCatalogSearchWorker();
@@ -1551,15 +1589,18 @@ function startCatalogSearchWorker() {
     if (message.generation !== generation || generation !== catalogSearchGeneration) return;
     if (message.type === 'ready') {
       catalogSearchWorkerReady = true;
-      const query = $('menuconfigSearch')?.value?.trim().toLowerCase() || '';
+      const query = normalizeMenuSearchQuery($('menuconfigSearch')?.value);
       if (query.length >= 2) requestCatalogSearch(query);
       return;
     }
     if (message.type !== 'result') return;
-    catalogSearchPending.delete(message.query);
-    catalogSearchResults.set(message.query, message.symbols || []);
+    const query = normalizeMenuSearchQuery(message.query);
+    if (catalogSearchRequests.get(query) !== message.requestId) return;
+    catalogSearchPending.delete(query);
+    catalogSearchRequests.delete(query);
+    catalogSearchResults.set(query, message.symbols || []);
     while (catalogSearchResults.size > 24) catalogSearchResults.delete(catalogSearchResults.keys().next().value);
-    if (($('menuconfigSearch')?.value?.trim().toLowerCase() || '') === message.query) renderMenuconfig();
+    if (normalizeMenuSearchQuery($('menuconfigSearch')?.value) === query) renderMenuconfig();
   };
   catalogSearchWorker.onerror = (error) => {
     console.warn('[Catalog search worker failed]', error.message || error);
@@ -1572,13 +1613,15 @@ function startCatalogSearchWorker() {
   });
 }
 function requestCatalogSearch(query) {
-  const normalized = String(query || '').trim().toLowerCase();
+  const normalized = normalizeMenuSearchQuery(query);
   if (!catalogSearchWorkerReady || normalized.length < 2 || catalogSearchPending.has(normalized) ||
       catalogSearchResults.has(normalized)) return;
+  const requestId = ++catalogSearchRequestId;
   catalogSearchPending.add(normalized);
+  catalogSearchRequests.set(normalized, requestId);
   catalogSearchWorker.postMessage({
     type: 'query', generation: catalogSearchGeneration,
-    requestId: ++catalogSearchRequestId, query: normalized,
+    requestId, query: normalized,
   });
 }
 function normalizeMenuSearchQuery(value) {
@@ -1589,6 +1632,16 @@ function normalizeMenuSearchIdentity(value) {
     .replace(/^config_/, '')
     .replace(/^package_/, '');
 }
+function menuSearchPathRank(option) {
+  const path = Array.isArray(option?.path) ? option.path.map((item) => String(item || '').trim()) : [];
+  const luciIndex = path.findIndex((item) => /^luci$/i.test(item));
+  if (luciIndex < 0) return { luci: false, numbered: false, number: Number.POSITIVE_INFINITY };
+  for (const item of path.slice(luciIndex + 1)) {
+    const match = item.match(/^\s*(\d+)\s*[.)-]?\s*/);
+    if (match) return { luci: true, numbered: true, number: Number(match[1]) };
+  }
+  return { luci: true, numbered: false, number: Number.POSITIVE_INFINITY };
+}
 function menuSearchRank(option, query) {
   const normalized = normalizeMenuSearchIdentity(query);
   const symbol = String(option?.symbol || '').toLowerCase();
@@ -1596,18 +1649,33 @@ function menuSearchRank(option, query) {
   const shortPackage = packageName.startsWith('luci-app-')
     ? packageName.slice('luci-app-'.length)
     : packageName;
-  const identities = [symbol, packageName, shortPackage].filter(Boolean);
-  const exact = Boolean(normalized) && identities.some((value) => value === normalized);
-  const prefix = Boolean(normalized) && identities.some((value) => value.startsWith(normalized));
-  let group = 3;
-  if (packageName.startsWith('luci-app-')) group = 0;
-  else if (packageName && exact) group = 1;
-  else if (packageName) group = 2;
-  const match = exact ? 0 : prefix ? 1 : 2;
+  const fullIdentities = [symbol, packageName].filter(Boolean);
+  const aliases = [shortPackage].filter((value) => value && !fullIdentities.includes(value));
+  const exact = Boolean(normalized) && fullIdentities.some((value) => value === normalized);
+  const prefix = Boolean(normalized) && fullIdentities.some((value) => value.startsWith(normalized));
+  const aliasExact = Boolean(normalized) && aliases.some((value) => value === normalized);
+  const match = exact ? 0 : prefix ? 1 : aliasExact ? 2 : 3;
+  const pathRank = menuSearchPathRank(option);
+  let group;
+  if (normalized === 'luci') {
+    if (packageName === 'luci') group = 0;
+    else if (packageName.startsWith('luci-') && !packageName.startsWith('luci-app-') && !pathRank.numbered) group = 1;
+    else if (pathRank.numbered) group = 10 + Math.min(pathRank.number, 80);
+    else if (pathRank.luci) group = 100;
+    else group = 200;
+  } else {
+    group = packageName.startsWith('luci-app-') ? 0 : packageName && exact ? 1 : packageName ? 2 : 3;
+  }
   return group * 10 + match;
 }
 function rankMenuSearchOptions(options, query) {
-  return [...options].sort((left, right) => menuSearchRank(left, query) - menuSearchRank(right, query));
+  return [...options].sort((left, right) => {
+    const rank = menuSearchRank(left, query) - menuSearchRank(right, query);
+    if (rank) return rank;
+    return String(left?.symbol || '').localeCompare(String(right?.symbol || ''), 'en', {
+      numeric: true, sensitivity: 'base',
+    });
+  });
 }
 function searchMenuOptionsSync(query) {
   const normalized = normalizeMenuSearchQuery(query);
@@ -1628,6 +1696,17 @@ function searchMenuOptions(query) {
       : null;
   }
   return searchMenuOptionsSync(normalized);
+}
+function setMenuconfigSearchBusy(busy) {
+  const input = $('menuconfigSearch');
+  const group = input?.closest('.menuconfig-search-group');
+  const active = Boolean(busy);
+  input?.setAttribute('aria-busy', String(active));
+  group?.classList.toggle('is-searching', active);
+}
+function currentMenuPageSize() {
+  return normalizeMenuSearchQuery($('menuconfigSearch')?.value).length >= 2
+    ? MENU_SEARCH_PAGE_SIZE : MENU_PAGE_SIZE;
 }
 async function ensureCatalogMenuLoaded(includeHidden = false) {
   if (!MENU_CATALOG?.splitAssets) return true;
@@ -2205,7 +2284,7 @@ function renderContractList(element, title, items, empty) {
       const chip = document.createElement('code');
       chip.className = 'build-contract-chip';
       chip.textContent = item;
-      chip.title = item;
+      bindUiTooltipContent(chip, { body: item });
       content.appendChild(chip);
     }
   }
@@ -2261,8 +2340,8 @@ function renderProfilePackageContract(element, target) {
       const upstream = row.upstream === 'exclude' ? '−' : '+';
       const explicit = mode === 'follow' ? '' : mode === 'include' ? ' → +' : ' → −';
       chip.textContent = `${upstream}${row.name}${explicit}`;
-      chip.title = `${row.name}
-${contractText('默认跟随上游；可在管理中显式加入或排除', 'Follows upstream by default; Manage can explicitly include or exclude it')}`;
+      bindUiTooltipContent(chip, { body: `${row.name}
+${contractText('默认跟随上游；可在管理中显式加入或排除', 'Follows upstream by default; Manage can explicitly include or exclude it')}` });
       content.appendChild(chip);
     }
   }
@@ -2388,7 +2467,7 @@ function renderBuildContract() {
   $('buildContractTitle').textContent = contractTitle;
   const toggle = $('buildContractToggle');
   const commitHint = `${contractText('Catalog 提交', 'Catalog commit')} ${commit}`;
-  toggle.title = commitHint;
+  bindUiTooltipContent(toggle, { body: commitHint });
   toggle.setAttribute('aria-label', `${contractTitle}; ${commitHint}`);
   const grid = $('buildContractGrid');
   grid.textContent = '';
@@ -2412,7 +2491,7 @@ function renderBuildContract() {
     key.textContent = label;
     const val = document.createElement('code');
     val.textContent = value;
-    val.title = value;
+    bindUiTooltipContent(val, { body: value });
     row.append(key, val);
     grid.appendChild(row);
   }
@@ -2441,8 +2520,8 @@ function resetCatalogSelectionLayers() {
   state.sel.clear();
   state.removed.clear();
   menuOriginFilter = 'all';
-  menuUserSettableOnly = true;
-  if ($('menuconfigUserSettable')) $('menuconfigUserSettable').checked = true;
+  menuUserSettableOnly = false;
+  if ($('menuconfigUserSettable')) $('menuconfigUserSettable').checked = false;
   refreshMenuconfigFilterText();
   markCatalogStateChanged();
 }
@@ -2611,11 +2690,15 @@ function refreshMenuconfigFilterText() {
 function refreshMenuconfigFilterSummary() {
   const summary = $('menuconfigFilterSummary');
   if (!summary) return;
-  const labels = [selectedOriginFilterLabel()];
-  if ($('menuconfigSelectedOnly')?.checked) labels.push(menuFilterText('selectedOnly'));
-  if ($('menuconfigUserSettable')?.checked) labels.push(menuFilterText('userSettable'));
-  summary.textContent = labels.join(' · ');
-  $('menuconfigFilterTrigger')?.setAttribute('aria-label', labels.join(', '));
+  const selectedOnly = Boolean($('menuconfigSelectedOnly')?.checked);
+  const userSettableOnly = Boolean($('menuconfigUserSettable')?.checked);
+  summary.textContent = selectedOnly
+    ? menuFilterText('selectedOnly')
+    : userSettableOnly ? menuFilterText('userSettable') : menuFilterText('filter');
+  const accessibility = [selectedOriginFilterLabel()];
+  if (selectedOnly) accessibility.push(menuFilterText('selectedOnly'));
+  if (userSettableOnly) accessibility.push(menuFilterText('userSettable'));
+  $('menuconfigFilterTrigger')?.setAttribute('aria-label', accessibility.join(', '));
 }
 function restoreCatalogDefault(option) {
   if (!option) return;
@@ -3149,7 +3232,9 @@ function openCatalogConflictModal(option, value, violations, openChildren = fals
     line.dataset.symbol = row.symbol;
     const name = document.createElement('code');
     name.textContent = row.label;
-    name.title = row.symbol.startsWith('PACKAGE_') ? `CONFIG_${row.symbol}` : row.symbol;
+    bindUiTooltipContent(name, {
+      body: row.symbol.startsWith('PACKAGE_') ? `CONFIG_${row.symbol}` : row.symbol,
+    });
     const stateBox = document.createElement('span');
     stateBox.className = 'catalog-conflict-state';
     for (const stateValue of ['n', 'm', 'y']) {
@@ -3562,7 +3647,7 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
         line.dataset.symbol = row.record.configSymbol;
         const name = document.createElement('code');
         name.textContent = row.record.package || row.record.configSymbol;
-        name.title = `CONFIG_${row.record.configSymbol}`;
+        bindUiTooltipContent(name, { body: `CONFIG_${row.record.configSymbol}` });
         const stateBox = document.createElement('span');
         stateBox.className = 'catalog-conflict-state';
         for (const stateValue of ['n', 'm', 'y']) {
@@ -3745,19 +3830,25 @@ function initMenuconfigControls() {
   };
   let searchTimer = 0;
   $('menuconfigSearch').oninput = () => {
-    if ($('menuconfigSearch').value.trim() && !menuExpanded) void setMenuconfigExpanded(true);
+    const immediateQuery = normalizeMenuSearchQuery($('menuconfigSearch').value);
+    if (immediateQuery && !menuExpanded) void setMenuconfigExpanded(true);
+    setMenuconfigSearchBusy(immediateQuery.length >= 2);
     clearTimeout(searchTimer);
     searchTimer = setTimeout(async () => {
       const query = $('menuconfigSearch').value.trim();
+      const normalized = normalizeMenuSearchQuery(query);
       if (query) {
         $('menuconfigSelectedOnly').checked = false;
         refreshMenuconfigFilterSummary();
         resetMenuNavigation();
       }
-      menuVisibleLimit = MENU_PAGE_SIZE;
+      menuVisibleLimit = normalized.length >= 2 ? MENU_SEARCH_PAGE_SIZE : MENU_PAGE_SIZE;
       resetMenuScroll();
-      if (query.length >= 2) await ensureCatalogHiddenLoaded().catch((error) =>
-        console.warn('[Catalog hidden shard]', error));
+      if (normalized.length >= 2) {
+        renderMenuconfig();
+        await ensureCatalogHiddenLoaded().catch((error) => console.warn('[Catalog hidden shard]', error));
+        if (normalizeMenuSearchQuery($('menuconfigSearch').value) !== normalized) return;
+      }
       renderMenuconfig();
     }, 180);
   };
@@ -3808,7 +3899,7 @@ function initMenuconfigControls() {
     if (scroller.dataset.hasMore !== 'true' ||
         scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 120) return;
     const top = scroller.scrollTop;
-    menuVisibleLimit += MENU_PAGE_SIZE;
+    menuVisibleLimit += currentMenuPageSize();
     renderMenuconfig();
     requestAnimationFrame(() => { scroller.scrollTop = top; });
   };
@@ -3881,9 +3972,10 @@ function kconfigConstraintTooltip(option, stateValue, constraints) {
 }
 function bindKconfigConstraintTooltip(button, option, stateValue, constraints) {
   const tooltip = kconfigConstraintTooltip(option, stateValue, constraints);
-  button.dataset.uiTooltipTitle = tooltip.title;
-  button.dataset.uiTooltipEmphasis = tooltip.emphasis;
-  button.dataset.uiTooltipBody = tooltip.body;
+  bindUiTooltipContent(button, {
+    ...tooltip,
+    key: `CONFIG_${option.symbol}:${stateValue}`,
+  });
 }
 function renderCatalogOriginSlot(option, origin) {
   const slot = document.createElement('span');
@@ -3994,6 +4086,7 @@ function renderMenuOption(option) {
           showDatasetTooltip(button, event);
           return;
         }
+        if (value === stateValue) return;
         setMenuValue(option, stateValue, childCount > 0 && stateValue !== 'n');
       };
       tri.appendChild(button);
@@ -4031,8 +4124,9 @@ function renderMenuOption(option) {
     childButton.type = 'button';
     childButton.className = 'menuconfig-child';
     childButton.textContent = '›';
-    childButton.title = value === 'n' ? 'Select M or Y to open sub-options' : 'Open sub-options';
-    childButton.setAttribute('aria-label', childButton.title);
+    const childHint = value === 'n' ? 'Select M or Y to open sub-options' : 'Open sub-options';
+    bindUiTooltipContent(childButton, { body: childHint });
+    childButton.setAttribute('aria-label', childHint);
     childButton.disabled = value === 'n';
     childButton.onclick = () => {
       openMenuChildren(option);
@@ -4080,7 +4174,7 @@ function renderMenuLeaf(options, list) {
         optionTranslation.title,
         menuOptionLabel(option),
       ].filter(Boolean))];
-      entry.title = [
+      entry.dataset.uiTooltipBody = [
         `CONFIG_${option.symbol}`,
         choiceDescription.join('\n'),
         (option.path || []).map(menuPathLabel).filter(Boolean).join(' › '),
@@ -4089,7 +4183,7 @@ function renderMenuLeaf(options, list) {
       select.appendChild(entry);
     }
     const syncChoiceTitle = () => {
-      select.title = select.selectedOptions[0]?.title || '';
+      bindUiTooltipContent(select, { body: select.selectedOptions[0]?.dataset.uiTooltipBody || '' });
     };
     syncChoiceTitle();
     select.onchange = () => {
@@ -4153,11 +4247,13 @@ function renderMenuPanelTitle(mode = 'path') {
     current.className = 'menuconfig-breadcrumb-current';
     current.textContent = mode;
     nav.appendChild(current);
-    nav.title = mode;
+    bindUiTooltipContent(nav, { body: mode });
     return;
   }
   const labels = ['Top level', ...menuBreadcrumb];
-  nav.title = labels.map((label) => label === 'Top level' ? menuUi('top') : menuPathLabel(label)).join(' / ');
+  bindUiTooltipContent(nav, {
+    body: labels.map((label) => label === 'Top level' ? menuUi('top') : menuPathLabel(label)).join(' / '),
+  });
   labels.forEach((label, index) => {
     if (index) {
       const separator = document.createElement('span');
@@ -4200,7 +4296,7 @@ function renderMenuconfig() {
   const list = $('menuconfigOptions');
   grid.textContent = '';
   list.textContent = '';
-  const query = $('menuconfigSearch').value.trim().toLowerCase();
+  const query = normalizeMenuSearchQuery($('menuconfigSearch').value);
   const selectedOnly = $('menuconfigSelectedOnly').checked;
   menuUserSettableOnly = $('menuconfigUserSettable').checked;
   refreshMenuconfigFilterSummary();
@@ -4277,6 +4373,7 @@ function renderMenuconfig() {
   $('menuconfigBack').hidden = !!query;
   $('menuconfigBack').disabled = menuHistory.length === 0;
   $('menuconfigBack').setAttribute('aria-disabled', String($('menuconfigBack').disabled));
+  setMenuconfigSearchBusy(searchPending);
   const nodeFragment = document.createDocumentFragment();
   for (const node of nodes) {
     const button = document.createElement('button');
@@ -4313,11 +4410,11 @@ function renderMenuconfig() {
     empty.textContent = searchPending ? 'Searching…' : query.length === 1
       ? 'Type one more character.'
       : 'No available options.';
-    empty.title = state.lang === 'en' ? '' : searchPending
+    bindUiTooltipContent(empty, { body: state.lang === 'en' ? '' : searchPending
       ? uiText('正在搜索…', '正在搜尋…', 'Searching…')
       : query.length === 1
         ? uiText('请再输入一个字符。', '請再輸入一個字元。', 'Type one more character.')
-        : uiText('没有可用选项。', '沒有可用選項。', 'No available options.');
+        : uiText('没有可用选项。', '沒有可用選項。', 'No available options.') });
     list.appendChild(empty);
   }
   panel.hidden = !options.length && !!nodes.length;
@@ -4450,7 +4547,7 @@ function renderImportedWorkspace() {
       ` (enabled ${activeUnknown}) · plugin actions ${state.sel.size + state.removed.size} · modified ${modified}`);
   const summaryTextElement = $('importSummaryText');
   summaryTextElement.textContent = summaryText;
-  summaryTextElement.title = summaryText;
+  bindUiTooltipContent(summaryTextElement, { body: summaryText });
   const targetCard = $('importTargetCard');
   targetCard.hidden = importedTargetVerified;
   workspace.hidden = importedTargetVerified;
@@ -4631,10 +4728,10 @@ function renderCatalogLocatorResults() {
     button.className = 'catalog-locator-item';
     const label = document.createElement('span');
     label.textContent = entry.label;
-    label.title = entry.label;
+    bindUiTooltipContent(label, { body: entry.label });
     const detail = document.createElement('small');
     detail.textContent = `${entry.type} · ${entry.detail}`;
-    detail.title = detail.textContent;
+    bindUiTooltipContent(detail, { body: detail.textContent });
     button.append(label, detail);
     button.onclick = async () => {
       results.hidden = true;
@@ -5155,7 +5252,7 @@ function renderCatalogApplicationsState(box) {
   row.dataset.state = failed ? 'error' : (empty ? 'empty' : 'loading');
   if (failed) {
     row.type = 'button';
-    row.title = catalogApplicationsError;
+    bindUiTooltipContent(row, { body: catalogApplicationsError });
     row.addEventListener('click', () => requestCatalogApplications(true));
   } else {
     row.setAttribute('role', 'status');
@@ -5315,9 +5412,9 @@ function renderPlugin(p) {
   // V10:灰色项只看双开关,其余沿用旧规则 / V10: grey items obey the double gate; everything else keeps the old rule
   cb.disabled = st === 'loading' || lockedItem || catalogLocked ||
     (st === 'unavailable' ? !canForce : (!adv && st !== 'ok'));
-  if (catalogLocked) cb.title = uiText(
+  if (catalogLocked) bindUiTooltipContent(item, { body: uiText(
     '由当前 Target / Profile 基础配置锁定', '由目前 Target / Profile 基礎設定鎖定',
-    'Locked by the current Target / Profile baseline');
+    'Locked by the current Target / Profile baseline') });
   cb.setAttribute('aria-label', pName(p));
   const applyChecked = (checked) => {
     cb.checked = checked;
@@ -5387,7 +5484,7 @@ function renderPlugin(p) {
       const f = document.createElement('span');
       f.className = `flag flag-origin flag-origin-${origin.kind}`;
       f.textContent = origin.label;
-      f.title = origin.detail || origin.label;
+      bindUiTooltipContent(f, { body: origin.detail || origin.label });
       nameBtn.appendChild(f);
     }
   }
@@ -5515,9 +5612,9 @@ function focusMenuconfigSymbol(symbol) {
     refreshMenuconfigFilterText();
     resetMenuNavigation();
     $('menuconfigSearch').value = symbol;
-    const query = symbol.toLowerCase();
+    const query = normalizeMenuSearchQuery(symbol);
     catalogSearchResults.set(query, [symbol]);
-    menuVisibleLimit = MENU_PAGE_SIZE;
+    menuVisibleLimit = MENU_SEARCH_PAGE_SIZE;
     resetMenuScroll();
     renderMenuconfig();
     requestAnimationFrame(() => {
@@ -5593,7 +5690,9 @@ function updateStats() {
     capText.disabled = false;
     capText.classList.add('rootfs-capacity');
     capText.textContent = `${rootfs.value} MiB`;
-    capText.title = uiText('查看 RootFS 容量与修改位置', '查看 RootFS 容量與修改位置', 'View RootFS capacity and where to modify it');
+    bindUiTooltipContent(capText, { body: uiText(
+      '查看 RootFS 容量与修改位置', '查看 RootFS 容量與修改位置',
+      'View RootFS capacity and where to modify it') });
   } else {
     $('capBox').hidden = false;
     capText.disabled = true;
@@ -5605,11 +5704,11 @@ function updateStats() {
     capText.textContent = knownBytes
       ? `${uiText('已知软件包体积', '已知軟體包體積', 'Known package size')} ${fmtSize(knownBytes)}`
       : uiText('软件包体积未知', '軟體包體積未知', 'Package size unknown');
-    capText.title = unknownCount
+    bindUiTooltipContent(capText, { body: unknownCount
       ? uiText(`另有 ${unknownCount} 项暂无官方体积数据`, `另有 ${unknownCount} 項暫無官方體積資料`,
         `${unknownCount} selected item(s) have no official size observation`)
       : uiText('来自 Catalog 的跨源官方软件包观测', '來自 Catalog 的跨源官方軟體包觀測',
-        'Cross-source official package observations from Catalog');
+        'Cross-source official package observations from Catalog') });
   }
   updateGroupBadges();
   renderBuildContract();
@@ -6580,10 +6679,10 @@ function updateSubmitGate() {
   const readiness = submitReadiness();
   button.disabled = !readiness.ok;
   button.setAttribute('aria-disabled', String(!readiness.ok));
-  button.title = readiness.ok ? '' : uiText(
+  bindUiTooltipContent(button, { body: readiness.ok ? '' : uiText(
     `请等待构建参数就绪：${readiness.missing.join('、')}`,
     `請等待建置參數就緒：${readiness.missing.join('、')}`,
-    `Waiting for build stages: ${readiness.missing.join(', ')}`);
+    `Waiting for build stages: ${readiness.missing.join(', ')}`) });
 }
 async function mobileIssuePayload(payload) {
   if (!mobileIssueClient()) return '';
@@ -6986,7 +7085,8 @@ async function openPackageProbeModal() {
     const intro = document.createElement('section');
     intro.className = 'probe-intro';
     const introTitle = document.createElement('h4'); introTitle.textContent = probeUiText('title');
-    const introText = document.createElement('p'); introText.textContent = probeUiText('intro'); introText.title = introText.textContent;
+    const introText = document.createElement('p'); introText.textContent = probeUiText('intro');
+    bindUiTooltipContent(introText, { body: introText.textContent });
     const guide = document.createElement('details'); guide.className = 'probe-guide';
     const guideButton = document.createElement('summary'); guideButton.textContent = 'ⓘ';
     guideButton.setAttribute('aria-label', probeUiText('howTo'));
@@ -7047,7 +7147,7 @@ async function openPackageProbeModal() {
         const packageName = option.symbol.slice('PACKAGE_'.length);
         const value = probeMenuOptionState(option);
         chip.textContent = `${packageName}=${String(value).toUpperCase()} ×`;
-        chip.title = `CONFIG_${option.symbol}`;
+        bindUiTooltipContent(chip, { body: `CONFIG_${option.symbol}` });
         chip.addEventListener('click', () => {
           const baselineValue = probePackageBaselineState(option);
           if (setMenuValue(option, baselineValue)) {
@@ -7300,10 +7400,10 @@ async function runSelfTest() {
   openModal(t('st.title'));
   const probe = $('modalProbe');
   probe.textContent = uiText('插件兼容探针', '外掛相容性探針', 'Package compatibility probe');
-  probe.title = uiText(
+  bindUiTooltipContent(probe, { body: uiText(
     '按 Catalog Source/Branch 探测软件包编译与同装兼容性',
     '依 Catalog Source/Branch 探測套件編譯與共裝相容性',
-    'Probe package compilation and co-install compatibility across Catalog Source/Branch entries');
+    'Probe package compilation and co-install compatibility across Catalog Source/Branch entries') });
   probe.hidden = false;
   const mb = $('modalBody');
   mb.textContent = '';

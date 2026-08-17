@@ -33,7 +33,7 @@ export function createUiButton({ text = '', className = 'btn', title = '', onCli
   button.type = 'button';
   addClassNames(button, 'ui-button', className);
   button.textContent = String(text);
-  if (title) button.title = String(title);
+  if (title) button.dataset.uiTooltipBody = String(title);
   if (typeof onClick === 'function') button.addEventListener('click', onClick);
   return button;
 }

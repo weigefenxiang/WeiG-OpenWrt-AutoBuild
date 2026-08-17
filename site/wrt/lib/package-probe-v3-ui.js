@@ -236,7 +236,7 @@ async function openPackageProbeV3Modal() {
           label.dataset.search = `${value} ${labelText}`.toLocaleLowerCase();
           const input = document.createElement('input'); input.type = 'checkbox'; input.checked = !selected.has('*') && selected.has(value);
           const code = document.createElement('span'); code.textContent = labelText;
-          if (labelText !== value && value) code.title = value;
+          if (labelText !== value && value) code.dataset.uiTooltipBody = value;
           label.append(input, code); list.appendChild(label);
           input.addEventListener('change', () => {
             if (selected.has('*')) selected.delete('*');

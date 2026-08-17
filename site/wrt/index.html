@@ -117,7 +117,7 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
       <a class="icon-btn" id="repoLink" href="https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild" target="_blank" rel="noopener" data-i18n-aria="btn.repo" data-i18n-title="btn.repo">
         <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
       </a>
-      <a class="icon-btn blog-link" href="https://www.weigeshare.cc.cd" target="_blank" rel="noopener" title="Wei.G Blog" aria-label="Wei.G Blog">
+      <a class="icon-btn blog-link" href="https://www.weigeshare.cc.cd" target="_blank" rel="noopener" data-ui-tooltip-body="Wei.G Blog" aria-label="Wei.G Blog">
         <img data-release-src="Wei.G-favicon_little.png" alt="" width="20" height="20">
       </a>
     </div>
@@ -193,7 +193,7 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
               data-floating-min-width="360" data-floating-max-width="920" data-floating-height="390"
               placeholder="… Subtarget / Target Profile"
               aria-label="Search Source, Branch, Target System, Subtarget or Target Profile"
-              title="Search Source, Branch, Target System, Subtarget or Target Profile">
+              data-ui-tooltip-body="Search Source, Branch, Target System, Subtarget or Target Profile">
             <div class="catalog-locator-results" id="catalogLocatorResults" hidden></div>
           </div>
           <section class="build-contract" id="buildContract" hidden aria-live="polite">
@@ -215,7 +215,7 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
               <button class="menuconfig-filter-trigger" id="menuconfigFilterTrigger" type="button"
                 aria-controls="menuconfigFilterMenu" aria-expanded="false" data-floating-dropdown
                 data-floating-min-width="300" data-floating-max-width="520" data-floating-height="420">
-                <span id="menuconfigFilterSummary">All origins · userSettable</span>
+                <span id="menuconfigFilterSummary">Filter</span>
                 <span class="menuconfig-filter-chevron" aria-hidden="true">⌄</span>
               </button>
               <div class="menuconfig-filter-menu" id="menuconfigFilterMenu" hidden>
@@ -232,7 +232,7 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
                 <fieldset class="menuconfig-filter-group menuconfig-display-filter">
                   <legend id="menuconfigDisplayTitle">Display</legend>
                   <label><input type="checkbox" id="menuconfigSelectedOnly"><span>Selected only</span></label>
-                  <label><input type="checkbox" id="menuconfigUserSettable" checked><span>userSettable</span></label>
+                  <label><input type="checkbox" id="menuconfigUserSettable"><span>userSettable</span></label>
                 </fieldset>
               </div>
             </div>
@@ -252,7 +252,7 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
               </label>
             </div>
             <div class="menuconfig-search-group">
-              <input type="search" id="menuconfigSearch" placeholder="Search option name / CONFIG symbol">
+              <input type="search" id="menuconfigSearch" placeholder="Search option name / CONFIG symbol" aria-busy="false">
               <button class="menuconfig-state-help" id="menuconfigStateHelp" type="button">N/M/Y</button>
             </div>
           </div>
