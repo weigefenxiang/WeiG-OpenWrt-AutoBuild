@@ -14,8 +14,8 @@
     ],
     "defaultSource": "ImmortalWrt",
     "developmentBranches": [
-      "master",
-      "main"
+      "main",
+      "master"
     ],
     "preferredTarget": {
       "selectors": {

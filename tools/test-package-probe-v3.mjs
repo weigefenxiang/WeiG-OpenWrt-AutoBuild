@@ -28,6 +28,14 @@ assert.match(probeText, /profiles:/, 'Probe scope must include Target Profile');
 assert.match(probeText, /fetchCore\(/, 'cross-Source/Branch scope must reuse the Catalog core loader');
 assert.match(probeText, /removeEventListener\('click', openPackageProbeModal\)/,
   'Probe V3 must replace, rather than duplicate, the legacy Probe launcher');
+assert.match(probeText, /bindUiTooltipContent\(option,[\s\S]*?L\$\{index \+ 1\}/,
+  'Probe depth help must reuse the shared tooltip template');
+assert.match(probeText, /bindUiTooltipContent\(row, \{ body: rowDetails \}\)/,
+  'Probe package descriptions must reuse the shared tooltip template');
+assert.doesNotMatch(probeText, /probe-depth-tooltip|showMenuPopup|probeTextIsTruncated/,
+  'Probe V3 retained an independent tooltip implementation');
+assert.doesNotMatch(probeCss, /\.probe-depth-tooltip/,
+  'Probe V3 retained independent tooltip presentation CSS');
 assert.doesNotMatch(probeText, /openvpn-openssl|luci-app-openvpn-server|ImmortalWrt|OpenWrt|LEDE|hanwckf/,
   'Probe V3 must not hardcode package or Source special cases');
 assert.match(probeCss, /\.probe-accordion-triggers\s*\{[^}]*repeat\(3/,

@@ -26,7 +26,8 @@ async function openPackageProbeV3Modal() {
     const intro = document.createElement('section');
     intro.className = 'probe-intro';
     const introTitle = document.createElement('h4'); introTitle.textContent = probeV3UiText('title');
-    const introText = document.createElement('p'); introText.textContent = probeV3UiText('intro'); introText.title = introText.textContent;
+    const introText = document.createElement('p'); introText.textContent = probeV3UiText('intro');
+    bindUiTooltipContent(introText, { body: introText.textContent });
     const guide = document.createElement('details'); guide.className = 'probe-guide';
     const guideButton = document.createElement('summary'); guideButton.textContent = 'ⓘ';
     guideButton.setAttribute('aria-label', probeV3UiText('howTo'));
@@ -60,13 +61,9 @@ async function openPackageProbeV3Modal() {
     overlayClose.addEventListener('click', closeProbeOverlay);
     overlay.addEventListener('click', (event) => { if (event.target === overlay) closeProbeOverlay(); });
 
-    const probeTextIsTruncated = (element) => element.scrollWidth > element.clientWidth + 1;
     const bindProbeTextTooltip = (element, text) => {
       if (!text) return;
-      element.addEventListener('mouseenter', () => {
-        if (probeTextIsTruncated(element)) showMenuPopup(element, text);
-      });
-      element.addEventListener('mouseleave', hideMenuTooltip);
+      bindUiTooltipContent(element, { body: text });
     };
 
     const intent = new Map();
@@ -161,15 +158,21 @@ async function openPackageProbeV3Modal() {
       const input = document.createElement('input'); input.type = 'radio'; input.name = 'probeDepth'; input.value = value; input.checked = index === 0;
       const level = document.createElement('span'); level.className = 'probe-level'; level.textContent = `L${index + 1}`;
       const title = document.createElement('strong'); title.className = 'probe-depth-title'; title.textContent = probeV3UiText(labelKey); title.dataset.short = probeV3UiText(shortKey);
-      const tooltip = document.createElement('span'); tooltip.className = 'probe-depth-tooltip'; tooltip.setAttribute('role', 'tooltip'); tooltip.textContent = probeV3UiText(helpKey);
-      option.title = probeV3UiText(helpKey);
-      option.append(input, level, title, tooltip); depth.appendChild(option);
+      bindUiTooltipContent(option, {
+        title: `L${index + 1} · ${probeV3UiText(labelKey)}`,
+        body: probeV3UiText(helpKey),
+      });
+      option.append(input, level, title); depth.appendChild(option);
       input.addEventListener('change', () => {
         if (!autoLimitTouched) autoLimit.value = String(autoDefaults[value] || 50);
         refreshRequestPreview();
       });
     }
-    const defconfig = document.createElement('label'); defconfig.className = 'probe-defconfig'; defconfig.title = probeV3UiText('defconfigHelp');
+    const defconfig = document.createElement('label'); defconfig.className = 'probe-defconfig';
+    bindUiTooltipContent(defconfig, {
+      title: probeV3UiText('defconfig'),
+      body: probeV3UiText('defconfigHelp'),
+    });
     const defconfigInput = document.createElement('input'); defconfigInput.type = 'checkbox'; defconfigInput.checked = true;
     const defconfigText = document.createElement('strong'); defconfigText.textContent = probeV3UiText('defconfig');
     defconfig.append(defconfigInput, defconfigText); depthRow.appendChild(defconfig);
@@ -387,11 +390,13 @@ async function openPackageProbeV3Modal() {
         const usage = document.createElement('span'); usage.className = 'probe-package-usage'; usage.textContent = choice.usage || '—';
         bindProbeTextTooltip(title, choice.title); bindProbeTextTooltip(usage, choice.usage);
         const rowDetails = [choice.displayId, `CONFIG_${choice.symbol}`, choice.title, choice.usage].filter(Boolean).join('\n');
-        const info = document.createElement('span'); info.className = 'probe-package-info'; info.textContent = '!'; info.setAttribute('aria-hidden', 'true');
-        info.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); showMenuPopup(row, rowDetails); });
+        bindUiTooltipContent(row, { body: rowDetails });
+        const info = document.createElement('span'); info.className = 'probe-package-info'; info.textContent = '!';
+        info.setAttribute('aria-label', rowDetails); bindUiTooltipContent(info, { body: rowDetails });
+        info.addEventListener('click', (event) => {
+          event.preventDefault(); event.stopPropagation(); showDatasetTooltip(info, event);
+        });
         row.append(mark, code, title, usage, info); row.setAttribute('aria-label', rowDetails);
-        row.addEventListener('focus', () => { if (probeTextIsTruncated(title) || probeTextIsTruncated(usage)) showMenuPopup(row, rowDetails); });
-        row.addEventListener('blur', hideMenuTooltip);
         if (selectable) row.addEventListener('click', () => {
           const states = optionSelectableStates(option);
           const enableValue = states.includes('y') ? 'y' : states.find((value) => value !== 'n') || 'y';

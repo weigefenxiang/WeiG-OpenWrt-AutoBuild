@@ -33,24 +33,31 @@ function policyRank(value, rows = []) {
 
 export function orderCatalogIndex(index, policy = {}) {
   const sourcePriority = (policy.sourcePriority || []).map(String);
-  const developmentBranches = (policy.developmentBranches || []).map(String);
+  const developmentBranches = (policy.developmentBranches?.length
+    ? policy.developmentBranches : ['main', 'master']).map(String);
+  const stableVersion = (name) => {
+    const value = String(name || '').match(/^(?:openwrt-|v)?(\d+(?:\.\d+)*)$/i)?.[1];
+    return value ? value.split('.').map(Number) : null;
+  };
   const branchCompare = (left, right) => {
     const leftName = String(left?.branch || left?.id || '');
     const rightName = String(right?.branch || right?.id || '');
-    const development = policyRank(leftName, developmentBranches) -
-      policyRank(rightName, developmentBranches);
-    if (development) return development;
-    const leftVersion = leftName.match(/^openwrt-(\d+(?:\.\d+)*)$/i)?.[1] || '';
-    const rightVersion = rightName.match(/^openwrt-(\d+(?:\.\d+)*)$/i)?.[1] || '';
+    const leftVersion = stableVersion(leftName);
+    const rightVersion = stableVersion(rightName);
     if (leftVersion && rightVersion) {
-      const a = leftVersion.split('.').map(Number);
-      const b = rightVersion.split('.').map(Number);
-      for (let index = 0; index < Math.max(a.length, b.length); index++) {
-        const difference = (b[index] || 0) - (a[index] || 0);
+      for (let index = 0; index < Math.max(leftVersion.length, rightVersion.length); index++) {
+        const difference = (rightVersion[index] || 0) - (leftVersion[index] || 0);
         if (difference) return difference;
       }
     }
-    if (leftVersion !== rightVersion) return leftVersion ? -1 : 1;
+    if (Boolean(leftVersion) !== Boolean(rightVersion)) return leftVersion ? -1 : 1;
+    const leftDevelopment = developmentBranches.indexOf(leftName);
+    const rightDevelopment = developmentBranches.indexOf(rightName);
+    if (leftDevelopment >= 0 || rightDevelopment >= 0) {
+      if (leftDevelopment < 0) return 1;
+      if (rightDevelopment < 0) return -1;
+      if (leftDevelopment !== rightDevelopment) return leftDevelopment - rightDevelopment;
+    }
     return leftName.localeCompare(rightName, undefined, { numeric: true });
   };
   const sources = (index?.sources || []).map((source) => ({
@@ -500,6 +507,25 @@ export function createCatalogModel(catalog) {
   for (const [symbol, rows] of Object.entries(relations.indexes?.reverseKconfig || {})) {
     reverseKconfig.set(symbol, [...rows]);
   }
+  // reverseKconfig is the Catalog's reverse index for ordinary `depends on`
+  // expressions. `select` and `imply` have different Kconfig semantics, so
+  // derive their lookup indexes from the canonical records instead of
+  // overloading that index or introducing another data authority.
+  const reverseSelects = new Map();
+  const reverseImplies = new Map();
+  const indexRules = (index, source, rows) => {
+    for (const raw of nestedExpressionStrings(rows || [])) {
+      const target = ruleParts(raw).symbol;
+      if (!target) continue;
+      const sources = index.get(target) || [];
+      if (!sources.includes(source)) sources.push(source);
+      index.set(target, sources);
+    }
+  };
+  for (const record of records) {
+    indexRules(reverseSelects, record.configSymbol, record.kconfig?.selectsExpressions);
+    indexRules(reverseImplies, record.configSymbol, record.kconfig?.impliesExpressions);
+  }
   const choices = new Map();
   for (const [id, rows] of Object.entries(relations.indexes?.choices || {})) {
     choices.set(id, [...rows]);
@@ -528,6 +554,8 @@ export function createCatalogModel(catalog) {
     providers,
     reverseDependencies,
     reverseKconfig,
+    reverseSelects,
+    reverseImplies,
     choices,
     featureSymbols,
     targetFeatureSymbols,
@@ -769,6 +797,8 @@ function validationOptions(inputValues, options = {}) {
     phase: String(options.phase || 'interactive'),
     contextComplete,
     trustedSymbols,
+    explicitSymbols: options.explicitSymbols instanceof Set
+      ? options.explicitSymbols : new Set(options.explicitSymbols || []),
     closedSymbols: options.closedSymbols instanceof Set
       ? options.closedSymbols : new Set(options.closedSymbols || []),
     deferred: options.deferred || 'ignore',
@@ -813,14 +843,123 @@ function dependencyLevel(record, values, options = {}) {
   return result.maximum;
 }
 
-export function selectableKconfigStates(record = {}, inputValues = new Map(), options = {}) {
+function selectRequirement(target, selectorValue, conditionValue) {
+  let level = Math.min(stateLevel(selectorValue), conditionValue);
+  if (target?.type === 'bool' && level === 1) level = 2;
+  return level;
+}
+
+function selectorCandidates(model, targetSymbol) {
+  if (!model || !targetSymbol) return [];
+  return [...(model.reverseSelects?.get(targetSymbol) || [])];
+}
+
+function activeSelectRequirements(model, record, values, options = {}) {
+  const active = [];
+  for (const sourceSymbol of selectorCandidates(model, record.configSymbol)) {
+    const source = model.bySymbol.get(sourceSymbol);
+    if (!source) continue;
+    const sourceValue = normalizeValue(values.get(sourceSymbol) ?? 'n');
+    if (stateLevel(sourceValue) === 0) continue;
+    for (const raw of nestedExpressionStrings(source.kconfig?.selectsExpressions || [])) {
+      const rule = ruleParts(raw);
+      if (rule.symbol !== record.configSymbol) continue;
+      const conditionLevel = evaluateExpressionRaw(rule.condition, values, options);
+      if (conditionLevel === UNKNOWN || conditionLevel === 0) continue;
+      const level = selectRequirement(record, sourceValue, conditionLevel);
+      if (!level) continue;
+      active.push({
+        sourceSymbol,
+        sourceValue,
+        condition: rule.condition,
+        conditionLevel,
+        level,
+        value: STATE[level],
+      });
+    }
+  }
+  return active.sort((left, right) => right.level - left.level ||
+    left.sourceSymbol.localeCompare(right.sourceSymbol));
+}
+
+function activeImplyRequirements(model, record, values, options = {}) {
+  const active = [];
+  for (const sourceSymbol of model?.reverseImplies?.get(record.configSymbol) || []) {
+    const source = model.bySymbol.get(sourceSymbol);
+    const sourceValue = normalizeValue(values.get(sourceSymbol) ?? 'n');
+    if (!source || stateLevel(sourceValue) === 0) continue;
+    for (const raw of nestedExpressionStrings(source.kconfig?.impliesExpressions || [])) {
+      const rule = ruleParts(raw);
+      if (rule.symbol !== record.configSymbol) continue;
+      const conditionLevel = evaluateExpressionRaw(rule.condition, values, options);
+      if (conditionLevel === UNKNOWN || conditionLevel === 0) continue;
+      const level = selectRequirement(record, sourceValue, conditionLevel);
+      if (level) active.push({ sourceSymbol, sourceValue, condition: rule.condition,
+        conditionLevel, level, value: STATE[level] });
+    }
+  }
+  return active;
+}
+
+export function kconfigStateConstraints(model, record = {}, inputValues = new Map(), options = {}) {
   const values = valuesMap(inputValues);
   const normalizedOptions = validationOptions(values, options);
-  return allowedKconfigStates(record).filter((value) => {
-    if (value === 'n') return record.canDisable !== false;
-    if (record.userSettable === false) return false;
-    return dependencyState(record, values, stateLevel(value), normalizedOptions).status !== 'unsatisfied';
+  const requestedSymbol = String(record.configSymbol || record.symbol || '').trim();
+  // Menu shards intentionally expose presentation objects keyed by `symbol`,
+  // while the relation authority uses canonical records keyed by configSymbol.
+  // Resolve that facade here so every caller observes the same Kconfig state.
+  const canonical = model?.bySymbol?.get(requestedSymbol) || record;
+  const configSymbol = String(canonical.configSymbol || requestedSymbol).trim();
+  const legalStates = allowedKconfigStates(canonical);
+  const dependency = dependencyState(canonical, values, 2, normalizedOptions);
+  const maximumLevel = dependency.status === 'deferred' ? 2 : dependency.maximum;
+  const selectors = activeSelectRequirements(model, canonical, values, normalizedOptions);
+  const minimumLevel = selectors.reduce((maximum, item) => Math.max(maximum, item.level), 0);
+  const readOnly = canonical.userSettable === false;
+  const directlySelectable = readOnly ? [] : legalStates.filter((value) => {
+    const level = stateLevel(value);
+    if (level < minimumLevel) return false;
+    if (value === 'n') return canonical.canDisable !== false;
+    if (minimumLevel === 2) return false;
+    if (minimumLevel === 1 && maximumLevel <= 1) return false;
+    return level <= maximumLevel;
   });
+  const current = normalizeKconfigStateValue(canonical, values.get(configSymbol) ?? 'n');
+  const states = legalStates.map((value) => {
+    const level = stateLevel(value);
+    let code = '';
+    if (readOnly) code = 'not-user-settable';
+    else if (level < minimumLevel) code = 'selected-lower-bound';
+    else if (minimumLevel === 2 || (minimumLevel === 1 && maximumLevel <= 1)) code = 'selected-fixed';
+    else if (value === 'n' && canonical.canDisable === false) code = 'cannot-disable';
+    else if (level > maximumLevel) code = 'dependency-upper-bound';
+    return {
+      value,
+      current: value === current,
+      selectable: directlySelectable.includes(value),
+      locked: value === current && !directlySelectable.includes(value) &&
+        (readOnly || minimumLevel > 0 || record.canDisable === false),
+      code,
+    };
+  });
+  return {
+    symbol: configSymbol,
+    current,
+    legalStates,
+    selectableStates: directlySelectable,
+    readOnly,
+    minimumLevel,
+    minimum: STATE[minimumLevel],
+    maximumLevel,
+    maximum: STATE[maximumLevel],
+    dependencyStatus: dependency.status,
+    selectors,
+    states,
+  };
+}
+
+export function selectableKconfigStates(record = {}, inputValues = new Map(), options = {}) {
+  return kconfigStateConstraints(options.model || null, record, inputValues, options).selectableStates;
 }
 
 function recordEnabled(record, values) {
@@ -938,8 +1077,14 @@ export function validateConfig(model, inputValues, rawOptions = {}) {
     }
   }
   for (const [choice, symbols] of model.choices) {
+    // A tristate choice may contain multiple M entries; only one member may
+    // hold Y, and a Y member excludes every M sibling. Bool choices naturally
+    // use only N/Y and follow the same rule.
+    const selected = symbols.filter((symbol) => normalizeValue(values.get(symbol) ?? 'n') === 'y');
     const enabled = symbols.filter((symbol) => stateLevel(values.get(symbol) ?? 'n') > 0);
-    if (enabled.length > 1) violations.push({ code: 'choice-conflict', choice, symbols: enabled });
+    if (selected.length > 1 || (selected.length === 1 && enabled.length > 1)) {
+      violations.push({ code: 'choice-conflict', choice, symbols: enabled });
+    }
   }
   return violations;
 }
@@ -963,11 +1108,30 @@ function applyKconfigRules(model, record, requested, values, changes, options = 
   for (const rows of record.kconfig?.selectsExpressions || []) {
     for (const raw of Array.isArray(rows) ? rows : [rows]) {
       const { symbol, condition } = ruleParts(raw);
-      if (!symbol || (condition && evaluateExpressionRaw(condition, values, options) !== 2)) continue;
+      if (!symbol) continue;
+      const conditionLevel = evaluateExpressionRaw(condition, values, options);
+      if (conditionLevel === UNKNOWN || conditionLevel === 0) continue;
       const target = model.bySymbol.get(symbol);
       if (!target) continue;
-      setValue(values, changes, symbol, enabledState(target, requested), 'select', record.configSymbol);
+      const requiredLevel = selectRequirement(target, requested, conditionLevel);
+      if (stateLevel(values.get(symbol) ?? 'n') >= requiredLevel) continue;
+      setValue(values, changes, symbol, STATE[requiredLevel], 'select', record.configSymbol);
     }
+  }
+}
+
+function applyImplyRules(model, record, requested, values, changes, options = {}) {
+  for (const raw of nestedExpressionStrings(record.kconfig?.impliesExpressions || [])) {
+    const { symbol, condition } = ruleParts(raw);
+    const target = model.bySymbol.get(symbol);
+    if (!target || options.explicitSymbols?.has(symbol)) continue;
+    const conditionLevel = evaluateExpressionRaw(condition, values, options);
+    if (conditionLevel === UNKNOWN || conditionLevel === 0) continue;
+    let requiredLevel = selectRequirement(target, requested, conditionLevel);
+    const maximum = dependencyLevel(target, values, options);
+    if (maximum !== UNKNOWN) requiredLevel = Math.min(requiredLevel, maximum);
+    if (stateLevel(values.get(symbol) ?? 'n') >= requiredLevel) continue;
+    setValue(values, changes, symbol, STATE[requiredLevel], 'imply', record.configSymbol);
   }
 }
 
@@ -1073,7 +1237,10 @@ function applyDirectPackageDependencies(model, record, requested, values, change
 }
 
 function reverseCandidates(model, record) {
-  const symbols = new Set(model.reverseKconfig.get(record.configSymbol) || []);
+  const symbols = new Set([
+    ...(model.reverseKconfig.get(record.configSymbol) || []),
+    ...(model.reverseSelects?.get(record.configSymbol) || []),
+  ]);
   for (const packageRow of model.reverseDependencies.get(record.package) || []) {
     const dependent = model.byPackage.get(packageRow);
     if (dependent?.configSymbol) symbols.add(dependent.configSymbol);
@@ -1121,6 +1288,7 @@ function cascadeEnabled(model, values, changes, initialSymbols, options = {}) {
     const requested = normalizeValue(values.get(symbol));
     applyDirectKconfigDependencies(model, record, requested, values, changes, options);
     applyKconfigRules(model, record, requested, values, changes, options);
+    applyImplyRules(model, record, requested, values, changes, options);
     applyDirectPackageDependencies(model, record, requested, values, changes, options);
     for (const change of changes.slice(before)) if (change.to !== 'n') queue.push(change.symbol);
   }
@@ -1131,7 +1299,9 @@ function activeSelectsSymbol(record, targetSymbol, values, options = {}) {
     for (const raw of Array.isArray(rows) ? rows : [rows]) {
       const rule = ruleParts(raw);
       if (rule.symbol !== targetSymbol) continue;
-      if (!rule.condition || evaluateExpressionRaw(rule.condition, values, options) === 2) return true;
+      const conditionLevel = evaluateExpressionRaw(rule.condition, values, options);
+      if (conditionLevel !== UNKNOWN && selectRequirement({ type: 'tristate' },
+        values.get(record.configSymbol) ?? 'n', conditionLevel) > 0) return true;
     }
   }
   return false;
@@ -1169,6 +1339,40 @@ function pruneUnusedDependencies(model, values, changes, dependencySymbols, prot
   }
 }
 
+function enforceActiveReverseRelations(model, values, changes, options = {}) {
+  // A selector condition can change even when the selector symbol itself does
+  // not. Re-evaluate the derived reverse indexes after every user intent so
+  // conditional and chained select/imply rules cannot become stale.
+  for (let pass = 0; pass < 64; pass++) {
+    let progress = false;
+    for (const targetSymbol of model.reverseSelects?.keys() || []) {
+      const target = model.bySymbol.get(targetSymbol);
+      if (!target) continue;
+      const active = activeSelectRequirements(model, target, values, options);
+      const minimum = active.reduce((level, item) => Math.max(level, item.level), 0);
+      if (minimum > stateLevel(values.get(targetSymbol) ?? 'n')) {
+        progress = setValue(values, changes, targetSymbol, STATE[minimum], 'select',
+          active.find((item) => item.level === minimum)?.sourceSymbol || '') || progress;
+      }
+    }
+    for (const targetSymbol of model.reverseImplies?.keys() || []) {
+      if (options.explicitSymbols?.has(targetSymbol)) continue;
+      const target = model.bySymbol.get(targetSymbol);
+      if (!target) continue;
+      const active = activeImplyRequirements(model, target, values, options);
+      let minimum = active.reduce((level, item) => Math.max(level, item.level), 0);
+      const maximum = dependencyLevel(target, values, options);
+      if (maximum !== UNKNOWN) minimum = Math.min(minimum, maximum);
+      if (minimum > stateLevel(values.get(targetSymbol) ?? 'n')) {
+        progress = setValue(values, changes, targetSymbol, STATE[minimum], 'imply',
+          active.find((item) => item.level === minimum)?.sourceSymbol || '') || progress;
+      }
+    }
+    if (!progress) return;
+  }
+  throw new Error('Kconfig reverse relation resolution did not converge');
+}
+
 export function applyUserIntent(model, inputValues, intent) {
   const initialValues = new Map(valuesMap(inputValues));
   const values = new Map(initialValues);
@@ -1177,16 +1381,43 @@ export function applyUserIntent(model, inputValues, intent) {
   const value = normalizeValue(intent?.value ?? 'n');
   const record = model.bySymbol.get(symbol);
   if (!record) throw new Error(`Catalog does not define ${symbol}`);
-  if (value !== 'n' && (!record.states?.includes(value) || (!record.userSettable && intent?.force !== true))) {
-    throw new Error(`${symbol} cannot be enabled directly`);
-  }
-  if (value === 'n' && !record.canDisable) throw new Error(`${symbol} cannot be disabled`);
   const options = validationOptions(initialValues, intent?.validationOptions || {});
+  options.explicitSymbols = new Set(intent?.explicitSymbols || options.explicitSymbols || []);
+  const constraints = kconfigStateConstraints(model, record, initialValues, options);
+  const legal = constraints.legalStates.includes(value);
+  const systemSelectable = legal && stateLevel(value) >= constraints.minimumLevel &&
+    (value === 'n' ? record.canDisable !== false :
+      (stateLevel(value) <= constraints.maximumLevel || stateLevel(value) <= constraints.minimumLevel));
+  // A direct package intent may repair simple positive PACKAGE_* dependencies
+  // through applyDirectKconfigDependencies below. Keep that established
+  // capability, while select-imposed lower bounds and no-prompt symbols remain
+  // strict at this public boundary.
+  const repairablePositiveIntent = value !== 'n' && constraints.minimumLevel === 0 &&
+    constraints.legalStates.includes(value) && record.userSettable !== false;
+  const allowed = intent?.force === true ? systemSelectable :
+    (constraints.selectableStates.includes(value) || repairablePositiveIntent);
+  if (!allowed) {
+    const error = new Error(`${symbol} cannot be set to ${value.toUpperCase()} under the active Kconfig constraints`);
+    error.name = 'CatalogIntentError';
+    error.intent = { symbol, value };
+    error.constraints = constraints;
+    throw error;
+  }
   const beforeKeys = new Set(validateConfig(model, initialValues, options).map(violationKey));
   setValue(values, changes, symbol, value, 'user');
-  if (record.choice && value !== 'n') {
+  if (record.choice && value === 'y') {
     for (const sibling of model.choices.get(record.choice) || []) {
       if (sibling !== symbol) setValue(values, changes, sibling, 'n', 'choice', symbol);
+    }
+  } else if (record.choice && value === 'm') {
+    // Native tristate choices permit several M members, but a Y sibling must
+    // fall back to M while the choice itself is modular.
+    for (const sibling of model.choices.get(record.choice) || []) {
+      const siblingRecord = model.bySymbol.get(sibling);
+      if (sibling !== symbol && normalizeValue(values.get(sibling) ?? 'n') === 'y' &&
+          siblingRecord?.states?.includes('m')) {
+        setValue(values, changes, sibling, 'm', 'choice', symbol);
+      }
     }
   }
   if (value === 'n') cascadeDisabled(model, values, changes, [symbol], options);
@@ -1194,6 +1425,39 @@ export function applyUserIntent(model, inputValues, intent) {
   if (changes.some((change) => change.to === 'n')) {
     pruneUnusedDependencies(model, values, changes, intent?.dependencySymbols,
       intent?.protectedSymbols, options);
+  }
+  enforceActiveReverseRelations(model, values, changes, options);
+  // Keep a user's latent N/M/Y intent while a select temporarily raises the
+  // effective value. Once the last selector disappears, restore that desired
+  // value without reverse-editing the selector (matching menuconfig).
+  const preferredValues = intent?.preferredValues instanceof Map
+    ? intent.preferredValues : new Map(Object.entries(intent?.preferredValues || {}));
+  let restored = true;
+  for (let pass = 0; restored && pass < preferredValues.size + 1; pass++) {
+    restored = false;
+    for (const [preferredSymbol, rawPreferred] of preferredValues) {
+      if (preferredSymbol === symbol || !model.bySymbol.has(preferredSymbol)) continue;
+      const preferredRecord = model.bySymbol.get(preferredSymbol);
+      if (!['bool', 'tristate'].includes(preferredRecord.type)) continue;
+      const preferred = normalizeKconfigStateValue(preferredRecord, rawPreferred);
+      const preferredConstraints = kconfigStateConstraints(model, preferredRecord, values, options);
+      let effectiveLevel = Math.min(stateLevel(preferred), preferredConstraints.maximumLevel);
+      if (!options.explicitSymbols.has(preferredSymbol)) {
+        const impliedLevel = activeImplyRequirements(model, preferredRecord, values, options)
+          .reduce((maximum, item) => Math.max(maximum, item.level), 0);
+        effectiveLevel = Math.max(effectiveLevel,
+          Math.min(impliedLevel, preferredConstraints.maximumLevel));
+      }
+      effectiveLevel = Math.max(effectiveLevel, preferredConstraints.minimumLevel);
+      if (preferredRecord.choice && (model.choices.get(preferredRecord.choice) || []).some((sibling) =>
+        sibling !== preferredSymbol && normalizeValue(values.get(sibling) ?? 'n') === 'y')) {
+        effectiveLevel = 0;
+      }
+      if (preferredRecord.type === 'bool' && effectiveLevel === 1) effectiveLevel = 2;
+      const effective = normalizeKconfigStateValue(preferredRecord, STATE[effectiveLevel]);
+      if (normalizeValue(values.get(preferredSymbol) ?? 'n') === effective) continue;
+      if (setValue(values, changes, preferredSymbol, effective, 'preferred-intent')) restored = true;
+    }
   }
   const violations = validateConfig(model, values, options);
   if (value !== 'n') {

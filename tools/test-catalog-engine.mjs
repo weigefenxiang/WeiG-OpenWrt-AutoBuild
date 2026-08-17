@@ -8,6 +8,7 @@ import {
   deriveCompatibilityPlans,
   evaluateCompatibilityRules,
   evaluateExpressionState,
+  kconfigStateConstraints,
   normalizeCompatibilityDocument,
   parseConfigDocument,
   normalizeKconfigStateValue,
@@ -274,12 +275,163 @@ for (const [gate, boolStates, tristateStates] of [
 }
 assert(selectableKconfigStates(stateBoundaryModel.bySymbol.get('LOCKED_BOOL'), new Map()).join(',') === 'y',
   'a non-disableable Kconfig state exposed N as a selectable value');
-assert(selectableKconfigStates(stateBoundaryModel.bySymbol.get('HIDDEN_BOOL'), new Map()).join(',') === 'n',
-  'a hidden Kconfig state was exposed for direct enablement');
+assert(selectableKconfigStates(stateBoundaryModel.bySymbol.get('HIDDEN_BOOL'), new Map()).join(',') === '',
+  'a hidden Kconfig state was exposed for direct mutation');
+expectThrow(() => applyUserIntent(stateBoundaryModel, new Map([['HIDDEN_BOOL', 'y']]), {
+  symbol: 'HIDDEN_BOOL', value: 'n',
+}), /active Kconfig constraints/, 'a no-prompt Kconfig symbol accepted a direct disable intent');
+const hiddenSystemUpdate = applyUserIntent(stateBoundaryModel, new Map([['HIDDEN_BOOL', 'y']]), {
+  symbol: 'HIDDEN_BOOL', value: 'n', force: true,
+});
+assert(hiddenSystemUpdate.values.get('HIDDEN_BOOL') === 'n',
+  'a derived/import restore could not update a no-prompt Kconfig symbol');
 assert(!validateConfig(stateBoundaryModel, new Map([
   ['MODULE_GATE', 'm'], ['BOOL_CHILD', 'y'], ['TRISTATE_CHILD', 'm'], ['LOCKED_BOOL', 'y'], ['HIDDEN_BOOL', 'n'],
 ])).some((row) => row.symbol === 'BOOL_CHILD'),
 'a bool depending on m was rejected instead of receiving Kconfig\'s m-to-y dependency coercion');
+
+const selectRecords = [
+  { kind: 'config', configSymbol: 'SELECT_M', kconfigSymbol: 'SELECT_M', type: 'tristate',
+    states: ['n', 'm', 'y'], kconfig: { selectsExpressions: [['TARGET_TRI', 'TARGET_BOOL']] } },
+  { kind: 'config', configSymbol: 'SELECT_Y', kconfigSymbol: 'SELECT_Y', type: 'bool',
+    states: ['n', 'y'], kconfig: { selectsExpressions: [['TARGET_TRI']] } },
+  { kind: 'config', configSymbol: 'SELECT_CONDITIONAL', kconfigSymbol: 'SELECT_CONDITIONAL', type: 'bool',
+    states: ['n', 'y'], kconfig: { selectsExpressions: [['TARGET_CONDITIONAL if CONDITION']] } },
+  { kind: 'config', configSymbol: 'CONDITION', kconfigSymbol: 'CONDITION', type: 'tristate',
+    states: ['n', 'm', 'y'] },
+  { kind: 'config', configSymbol: 'MODULE_CEILING', kconfigSymbol: 'MODULE_CEILING', type: 'tristate',
+    states: ['n', 'm', 'y'] },
+  { kind: 'config', configSymbol: 'TARGET_TRI', kconfigSymbol: 'TARGET_TRI', type: 'tristate',
+    states: ['n', 'm', 'y'] },
+  { kind: 'config', configSymbol: 'TARGET_BOOL', kconfigSymbol: 'TARGET_BOOL', type: 'bool',
+    states: ['n', 'y'] },
+  { kind: 'config', configSymbol: 'TARGET_CONDITIONAL', kconfigSymbol: 'TARGET_CONDITIONAL', type: 'tristate',
+    states: ['n', 'm', 'y'] },
+  { kind: 'config', configSymbol: 'TARGET_FIXED_M', kconfigSymbol: 'TARGET_FIXED_M', type: 'tristate',
+    states: ['n', 'm', 'y'], kconfig: { dependsExpressions: [['MODULE_CEILING']] } },
+  { kind: 'config', configSymbol: 'SELECT_FIXED_M', kconfigSymbol: 'SELECT_FIXED_M', type: 'tristate',
+    states: ['n', 'm', 'y'], kconfig: { selectsExpressions: [['TARGET_FIXED_M']] } },
+];
+const selectModel = createCatalogModel({
+  schema: 5, targets: [], relations: {
+    schema: 2,
+    records: selectRecords,
+    indexes: { reverseKconfig: {
+      // reverseKconfig is deliberately unrelated: it indexes ordinary
+      // dependencies, not reverse-select ownership.
+      TARGET_TRI: ['MODULE_CEILING'],
+    } },
+  },
+});
+assert(selectModel.reverseSelects.get('TARGET_TRI')?.join(',') === 'SELECT_M,SELECT_Y' &&
+  !selectModel.reverseSelects.get('TARGET_TRI')?.includes('MODULE_CEILING'),
+  'runtime select lookup was not derived from canonical selectsExpressions');
+const selectMValues = new Map([['SELECT_M', 'm'], ['TARGET_TRI', 'm'], ['TARGET_BOOL', 'y']]);
+const targetTriM = kconfigStateConstraints(selectModel, selectModel.bySymbol.get('TARGET_TRI'), selectMValues);
+assert(targetTriM.minimum === 'm' && targetTriM.maximum === 'y' &&
+  targetTriM.selectableStates.join(',') === 'm,y' && targetTriM.selectors[0]?.sourceSymbol === 'SELECT_M',
+  'tristate select m did not expose the native {M}/Y boundary');
+const targetBoolM = kconfigStateConstraints(selectModel, selectModel.bySymbol.get('TARGET_BOOL'), selectMValues);
+assert(targetBoolM.minimum === 'y' && targetBoolM.selectableStates.length === 0 &&
+  targetBoolM.states.find((row) => row.value === 'y')?.locked,
+  'a tristate m selector did not coerce a bool target to locked Y');
+expectThrow(() => applyUserIntent(selectModel, selectMValues, { symbol: 'TARGET_TRI', value: 'n' }),
+  /active Kconfig constraints/, 'an active select m lower bound accepted N');
+const raisedTarget = applyUserIntent(selectModel, selectMValues, { symbol: 'TARGET_TRI', value: 'y' });
+assert(raisedTarget.values.get('TARGET_TRI') === 'y', 'a target with select m could not be raised to Y');
+
+const noDowngrade = applyUserIntent(selectModel,
+  new Map([['SELECT_Y', 'y'], ['TARGET_TRI', 'y'], ['SELECT_M', 'n']]),
+  { symbol: 'SELECT_M', value: 'm' });
+assert(noDowngrade.values.get('TARGET_TRI') === 'y',
+  'a later select m incorrectly downgraded an existing Y target');
+const conditionalValues = new Map([
+  ['SELECT_CONDITIONAL', 'y'], ['CONDITION', 'm'], ['TARGET_CONDITIONAL', 'm'],
+]);
+const conditional = kconfigStateConstraints(selectModel,
+  selectModel.bySymbol.get('TARGET_CONDITIONAL'), conditionalValues);
+assert(conditional.minimum === 'm' && conditional.selectableStates.join(',') === 'm,y' &&
+  conditional.selectors[0]?.condition === 'CONDITION',
+  'conditional select did not use min(selector, condition)');
+const conditionalActivated = applyUserIntent(selectModel,
+  new Map([['SELECT_CONDITIONAL', 'y'], ['CONDITION', 'n'], ['TARGET_CONDITIONAL', 'n']]),
+  { symbol: 'CONDITION', value: 'm' });
+assert(conditionalActivated.values.get('TARGET_CONDITIONAL') === 'm',
+  'changing only a select condition did not activate its M lower bound');
+const conditionalDisabled = applyUserIntent(selectModel, conditionalActivated.values,
+  { symbol: 'CONDITION', value: 'n', dependencySymbols: new Set(['TARGET_CONDITIONAL']),
+    preferredValues: new Map([['TARGET_CONDITIONAL', 'n']]) });
+assert(conditionalDisabled.values.get('TARGET_CONDITIONAL') === 'n',
+  'disabling a select condition did not restore the target base intent');
+const conditionalReactivated = applyUserIntent(selectModel, conditionalDisabled.values,
+  { symbol: 'CONDITION', value: 'y' });
+assert(conditionalReactivated.values.get('TARGET_CONDITIONAL') === 'y',
+  'a select condition could not reactivate after its automatic N state was pruned');
+const fixedMValues = new Map([
+  ['MODULE_CEILING', 'm'], ['SELECT_FIXED_M', 'm'], ['TARGET_FIXED_M', 'm'],
+]);
+const fixedM = kconfigStateConstraints(selectModel, selectModel.bySymbol.get('TARGET_FIXED_M'), fixedMValues);
+assert(fixedM.minimum === 'm' && fixedM.maximum === 'm' && fixedM.selectableStates.length === 0 &&
+  fixedM.states.find((row) => row.value === 'm')?.locked,
+  'a fixed M Kconfig state was not rendered as read-only');
+const menuFacadeValues = new Map([['SELECT_Y', 'y'], ['TARGET_TRI', 'y']]);
+const menuFacade = kconfigStateConstraints(selectModel,
+  { symbol: 'TARGET_TRI', type: 'tristate', userSettable: true }, menuFacadeValues);
+assert(menuFacade.symbol === 'TARGET_TRI' && menuFacade.current === 'y' && menuFacade.minimum === 'y' &&
+  menuFacade.states.find((row) => row.value === 'y')?.current,
+  'a menu-shard facade without configSymbol did not resolve its canonical Catalog state');
+
+const raisedBySelect = applyUserIntent(selectModel,
+  new Map([['SELECT_Y', 'n'], ['TARGET_TRI', 'n']]),
+  { symbol: 'SELECT_Y', value: 'y', dependencySymbols: new Set(['TARGET_TRI']),
+    preferredValues: new Map([['TARGET_TRI', 'n']]) });
+assert(raisedBySelect.values.get('SELECT_Y') === 'y' && raisedBySelect.values.get('TARGET_TRI') === 'y',
+  'select Y did not raise its target to the mandatory Y lower bound');
+expectThrow(() => applyUserIntent(selectModel, raisedBySelect.values,
+  { symbol: 'TARGET_TRI', value: 'm' }), /active Kconfig constraints/,
+  'a selected Y target accepted a reverse downgrade to M');
+const selectorLowered = applyUserIntent(selectModel, raisedBySelect.values,
+  { symbol: 'SELECT_Y', value: 'n', dependencySymbols: new Set(['TARGET_TRI']),
+    preferredValues: new Map([['TARGET_TRI', 'm']]), protectedSymbols: new Set(['TARGET_TRI']) });
+assert(selectorLowered.values.get('TARGET_TRI') === 'm' &&
+  selectorLowered.changes.some((row) => row.symbol === 'TARGET_TRI' && row.reason === 'preferred-intent'),
+  'removing the last selector did not restore the target user intent');
+const selectorModule = applyUserIntent(selectModel,
+  new Map([['SELECT_M', 'y'], ['TARGET_TRI', 'y']]),
+  { symbol: 'SELECT_M', value: 'm', dependencySymbols: new Set(['TARGET_TRI']),
+    preferredValues: new Map([['TARGET_TRI', 'n']]) });
+assert(selectorModule.values.get('TARGET_TRI') === 'm',
+  'lowering a selector from Y to M did not recompute an automatic target to M');
+const remainingSelector = applyUserIntent(selectModel,
+  new Map([['SELECT_Y', 'y'], ['SELECT_M', 'm'], ['TARGET_TRI', 'y']]),
+  { symbol: 'SELECT_Y', value: 'n', dependencySymbols: new Set(['TARGET_TRI']),
+    preferredValues: new Map([['TARGET_TRI', 'n']]) });
+assert(remainingSelector.values.get('TARGET_TRI') === 'm',
+  'removing one of multiple selectors ignored the remaining M lower bound');
+
+const tristateChoiceModel = createCatalogModel({ schema: 5, targets: [], relations: {
+  schema: 2,
+  records: ['CHOICE_A', 'CHOICE_B', 'CHOICE_C'].map((configSymbol) => ({
+    kind: 'config', configSymbol, kconfigSymbol: configSymbol, type: 'tristate',
+    states: ['n', 'm', 'y'], choice: 'TRISTATE_CHOICE',
+  })),
+  indexes: { choices: { TRISTATE_CHOICE: ['CHOICE_A', 'CHOICE_B', 'CHOICE_C'] } },
+} });
+const modularChoice = applyUserIntent(tristateChoiceModel,
+  new Map([['CHOICE_A', 'm'], ['CHOICE_B', 'n'], ['CHOICE_C', 'n']]),
+  { symbol: 'CHOICE_B', value: 'm' });
+assert(modularChoice.values.get('CHOICE_A') === 'm' && modularChoice.values.get('CHOICE_B') === 'm' &&
+  !validateConfig(tristateChoiceModel, modularChoice.values).some((row) => row.code === 'choice-conflict'),
+  'a tristate choice incorrectly rejected multiple M members');
+const selectedChoice = applyUserIntent(tristateChoiceModel, modularChoice.values,
+  { symbol: 'CHOICE_C', value: 'y', preferredValues: new Map([['CHOICE_A', 'm']]) });
+assert(selectedChoice.values.get('CHOICE_A') === 'n' && selectedChoice.values.get('CHOICE_B') === 'n' &&
+  selectedChoice.values.get('CHOICE_C') === 'y',
+  'a tristate choice Y did not exclude every sibling or suppressed latent M intent');
+const restoredChoice = applyUserIntent(tristateChoiceModel, selectedChoice.values,
+  { symbol: 'CHOICE_C', value: 'n', preferredValues: new Map([['CHOICE_A', 'm']]) });
+assert(restoredChoice.values.get('CHOICE_A') === 'm' && restoredChoice.values.get('CHOICE_C') === 'n',
+  'a suppressed tristate choice M intent was not restored after the Y member was disabled');
 const escapedStringDefault = '"a\\\"b\\\\c"';
 for (const [type, raw, expected] of [
   ['string', '""', ''], ['string', '"hello"', 'hello'], ['string', '"n"', 'n'],
@@ -442,8 +594,15 @@ assert(protectedResult.values.get('PACKAGE_flow-core') === 'y',
 const imply = applyUserIntent(model, full.values, {
   symbol: 'PACKAGE_imply-source', value: 'y', validationOptions: full.validationOptions,
 });
-assert(imply.values.get('SOFT_HINT') !== 'y',
-  'weak imply relationship was incorrectly treated as a mandatory dependency');
+assert(imply.values.get('SOFT_HINT') === 'y' &&
+  imply.changes.some((row) => row.symbol === 'SOFT_HINT' && row.reason === 'imply'),
+  'weak imply relationship did not provide its native suggested value');
+const implyOverride = applyUserIntent(model, imply.values, {
+  symbol: 'SOFT_HINT', value: 'n', explicitSymbols: ['SOFT_HINT'],
+});
+assert(implyOverride.values.get('SOFT_HINT') === 'n' &&
+  implyOverride.values.get('PACKAGE_imply-source') === 'y',
+  'a user could not override a weak imply without reverse-editing its source');
 
 const provider = applyUserIntent(model, parseConfigDocument([
   'CONFIG_PACKAGE_provider-a=y',
@@ -715,19 +874,30 @@ for (let index = 0; index < matrixTargets.length; index++) {
 
 const ordered = orderCatalogIndex({ sources: [
   { id: 'source-c', branches: [{ id: 'v-next', branch: 'openwrt-26.10' },
-    { id: 'main', branch: 'main' }, { id: 'v-old', branch: 'openwrt-9.2' }] },
+    { id: 'main', branch: 'main' }, { id: 'v-old', branch: 'openwrt-9.2' },
+    { id: 'snapshot', branch: 'snapshot' }] },
   { id: 'source-a', branches: [{ id: 'v', branch: 'openwrt-25.1' }] },
   { id: 'source-b', branches: [{ id: 'master', branch: 'master' },
-    { id: 'future', branch: 'openwrt-30.2' }] },
+    { id: 'future', branch: 'openwrt-30.2' }, { id: 'vendor', branch: 'vendor-next' }] },
 ] }, {
   sourcePriority: ['source-a', 'source-b', 'source-c'],
-  developmentBranches: ['master', 'main'],
+  developmentBranches: ['main', 'master'],
 });
 assert(ordered.sources.map((row) => row.id).join(',') === 'source-a,source-b,source-c',
   'selection policy source order was not applied');
-assert(ordered.sources[1].branches.map((row) => row.branch).join(',') === 'master,openwrt-30.2' &&
-  ordered.sources[2].branches.map((row) => row.branch).join(',') === 'main,openwrt-26.10,openwrt-9.2',
-  'development/future version branch order was not applied');
+assert(ordered.sources[1].branches.map((row) => row.branch).join(',') ===
+  'openwrt-30.2,master,vendor-next' &&
+  ordered.sources[2].branches.map((row) => row.branch).join(',') ===
+  'openwrt-26.10,openwrt-9.2,main,snapshot',
+  'stable/development/special branch order was not applied');
+const defaultBranchOrder = orderCatalogIndex({ sources: [{ id: 'future', branches: [
+  { id: 'master', branch: 'master' }, { id: 'next', branch: 'openwrt-26.12' },
+  { id: 'current', branch: 'openwrt-25.12' }, { id: 'rc', branch: 'openwrt-27.01-rc1' },
+  { id: 'main', branch: 'main' },
+] }] }, { developmentBranches: ['main', 'master'] }).sources[0].branches;
+assert(defaultBranchOrder.map((row) => row.branch).join(',') ===
+  'openwrt-26.12,openwrt-25.12,main,master,openwrt-27.01-rc1',
+  'a future stable branch did not become the first default while prerelease stayed special');
 const targetTree = {
   targetSelectors: [{ id: 'family' }, { id: 'board' }, { id: 'profile' }],
   targetTree: [{ value: 'first', children: [{ value: 'fallback', children: [{ value: 'base' }] }] },
@@ -768,9 +938,12 @@ for (let index = 0; index < 12; index++) {
     archPackages: themeTarget.archPackages };
   assert(resolveEffectiveTheme(themeModel, target).symbol === baselineSymbol,
     `theme ${index}: profile baseline was not resolved`);
-  assert(resolveEffectiveTheme(themeModel, target, new Map([[overrideSymbol, 'y']]), {
+  const themeOverride = resolveEffectiveTheme(themeModel, target, new Map([[overrideSymbol, 'y']]), {
     explicitSymbols: [overrideSymbol], preferredSymbol: overrideSymbol,
-  }).symbol === overrideSymbol, `theme ${index}: explicit override did not win`);
+  });
+  assert(themeOverride.symbol === overrideSymbol && themeOverride.values.get(baselineSymbol) === 'y' &&
+    themeOverride.values.get(overrideSymbol) === 'y',
+  `theme ${index}: explicit theme did not win while preserving the native Profile theme`);
   assert(resolveEffectiveTheme(themeModel, target, new Map([[overrideSymbol, 'n']]), {
     explicitSymbols: [overrideSymbol], preferredSymbol: overrideSymbol,
   }).symbol === baselineSymbol, `theme ${index}: disabled override hid the profile baseline`);

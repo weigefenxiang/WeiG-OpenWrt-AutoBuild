@@ -211,22 +211,31 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
             </div>
           </section>
           <div class="build-contract-controls" id="buildContractControls" hidden>
-            <label class="build-contract-selected-filter" title="Selected only">
-              <input type="checkbox" id="menuconfigSelectedOnly">
-              <span>Selected only</span>
-            </label>
-            <label class="menuconfig-origin-filter-label" title="Filter by configuration origin">
-              <span>Origin</span>
-              <select id="menuconfigOriginFilter">
-                <option value="all">All origins</option>
-                <option value="user">User selected</option>
-                <option value="excluded">Explicitly excluded</option>
-                <option value="default">Upstream defaults</option>
-                <option value="recommended">Recommended</option>
-                <option value="dependency">Dependencies</option>
-                <option value="imported">Imported</option>
-              </select>
-            </label>
+            <div class="menuconfig-filter-control">
+              <button class="menuconfig-filter-trigger" id="menuconfigFilterTrigger" type="button"
+                aria-controls="menuconfigFilterMenu" aria-expanded="false" data-floating-dropdown
+                data-floating-min-width="300" data-floating-max-width="520" data-floating-height="420">
+                <span id="menuconfigFilterSummary">All origins · userSettable</span>
+                <span class="menuconfig-filter-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <div class="menuconfig-filter-menu" id="menuconfigFilterMenu" hidden>
+                <fieldset class="menuconfig-filter-group" id="menuconfigOriginFilter">
+                  <legend id="menuconfigOriginTitle">Origin</legend>
+                  <label><input type="radio" name="menuconfigOrigin" value="all" checked><span>All origins</span></label>
+                  <label><input type="radio" name="menuconfigOrigin" value="user"><span>User selected</span></label>
+                  <label><input type="radio" name="menuconfigOrigin" value="excluded"><span>Explicitly excluded</span></label>
+                  <label><input type="radio" name="menuconfigOrigin" value="default"><span>Upstream defaults</span></label>
+                  <label><input type="radio" name="menuconfigOrigin" value="recommended"><span>Recommended</span></label>
+                  <label><input type="radio" name="menuconfigOrigin" value="dependency"><span>Dependencies</span></label>
+                  <label><input type="radio" name="menuconfigOrigin" value="imported"><span>Imported</span></label>
+                </fieldset>
+                <fieldset class="menuconfig-filter-group menuconfig-display-filter">
+                  <legend id="menuconfigDisplayTitle">Display</legend>
+                  <label><input type="checkbox" id="menuconfigSelectedOnly"><span>Selected only</span></label>
+                  <label><input type="checkbox" id="menuconfigUserSettable" checked><span>userSettable</span></label>
+                </fieldset>
+              </div>
+            </div>
           </div>
         </div>
         <div class="menuconfig-box" id="menuconfigBox" hidden>

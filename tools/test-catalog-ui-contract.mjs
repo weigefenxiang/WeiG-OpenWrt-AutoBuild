@@ -111,6 +111,23 @@ expect(app.includes('useDefconfig: false,') &&
   css.includes('.menuconfig-defconfig{flex:none;min-width:52px;min-height:42px;'),
   'Defconfig default, Advanced menuconfig placement, or compact Catalog overview layout regressed');
 
+expect(html.includes('id="menuconfigFilterTrigger"') &&
+  html.includes('aria-controls="menuconfigFilterMenu"') &&
+  html.includes('id="menuconfigOriginFilter"') &&
+  html.includes('name="menuconfigOrigin" value="all" checked') &&
+  html.includes('id="menuconfigSelectedOnly"') &&
+  html.includes('id="menuconfigUserSettable" checked') &&
+  app.includes('let menuUserSettableOnly = true;') &&
+  app.includes('function refreshMenuconfigFilterSummary()') &&
+  app.includes("!menuUserSettableOnly || option.userSettable !== false") &&
+  app.includes("event.target.closest('input[name=\"menuconfigOrigin\"]')") &&
+  !app.includes("$('menuconfigOriginFilter').options") &&
+  css.includes('.menuconfig-filter-menu{') &&
+  css.includes('.menuconfig-filter-group label:has(input:checked)') &&
+  css.includes('.menuconfig-filter-trigger{') &&
+  css.includes('white-space:nowrap') && css.includes('white-space:normal'),
+  'origin/Selected/userSettable filters are not combined in the reusable readable popover');
+
 expect(
   css.includes('--font-page-title: 24px;') &&
   css.includes('--font-section-title: 20px;') &&
@@ -164,9 +181,21 @@ expect(html.includes('class="ui-tooltip" id="uiTooltip"') &&
   sharedTooltipContract.includes('const visibleArea = (candidate) => {') &&
   sharedTooltipContract.includes('area > best.area || (area === best.area && distance < best.distance)') &&
   sharedTooltipContract.includes("uiTooltip.style.removeProperty('max-height');") &&
+  sharedTooltipContract.includes("uiTooltip.classList.toggle('is-pinned', uiTooltipPinned)") &&
+  sharedTooltipContract.includes("uiTooltip.classList.remove('is-pinned')") &&
+  sharedTooltipContract.includes('function bindUiTooltipContent(target') &&
   sharedTooltipContract.includes("document.addEventListener('pointermove'") &&
+  sharedTooltipContract.includes("document.addEventListener('dblclick'") &&
+  sharedTooltipContract.includes('showDatasetTooltip(target, event, true)') &&
+  sharedTooltipContract.includes("event.pointerType !== 'touch'") &&
+  sharedTooltipContract.includes('now - uiTooltipTouchAt <= 500') &&
   sharedTooltipContract.includes('positionUiTooltip(target, event)') &&
-  app.includes('showUiTooltip(element, { body: text, event });'),
+  sharedTooltipContract.includes('!uiTooltipTarget.contains(event.target) && !uiTooltip.contains(event.target)') &&
+  sharedTooltipContract.includes('if (uiTooltipPinned && uiTooltipTarget?.isConnected) positionUiTooltip(uiTooltipTarget)') &&
+  css.includes('.ui-tooltip.is-pinned{pointer-events:auto;user-select:text;cursor:text}') &&
+  css.includes(':is([data-ui-tooltip-title],[data-ui-tooltip-emphasis],[data-ui-tooltip-body]){touch-action:manipulation}') &&
+  app.includes("bindUiTooltipContent($('menuconfigStateHelp'), { body: help })") &&
+  !app.includes('function showMenuPopup(') && !app.includes('function showPopover('),
   'shared pointer-following tooltip template or content-bound positioning regressed');
 expect(app.includes("dataset.uiTooltipTitle = 'D · Defconfig'") &&
   app.includes('⚠ 当前版本加载时已完成基准配置解析。通常直接在现有结果上增减即可，无需开启 D。') &&
@@ -176,18 +205,27 @@ expect(app.includes("dataset.uiTooltipTitle = 'D · Defconfig'") &&
   app.includes("removeAttribute('title')"),
   'Defconfig compact warning or shared tooltip binding regressed');
 expect(pluginRenderContract.includes('const applyChecked = (checked) => {') &&
-  pluginRenderContract.includes('item.dataset.uiTooltipTitle = pName(p)') &&
-  pluginRenderContract.includes('item.dataset.uiTooltipBody = tooltipBody') &&
-  pluginRenderContract.includes("item.addEventListener('dblclick', (event) => {") &&
-  pluginRenderContract.includes('if (cb.disabled) return;') &&
-  pluginRenderContract.includes('applyChecked(!cb.checked);') &&
+  pluginRenderContract.includes('bindUiTooltipContent(item, { title: pName(p), body: tooltipBody })') &&
+  pluginRenderContract.includes('bindUiTooltipContent(nameBtn, { title: pName(p), body: tooltipBody })') &&
+  !pluginRenderContract.includes("item.addEventListener('dblclick'") &&
   !pluginRenderContract.includes('if (curatedPluginChecked(p, st, catalogOption) && cb.checked) return;') &&
   !pluginRenderContract.includes('applyChecked(true);') &&
   !pluginRenderContract.includes('nameBtn.title = detail'),
-  'plugin card double-click toggle or shared tooltip binding regressed');
-expect((app.match(/origin\.kind !== 'inactive' && origin\.kind !== 'user'/g) || []).length >= 2 &&
-  app.includes("kind: 'user', label: uiText('用户选择'"),
-  'user-selected state must remain internal while its item badges stay hidden');
+  'plugin card selection or shared double-click tooltip binding regressed');
+const originSlotContract = app.match(/function renderCatalogOriginSlot\(option, origin\) \{[\s\S]*?\n\}/)?.[0] || '';
+expect(app.includes("kind: 'user', label: uiText('自选'") &&
+  app.includes("kind: 'user-exclude', label: uiText('排除'") &&
+  app.includes("kind: 'dependency', label: uiText('自动依赖'") &&
+  app.includes('preferredValues: catalogPreferredValues()') &&
+  app.includes('活动 select 暂时把实际值提升为') &&
+  app.includes("displayKind: 'default', label: uiText('默认'") &&
+  originSlotContract.includes("slot.className = 'menuconfig-origin-slot'") &&
+  originSlotContract.includes("const displayKind = origin.displayKind || origin.kind") &&
+  originSlotContract.includes("restorable ? ' ↶' : ''") &&
+  originSlotContract.includes('restoreCatalogDefault(option)') &&
+  css.includes('.catalog-origin-user{') && css.includes('.catalog-origin-user-exclude{') &&
+  css.includes('.catalog-origin-default{') && css.includes('.catalog-origin-dependency{'),
+  'Advanced menuconfig origin badges lost the shared, restorable source template');
 
 expect(css.includes('/* 可勾选卡片立体模板 / shared selectable-card elevation template */') &&
   css.includes('--select-card-border: color-mix(in srgb, var(--border) 46%, #8ea0b7 54%);') &&
@@ -267,8 +305,8 @@ expect(probeContract.includes('selfTestViewToken += 1') &&
   'in-page probe can race the self-test modal, remains gated by applications, or no longer reuses the Catalog/Kconfig model');
 expect(probeContract.includes('const depthOptions = [') && probeContract.includes('`L${index + 1}`') &&
   probeContract.includes("'packageCompileShort'") && probeContract.includes('title.dataset.short = probeUiText(shortKey)') &&
-  probeContract.includes("popup.setAttribute('role', 'tooltip')") &&
-  probeContract.includes("if (event.key === 'Escape') { closeDepthHelp(); closeProbeOverlay(); }") &&
+  probeContract.includes('bindUiTooltipContent(infoButton, {') &&
+  probeContract.includes("layout.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeProbeOverlay(); });") &&
   probeContract.includes('branchSearch.addEventListener') && probeContract.includes('customScope.hidden') &&
   probeContract.includes("customScope = document.createElement('details')") && probeContract.includes('updateCustomScopeSummary') &&
   probeContract.includes('preview.hidden = true') && probeContract.includes("previewButton.setAttribute('aria-expanded'") &&
@@ -324,6 +362,33 @@ expect(setMenuValueContract.includes('applyMenuValue(option, value, false)') &&
   setMenuValueContract.includes('const renderedValue = menuValues.get(option.symbol)') &&
   setMenuValueContract.includes("renderCatalogUiAfterIntent(openChildren && renderedValue !== 'n', option, renderedValue)"),
   'Advanced menuconfig must apply the clicked Kconfig symbol directly and keep dependency direction native');
+const renderMenuOptionContract = app.match(/function renderMenuOption\(option\) \{[\s\S]*?\n\}\nfunction renderMenuLeaf/)?.[0] || '';
+expect(app.includes('function optionStateConstraints(option)') &&
+  (app.match(/CATALOG_ENGINE\.kconfigStateConstraints/g) || []).length >= 3 &&
+  renderMenuOptionContract.includes("for (const stateValue of ['n', 'm', 'y'])") &&
+  renderMenuOptionContract.includes('actions.appendChild(renderCatalogOriginSlot(option, origin))') &&
+  renderMenuOptionContract.indexOf('actions.appendChild(renderCatalogOriginSlot(option, origin))') <
+    renderMenuOptionContract.indexOf("for (const stateValue of ['n', 'm', 'y'])") &&
+  renderMenuOptionContract.includes("spacer.className = 'kconfig-state-spacer'") &&
+  app.includes("button.setAttribute('aria-disabled', String(!stateConstraint.selectable))") &&
+  app.includes('showDatasetTooltip(button, event)') &&
+  app.includes('function kconfigConstraintTooltip(option, stateValue, constraints)') &&
+  css.includes('.menuconfig-origin-slot{display:flex;flex:none;width:72px') &&
+  !css.includes('.menuconfig-restore-slot{') && !css.includes('.menuconfig-restore-default{') &&
+  css.includes('.kconfig-tri{display:grid;grid-template-columns:repeat(3,34px)') &&
+  css.includes('.kconfig-tri .kconfig-state.is-current.is-editable') &&
+  css.includes('.kconfig-tri .kconfig-state.is-current.is-locked') &&
+  css.includes('.kconfig-tri .kconfig-state.is-disabled'),
+  'N/M/Y controls lost fixed alignment, shared Catalog constraints, locked styling, or mobile-readable hints');
+expect(!app.includes('button.hidden = button.disabled && !active') &&
+  !app.includes("applyCatalogIntent(row.option, 'n', true, 'user')") &&
+  !app.includes("applyCatalogIntent(row.option, value, true, 'user')"),
+  'conflict/compatibility editors still hide constrained states or bypass the common Kconfig boundary');
+const themeGenerationContract = app.match(/function applyToConfig\(text, sel\) \{([\s\S]*?)\n\}/)?.[1] || '';
+expect(themeGenerationContract.includes('for (const change of themeResolution.changes || [])') &&
+  !themeGenerationContract.includes('for (const symbol of themeResolution.symbols)') &&
+  !themeGenerationContract.includes("symbol === themeResolution.symbol ? 'y' : 'n'"),
+  'firmware generation still disables unrelated upstream themes to emulate artificial exclusivity');
 const probeChoiceContract = app.match(/function probeChoiceFromMenuOption\(option\) \{[\s\S]*?\n\}/)?.[0] || '';
 expect(probeChoiceContract.includes("const symbol = String(option?.symbol || '')") &&
   probeChoiceContract.includes("symbol.startsWith('PACKAGE_') ? symbol.slice('PACKAGE_'.length) : ''") &&
@@ -397,7 +462,10 @@ expect(probeContract.includes("guide.className = 'probe-guide'") &&
   probeContract.includes("usage.className = 'probe-package-usage'") &&
   probeContract.includes("info.className = 'probe-package-info'") && probeContract.includes("info.textContent = '!'") &&
   probeContract.includes('bindProbeTextTooltip(title, choice.title)') &&
-  probeContract.includes('showMenuPopup(row, rowDetails)'),
+  probeContract.includes('bindUiTooltipContent(row, { body: rowDetails })') &&
+  probeContract.includes('showDatasetTooltip(info, event)') &&
+  !probeContract.includes('showMenuPopup(row, rowDetails)') &&
+  !probeContract.includes('probe-info-popup'),
   'compact probe guide or shared full-text tooltip contract regressed');
 expect(css.includes('.probe-depth { grid-template-columns: repeat(4, minmax(0, 1fr))') &&
   css.includes('.probe-filter-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))') &&
