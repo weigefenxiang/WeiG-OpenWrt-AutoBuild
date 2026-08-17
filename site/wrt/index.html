@@ -182,8 +182,16 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
             <span id="catalogLoadText">Loading Target and menuconfig…</span>
           </button>
           <div class="catalog-load-details" id="catalogLoadDetails" hidden>
+            <div class="catalog-load-summary" role="status">
+              <strong id="catalogLoadReasonTitle"></strong>
+              <span id="catalogLoadReasonText"></span>
+            </div>
             <pre id="catalogLoadDiagnostics"></pre>
-            <button class="catalog-copy-diagnostics" id="catalogCopyDiagnostics" type="button">Copy diagnostics</button>
+            <div class="catalog-load-actions">
+              <a class="catalog-status-link" id="catalogStatusLink" href="https://www.githubstatus.com/"
+                target="_blank" rel="noopener noreferrer" hidden>GitHub service status</a>
+              <button class="catalog-copy-diagnostics" id="catalogCopyDiagnostics" type="button">Copy diagnostics</button>
+            </div>
           </div>
         </div>
         <div class="catalog-overview-row">

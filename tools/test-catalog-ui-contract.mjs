@@ -64,6 +64,30 @@ expect(refreshMenuIndexContract.includes("error?.name !== 'AbortError'") &&
   renderDevicesContract.includes("if (catalogLoadMode !== 'error') setCatalogLoadState('loading')") &&
   !app.includes('No usable Catalog sources are available'),
   'Catalog startup still reports a generic failure before loading or discards provider diagnostics');
+const failureClassifierSource = app.match(/(function classifyCatalogLoadFailure\([\s\S]*?\n\})\nfunction catalogLoadFailureCopy/)?.[1] || '';
+const classifyCatalogLoadFailure = failureClassifierSource
+  ? Function(`"use strict"; return (${failureClassifierSource});`)()
+  : null;
+expect(classifyCatalogLoadFailure &&
+  classifyCatalogLoadFailure('', [], false).kind === 'offline' &&
+  classifyCatalogLoadFailure('Catalog index unavailable', [
+    { provider: 'jsdelivr', ok: false, detail: 'Failed to fetch' },
+    { provider: 'github-raw', ok: false, detail: 'Failed to fetch' },
+    { provider: 'github-api', ok: false, detail: 'Failed to fetch' },
+  ], true).kind === 'unreachable' &&
+  classifyCatalogLoadFailure('', [{ provider: 'github-api', ok: false, detail: 'HTTP 429' }], true).kind === 'rate-limit' &&
+  classifyCatalogLoadFailure('', [{ provider: 'github-raw', ok: false, detail: 'HTTP 503' }], true).kind === 'remote-service' &&
+  classifyCatalogLoadFailure('', [{ provider: 'github-raw', ok: false, detail: 'HTTP 404' }], true).kind === 'snapshot-missing' &&
+  classifyCatalogLoadFailure('', [{ provider: 'jsdelivr', ok: false, detail: 'Catalog compressed SHA-256 mismatch' }], true).kind === 'validation',
+  'Catalog failure reason classification regressed');
+expect(html.includes('id="catalogLoadReasonTitle"') && html.includes('id="catalogLoadReasonText"') &&
+  html.includes('id="catalogStatusLink"') && html.includes('href="https://www.githubstatus.com/"') &&
+  html.includes('target="_blank" rel="noopener noreferrer"') &&
+  app.includes("`Reason: ${failure.kind} - ${summary.title}`") &&
+  app.includes("$('catalogStatusLink').hidden = !failed || !failure.showGithubStatus") &&
+  css.includes('grid-template-areas:"summary summary" "diagnostics actions"') &&
+  css.includes('grid-template-areas:"summary" "diagnostics" "actions"'),
+  'Catalog failure summary, safe GitHub status link, copied reason, or mobile layout regressed');
 expect(html.includes('data-i18n="btn.import.short"') && html.includes('data-i18n="btn.submit.short"') &&
   css.includes('.actionbar-row { flex-wrap: nowrap; gap: 5px; padding: 6px 8px; }') &&
   css.includes('.action-label-full { display: none; }') && css.includes('.action-label-short { display: inline; }') &&

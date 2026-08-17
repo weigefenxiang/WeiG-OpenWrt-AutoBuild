@@ -369,11 +369,15 @@ input:focus-visible { border-color: var(--accent); }
 .catalog-load-state[data-state=error]{border-color:color-mix(in srgb,var(--danger) 55%,var(--border));color:var(--danger);cursor:pointer}
 .catalog-load-spinner{width:17px;height:17px;flex:none;border:2px solid color-mix(in srgb,var(--accent) 24%,transparent);border-top-color:var(--accent);border-radius:50%;animation:catalog-spin .75s linear infinite}
 .catalog-load-state[data-state=error] .catalog-load-spinner{animation:none;border-color:var(--danger);border-top-color:transparent}
-.catalog-load-details{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:10px;flex:1 0 100%;padding:10px;border:1px solid color-mix(in srgb,var(--danger) 45%,var(--border));border-radius:9px;background:color-mix(in srgb,var(--danger) 5%,var(--card))}
+.catalog-load-details{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"summary summary" "diagnostics actions";align-items:start;gap:10px;flex:1 0 100%;padding:10px;border:1px solid color-mix(in srgb,var(--danger) 45%,var(--border));border-radius:9px;background:color-mix(in srgb,var(--danger) 5%,var(--card))}
 .catalog-load-details[hidden]{display:none}
-.catalog-load-details pre{min-width:0;max-height:190px;margin:0;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text2);font:12px/1.5 ui-monospace,Consolas,monospace}
-.catalog-copy-diagnostics{min-height:34px;padding:0 10px;border:1px solid var(--border);border-radius:7px;background:var(--card2);color:var(--text);font:inherit;cursor:pointer}
-.catalog-copy-diagnostics:hover,.catalog-copy-diagnostics:focus-visible{border-color:var(--accent);color:var(--accent)}
+.catalog-load-summary{grid-area:summary;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:9px 11px;border:1px solid color-mix(in srgb,var(--danger) 28%,var(--border));border-radius:8px;background:color-mix(in srgb,var(--danger) 7%,var(--card2));color:var(--text2)}
+.catalog-load-summary strong{color:var(--danger)}
+.catalog-load-details pre{grid-area:diagnostics;min-width:0;max-height:190px;margin:0;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text2);font:12px/1.5 ui-monospace,Consolas,monospace}
+.catalog-load-actions{grid-area:actions;display:grid;gap:8px;min-width:max-content}
+.catalog-status-link,.catalog-copy-diagnostics{display:flex;align-items:center;justify-content:center;min-height:34px;padding:0 10px;border:1px solid var(--border);border-radius:7px;background:var(--card2);color:var(--text);font:inherit;text-decoration:none;cursor:pointer}
+.catalog-status-link[hidden]{display:none}
+.catalog-status-link:hover,.catalog-status-link:focus-visible,.catalog-copy-diagnostics:hover,.catalog-copy-diagnostics:focus-visible{border-color:var(--accent);color:var(--accent)}
 @keyframes catalog-spin{to{transform:rotate(360deg)}}
 .catalog-overview-row{display:grid;grid-template-columns:minmax(0,1fr) max-content max-content;grid-template-rows:auto auto;align-items:start;gap:10px;margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
 .catalog-locator{position:relative;grid-column:1;grid-row:1;min-width:0}
@@ -1379,7 +1383,7 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
 
 .hidden-package-option { border-left: 3px solid var(--warn); }
 
-@media(max-width:560px){.catalog-load-details{grid-template-columns:1fr}.catalog-copy-diagnostics{width:100%}}
+@media(max-width:560px){.catalog-load-details{grid-template-columns:1fr;grid-template-areas:"summary" "diagnostics" "actions"}.catalog-load-actions{grid-template-columns:1fr;min-width:0}.catalog-status-link,.catalog-copy-diagnostics{width:100%}}
 
 /* 标准交互控件模板：以后新增输入/下拉/按钮/选择框优先复用 .control-field / .control-action / .control-choice */
 :where(.control-field, input[type="search"], input[type="text"], input[type="password"], input[type="number"], select, textarea) {

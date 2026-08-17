@@ -1444,10 +1444,79 @@ function bindMenuOptionTooltip(element) {
 function hideMenuTooltip(force = false) {
   hideUiTooltip(force);
 }
+function classifyCatalogLoadFailure(errorText = '', diagnostics = [], online = true) {
+  const failedRows = (Array.isArray(diagnostics) ? diagnostics : []).filter((row) => row?.ok === false);
+  const combined = [
+    String(errorText || ''),
+    ...failedRows.map((row) => `${row.stage || ''} ${row.provider || ''} ${row.detail || ''}`),
+  ].join('\n');
+  if (!online) return { kind: 'offline', showGithubStatus: false };
+  if (/SHA-256|byte length mismatch|schema|does not match|commit mismatch|provenance|decompress|gzip|JSON/i.test(combined)) {
+    return { kind: 'validation', showGithubStatus: false };
+  }
+  if (/\bHTTP 429\b/i.test(combined)) return { kind: 'rate-limit', showGithubStatus: true };
+  if (/\bHTTP 5\d\d\b/i.test(combined)) return { kind: 'remote-service', showGithubStatus: true };
+  const remoteProviders = new Set(['jsdelivr', 'github-raw', 'github-api', 'github-release']);
+  const remoteFailures = failedRows.filter((row) => remoteProviders.has(String(row.provider || '')));
+  if ((remoteFailures.length && remoteFailures.every((row) => /Failed to fetch|NetworkError|Load failed/i.test(String(row.detail || '')))) ||
+      (!remoteFailures.length && /Failed to fetch|NetworkError|Load failed/i.test(combined))) {
+    return { kind: 'unreachable', showGithubStatus: true };
+  }
+  if (/\bHTTP 404\b/i.test(combined)) return { kind: 'snapshot-missing', showGithubStatus: false };
+  return { kind: 'unknown', showGithubStatus: true };
+}
+function catalogLoadFailureCopy(kind) {
+  const messages = {
+    offline: {
+      title: uiText('浏览器当前离线', '瀏覽器目前離線', 'Your browser is offline'),
+      body: uiText('请检查本机网络连接，联网后点击上方按钮重试。', '請檢查本機網路連線，連線後點擊上方按鈕重試。',
+        'Check your network connection, then use the button above to retry.'),
+    },
+    validation: {
+      title: uiText('Catalog 数据校验失败', 'Catalog 資料驗證失敗', 'Catalog data validation failed'),
+      body: uiText('下载已响应，但数据完整性、格式或浏览器解压校验未通过；请复制诊断信息后反馈。',
+        '下載已有回應，但資料完整性、格式或瀏覽器解壓驗證未通過；請複製診斷資訊後回報。',
+        'The download responded, but integrity, format, or browser decompression validation failed. Copy the diagnostics when reporting it.'),
+    },
+    'rate-limit': {
+      title: uiText('远端请求受到限流', '遠端請求受到限流', 'Remote requests are rate-limited'),
+      body: uiText('GitHub 或 CDN 暂时拒绝了过多请求；请稍后重试，也可查看 GitHub 服务状态。',
+        'GitHub 或 CDN 暫時拒絕了過多請求；請稍後重試，也可查看 GitHub 服務狀態。',
+        'GitHub or the CDN temporarily rejected too many requests. Retry later or check GitHub service status.'),
+    },
+    'remote-service': {
+      title: uiText('远端服务暂时异常', '遠端服務暫時異常', 'A remote service is temporarily unavailable'),
+      body: uiText('Catalog 数据源返回服务器错误，可能是 GitHub 或 CDN 故障；请稍后重试并查看服务状态。',
+        'Catalog 資料來源回傳伺服器錯誤，可能是 GitHub 或 CDN 故障；請稍後重試並查看服務狀態。',
+        'A Catalog source returned a server error. GitHub or the CDN may be disrupted; retry later and check service status.'),
+    },
+    unreachable: {
+      title: uiText('远端数据源暂时不可达', '遠端資料來源暫時無法連線', 'Remote Catalog sources are unreachable'),
+      body: uiText('浏览器在线，但 jsDelivr 与 GitHub 数据源均无法连接；可能是网络限制或 GitHub 全球服务故障。',
+        '瀏覽器在線，但 jsDelivr 與 GitHub 資料來源均無法連線；可能是網路限制或 GitHub 全球服務故障。',
+        'The browser is online, but jsDelivr and GitHub sources are unreachable. Network filtering or a GitHub service incident may be involved.'),
+    },
+    'snapshot-missing': {
+      title: uiText('Catalog 分支或快照不存在', 'Catalog 分支或快照不存在', 'The Catalog branch or snapshot is unavailable'),
+      body: uiText('远端服务可以访问，但当前数据分支或固定快照尚未发布；请复制诊断信息后反馈。',
+        '遠端服務可以存取，但目前資料分支或固定快照尚未發布；請複製診斷資訊後回報。',
+        'The remote service is reachable, but this data branch or pinned snapshot is not published. Copy the diagnostics when reporting it.'),
+    },
+    unknown: {
+      title: uiText('Catalog 加载失败', 'Catalog 載入失敗', 'Catalog failed to load'),
+      body: uiText('所有可用数据源均未成功；请重试、查看 GitHub 服务状态，或复制诊断信息后反馈。',
+        '所有可用資料來源均未成功；請重試、查看 GitHub 服務狀態，或複製診斷資訊後回報。',
+        'No Catalog source succeeded. Retry, check GitHub service status, or copy the diagnostics when reporting it.'),
+    },
+  };
+  return messages[kind] || messages.unknown;
+}
 function catalogDiagnosticsText() {
   const source = selectedCatalogSource();
   const branch = selectedCatalogBranch(source);
   const detail = CATALOG_LOADER_MODULE?.formatCatalogDiagnostics(catalogLoadDiagnostics) || '';
+  const failure = classifyCatalogLoadFailure(catalogLoadError, catalogLoadDiagnostics, navigator.onLine);
+  const summary = catalogLoadFailureCopy(failure.kind);
   return [
     `Catalog repository: ${MENU_CATALOG_REPO}`,
     `Selection: ${source?.id || '(unknown)'}/${branch?.branch || branch?.id || '(unknown)'}`,
@@ -1455,6 +1524,7 @@ function catalogDiagnosticsText() {
     `Online: ${navigator.onLine}`,
     `Browser gzip: ${typeof DecompressionStream === 'function'}`,
     `Cache API: ${Boolean(globalThis.caches?.open)}`,
+    `Reason: ${failure.kind} - ${summary.title}`,
     `Error: ${catalogLoadError || '(unknown)'}`,
     detail,
   ].filter(Boolean).join('\n');
@@ -1463,6 +1533,8 @@ function renderCatalogLoadState() {
   const box = $('catalogLoadState');
   if (!box) return;
   const failed = catalogLoadMode === 'error';
+  const failure = classifyCatalogLoadFailure(catalogLoadError, catalogLoadDiagnostics, navigator.onLine);
+  const summary = catalogLoadFailureCopy(failure.kind);
   box.hidden = catalogLoadMode === 'idle';
   box.disabled = !failed;
   box.dataset.state = catalogLoadMode;
@@ -1470,13 +1542,19 @@ function renderCatalogLoadState() {
   $('targetPicker')?.setAttribute('aria-busy', String(catalogLoadMode === 'loading'));
   if ($('catalogLoadText')) {
     $('catalogLoadText').textContent = failed
-      ? uiText('Catalog 加载失败，点击重试', 'Catalog 載入失敗，點擊重試',
-        'Catalog failed to load. Click to retry')
+      ? `${summary.title}${uiText('，点击重试', '，點擊重試', '. Click to retry')}`
       : uiText('正在加载 Target 与 menuconfig…', '正在載入 Target 與 menuconfig…',
         'Loading Target and menuconfig…');
   }
   const details = $('catalogLoadDetails');
   if (details) details.hidden = !failed;
+  if ($('catalogLoadReasonTitle')) $('catalogLoadReasonTitle').textContent = failed ? summary.title : '';
+  if ($('catalogLoadReasonText')) $('catalogLoadReasonText').textContent = failed ? summary.body : '';
+  if ($('catalogStatusLink')) {
+    $('catalogStatusLink').hidden = !failed || !failure.showGithubStatus;
+    $('catalogStatusLink').textContent = uiText('查看 GitHub 服务状态', '查看 GitHub 服務狀態',
+      'View GitHub service status');
+  }
   if ($('catalogLoadDiagnostics')) $('catalogLoadDiagnostics').textContent = failed ? catalogDiagnosticsText() : '';
   if ($('catalogCopyDiagnostics')) {
     $('catalogCopyDiagnostics').textContent = uiText('复制诊断', '複製診斷', 'Copy diagnostics');
