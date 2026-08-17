@@ -113,6 +113,7 @@ const baselineOptions = [
   { symbol: 'A', type: 'bool', hidden: false },
   { symbol: 'TARGETED', type: 'bool', hidden: false },
   { symbol: 'MODULE', type: 'tristate', hidden: false },
+  { symbol: 'LUCI_LANG_zh_Hans', type: 'tristate', hidden: false },
   { symbol: 'HIDDEN', type: 'bool', hidden: true },
   { symbol: 'CHOICE_A', type: 'bool', hidden: false, choice: 'FIXTURE_CHOICE' },
   { symbol: 'CHOICE_B', type: 'bool', hidden: false, choice: 'FIXTURE_CHOICE' },
@@ -120,6 +121,7 @@ const baselineOptions = [
 const baselineEntries = new Map([
   ['A', { value: 'y' }], ['B', { value: 'y' }], ['C', { value: 'y' }],
   ['TARGETED', { value: 'y' }], ['MODULE', { value: 'm' }], ['HIDDEN', { value: 'y' }],
+  ['LUCI_LANG_zh_Hans', { value: 'y' }],
   ['CHOICE_A', { value: 'n' }], ['CHOICE_B', { value: 'y' }],
 ]);
 const baselineContext = {
@@ -134,7 +136,8 @@ const baselineContext = {
   },
   menuValues: new Map(), menuTouched: new Set(), catalogBaselineValues: new Map(),
   catalogBaselineOrigins: new Map(), catalogRecommendedValues: new Map(),
-  catalogDependencySymbols: new Set(), catalogImportedSymbols: new Set(),
+  catalogDependencySymbols: new Set(), catalogConditionalDefaultSymbols: new Set(),
+  catalogImportedSymbols: new Set(),
   catalogUserOverrides: new Map(), state: { sel: new Set(), removed: new Set() },
   menuSearchOptions: baselineOptions,
   markCatalogStateChanged() {}, snapshotCatalogBaseline() {},
@@ -149,6 +152,8 @@ assert.equal(baselineContext.menuValues.get('B'), 'y');
 assert.equal(baselineContext.menuValues.get('C'), 'y');
 assert.equal(baselineContext.menuValues.get('TARGETED'), 'y');
 assert.equal(baselineContext.menuValues.get('MODULE'), 'm');
+assert.equal(baselineContext.menuValues.get('LUCI_LANG_zh_Hans'), 'y',
+  'Native Profile firmware language was not preserved during initial Catalog load');
 assert.equal(baselineContext.menuValues.get('CHOICE_B'), 'y');
 assert.equal(baselineContext.menuValues.get('HIDDEN'), 'y');
 assert.equal(baselineContext.menuValues.get('CHOICE_A'), 'n');
@@ -157,6 +162,29 @@ assert.equal(baselineContextBuilds, 0,
 assert.equal(baselineValueReads, baselineOptions.length,
   'Native Profile initialization did not read each loaded option exactly once');
 assert.ok(baselineElapsed < 1000, `Native Profile baseline seeding took ${baselineElapsed.toFixed(1)}ms`);
+
+const hiddenDerivedSource = appFunctionSource(appSource, 'hiddenDerivedOptionActive', 'optionVisible');
+const hiddenDerivedContext = {
+  menuValues: new Map(),
+  kconfigLevel(value) { return value === 'y' ? 2 : value === 'm' ? 1 : 0; },
+  String,
+};
+vm.runInNewContext(hiddenDerivedSource, hiddenDerivedContext, { filename: 'app-hidden-derived-fixture.js' });
+const hiddenLanguage = {
+  symbol: 'PACKAGE_luci-i18n-demo-zh-cn', type: 'tristate', hidden: true,
+  userSettable: false, origin: 'hidden-kconfig+packageinfo',
+};
+assert.equal(hiddenDerivedContext.hiddenDerivedOptionActive(hiddenLanguage), false,
+  'an inactive promptless language package was rendered before its Kconfig conditions became active');
+hiddenDerivedContext.menuValues.set(hiddenLanguage.symbol, 'm');
+assert.equal(hiddenDerivedContext.hiddenDerivedOptionActive(hiddenLanguage), true,
+  'an active promptless language package was hidden after resolving to M');
+hiddenDerivedContext.menuValues.set(hiddenLanguage.symbol, 'y');
+assert.equal(hiddenDerivedContext.hiddenDerivedOptionActive(hiddenLanguage), true,
+  'an active promptless language package was hidden after resolving to Y');
+assert.equal(hiddenDerivedContext.hiddenDerivedOptionActive({
+  ...hiddenLanguage, symbol: 'PACKAGE_metadata-only', origin: 'packageinfo-only',
+}), true, 'packageinfo-only diagnostics were incorrectly hidden with derived Kconfig symbols');
 
 const workerSource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-search-worker.js'), 'utf8');
 const messages = [];

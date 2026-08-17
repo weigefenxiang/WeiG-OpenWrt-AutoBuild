@@ -138,6 +138,9 @@ function CountingDecompressionStream(format) {
 const calls = [];
 const fetchImpl = async (url) => {
   calls.push(url);
+  if (url.includes('cdn.jsdelivr.net') && url.includes('index.json')) {
+    return new Response(JSON.stringify(index), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
   if (url.includes('raw.githubusercontent.com') && url.includes('index.json')) {
     return new Response(JSON.stringify(index), { status: 200, headers: { 'content-type': 'application/json' } });
   }
@@ -160,13 +163,13 @@ const loader = createCatalogLoader({
 });
 const first = await loader.fetchBundle({ sourceId: 'ImmortalWrt', branchName: 'openwrt-25.12' });
 assert(first.provider === 'github-raw', 'invalid jsDelivr asset did not fall back to GitHub Raw');
-assert(first.indexProvider === 'github-raw', 'latest index was not loaded from GitHub Raw first');
+assert(first.indexProvider === 'jsdelivr', 'latest index was not loaded from jsDelivr first');
 assert(first.model.catalog.schema === 5, 'validated Catalog model was not returned');
 assert(catalogDecodeCount === 1, `network Catalog decoded ${catalogDecodeCount} times; expected once`);
 assert(first.diagnostics.some((row) => !row.ok && row.provider === 'jsdelivr' && /byte length|SHA-256/.test(row.detail)),
 'jsDelivr hash failure was not diagnosed');
-assert(!calls.some((url) => url.includes('cdn.jsdelivr.net') && url.includes('index.json')),
-'jsDelivr index was requested even though GitHub Raw index succeeded');
+assert(!calls.some((url) => url.includes('raw.githubusercontent.com') && url.includes('index.json')),
+'GitHub Raw index was requested even though jsDelivr succeeded');
 
 const beforeCache = calls.length;
 const cached = await loader.fetchBundle({ sourceId: 'ImmortalWrt', branchName: 'openwrt-25.12' });
@@ -179,13 +182,13 @@ await loader.clearCache();
 const fallbackCalls = [];
 const fallbackFetch = async (url) => {
   fallbackCalls.push(url);
-  if (url.includes('raw.githubusercontent.com') && url.includes('index.json')) {
+  if (url.includes('cdn.jsdelivr.net') && url.includes('index.json')) {
     return new Response('offline', { status: 503 });
   }
-  if (url.includes('cdn.jsdelivr.net') && url.includes('index.json')) {
+  if (url.includes('raw.githubusercontent.com') && url.includes('index.json')) {
     return new Response(JSON.stringify(index), { status: 200 });
   }
-  if (url.includes('cdn.jsdelivr.net') && url.includes(asset)) {
+  if (url.includes('raw.githubusercontent.com') && url.includes(asset)) {
     return new Response(valid.bytes, { status: 200 });
   }
   return new Response('missing', { status: 404 });
@@ -201,10 +204,54 @@ const fallbackLoader = createCatalogLoader({
 const fallback = await fallbackLoader.fetchBundle({
   sourceId: 'ImmortalWrt', branchName: 'openwrt-25.12', forceRefresh: true,
 });
-assert(fallback.indexProvider === 'jsdelivr', 'index provider fallback did not reach jsDelivr');
-assert(fallback.provider === 'jsdelivr', 'valid jsDelivr immutable asset was not accepted');
-assert(fallbackCalls[0].includes('raw.githubusercontent.com') && fallbackCalls[0].includes('wrt_refresh=456'),
-'GitHub Raw refresh-busted index was not attempted first');
+assert(fallback.indexProvider === 'github-raw', 'index provider fallback did not reach GitHub Raw');
+assert(fallback.provider === 'github-raw', 'valid GitHub Raw immutable asset was not accepted');
+assert(fallbackCalls[0].includes('cdn.jsdelivr.net') && fallbackCalls[0].includes('wrt_refresh=456'),
+'jsDelivr refresh-busted index was not attempted first');
+
+const apiCalls = [];
+const apiFetch = async (url, options = {}) => {
+  apiCalls.push({ url, options });
+  if ((url.includes('cdn.jsdelivr.net') || url.includes('raw.githubusercontent.com')) && url.includes('index.json')) {
+    return new Response('unavailable', { status: url.includes('cdn.jsdelivr.net') ? 404 : 429 });
+  }
+  if (url.includes('api.github.com') && url.includes('/contents/index.json?ref=catalog-main')) {
+    return new Response(JSON.stringify(index), { status: 200 });
+  }
+  if ((url.includes('cdn.jsdelivr.net') || url.includes('raw.githubusercontent.com')) && url.includes(asset)) {
+    return new Response('unavailable', { status: 503 });
+  }
+  if (url.includes('api.github.com') && url.includes(`/contents/${asset}?ref=${index.assetRef}`)) {
+    return new Response(valid.bytes, { status: 200 });
+  }
+  return new Response('missing', { status: 404 });
+};
+const apiLoader = createCatalogLoader({
+  repository: 'owner/catalog',
+  dataRef: 'catalog-main',
+  allowReleaseFallback: false,
+  engine: { createCatalogModel },
+  fetchImpl: apiFetch,
+  cacheStorage: fakeCaches(),
+  subtle: null,
+  now: () => 654,
+});
+const apiFallback = await apiLoader.fetchBundle({
+  sourceId: 'ImmortalWrt', branchName: 'openwrt-25.12', forceRefresh: true,
+});
+assert(apiFallback.indexProvider === 'github-api' && apiFallback.provider === 'github-api',
+  'GitHub Contents API did not recover the Catalog index and immutable asset');
+assert(apiCalls.slice(0, 3).map((call) => new URL(call.url).hostname).join(',') ===
+  'cdn.jsdelivr.net,raw.githubusercontent.com,api.github.com',
+  'Catalog index providers no longer run in jsDelivr -> Raw -> GitHub API order');
+assert(apiCalls.filter((call) => call.url.includes('api.github.com')).every((call) =>
+  call.options.headers?.accept === 'application/vnd.github.raw+json'),
+  'GitHub Contents API requests lost the raw response media type');
+assert(apiCalls.some((call) => call.url.includes(`/contents/${asset}?ref=${index.assetRef}`)),
+  'GitHub Contents API asset request did not use the immutable assetRef');
+assert(apiFallback.diagnostics.filter((row) => row.stage === 'index' && !row.ok)
+  .map((row) => row.provider).join(',') === 'jsdelivr,github-raw',
+  'GitHub API recovery diagnostics did not preserve the two prior provider failures');
 
 const releaseCalls = [];
 const releaseFetch = async (url) => {
@@ -213,6 +260,9 @@ const releaseFetch = async (url) => {
     return new Response('offline', { status: 503 });
   }
   if (url.includes('cdn.jsdelivr.net') && url.includes('index.json')) {
+    return new Response('offline', { status: 503 });
+  }
+  if (url.includes('api.github.com') && url.includes('index.json')) {
     return new Response('offline', { status: 503 });
   }
   if (url.includes('/releases/download/menuconfig-catalog-complete/index.json')) {
@@ -244,8 +294,8 @@ assert(releaseFallback.provider === 'github-release',
 'asset provider fallback did not reach the complete GitHub Release');
 assert(releaseCalls.some((url) => url.includes('/releases/download/menuconfig-catalog-complete/index.json?wrt_refresh=789')),
 'GitHub Release index URL was not refresh-busted');
-assert(releaseFallback.diagnostics.filter((row) => row.stage === 'index' && !row.ok).length === 2,
-'GitHub Release index fallback diagnostics did not preserve both prior failures');
+assert(releaseFallback.diagnostics.filter((row) => row.stage === 'index' && !row.ok).length === 3,
+'GitHub Release index fallback diagnostics did not preserve all prior failures');
 
 const stale = compressedDocument(catalog(commit, 4, 1));
 let staleError = null;

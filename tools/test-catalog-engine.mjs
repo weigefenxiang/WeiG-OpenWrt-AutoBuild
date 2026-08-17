@@ -15,6 +15,7 @@ import {
   orderCatalogIndex,
   resolveKconfigDefault,
   preferredCatalogTarget,
+  reconcileKconfigDerivedValues,
   resolveCatalogUserOverride,
   resolveEffectiveTheme,
   selectableKconfigStates,
@@ -98,6 +99,8 @@ const records = [
   { kind: 'package', package: 'ui-service', configSymbol: 'PACKAGE_ui-service', kconfigSymbol: 'PACKAGE_ui-service', states: ['n', 'm', 'y'],
     packageInfo: { depends: [{ raw: '+core-service', required: true, packages: ['core-service'] }] } },
   { kind: 'package', package: 'i18n-service', configSymbol: 'PACKAGE_i18n-service', kconfigSymbol: 'PACKAGE_i18n-service', states: ['n', 'm', 'y'], hidden: true, visible: false, userSettable: false,
+    defaults: ['LANGUAGE_SWITCH||(EVERYTHING&&m)'],
+    kconfig: { dependsExpressions: [['PACKAGE_ui-service']] },
     packageInfo: { depends: [{ raw: '+ui-service', required: true, packages: ['ui-service'] }] } },
   { kind: 'package', package: 'flow-core', configSymbol: 'PACKAGE_flow-core', kconfigSymbol: 'PACKAGE_flow-core', states: ['n', 'm', 'y'] },
   { kind: 'package', package: 'flow-offload', configSymbol: 'PACKAGE_flow-offload', kconfigSymbol: 'PACKAGE_flow-offload', states: ['n', 'm', 'y'],
@@ -528,6 +531,8 @@ assert(offload.values.get('PACKAGE_flow-core') === 'y' && offload.values.get('PA
   'generic forward dependency closure failed');
 
 const directionalBase = parseConfigDocument([
+  '# CONFIG_LANGUAGE_SWITCH is not set',
+  '# CONFIG_EVERYTHING is not set',
   '# CONFIG_PACKAGE_core-service is not set',
   '# CONFIG_PACKAGE_ui-service is not set',
   '# CONFIG_PACKAGE_i18n-service is not set',
@@ -542,6 +547,41 @@ assert(dependencyOnly.values.get('PACKAGE_core-service') === 'y' &&
   dependencyOnly.values.get('PACKAGE_ui-service') === 'n' &&
   dependencyOnly.values.get('PACKAGE_i18n-service') === 'n',
   'enabling a dependency incorrectly reverse-selected packages that depend on it');
+
+const localizedBase = new Map(directionalBase).set('LANGUAGE_SWITCH', 'y');
+const localizedBuiltin = applyUserIntent(model, localizedBase, {
+  symbol: 'PACKAGE_ui-service', value: 'y',
+});
+assert(localizedBuiltin.values.get('PACKAGE_i18n-service') === 'y' &&
+  localizedBuiltin.changes.some((row) => row.symbol === 'PACKAGE_i18n-service' &&
+    row.reason === 'conditional-default'),
+  'a promptless language package did not follow its enabled parent and firmware language default');
+const localizedModule = applyUserIntent(model, localizedBase, {
+  symbol: 'PACKAGE_ui-service', value: 'm',
+});
+assert(localizedModule.values.get('PACKAGE_i18n-service') === 'm',
+  'a promptless language package did not respect its modular parent dependency ceiling');
+const localizedParentOff = applyUserIntent(model, localizedBuiltin.values, {
+  symbol: 'PACKAGE_ui-service', value: 'n',
+});
+assert(localizedParentOff.values.get('PACKAGE_i18n-service') === 'n',
+  'a promptless language package remained enabled after its parent was disabled');
+const localizedLanguageOff = applyUserIntent(model, localizedBuiltin.values, {
+  symbol: 'LANGUAGE_SWITCH', value: 'n',
+});
+assert(localizedLanguageOff.values.get('PACKAGE_ui-service') === 'y' &&
+  localizedLanguageOff.values.get('PACKAGE_i18n-service') === 'n',
+  'a promptless language package remained enabled after its firmware language was disabled');
+const reconciledImport = reconcileKconfigDerivedValues(model, new Map([
+  ...localizedBase,
+  ['PACKAGE_ui-service', 'y'],
+  ['PACKAGE_core-service', 'y'],
+  ['PACKAGE_i18n-service', 'n'],
+]));
+assert(reconciledImport.values.get('PACKAGE_i18n-service') === 'y' &&
+  reconciledImport.derivedSymbols.has('PACKAGE_i18n-service') &&
+  reconciledImport.derivedReasons.get('PACKAGE_i18n-service') === 'conditional-default',
+  'a stale imported hidden default was not reconciled from authoritative Kconfig conditions');
 
 const chain = parseConfigDocument([
   'CONFIG_PACKAGE_core-service=y',

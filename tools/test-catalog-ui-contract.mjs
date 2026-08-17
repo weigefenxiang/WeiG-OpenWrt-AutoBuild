@@ -57,6 +57,13 @@ expect(app.includes('button.textContent = sha;') && !app.includes('sha.slice(0, 
   css.includes('width: min(480px, calc(100vw - 16px))') && css.includes('text-overflow: ellipsis') &&
   html.indexOf('id="siteVersion"') < html.indexOf('id="importBtn"') && html.indexOf('id="importBtn"') < html.indexOf('id="submitBtn"'),
   'Build Information anchoring, interactive auto-close, full-width SHA display, or footer order regressed');
+const refreshMenuIndexContract = app.match(/async function refreshMenuIndex\(\) \{[\s\S]*?\n\}\nfunction selectedCatalogSource/)?.[0] || '';
+const renderDevicesContract = app.match(/function renderDevices\(\) \{[\s\S]*?\n\}\n\nfunction updateDeviceSummary/)?.[0] || '';
+expect(refreshMenuIndexContract.includes("error?.name !== 'AbortError'") &&
+  refreshMenuIndexContract.includes("setCatalogLoadState('error', error, error?.diagnostics)") &&
+  renderDevicesContract.includes("if (catalogLoadMode !== 'error') setCatalogLoadState('loading')") &&
+  !app.includes('No usable Catalog sources are available'),
+  'Catalog startup still reports a generic failure before loading or discards provider diagnostics');
 expect(html.includes('data-i18n="btn.import.short"') && html.includes('data-i18n="btn.submit.short"') &&
   css.includes('.actionbar-row { flex-wrap: nowrap; gap: 5px; padding: 6px 8px; }') &&
   css.includes('.action-label-full { display: none; }') && css.includes('.action-label-short { display: inline; }') &&
@@ -236,6 +243,8 @@ const originSlotContract = app.match(/function renderCatalogOriginSlot\(option, 
 expect(app.includes("kind: 'user', label: uiText('自选'") &&
   app.includes("kind: 'user-exclude', label: uiText('排除'") &&
   app.includes("kind: 'dependency', label: uiText('自动依赖'") &&
+  app.includes('catalogConditionalDefaultSymbols.has(symbol)') &&
+  app.includes('当前值由 Catalog Kconfig 的条件默认值自动计算') &&
   app.includes('preferredValues: catalogPreferredValues()') &&
   app.includes('活动 select 暂时把实际值提升为') &&
   app.includes("displayKind: 'default', label: uiText('默认'") &&
@@ -398,6 +407,8 @@ expect(setMenuValueContract.includes('applyMenuValue(option, value, false)') &&
   setMenuValueContract.includes("renderCatalogUiAfterIntent(openChildren && renderedValue !== 'n', option, renderedValue)"),
   'Advanced menuconfig must apply the clicked Kconfig symbol directly and keep dependency direction native');
 const renderMenuOptionContract = app.match(/function renderMenuOption\(option\) \{[\s\S]*?\n\}\nfunction renderMenuLeaf/)?.[0] || '';
+const hiddenDerivedContract = app.match(/function hiddenDerivedOptionActive\(option\) \{[\s\S]*?\n\}/)?.[0] || '';
+const importedDefaultContract = app.match(/function reconcileImportedConditionalDefaults\(\) \{[\s\S]*?\n\}/)?.[0] || '';
 expect(app.includes('function optionStateConstraints(option)') &&
   (app.match(/CATALOG_ENGINE\.kconfigStateConstraints/g) || []).length >= 3 &&
   renderMenuOptionContract.includes("for (const stateValue of ['n', 'm', 'y'])") &&
@@ -415,6 +426,17 @@ expect(app.includes('function optionStateConstraints(option)') &&
   css.includes('.kconfig-tri .kconfig-state.is-current.is-locked') &&
   css.includes('.kconfig-tri .kconfig-state.is-disabled'),
   'N/M/Y controls lost fixed alignment, shared Catalog constraints, locked styling, or mobile-readable hints');
+expect(hiddenDerivedContract.includes("option.origin === 'packageinfo-only'") &&
+  hiddenDerivedContract.includes('option.userSettable !== false') &&
+  hiddenDerivedContract.includes('kconfigLevel(value) > 0') &&
+  app.includes('if (option?.hidden) return hiddenDerivedOptionActive(option)') &&
+  importedDefaultContract.includes('CATALOG_ENGINE.reconcileKconfigDerivedValues') &&
+  importedDefaultContract.includes("derivedReasons.get(symbol) === 'conditional-default'") &&
+  app.includes('reconcileImportedConditionalDefaults();') &&
+  app.includes('该符号没有可操作提示；当前状态由 Kconfig 条件默认值自动计算') &&
+  app.includes('option.defaults?.length ? uiText(`默认：${option.defaults.join') &&
+  !app.includes("PACKAGE_luci-i18n-openvpn-server-zh-cn"),
+  'promptless conditional defaults no longer hide at N, reconcile imports, explain their read-only cause, or remain package-agnostic');
 expect(!app.includes('button.hidden = button.disabled && !active') &&
   !app.includes("applyCatalogIntent(row.option, 'n', true, 'user')") &&
   !app.includes("applyCatalogIntent(row.option, value, true, 'user')"),

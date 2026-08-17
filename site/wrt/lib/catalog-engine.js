@@ -479,8 +479,12 @@ export function createCatalogModel(catalog) {
     for (const raw of record.defaults || []) {
       const { valueExpression, condition } = defaultParts(raw);
       if (record.type === 'bool' || record.type === 'tristate') {
-        for (const symbol of referencedExpressionSymbols(valueExpression)) defaultReferences.add(symbol);
-        for (const symbol of referencedExpressionSymbols(condition)) defaultReferences.add(symbol);
+        for (const symbol of [
+          ...referencedExpressionSymbols(valueExpression),
+          ...referencedExpressionSymbols(condition),
+        ]) {
+          defaultReferences.add(symbol);
+        }
       }
     }
     for (const expression of nestedExpressionStrings(record.kconfig?.dependsExpressions || [])) {
@@ -556,6 +560,11 @@ export function createCatalogModel(catalog) {
     reverseKconfig,
     reverseSelects,
     reverseImplies,
+    promptlessDefaultRecords: records.filter((record) =>
+      record.hidden === true &&
+      record.userSettable === false &&
+      ['bool', 'tristate'].includes(record.type) &&
+      Array.isArray(record.defaults) && record.defaults.length > 0),
     choices,
     featureSymbols,
     targetFeatureSymbols,
@@ -1373,6 +1382,72 @@ function enforceActiveReverseRelations(model, values, changes, options = {}) {
   throw new Error('Kconfig reverse relation resolution did not converge');
 }
 
+function derivedDefaultState(model, record, values, options = {}) {
+  const resolved = resolveKconfigDefault(record, values, options);
+  if (resolved.status === 'deferred') return null;
+  const dependencyMaximum = dependencyLevel(record, values, options);
+  let defaultLevel = stateLevel(resolved.value);
+  if (dependencyMaximum !== UNKNOWN) defaultLevel = Math.min(defaultLevel, dependencyMaximum);
+  const selectors = activeSelectRequirements(model, record, values, options);
+  const selectorLevel = selectors.reduce((maximum, item) => Math.max(maximum, item.level), 0);
+  const implies = activeImplyRequirements(model, record, values, options);
+  let implyLevel = implies.reduce((maximum, item) => Math.max(maximum, item.level), 0);
+  if (dependencyMaximum !== UNKNOWN) implyLevel = Math.min(implyLevel, dependencyMaximum);
+  let level = Math.max(defaultLevel, implyLevel, selectorLevel);
+  if (record.type === 'bool' && level === 1) level = 2;
+  const value = normalizeKconfigStateValue(record, STATE[level] || 'n');
+  if (selectorLevel >= implyLevel && selectorLevel > defaultLevel) {
+    return {
+      value,
+      reason: 'select',
+      source: selectors.find((item) => item.level === selectorLevel)?.sourceSymbol || '',
+    };
+  }
+  if (implyLevel > defaultLevel) {
+    return {
+      value,
+      reason: 'imply',
+      source: implies.find((item) => item.level === implyLevel)?.sourceSymbol || '',
+    };
+  }
+  return { value, reason: 'conditional-default', source: '' };
+}
+
+function reconcileDerivedDefaults(model, values, changes, options = {}) {
+  const records = model?.promptlessDefaultRecords || [];
+  const derivedSymbols = new Set();
+  const derivedReasons = new Map();
+  for (let pass = 0; pass < 64; pass++) {
+    const before = changes.length;
+    const enabled = [];
+    const disabled = [];
+    for (const record of records) {
+      if (!record?.configSymbol || options.trustedSymbols?.has(record.configSymbol)) continue;
+      const resolved = derivedDefaultState(model, record, values, options);
+      if (!resolved) continue;
+      derivedSymbols.add(record.configSymbol);
+      derivedReasons.set(record.configSymbol, resolved.reason);
+      if (!setValue(values, changes, record.configSymbol, resolved.value,
+        resolved.reason, resolved.source)) continue;
+      if (resolved.value === 'n') disabled.push(record.configSymbol);
+      else enabled.push(record.configSymbol);
+    }
+    if (disabled.length) cascadeDisabled(model, values, changes, disabled, options);
+    if (enabled.length) cascadeEnabled(model, values, changes, enabled, options);
+    enforceActiveReverseRelations(model, values, changes, options);
+    if (changes.length === before) return { derivedSymbols, derivedReasons };
+  }
+  throw new Error('Kconfig conditional default resolution did not converge');
+}
+
+export function reconcileKconfigDerivedValues(model, inputValues, rawOptions = {}) {
+  const values = new Map(valuesMap(inputValues));
+  const changes = [];
+  const options = validationOptions(values, rawOptions);
+  const derived = reconcileDerivedDefaults(model, values, changes, options);
+  return { values, changes, ...derived, violations: validateConfig(model, values, options) };
+}
+
 export function applyUserIntent(model, inputValues, intent) {
   const initialValues = new Map(valuesMap(inputValues));
   const values = new Map(initialValues);
@@ -1459,6 +1534,13 @@ export function applyUserIntent(model, inputValues, intent) {
       if (setValue(values, changes, preferredSymbol, effective, 'preferred-intent')) restored = true;
     }
   }
+  const derivedStart = changes.length;
+  let derived = reconcileDerivedDefaults(model, values, changes, options);
+  if (changes.slice(derivedStart).some((change) => change.to === 'n')) {
+    pruneUnusedDependencies(model, values, changes, intent?.dependencySymbols,
+      intent?.protectedSymbols, options);
+    derived = reconcileDerivedDefaults(model, values, changes, options);
+  }
   const violations = validateConfig(model, values, options);
   if (value !== 'n') {
     const blocking = violations.filter((item) => !beforeKeys.has(violationKey(item)));
@@ -1470,7 +1552,7 @@ export function applyUserIntent(model, inputValues, intent) {
       throw error;
     }
   }
-  return { values, changes, violations };
+  return { values, changes, ...derived, violations };
 }
 
 export function resolveEffectiveTheme(model, target, inputValues = new Map(), options = {}) {

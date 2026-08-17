@@ -122,6 +122,7 @@ const catalogBaselineValues = new Map();
 const catalogBaselineOrigins = new Map();
 const catalogRecommendedValues = new Map();
 const catalogDependencySymbols = new Set();
+const catalogConditionalDefaultSymbols = new Set();
 const catalogImportedSymbols = new Set();
 const catalogUserOverrides = new Map();
 const profilePackageOverrides = new Map();
@@ -1306,7 +1307,11 @@ async function refreshMenuIndex() {
         renderCatalogLocatorResults();
       }
     }
-  } catch (e) { /* 远程 Catalog 暂不可用时继续使用仓库内回退清单 / keep the bundled locator while remote providers are unavailable */ }
+  } catch (error) {
+    if (error?.name !== 'AbortError' && !MENU_INDEX?.sources?.length) {
+      setCatalogLoadState('error', error, error?.diagnostics);
+    }
+  }
   finally {
     if (menuIndexAbortController === abortController) menuIndexAbortController = null;
   }
@@ -2513,6 +2518,7 @@ function resetCatalogSelectionLayers() {
   catalogBaselineOrigins.clear();
   catalogRecommendedValues.clear();
   catalogDependencySymbols.clear();
+  catalogConditionalDefaultSymbols.clear();
   catalogImportedSymbols.clear();
   catalogUserOverrides.clear();
   profilePackageOverrides.clear();
@@ -2532,6 +2538,7 @@ function initializeCatalogBaseline() {
   catalogBaselineOrigins.clear();
   catalogRecommendedValues.clear();
   catalogDependencySymbols.clear();
+  catalogConditionalDefaultSymbols.clear();
   catalogImportedSymbols.clear();
   catalogUserOverrides.clear();
   state.sel.clear();
@@ -2638,6 +2645,15 @@ function catalogOriginMeta(option) {
       kind: 'recommended', label: uiText('推荐', '推薦', 'Recommended'),
       detail: uiText('当前值来自网页推荐项。', '目前值來自網頁推薦項目。',
         'The current value comes from the web recommendations.'),
+    };
+  }
+  if (catalogConditionalDefaultSymbols.has(symbol)) {
+    return {
+      kind: 'kconfig-default', displayKind: 'default', label: uiText('默认', '預設', 'Default'),
+      detail: uiText(
+        '当前值由 Catalog Kconfig 的条件默认值自动计算；修改父选项、固件语言或其他条件后会自动更新。',
+        '目前值由 Catalog Kconfig 的條件預設值自動計算；修改父選項、韌體語言或其他條件後會自動更新。',
+        'Catalog Kconfig computed this conditional default. It updates automatically when its parent option, firmware language, or another condition changes.'),
     };
   }
   if (catalogDependencySymbols.has(symbol)) {
@@ -2768,8 +2784,15 @@ function refreshMenuEvaluationCaches() {
   menuSelectableStatesCache.clear();
   menuStateConstraintsCache.clear();
 }
+function hiddenDerivedOptionActive(option) {
+  if (!option?.hidden || option.userSettable !== false || option.origin === 'packageinfo-only') return true;
+  const value = menuValues.get(option.symbol) ?? (option.type === 'string' ? '' : 'n');
+  return option.type === 'bool' || option.type === 'tristate'
+    ? kconfigLevel(value) > 0
+    : String(value ?? '').trim() !== '';
+}
 function optionVisible(option) {
-  if (option?.hidden) return true;
+  if (option?.hidden) return hiddenDerivedOptionActive(option);
   refreshMenuEvaluationCaches();
   if (menuVisibilityCache.has(option.symbol)) return menuVisibilityCache.get(option.symbol);
   const visible = optionDependencyVariants(option).some((group) =>
@@ -2962,7 +2985,15 @@ function applyCatalogIntent(option, value, force = false, source = 'user') {
     for (const change of result.changes) {
       menuValues.set(change.symbol, change.to);
       const explicit = change.symbol === option.symbol;
-      if (source === 'restore' && explicit) {
+      const conditionalDefault = change.reason === 'conditional-default';
+      const changedOption = menuOptionBySymbol.get(change.symbol);
+      if (conditionalDefault) {
+        menuTouched.delete(change.symbol);
+        catalogImportedSymbols.delete(change.symbol);
+        catalogDependencySymbols.delete(change.symbol);
+        if (change.to === 'n') catalogConditionalDefaultSymbols.delete(change.symbol);
+        else catalogConditionalDefaultSymbols.add(change.symbol);
+      } else if (source === 'restore' && explicit) {
         if (!catalogRecommendedValues.has(change.symbol) && !catalogImportedSymbols.has(change.symbol)) {
           menuTouched.delete(change.symbol);
         }
@@ -2984,11 +3015,15 @@ function applyCatalogIntent(option, value, force = false, source = 'user') {
           catalogUserOverrides.set(change.symbol, override);
         }
       } else if (source === 'recommended' && explicit) catalogRecommendedValues.set(change.symbol, change.to);
-      else if (source === 'imported') catalogImportedSymbols.add(change.symbol);
-      if (explicit) catalogDependencySymbols.delete(change.symbol);
-      else if (change.to === 'n') catalogDependencySymbols.delete(change.symbol);
-      else catalogDependencySymbols.add(change.symbol);
-      const changedOption = menuOptionBySymbol.get(change.symbol);
+      else if (source === 'imported' && changedOption?.userSettable !== false) {
+        catalogImportedSymbols.add(change.symbol);
+      }
+      if (!conditionalDefault) {
+        catalogConditionalDefaultSymbols.delete(change.symbol);
+        if (explicit) catalogDependencySymbols.delete(change.symbol);
+        else if (change.to === 'n') catalogDependencySymbols.delete(change.symbol);
+        else catalogDependencySymbols.add(change.symbol);
+      }
       if (!changedOption) continue;
       syncMenuToCurated(changedOption, change.to, curatedSource);
       if (source === 'user' && explicit) syncFirmwareThemeFromMenu(changedOption, change.to);
@@ -2998,6 +3033,39 @@ function applyCatalogIntent(option, value, force = false, source = 'user') {
   } catch (error) {
     restoreCatalogUiState(snapshot);
     throw error;
+  }
+}
+function reconcileImportedConditionalDefaults() {
+  if (!CATALOG_MODEL || !CATALOG_ENGINE?.reconcileKconfigDerivedValues) return;
+  const context = catalogValidationContext(menuValues, 'interactive');
+  const result = CATALOG_ENGINE.reconcileKconfigDerivedValues(
+    CATALOG_MODEL, context.values, context.validationOptions);
+  const derivedSymbols = result.derivedSymbols || new Set();
+  const derivedReasons = result.derivedReasons || new Map();
+  for (const change of result.changes) {
+    if (!menuOptionBySymbol.has(change.symbol)) continue;
+    menuValues.set(change.symbol, change.to);
+    if (derivedSymbols.has(change.symbol)) continue;
+    if (change.to === 'n') catalogDependencySymbols.delete(change.symbol);
+    else catalogDependencySymbols.add(change.symbol);
+  }
+  for (const symbol of derivedSymbols) {
+    if (!menuOptionBySymbol.has(symbol)) continue;
+    const value = result.values.get(symbol) ?? 'n';
+    menuValues.set(symbol, value);
+    catalogImportedSymbols.delete(symbol);
+    menuImportedOriginal.delete(symbol);
+    menuImportedNonDefault.delete(symbol);
+    catalogDependencySymbols.delete(symbol);
+    const baseline = catalogBaselineValues.get(symbol) ?? 'n';
+    if (value !== 'n' && value !== baseline && derivedReasons.get(symbol) === 'conditional-default') {
+      catalogConditionalDefaultSymbols.add(symbol);
+    } else {
+      catalogConditionalDefaultSymbols.delete(symbol);
+      if (value !== 'n' && value !== baseline && ['select', 'imply'].includes(derivedReasons.get(symbol))) {
+        catalogDependencySymbols.add(symbol);
+      }
+    }
   }
 }
 function normalizeKconfigValueByType(rawValue, type = 'bool', symbol = 'Kconfig option') {
@@ -3113,6 +3181,7 @@ function snapshotCatalogUiState() {
   return {
     values: new Map(menuValues), touched: new Set(menuTouched), selected: new Set(state.sel),
     removed: new Set(state.removed), dependencies: new Set(catalogDependencySymbols),
+    conditionalDefaults: new Set(catalogConditionalDefaultSymbols),
     userOverrides: new Map(catalogUserOverrides), recommended: new Map(catalogRecommendedValues),
     imported: new Set(catalogImportedSymbols), theme: state.theme,
     revision: catalogStateRevision,
@@ -3133,6 +3202,7 @@ function restoreCatalogUiState(snapshot) {
   restoreSet(state.sel, snapshot.selected);
   restoreSet(state.removed, snapshot.removed);
   restoreSet(catalogDependencySymbols, snapshot.dependencies);
+  restoreSet(catalogConditionalDefaultSymbols, snapshot.conditionalDefaults);
   restoreMap(catalogUserOverrides, snapshot.userOverrides);
   restoreMap(catalogRecommendedValues, snapshot.recommended);
   restoreSet(catalogImportedSymbols, snapshot.imported);
@@ -3939,6 +4009,11 @@ function kconfigConstraintTooltip(option, stateValue, constraints) {
   if (stateRow.selectable) {
     emphasis = uiText(`可直接切换为 ${stateValue.toUpperCase()}。`, `可直接切換為 ${stateValue.toUpperCase()}。`,
       `You can set this option directly to ${stateValue.toUpperCase()}.`);
+  } else if (constraints.readOnly && (option.defaults || []).length) {
+    emphasis = uiText(
+      '该符号没有可操作提示；当前状态由 Kconfig 条件默认值自动计算。请修改其父选项、固件语言或默认条件。',
+      '此符號沒有可操作提示；目前狀態由 Kconfig 條件預設值自動計算。請修改其父選項、韌體語言或預設條件。',
+      'This symbol has no user prompt. Kconfig computes it from conditional defaults; change its parent option, firmware language, or default condition instead.');
   } else if (constraints.readOnly) {
     emphasis = uiText(
       '该符号没有可操作提示（userSettable=false），只能由 Profile、默认值、select 或导入配置决定。',
@@ -3967,6 +4042,8 @@ function kconfigConstraintTooltip(option, stateValue, constraints) {
       `Active selectors:\n${selectorLines.join('\n')}`) : '',
     option.depends?.length ? uiText(`依赖：${option.depends.join(' && ')}`, `相依：${option.depends.join(' && ')}`,
       `Depends on: ${option.depends.join(' && ')}`) : '',
+    option.defaults?.length ? uiText(`默认：${option.defaults.join('；')}`, `預設：${option.defaults.join('；')}`,
+      `Defaults: ${option.defaults.join('; ')}`) : '',
   ].filter(Boolean).join('\n\n');
   return { title: `CONFIG_${option.symbol} · ${stateValue.toUpperCase()}`, emphasis, body };
 }
@@ -4786,7 +4863,7 @@ function renderDevices() {
     return;
   }
   if (!MENU_INDEX?.sources?.length) {
-    setCatalogLoadState('error', 'No usable Catalog sources are available');
+    if (catalogLoadMode !== 'error') setCatalogLoadState('loading');
     $('menuconfigGrid').textContent = '';
     $('menuconfigPanel').hidden = true;
     updateDeviceSummary();
@@ -6367,6 +6444,7 @@ function restoreSelections(config, payload) {
   catalogUserOverrides.clear();
   catalogImportedSymbols.clear();
   catalogDependencySymbols.clear();
+  catalogConditionalDefaultSymbols.clear();
   importedConfigValues.clear();
   importedUnknownOriginal.clear();
   importedUnknownEdits.clear();
@@ -6407,6 +6485,7 @@ function restoreSelections(config, payload) {
         if (String(value) !== String(defaultValue)) menuImportedNonDefault.add(option.symbol);
       }
     }
+    reconcileImportedConditionalDefaults();
   }
   if (explicit) {
     for (const p of PLUGINS.plugins) {
