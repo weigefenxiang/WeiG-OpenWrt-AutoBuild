@@ -21,24 +21,15 @@ function safeReleaseTag(value) {
 
 export function safeCatalogDataRef(value) {
   const ref = String(value || '').trim();
-  if (!/^catalog-(?:fix(?:-[A-Za-z0-9][A-Za-z0-9._-]{0,95})?|dev|staging|main)$/.test(ref)) {
+  if (!/^catalog-(?:fix-[A-Za-z0-9][A-Za-z0-9._-]{0,95}|dev|staging|main)$/.test(ref)) {
     throw new Error(`invalid Catalog data branch: ${value}`);
   }
   return ref;
 }
 
 function catalogFixCodeRefMatches(codeRef, branch) {
-  const ref = String(codeRef || '').trim();
-  if (branch === 'catalog-fix') {
-    if (!/^fix\/[A-Za-z0-9._/-]+$/.test(ref)) return false;
-    return !/-[ABC]$/i.test(ref);
-  }
   const suffix = /^catalog-fix-([A-Za-z0-9][A-Za-z0-9._-]{0,95})$/.exec(branch)?.[1] || '';
-  if (!suffix) return false;
-  if (ref === `fix-${suffix}`) return true;
-  if (!/^fix\/[A-Za-z0-9._/-]+$/.test(ref)) return false;
-  const legacyLane = /-([ABC])$/i.exec(ref)?.[1]?.toUpperCase() || '';
-  return Boolean(legacyLane) && suffix === legacyLane;
+  return Boolean(suffix) && String(codeRef || '').trim() === `fix-${suffix}`;
 }
 
 export function validateCatalogProvenance(index, dataRef, repository) {
@@ -58,7 +49,7 @@ export function validateCatalogProvenance(index, dataRef, repository) {
   if (typeof provenance.complete !== 'boolean') throw new Error('Catalog provenance complete must be boolean');
 
   const branch = safeCatalogDataRef(dataRef);
-  const validCodeRef = branch.startsWith('catalog-fix') ? catalogFixCodeRefMatches(codeRef, branch)
+  const validCodeRef = branch.startsWith('catalog-fix-') ? catalogFixCodeRefMatches(codeRef, branch)
     : branch === 'catalog-dev' ? codeRef === 'dev'
       : branch === 'catalog-staging' ? codeRef === 'staging'
         : codeRef === 'main';

@@ -44,7 +44,6 @@
   "catalogDataBranches": {
     "fixDefault": "catalog-dev",
     "fixOverrides": {},
-    "legacyFix": "catalog-fix",
     "dev": "catalog-dev",
     "staging": "catalog-staging",
     "main": "catalog-main"

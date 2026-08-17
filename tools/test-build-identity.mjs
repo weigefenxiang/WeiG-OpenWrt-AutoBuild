@@ -27,7 +27,7 @@ assert.equal(normalizeBuildEnvironment('bad branch'), '');
 assert.equal(normalizeBuildEnvironment('../main'), '');
 
 const catalogChannels = {
-  fixDefault: 'catalog-dev', fixOverrides: {}, legacyFix: 'catalog-fix',
+  fixDefault: 'catalog-dev', fixOverrides: {},
   dev: 'catalog-dev', staging: 'catalog-staging', main: 'catalog-main',
 };
 assert.equal(catalogDataBranch('fix-F', catalogChannels), 'catalog-dev');
@@ -47,11 +47,8 @@ assert.throws(() => catalogDataBranch('fix-F', {
 }), /invalid Catalog data branch override/);
 assert.throws(() => catalogDataBranch('fix-F', { ...catalogChannels, fixDefault: 'catalog-main' }),
   /invalid Catalog data branch/);
-// Historical slash-style branches remain read-compatible but are not the standard authority.
-assert.equal(catalogDataBranch('fix/catalog-compatibility', catalogChannels), 'catalog-fix');
-assert.equal(catalogDataBranch('fix/catalog-compatibility-A', catalogChannels), 'catalog-fix-A');
-assert.equal(catalogDataBranch('fix/catalog-compatibility-B', catalogChannels), 'catalog-fix-B');
-assert.equal(catalogDataBranch('fix/catalog-compatibility-C', catalogChannels), 'catalog-fix-C');
+// Slash-style historical branches no longer receive a dedicated Catalog data lane.
+assert.equal(catalogDataBranch('fix/catalog-compatibility', catalogChannels), 'catalog-main');
 assert.equal(catalogDataBranch('dev', catalogChannels), 'catalog-dev');
 assert.equal(catalogDataBranch('staging', catalogChannels), 'catalog-staging');
 assert.equal(catalogDataBranch('main', catalogChannels), 'catalog-main');
@@ -73,15 +70,8 @@ assert.equal(validateCatalogProvenance(catalogProvenance('fix-next.test'), 'cata
   'fix-next.test');
 assert.throws(() => validateCatalogProvenance(catalogProvenance('fix-F'), 'catalog-fix-G', 'owner/catalog'),
   /does not match catalog-fix-G/);
-// Historical slash-style A/B/C provenance remains compatible.
-assert.equal(validateCatalogProvenance(catalogProvenance('fix/demo-A'), 'catalog-fix-A', 'owner/catalog')?.codeRef,
-  'fix/demo-A');
-assert.equal(validateCatalogProvenance(catalogProvenance('fix/demo-b'), 'catalog-fix-B', 'owner/catalog')?.codeRef,
-  'fix/demo-b');
-assert.throws(() => validateCatalogProvenance(catalogProvenance('fix/demo-A'), 'catalog-fix-B', 'owner/catalog'),
-  /does not match catalog-fix-B/);
 assert.throws(() => validateCatalogProvenance(catalogProvenance('fix/demo-A'), 'catalog-fix', 'owner/catalog'),
-  /does not match catalog-fix/);
+  /invalid Catalog data branch/);
 
 assert.equal(normalizeBuildCommit('005e435f91b2c2891cf46468e2cb46e36519df8b'), '005e435f91b2c2891cf46468e2cb46e36519df8b');
 assert.equal(normalizeBuildCommit('005E435F91B2C2891CF46468E2CB46E36519DF8B'), '005e435f91b2c2891cf46468e2cb46e36519df8b');

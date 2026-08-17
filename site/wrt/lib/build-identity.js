@@ -38,13 +38,12 @@ const SITE_SHA256_RE = /^[a-f0-9]{64}$/;
 const CATALOG_DATA_BRANCHES = Object.freeze({
   fixDefault: 'catalog-dev',
   fixOverrides: Object.freeze({}),
-  legacyFix: 'catalog-fix',
   dev: 'catalog-dev',
   staging: 'catalog-staging',
   main: 'catalog-main',
 });
 const CANONICAL_FIX_RE = /^fix-([A-Za-z0-9][A-Za-z0-9._-]{0,95})$/;
-const CATALOG_DATA_REF_RE = /^catalog-(?:fix(?:-[A-Za-z0-9][A-Za-z0-9._-]{0,95})?|dev|staging|main)$/;
+const CATALOG_DATA_REF_RE = /^catalog-(?:fix-[A-Za-z0-9][A-Za-z0-9._-]{0,95}|dev|staging|main)$/;
 
 function configuredCatalogChannel(configured, key) {
   const mapping = configured && typeof configured === 'object' ? configured : {};
@@ -70,14 +69,6 @@ function configuredFixDataBranch(configured, environment) {
   return configuredCatalogChannel(configured, 'fixDefault');
 }
 
-// Frozen compatibility only for historical slash-style fix branches.
-function legacyFixDataBranch(environment) {
-  const ref = String(environment || '');
-  if (!/^fix\/[A-Za-z0-9._/-]+$/.test(ref)) return '';
-  const lane = /-([ABC])$/i.exec(ref)?.[1]?.toUpperCase() || '';
-  return lane ? `catalog-fix-${lane}` : 'catalog-fix';
-}
-
 export function normalizeBuildEnvironment(value) {
   let environment = String(value || '').trim();
   if (!environment) return '';
@@ -96,11 +87,6 @@ export function normalizeBuildCommit(value) {
 export function catalogDataBranch(value, configured = CATALOG_DATA_BRANCHES) {
   const environment = normalizeBuildEnvironment(value) || 'main';
   if (CANONICAL_FIX_RE.test(environment)) return configuredFixDataBranch(configured, environment);
-  const legacyFix = legacyFixDataBranch(environment);
-  if (legacyFix) {
-    if (legacyFix === 'catalog-fix') configuredCatalogChannel(configured, 'legacyFix');
-    return legacyFix;
-  }
   const channel = ['dev', 'staging', 'main'].includes(environment) ? environment : 'main';
   return configuredCatalogChannel(configured, channel);
 }

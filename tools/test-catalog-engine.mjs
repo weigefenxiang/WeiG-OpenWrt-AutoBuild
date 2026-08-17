@@ -623,7 +623,7 @@ const acknowledgement = {
   sha256: 'a'.repeat(64), dataRef: 'catalog-fix-F', sourceId: 'Demo', branchName: 'stable',
   revision: 7, ruleIds: ['OWN-TEST', 'OWN-TIE'],
 };
-for (const dataRef of ['catalog-fix', 'catalog-fix-F', 'catalog-dev', 'catalog-staging', 'catalog-main']) {
+for (const dataRef of ['catalog-fix-F', 'catalog-dev', 'catalog-staging', 'catalog-main']) {
   assert(safeCatalogDataRef(dataRef) === dataRef, `Catalog loader rejected canonical dataRef ${dataRef}`);
   compatibilityAcknowledgementKey({ ...acknowledgement, dataRef });
 }

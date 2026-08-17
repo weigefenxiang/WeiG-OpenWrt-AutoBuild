@@ -104,8 +104,8 @@ assert(validateCatalogProvenance(provenanceBase, 'catalog-dev', 'owner/catalog')
   'catalog-dev provenance did not validate');
 assert(validateCatalogProvenance({}, 'catalog-dev', 'owner/catalog') === null,
   'legacy index without provenance lost backward compatibility');
-assert(validateCatalogProvenance({ provenance: { ...provenanceBase.provenance, codeRef: 'fix/demo' } },
-  'catalog-fix', 'owner/catalog')?.codeRef === 'fix/demo', 'catalog-fix provenance did not validate');
+assertThrows(() => validateCatalogProvenance({ provenance: { ...provenanceBase.provenance, codeRef: 'fix/demo' } },
+  'catalog-fix', 'owner/catalog'), /invalid Catalog data branch/, 'bare catalog-fix unexpectedly remained valid');
 assert(validateCatalogProvenance({ provenance: { ...provenanceBase.provenance, codeRef: 'fix-F' } },
   'catalog-fix-F', 'owner/catalog')?.codeRef === 'fix-F', 'canonical catalog-fix-F provenance did not validate');
 assertThrows(() => validateCatalogProvenance({ provenance: { ...provenanceBase.provenance, codeRef: 'fix-G' } },
@@ -450,9 +450,9 @@ for (const mutate of [
 
 const previewCalls = [];
 const previewIndex = structuredClone(index);
-previewIndex.provenance = { repository: 'owner/catalog', codeRef: 'fix/test', codeSha: provenanceSha, complete: false };
+previewIndex.provenance = { repository: 'owner/catalog', codeRef: 'fix-test', codeSha: provenanceSha, complete: false };
 const previewLoader = createCatalogLoader({
-  repository: 'owner/catalog', dataRef: 'catalog-fix',
+  repository: 'owner/catalog', dataRef: 'catalog-fix-test',
   engine: { createCatalogModel }, cacheStorage: fakeCaches(), subtle: null,
   fetchImpl: async (url) => {
     previewCalls.push(url);
@@ -464,8 +464,8 @@ const previewLoader = createCatalogLoader({
   },
 });
 const preview = await previewLoader.fetchIndex({ forceRefresh: true });
-assert(preview.provider === 'jsdelivr' && previewCalls.some((url) => url.includes('@catalog-fix/index.json')),
-  'fix channel did not read catalog-fix');
+assert(preview.provider === 'jsdelivr' && previewCalls.some((url) => url.includes('@catalog-fix-test/index.json')),
+  'canonical fix channel did not read catalog-fix-test');
 assert(!previewCalls.some((url) => url.includes('/releases/')),
   'preview channel attempted to read the production Release');
 
