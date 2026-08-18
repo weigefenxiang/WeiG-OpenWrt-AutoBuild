@@ -1538,54 +1538,6 @@ export function evaluateCompatibilityRules(model, document, inputValues, context
   return { document: normalized, values, warnings };
 }
 
-function compatibilityDirectDisableBlockers(model, record, values, options = {}) {
-  const testValues = new Map(valuesMap(values));
-  testValues.set(record.configSymbol, 'n');
-  const blockers = [];
-  for (const symbol of reverseCandidates(model, record)) {
-    const candidate = model.bySymbol.get(symbol);
-    if (!candidate || !recordEnabled(candidate, values)) continue;
-    const before = new Set(recordViolations(model, candidate, values, options)
-      .filter((item) => !item.deferred).map(violationKey));
-    const after = recordViolations(model, candidate, testValues, options)
-      .filter((item) => !item.deferred);
-    if (after.some((item) => !before.has(violationKey(item)))) blockers.push(candidate);
-  }
-  return blockers.sort((left, right) => left.configSymbol.localeCompare(right.configSymbol));
-}
-
-function compatibilityDisableSteps(model, record, inputValues, intent = {}, { includeReverseBlockers = true } = {}) {
-  const values = new Map(valuesMap(inputValues));
-  const options = validationOptions(values, intent.validationOptions || {});
-  const ordered = [];
-  const planned = new Set();
-  const visiting = new Set();
-  const visit = (candidate) => {
-    if (!candidate?.configSymbol || normalizeValue(values.get(candidate.configSymbol) ?? 'n') === 'n') return true;
-    if (candidate.canDisable === false || candidate.userSettable === false || visiting.has(candidate.configSymbol)) return false;
-    visiting.add(candidate.configSymbol);
-    const selectors = activeSelectRequirements(model, candidate, values, options);
-    for (const selector of selectors) {
-      const source = model.bySymbol.get(selector.sourceSymbol);
-      if (!source || !visit(source)) return false;
-    }
-    visiting.delete(candidate.configSymbol);
-    if (!planned.has(candidate.configSymbol)) {
-      planned.add(candidate.configSymbol);
-      ordered.push({ symbol: candidate.configSymbol, package: candidate.package || packageNameFromSymbol(candidate.configSymbol), value: 'n' });
-      values.set(candidate.configSymbol, 'n');
-    }
-    return true;
-  };
-  if (includeReverseBlockers) {
-    for (const blocker of compatibilityDirectDisableBlockers(model, record, values, options)) {
-      if (blocker.userSettable === false) continue;
-      if (!visit(blocker)) return null;
-    }
-  }
-  return visit(record) ? ordered : null;
-}
-
 function compatibilityPlanChanges(startingValues, resultValues, rawChanges) {
   const starting = valuesMap(startingValues);
   const final = valuesMap(resultValues);
@@ -1600,6 +1552,93 @@ function compatibilityPlanChanges(startingValues, resultValues, rawChanges) {
   })).filter((change) => change.from !== change.to);
 }
 
+function compatibilityDisablePlan(model, record, inputValues, intent = {}) {
+  const startingValues = new Map(valuesMap(inputValues));
+  let values = new Map(startingValues);
+  const options = validationOptions(values, intent.validationOptions || {});
+  const steps = [];
+  const allChanges = [];
+  const visiting = new Set();
+  const protectedSymbols = new Set(intent.protectedSymbols || []);
+  const preferredValues = intent.preferredValues instanceof Map
+    ? new Map(intent.preferredValues) : new Map(Object.entries(intent.preferredValues || {}));
+  const explicitSymbols = new Set(intent.explicitSymbols || []);
+  options.explicitSymbols = explicitSymbols;
+
+  const visit = (candidate) => {
+    const symbol = String(candidate?.configSymbol || '');
+    if (!symbol || normalizeValue(values.get(symbol) ?? 'n') === 'n') return true;
+    if (candidate.canDisable === false || candidate.userSettable === false || visiting.has(symbol)) return false;
+    visiting.add(symbol);
+
+    for (let pass = 0; pass < 64 && normalizeValue(values.get(symbol) ?? 'n') !== 'n'; pass++) {
+      const constraints = kconfigStateConstraints(model, candidate, values, options);
+      if (constraints.selectableStates.includes('n')) break;
+      const sourceSymbols = unique((constraints.selectors || []).map((selector) => selector.sourceSymbol));
+      if (!sourceSymbols.length) {
+        visiting.delete(symbol);
+        return false;
+      }
+      let progressed = false;
+      for (const sourceSymbol of sourceSymbols) {
+        const source = model.bySymbol.get(sourceSymbol);
+        const beforeSource = normalizeValue(values.get(sourceSymbol) ?? 'n');
+        const beforeCandidate = normalizeValue(values.get(symbol) ?? 'n');
+        if (!source || !visit(source)) {
+          visiting.delete(symbol);
+          return false;
+        }
+        if (normalizeValue(values.get(sourceSymbol) ?? 'n') !== beforeSource ||
+            normalizeValue(values.get(symbol) ?? 'n') !== beforeCandidate) progressed = true;
+        if (normalizeValue(values.get(symbol) ?? 'n') === 'n') break;
+      }
+      if (!progressed) {
+        visiting.delete(symbol);
+        return false;
+      }
+    }
+
+    if (normalizeValue(values.get(symbol) ?? 'n') === 'n') {
+      visiting.delete(symbol);
+      return true;
+    }
+    const constraints = kconfigStateConstraints(model, candidate, values, options);
+    if (!constraints.selectableStates.includes('n')) {
+      visiting.delete(symbol);
+      return false;
+    }
+
+    protectedSymbols.delete(symbol);
+    preferredValues.set(symbol, 'n');
+    explicitSymbols.add(symbol);
+    const result = applyUserIntent(model, values, {
+      ...intent,
+      symbol,
+      value: 'n',
+      force: false,
+      protectedSymbols,
+      preferredValues,
+      explicitSymbols,
+    });
+    values = result.values;
+    allChanges.push(...result.changes);
+    if (normalizeValue(values.get(symbol) ?? 'n') !== 'n') {
+      visiting.delete(symbol);
+      return false;
+    }
+    steps.push({ symbol, package: candidate.package || packageNameFromSymbol(symbol), value: 'n' });
+    visiting.delete(symbol);
+    return true;
+  };
+
+  if (!visit(record) || !steps.length) return null;
+  return {
+    steps,
+    values,
+    changes: compatibilityPlanChanges(startingValues, values, allChanges),
+  };
+}
+
 export function deriveCompatibilityPlans(model, inputValues, warning, intent = {}) {
   const rule = warning?.rule;
   const records = warning?.records || [];
@@ -1609,47 +1648,19 @@ export function deriveCompatibilityPlans(model, inputValues, warning, intent = {
   for (const record of records) {
     if (!record.canDisable) continue;
     try {
-      const options = validationOptions(startingValues, intent.validationOptions || {});
-      const selectorLocked = rule.issue === 'build-failure' &&
-        activeSelectRequirements(model, record, valuesMap(startingValues), options).length > 0;
-      const steps = compatibilityDisableSteps(model, record, startingValues, intent,
-        { includeReverseBlockers: !selectorLocked });
-      if (!steps?.length) continue;
-      let values = new Map(valuesMap(startingValues));
-      const allChanges = [];
-      const protectedSymbols = new Set(intent.protectedSymbols || []);
-      const preferredValues = intent.preferredValues instanceof Map
-        ? new Map(intent.preferredValues) : new Map(Object.entries(intent.preferredValues || {}));
-      const explicitSymbols = new Set(intent.explicitSymbols || []);
-      for (const step of steps) {
-        protectedSymbols.delete(step.symbol);
-        preferredValues.set(step.symbol, 'n');
-        explicitSymbols.add(step.symbol);
-        if (normalizeValue(values.get(step.symbol) ?? 'n') === 'n') continue;
-        const result = applyUserIntent(model, values, {
-          ...intent,
-          symbol: step.symbol,
-          value: 'n',
-          force: false,
-          protectedSymbols,
-          preferredValues,
-          explicitSymbols,
-        });
-        values = result.values;
-        allChanges.push(...result.changes);
-      }
-      const resolved = !compatibilityRuleTriggered(rule, records, values, intent.validationOptions || {});
+      const plan = compatibilityDisablePlan(model, record, startingValues, intent);
+      if (!plan?.steps.length) continue;
+      const resolved = !compatibilityRuleTriggered(rule, records, plan.values, intent.validationOptions || {});
       if (!resolved) continue;
-      const changes = compatibilityPlanChanges(startingValues, values, allChanges);
-      const stepSymbols = new Set(steps.map((step) => step.symbol));
+      const stepSymbols = new Set(plan.steps.map((step) => step.symbol));
       candidates.push({
         package: record.package,
         symbol: record.configSymbol,
-        steps,
-        changes,
-        automaticChanges: changes.filter((change) => !stepSymbols.has(change.symbol)),
-        values,
-        cost: selectorLocked ? steps.length : new Set(changes.map((change) => change.symbol)).size,
+        steps: plan.steps,
+        changes: plan.changes,
+        automaticChanges: plan.changes.filter((change) => !stepSymbols.has(change.symbol)),
+        values: plan.values,
+        cost: plan.steps.length,
       });
     } catch {
       // A participant that cannot produce a valid sequence through the shared Kconfig intent engine is not a candidate.
