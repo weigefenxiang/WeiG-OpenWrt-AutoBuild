@@ -64,7 +64,7 @@
 
 .probe-depth-row { display: flex; min-width: 0; align-items: center; gap: 10px; }
 .probe-inline-label { flex: none; color: var(--text); font-size: var(--menuconfig-title-size); }
-.probe-depth { display: grid; grid-template-columns: repeat(4, minmax(128px, 1fr)); min-width: 0; flex: 1; gap: 7px; }
+.probe-depth { display: grid; grid-template-columns: minmax(128px, 1fr); min-width: 0; flex: 1; gap: 7px; }
 .probe-depth-option {
   position: relative; display: flex; min-width: 0; align-items: center; gap: 6px; padding: 7px 9px;
   border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); cursor: pointer;
@@ -126,10 +126,9 @@
   width: 74px; min-height: 34px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 7px;
   background: var(--card); color: var(--text); font: inherit; text-align: center;
 }
-.probe-match-count { margin-left: auto; color: var(--text2); font-size: var(--menuconfig-body-size); white-space: nowrap; }
 
 .probe-accordion { display: grid; gap: 7px; }
-.probe-accordion-triggers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.probe-accordion-triggers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .probe-accordion-trigger {
   min-width: 0; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--card);
   color: var(--text2); font: inherit; font-size: var(--menuconfig-body-size); text-align: left; cursor: pointer;
@@ -198,7 +197,7 @@
   .modal-body .probe-intro > p { grid-column: 1 / -1; white-space: normal; }
   .probe-guide { grid-column: 2; grid-row: 1; }
   .probe-state-summary { overflow-x: auto; }
-  .probe-depth { grid-template-columns: repeat(4, minmax(74px, 1fr)); width: 100%; }
+  .probe-depth { grid-template-columns: minmax(74px, 1fr); width: 100%; }
   .probe-depth-option { justify-content: center; padding-inline: 5px; }
   .probe-depth-title { font-size: 0; }
   .probe-depth-title::after { content: attr(data-short); font-size: 13px; }
@@ -206,8 +205,7 @@
   .probe-multiselect-field, .probe-multiselect-field:nth-child(4), .probe-multiselect-field:nth-child(5) { grid-column: auto; }
   .probe-multiselect-panel { min-width: 100%; }
   .probe-coverage-row { gap: 8px 10px; }
-  .probe-match-count { width: 100%; margin-left: 0; }
-  .probe-accordion-triggers { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .probe-accordion-triggers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .probe-accordion-trigger { padding-inline: 6px; text-align: center; }
   .probe-results { max-height: 38vh; }
   .probe-package { grid-template-columns: 30px minmax(0, 1fr); }

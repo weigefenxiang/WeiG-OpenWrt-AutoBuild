@@ -14,7 +14,13 @@ function probeV3UiText(key) {
     const exact = String(external[state.lang] || external.en || external['zh-CN'] || '').trim();
     if (exact) return exact;
   }
-  return t('probe.v3.' + key);
+  if (key === 'level1') return `L${1}`;
+  const fallback = {
+    l1Intro: 'intro', l1HowTo: 'howTo', configResolve: 'defconfig', configResolveHelp: 'defconfigHelp',
+    environmentLimit: 'coverageMode', sourceExcluded: 'notApplicable', l1StateInstruction: 'stateInstruction',
+    l1Submitted: 'submittedState',
+  }[key] || key;
+  return t('probe.v3.' + fallback);
 }
 function probeV3CodeChannel() {
   const branch = String(state.buildMeta?.branch || 'main');
@@ -76,6 +82,36 @@ function probeV3CurrentTarget() {
     profileLabel: String(profile.name || profile.id || 'Default profile'),
   };
 }
+
+function probeV3ScopeOptionMaps() {
+  const maps = {
+    sources: new Map(), branches: new Map(), targetSystems: new Map(), subtargets: new Map(), profiles: new Map(),
+  };
+  for (const source of MENU_INDEX?.sources || []) {
+    const sourceId = String(source?.id || '');
+    if (!sourceId || sourceId.toLowerCase() === 'hanwckf') continue;
+    maps.sources.set(sourceId, String(source?.label || sourceId));
+    for (const branch of source?.branches || []) {
+      if (branch?.state === 'unavailable') continue;
+      const branchName = String(branch?.branch || branch?.id || '');
+      if (branchName) maps.branches.set(branchName, branchName);
+    }
+  }
+  for (const target of MENU_CATALOG?.targets || []) {
+    const targetSystem = String(target?.board || '');
+    const subtarget = String(target?.subtarget || '');
+    if (targetSystem) maps.targetSystems.set(targetSystem, String(target?.systemName || targetSystem));
+    if (subtarget || targetSystem) maps.subtargets.set(subtarget, String(target?.subtargetLabel || target?.subtargetName || subtarget || 'Default'));
+    const profiles = (target?.profiles || []).filter((profile) => profile?.selectable !== false);
+    if (!profiles.length) maps.profiles.set('', 'Default profile');
+    for (const profile of profiles) {
+      const profileId = String(profile?.id || '');
+      maps.profiles.set(profileId, String(profile?.name || profileId || 'Default profile'));
+    }
+  }
+  return maps;
+}
+
 function probeV3MenuOptionState(option) {
   if (!option) return 'n';
   const raw = menuValues.get(option.symbol) ?? simpleKconfigDefault(option);
@@ -136,108 +172,6 @@ function probeV3IssueUrl(request, token) {
   return `https://github.com/${PROJECT.catalogRepository}/issues/new?${params}`;
 }
 
-let probeV3EnvironmentUniverseCache = { key: '', rows: [] };
-let probeV3EnvironmentUniversePromise = null;
-async function probeV3EnvironmentUniverse(forceRefresh = false, onProgress = null) {
-  const assetRef = String(MENU_INDEX?.assetRef || '');
-  const key = `${MENU_CATALOG_DATA_REF}:${assetRef}`;
-  if (!forceRefresh && probeV3EnvironmentUniverseCache.key === key && probeV3EnvironmentUniverseCache.rows.length) {
-    return probeV3EnvironmentUniverseCache.rows;
-  }
-  if (!forceRefresh && probeV3EnvironmentUniversePromise) return probeV3EnvironmentUniversePromise;
-  const pairs = [];
-  for (const source of MENU_INDEX?.sources || []) {
-    for (const branch of source.branches || []) {
-      if (branch.state === 'unavailable') continue;
-      pairs.push({ source, branch });
-    }
-  }
-  const run = (async () => {
-    const rows = [];
-    let cursor = 0;
-    let completed = 0;
-    const worker = async () => {
-      while (cursor < pairs.length) {
-        const pair = pairs[cursor++];
-        const branchName = String(pair.branch.branch || pair.branch.id || '');
-        const loaded = await CATALOG_LOADER.fetchCore({
-          sourceId: String(pair.source.id || ''), branchName,
-        });
-        for (const target of loaded.data?.targets || []) {
-          const targetSystem = String(target.board || '');
-          const subtarget = String(target.subtarget || '');
-          const targetId = String(target.id || [targetSystem, subtarget].filter(Boolean).join('/'));
-          const profiles = (target.profiles || []).filter((profile) => profile.selectable !== false);
-          const effectiveProfiles = profiles.length ? profiles : [{ id: '', name: 'Default profile' }];
-          for (const profile of effectiveProfiles) {
-            rows.push({
-              source: String(pair.source.id || ''),
-              sourceLabel: String(pair.source.label || pair.source.id || ''),
-              branch: branchName,
-              targetSystem,
-              targetSystemLabel: String(target.systemName || targetSystem),
-              subtarget,
-              subtargetLabel: String(target.subtargetLabel || target.subtargetName || subtarget || 'Default'),
-              target: targetId,
-              profile: String(profile.id || ''),
-              profileLabel: String(profile.name || profile.id || 'Default profile'),
-              profileSelector: String(profile.selector || ''),
-              sourceCommit: String(pair.branch.commit || loaded.data?.source?.commit || ''),
-            });
-          }
-        }
-        completed += 1;
-        onProgress?.(completed, pairs.length);
-      }
-    };
-    const workers = Array.from({ length: Math.min(4, Math.max(1, pairs.length)) }, () => worker());
-    await Promise.all(workers);
-    rows.sort((a, b) => a.source.localeCompare(b.source) ||
-      a.branch.localeCompare(b.branch, undefined, { numeric: true }) ||
-      a.targetSystem.localeCompare(b.targetSystem) || a.subtarget.localeCompare(b.subtarget) ||
-      a.profile.localeCompare(b.profile));
-    probeV3EnvironmentUniverseCache = { key, rows };
-    return rows;
-  })().finally(() => { probeV3EnvironmentUniversePromise = null; });
-  probeV3EnvironmentUniversePromise = run;
-  return run;
-}
-function probeV3FilterMatches(value, selected) {
-  return selected.has('*') || selected.has(String(value ?? ''));
-}
-function probeV3FilterEnvironments(rows, filters) {
-  return rows.filter((row) => probeV3FilterMatches(row.source, filters.sources) &&
-    probeV3FilterMatches(row.branch, filters.branches) &&
-    probeV3FilterMatches(row.targetSystem, filters.targetSystems) &&
-    probeV3FilterMatches(row.subtarget, filters.subtargets) &&
-    probeV3FilterMatches(row.profile, filters.profiles));
-}
-function probeV3DimensionValues(rows, key) {
-  return new Set(rows.map((row) => String(row[key] ?? '')));
-}
-function probeV3CoverageSample(rows, limit) {
-  if (rows.length <= limit) return [...rows];
-  const remaining = [...rows];
-  const selected = [];
-  const seen = {
-    source: new Set(), branch: new Set(), targetSystem: new Set(), subtarget: new Set(), profile: new Set(),
-  };
-  const dimensions = Object.keys(seen);
-  while (selected.length < limit && remaining.length) {
-    let bestIndex = 0;
-    let bestScore = -1;
-    for (let index = 0; index < remaining.length; index++) {
-      const row = remaining[index];
-      let score = 0;
-      for (const dimension of dimensions) if (!seen[dimension].has(String(row[dimension] ?? ''))) score += 1;
-      if (score > bestScore) { bestScore = score; bestIndex = index; }
-    }
-    const [row] = remaining.splice(bestIndex, 1);
-    selected.push(row);
-    for (const dimension of dimensions) seen[dimension].add(String(row[dimension] ?? ''));
-  }
-  return selected;
-}
 function probeV3FilterRequest(filters) {
   const values = (set) => set.has('*') ? ['*'] : [...set].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   return {
