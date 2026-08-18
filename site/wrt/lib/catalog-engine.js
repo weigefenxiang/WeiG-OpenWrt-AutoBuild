@@ -1247,11 +1247,40 @@ function reconcileDerivedDefaults(model, values, changes, options = {}) {
   throw new Error('Kconfig conditional default resolution did not converge');
 }
 
+function reconcileNonUserSettableDependents(model, values, changes, options = {}) {
+  const start = changes.length;
+  for (let pass = 0; pass < 64; pass++) {
+    const disabled = [];
+    for (const record of model?.records || []) {
+      if (!record?.configSymbol || record.userSettable !== false || !recordEnabled(record, values) ||
+          options.trustedSymbols?.has(record.configSymbol)) continue;
+      const violations = recordViolations(model, record, values, options).filter((item) =>
+        !item.deferred && (item.code === 'kconfig-dependency-unsatisfied' ||
+          item.code === 'package-dependency-unsatisfied'));
+      if (!violations.length) continue;
+      if (setValue(values, changes, record.configSymbol, 'n', 'dependency-unsatisfied',
+        violations[0].dependency || '')) disabled.push(record.configSymbol);
+    }
+    if (!disabled.length) {
+      return new Set(changes.slice(start)
+        .filter((change) => change.to === 'n' && change.reason === 'dependency-unsatisfied')
+        .map((change) => change.symbol));
+    }
+    cascadeDisabled(model, values, changes, disabled, options);
+  }
+  throw new Error('Kconfig derived dependency reconciliation did not converge');
+}
+
 export function reconcileKconfigDerivedValues(model, inputValues, rawOptions = {}) {
   const values = new Map(valuesMap(inputValues));
   const changes = [];
   const options = validationOptions(values, rawOptions);
+  const reconciledSymbols = reconcileNonUserSettableDependents(model, values, changes, options);
   const derived = reconcileDerivedDefaults(model, values, changes, options);
+  for (const symbol of reconciledSymbols) {
+    derived.derivedSymbols.add(symbol);
+    if (!derived.derivedReasons.has(symbol)) derived.derivedReasons.set(symbol, 'dependency-unsatisfied');
+  }
   return { values, changes, ...derived, violations: validateConfig(model, values, options) };
 }
 
@@ -1549,6 +1578,7 @@ function compatibilityDisableSteps(model, record, inputValues, intent = {}) {
     return true;
   };
   for (const blocker of compatibilityDirectDisableBlockers(model, record, values, options)) {
+    if (blocker.userSettable === false) continue;
     if (!visit(blocker)) return null;
   }
   return visit(record) ? ordered : null;
