@@ -1509,6 +1509,22 @@ export function evaluateCompatibilityRules(model, document, inputValues, context
   return { document: normalized, values, warnings };
 }
 
+function compatibilityDirectDisableBlockers(model, record, values, options = {}) {
+  const testValues = new Map(valuesMap(values));
+  testValues.set(record.configSymbol, 'n');
+  const blockers = [];
+  for (const symbol of reverseCandidates(model, record)) {
+    const candidate = model.bySymbol.get(symbol);
+    if (!candidate || !recordEnabled(candidate, values)) continue;
+    const before = new Set(recordViolations(model, candidate, values, options)
+      .filter((item) => !item.deferred).map(violationKey));
+    const after = recordViolations(model, candidate, testValues, options)
+      .filter((item) => !item.deferred);
+    if (after.some((item) => !before.has(violationKey(item)))) blockers.push(candidate);
+  }
+  return blockers.sort((left, right) => left.configSymbol.localeCompare(right.configSymbol));
+}
+
 function compatibilityDisableSteps(model, record, inputValues, intent = {}) {
   const values = new Map(valuesMap(inputValues));
   const options = validationOptions(values, intent.validationOptions || {});
@@ -1532,6 +1548,9 @@ function compatibilityDisableSteps(model, record, inputValues, intent = {}) {
     }
     return true;
   };
+  for (const blocker of compatibilityDirectDisableBlockers(model, record, values, options)) {
+    if (!visit(blocker)) return null;
+  }
   return visit(record) ? ordered : null;
 }
 
