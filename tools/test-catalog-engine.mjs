@@ -704,12 +704,16 @@ for (const [left, right, expected] of [
   `ownership rule treated ${left}/${right} as ${expected ? 'not installed' : 'simultaneously installed'}`);
 }
 const ownershipPlans = deriveCompatibilityPlans(model, ownershipValues, ownership.warnings[0]);
-assert(ownershipPlans.recommended?.package === 'ui-service' &&
-  ownershipPlans.recommended.cost === 2 && ownershipPlans.candidates.find((row) => row.package === 'core-service')?.cost === 3,
-  'unique lowest-cost compatibility plan was not derived from generic dependency cascades');
-assert(evaluateCompatibilityRules(model, compatibility, ownershipPlans.recommended.values, {
-  sourceId: 'Demo', branchName: 'stable',
-}).warnings.length === 0, 'recommended compatibility plan did not resolve the rule');
+assert(ownershipPlans.recommended === null &&
+  ownershipPlans.candidates.length === 2 &&
+  ownershipPlans.candidates.every((row) => row.cost === 1 && row.steps.length === 1),
+  'equal one-action compatibility plans should remain ambiguous instead of ranking automatic cascades');
+for (const candidate of ownershipPlans.candidates) {
+  assert(evaluateCompatibilityRules(model, compatibility, candidate.values, {
+    sourceId: 'Demo', branchName: 'stable',
+  }).warnings.length === 0,
+  `ownership candidate ${candidate.package} did not resolve the rule`);
+}
 assert(evaluateCompatibilityRules(model, compatibility,
   new Map(ownershipValues).set('USE_APK', 'n'), { sourceId: 'Demo', branchName: 'stable' }).warnings.length === 0,
   'unsatisfied compatibility condition still triggered');
@@ -740,10 +744,15 @@ assert(buildPlans.recommended?.package === 'core-service' &&
     sourceId: 'Demo', branchName: 'stable',
   }).warnings.length === 0,
 'single-package compatibility rule did not derive and apply a generic disable intent');
-assert(buildPlans.recommended.steps.map((step) => step.package).join('>') === 'ui-service>core-service',
-  'compatibility planning did not order the enabled upstream dependent before the requested disable target');
+assert(buildPlans.recommended.steps.map((step) => step.package).join('>') === 'core-service',
+  'ordinary reverse dependents were incorrectly promoted to explicit menuconfig user actions');
+assert(buildPlans.recommended.cost === 1,
+  'automatic dependency reconciliation incorrectly inflated the explicit user-action cost');
 assert(buildPlans.recommended.automaticChanges.some((change) =>
-  change.symbol === 'PACKAGE_i18n-service' && change.to === 'n') &&
+  change.symbol === 'PACKAGE_ui-service' && change.to === 'n') &&
+  buildPlans.recommended.automaticChanges.some((change) =>
+    change.symbol === 'PACKAGE_i18n-service' && change.to === 'n') &&
+  buildPlans.recommended.values.get('PACKAGE_ui-service') === 'n' &&
   buildPlans.recommended.values.get('PACKAGE_i18n-service') === 'n',
   'compatibility planning did not preserve shared Kconfig automatic dependent cleanup');
 
