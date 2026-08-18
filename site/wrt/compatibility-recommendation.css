@@ -1,0 +1,29 @@
+/* SPDX-FileCopyrightText: 2026 weigefenxiang <weigefenxiang@gmail.com> */
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+
+/* Keep compatibility recommendations compact; full text stays in the shared viewport-bounded tooltip. */
+.compatibility-recommendation-action,
+.compatibility-recommendation-detail {
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.compatibility-recommendation-action {
+  -webkit-line-clamp: 2;
+}
+.compatibility-recommendation-detail {
+  max-width: min(100%, 560px);
+  -webkit-line-clamp: 2;
+}
+.compatibility-recommendation-action[data-ui-tooltip-body],
+.compatibility-recommendation-detail[data-ui-tooltip-body] {
+  cursor: help;
+}
+
+@media (max-width: 560px) {
+  .compatibility-recommendation-detail {
+    max-width: 100%;
+  }
+}

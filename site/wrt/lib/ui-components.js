@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import './compatibility-recommendation-ui.js';
+
 function addClassNames(element, ...names) {
   for (const name of names.flatMap((value) => String(value || '').split(/\s+/)).filter(Boolean)) {
     element.classList.add(name);
