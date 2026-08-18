@@ -33,7 +33,7 @@ const catalog = {
       providers: {},
       reverseDependencies: {},
       reverseKconfig: {
-        PACKAGE_selected-core: ['PACKAGE_dependent-one', 'PACKAGE_dependent-two'],
+        'PACKAGE_selected-core': ['PACKAGE_dependent-one', 'PACKAGE_dependent-two'],
       },
       choices: {},
     },
