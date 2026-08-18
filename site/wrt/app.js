@@ -18,6 +18,8 @@
     'lib/core/data-loader.js',
     'lib/ui/ui-runtime.js',
     'lib/core/application-controller.js',
+    'lib/plugins/workspace-controller.js',
+    'lib/plugins/plugin-controller.js',
     'lib/config/config-state.js',
     'lib/config/config-generator.js',
     'lib/config/config-importer.js',
