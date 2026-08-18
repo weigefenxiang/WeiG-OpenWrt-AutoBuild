@@ -1,10 +1,10 @@
 /*
  * SPDX-FileCopyrightText: 2026 weigefenxiang <weigefenxiang@gmail.com>
  * SPDX-License-Identifier: GPL-3.0-or-later
-+ *
-+ * Release-scoped static data loading runtime.
-+ */
-+'use strict';
+ *
+ * Release-scoped static data loading runtime.
+ */
+'use strict';
 
 /* ============ 数据加载 / Data loading ============ */
 function dataUrls(path) {

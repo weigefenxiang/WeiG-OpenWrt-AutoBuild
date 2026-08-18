@@ -159,90 +159,12 @@ const LANG_SHORT = {
   'zh-CN': '简', 'zh-TW': '繁', en: 'EN', ru: 'RU', es: 'ES', pt: 'PT',
   ja: '日', ko: '한', de: 'DE', fr: 'FR', vi: 'VI',
 };
-const MENU_UI_I18N = {
-  top: {
-    'zh-CN': '主菜单', 'zh-TW': '主選單', en: 'Top level', ru: 'Главное меню',
-    es: 'Menú principal', pt: 'Menu principal', ja: 'メインメニュー', ko: '주 메뉴',
-    de: 'Hauptmenü', fr: 'Menu principal', vi: 'Menu chính',
-  },
-  locator: {
-    'zh-CN': '搜索 Source、Branch、Target System、Subtarget 或 Target Profile',
-    'zh-TW': '搜尋 Source、Branch、Target System、Subtarget 或 Target Profile',
-    en: 'Search Source, Branch, Target System, Subtarget or Target Profile',
-    ru: 'Поиск Source, Branch, Target System, Subtarget или Target Profile',
-    es: 'Buscar Source, Branch, Target System, Subtarget o Target Profile',
-    pt: 'Pesquisar Source, Branch, Target System, Subtarget ou Target Profile',
-    ja: 'Source、Branch、Target System、Subtarget、Target Profile を検索',
-    ko: 'Source, Branch, Target System, Subtarget 또는 Target Profile 검색',
-    de: 'Source, Branch, Target System, Subtarget oder Target Profile suchen',
-    fr: 'Rechercher Source, Branch, Target System, Subtarget ou Target Profile',
-    vi: 'Tìm Source, Branch, Target System, Subtarget hoặc Target Profile',
-  },
-  min2: {
-    'zh-CN': '请输入至少 2 个字符', 'zh-TW': '請輸入至少 2 個字元', en: 'Type at least 2 characters',
-    ru: 'Введите не менее 2 символов', es: 'Escribe al menos 2 caracteres', pt: 'Digite pelo menos 2 caracteres',
-    ja: '2文字以上入力してください', ko: '2자 이상 입력하세요', de: 'Mindestens 2 Zeichen eingeben',
-    fr: 'Saisissez au moins 2 caractères', vi: 'Nhập ít nhất 2 ký tự',
-  },
-  rootOptions: {
-    'zh-CN': '根级 Kconfig 选项', 'zh-TW': '根級 Kconfig 選項', en: 'Root Kconfig options',
-    ru: 'Корневые параметры Kconfig', es: 'Opciones Kconfig raíz', pt: 'Opções Kconfig raiz',
-    ja: 'ルート Kconfig オプション', ko: '루트 Kconfig 옵션', de: 'Kconfig-Wurzeloptionen',
-    fr: 'Options Kconfig racine', vi: 'Tùy chọn Kconfig gốc',
-  },
-  rootOptionsHelp: {
-    'zh-CN': 'Catalog 中没有父菜单的顶层配置项', 'zh-TW': 'Catalog 中沒有父選單的頂層設定項',
-    en: 'Top-level Catalog options without a parent menu',
-    ru: 'Параметры верхнего уровня Catalog без родительского меню',
-    es: 'Opciones superiores de Catalog sin menú principal',
-    pt: 'Opções de nível superior do Catalog sem menu pai',
-    ja: '親メニューを持たない Catalog のトップレベル設定',
-    ko: '상위 메뉴가 없는 Catalog 최상위 설정',
-    de: 'Catalog-Optionen der obersten Ebene ohne übergeordnetes Menü',
-    fr: 'Options Catalog de premier niveau sans menu parent',
-    vi: 'Tùy chọn Catalog cấp cao nhất không có menu cha',
-  },
-};
-const menuUi = (key) => MENU_UI_I18N[key]?.[state.lang] || MENU_UI_I18N[key]?.en || key;
-const MENU_FILTER_I18N = {
-  'zh-CN': { origin: '来源', display: '显示', filter: '筛选', all: '全部来源', user: '用户选择', excluded: '明确排除', default: '上游默认', recommended: '网页推荐', dependency: '自动依赖', imported: '导入配置', selectedOnly: '仅看已选', userSettable: 'userSettable' },
-  'zh-TW': { origin: '來源', display: '顯示', filter: '篩選', all: '全部來源', user: '使用者選擇', excluded: '明確排除', default: '上游預設', recommended: '網頁推薦', dependency: '自動相依', imported: '匯入設定', selectedOnly: '僅看已選', userSettable: 'userSettable' },
-  en: { origin: 'Origin', display: 'Display', filter: 'Filter', all: 'All origins', user: 'User selected', excluded: 'Explicitly excluded', default: 'Upstream defaults', recommended: 'Recommended', dependency: 'Dependencies', imported: 'Imported', selectedOnly: 'Selected only', userSettable: 'userSettable' },
-  ru: { origin: 'Источник', display: 'Отображение', filter: 'Фильтр', all: 'Все источники', user: 'Выбрано пользователем', excluded: 'Явно исключено', default: 'По умолчанию upstream', recommended: 'Рекомендуемое', dependency: 'Зависимости', imported: 'Импортировано', selectedOnly: 'Только выбранные', userSettable: 'userSettable' },
-  es: { origin: 'Origen', display: 'Mostrar', filter: 'Filtro', all: 'Todos los orígenes', user: 'Selección del usuario', excluded: 'Excluido explícitamente', default: 'Valores upstream', recommended: 'Recomendado', dependency: 'Dependencias', imported: 'Importado', selectedOnly: 'Solo seleccionados', userSettable: 'userSettable' },
-  pt: { origin: 'Origem', display: 'Exibição', filter: 'Filtro', all: 'Todas as origens', user: 'Selecionado pelo usuário', excluded: 'Excluído explicitamente', default: 'Padrões upstream', recommended: 'Recomendado', dependency: 'Dependências', imported: 'Importado', selectedOnly: 'Somente selecionados', userSettable: 'userSettable' },
-  ja: { origin: '由来', display: '表示', filter: '絞り込み', all: 'すべての由来', user: 'ユーザー選択', excluded: '明示的に除外', default: '上流の既定値', recommended: '推奨', dependency: '依存関係', imported: 'インポート', selectedOnly: '選択済みのみ', userSettable: 'userSettable' },
-  ko: { origin: '출처', display: '표시', filter: '필터', all: '모든 출처', user: '사용자 선택', excluded: '명시적 제외', default: '업스트림 기본값', recommended: '권장', dependency: '종속성', imported: '가져옴', selectedOnly: '선택 항목만', userSettable: 'userSettable' },
-  de: { origin: 'Ursprung', display: 'Anzeige', filter: 'Filter', all: 'Alle Ursprünge', user: 'Benutzerauswahl', excluded: 'Explizit ausgeschlossen', default: 'Upstream-Standardwerte', recommended: 'Empfohlen', dependency: 'Abhängigkeiten', imported: 'Importiert', selectedOnly: 'Nur ausgewählte', userSettable: 'userSettable' },
-  fr: { origin: 'Origine', display: 'Affichage', filter: 'Filtrer', all: 'Toutes les origines', user: 'Choix utilisateur', excluded: 'Exclu explicitement', default: 'Valeurs upstream', recommended: 'Recommandé', dependency: 'Dépendances', imported: 'Importé', selectedOnly: 'Sélection uniquement', userSettable: 'userSettable' },
-  vi: { origin: 'Nguồn', display: 'Hiển thị', filter: 'Bộ lọc', all: 'Tất cả nguồn', user: 'Người dùng chọn', excluded: 'Loại trừ rõ ràng', default: 'Mặc định upstream', recommended: 'Đề xuất', dependency: 'Phụ thuộc', imported: 'Đã nhập', selectedOnly: 'Chỉ mục đã chọn', userSettable: 'userSettable' },
-};
-const menuFilterText = (key) => MENU_FILTER_I18N[state.lang]?.[key] || MENU_FILTER_I18N.en[key] || key;
+
+const menuUi = (key) => t('menu.ui.' + key);
+
+const menuFilterText = (key) => t('menu.filter.' + key);
 const MENU_ORIGIN_FILTER_VALUES = ['all', 'user', 'excluded', 'default', 'recommended', 'dependency', 'imported'];
-const TARGET_FIELD_I18N = {
-  source: {
-    'zh-CN': '源码', 'zh-TW': '原始碼', ru: 'Источник', es: 'Fuente', pt: 'Fonte',
-    ja: 'ソース', ko: '소스', de: 'Quelle', fr: 'Source', vi: 'Nguồn',
-  },
-  branch: {
-    'zh-CN': '分支', 'zh-TW': '分支', ru: 'Ветка', es: 'Rama', pt: 'Ramificação',
-    ja: 'ブランチ', ko: '브랜치', de: 'Branch', fr: 'Branche', vi: 'Nhánh',
-  },
-  system: {
-    'zh-CN': '目标系统', 'zh-TW': '目標系統', ru: 'Целевая система', es: 'Sistema de destino',
-    pt: 'Sistema de destino', ja: 'ターゲットシステム', ko: '대상 시스템',
-    de: 'Zielsystem', fr: 'Système cible', vi: 'Hệ thống đích',
-  },
-  subtarget: {
-    'zh-CN': '子目标', 'zh-TW': '子目標', ru: 'Подцель', es: 'Subdestino', pt: 'Subalvo',
-    ja: 'サブターゲット', ko: '하위 대상', de: 'Unterziel', fr: 'Sous-cible', vi: 'Đích con',
-  },
-  profile: {
-    'zh-CN': '目标配置', 'zh-TW': '目標設定', ru: 'Целевой профиль', es: 'Perfil de destino',
-    pt: 'Perfil de destino', ja: 'ターゲットプロファイル', ko: '대상 프로필',
-    de: 'Zielprofil', fr: 'Profil cible', vi: 'Hồ sơ đích',
-  },
-};
+
 const DEFAULT_TARGET_SELECTORS = [
   { id: 'system', labelEn: 'Target System', labelZh: '目标系统' },
   { id: 'subtarget', labelEn: 'Subtarget', labelZh: '子目标' },

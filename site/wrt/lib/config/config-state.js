@@ -63,7 +63,7 @@ function renderImportedUnknownRow(symbol) {
   let input;
   if ([original, value].some((item) => ['y', 'm', 'n'].includes(item))) {
     input = document.createElement('select');
-    for (const item of [['y', 'Y'], ['m', 'M'], ['n', uiText('关闭', '關閉', 'Disabled')]]) {
+    for (const item of [['y', 'Y'], ['m', 'M'], ['n', t('runtime.b759fd16bf01')]]) {
       const option = document.createElement('option');
       option.value = item[0];
       option.textContent = item[1];
@@ -82,13 +82,13 @@ function renderImportedUnknownRow(symbol) {
   actions.className = 'import-unknown-actions';
   const close = document.createElement('button');
   close.type = 'button';
-  close.textContent = uiText('关闭', '關閉', 'Disable');
+  close.textContent = t('runtime.157b853b45eb');
   close.onclick = () => setImportedEdit(symbol, 'n');
   const remove = document.createElement('button');
   remove.type = 'button';
   remove.textContent = edit?.action === 'delete'
-    ? uiText('已删除', '已刪除', 'Deleted')
-    : uiText('删除行', '刪除列', 'Delete line');
+    ? t('runtime.a6edbcaca91c')
+    : t('runtime.4bdb50062f7c');
   remove.disabled = edit?.action === 'delete';
   remove.onclick = () => {
     importedUnknownEdits.set(symbol, { action: 'delete' });
@@ -96,7 +96,7 @@ function renderImportedUnknownRow(symbol) {
   };
   const restore = document.createElement('button');
   restore.type = 'button';
-  restore.textContent = uiText('恢复', '還原', 'Restore');
+  restore.textContent = t('runtime.87f2d4e4842b');
   restore.disabled = !edit;
   restore.onclick = () => {
     importedUnknownEdits.delete(symbol);
@@ -122,13 +122,13 @@ function renderImportedWorkspace() {
     return value !== 'n' && value !== '0' && value !== '""';
   }).length;
   const modified = menuTouched.size + importedUnknownEdits.size;
-  const summaryText = uiText(
-    `已识别 ${menuImportedOriginal.size} 项 · 仅导入 ${importedUnknownOriginal.size} 项` +
-      `（启用 ${activeUnknown}）· 插件操作 ${state.sel.size + state.removed.size} 项 · 已修改 ${modified} 项`,
-    `已識別 ${menuImportedOriginal.size} 項 · 僅匯入 ${importedUnknownOriginal.size} 項` +
-      `（啟用 ${activeUnknown}）· 外掛操作 ${state.sel.size + state.removed.size} 項 · 已修改 ${modified} 項`,
-    `Recognized ${menuImportedOriginal.size} · import-only ${importedUnknownOriginal.size}` +
-      ` (enabled ${activeUnknown}) · plugin actions ${state.sel.size + state.removed.size} · modified ${modified}`);
+  const summaryText = t('import.workspaceSummary', {
+    recognized: menuImportedOriginal.size,
+    imported: importedUnknownOriginal.size,
+    enabled: activeUnknown,
+    pluginActions: state.sel.size + state.removed.size,
+    modified,
+  });
   const summaryTextElement = $('importSummaryText');
   summaryTextElement.textContent = summaryText;
   bindUiTooltipContent(summaryTextElement, { body: summaryText });
@@ -137,22 +137,17 @@ function renderImportedWorkspace() {
   workspace.hidden = importedTargetVerified;
   targetCard.textContent = '';
   if (!importedTargetVerified) {
-    targetCard.append(document.createTextNode(uiText(
-      `⚠ Custom Target：${state.device.target.system} / ${state.device.target.subtarget} / ` +
-        `${state.device.target.profileLabel} 未经当前 Catalog 验证，将按上传配置直接构建；是否可用由所选源码决定。 `,
-      `⚠ Custom Target：${state.device.target.system} / ${state.device.target.subtarget} / ` +
-        `${state.device.target.profileLabel} 未經目前 Catalog 驗證，將按上傳設定直接建置；是否可用由所選原始碼決定。 `,
-      `⚠ Custom Target: ${state.device.target.system} / ${state.device.target.subtarget} / ` +
-        `${state.device.target.profileLabel} is not verified by the current Catalog; it will be built as uploaded and availability depends on the selected upstream. `)));
+    targetCard.append(document.createTextNode(t('import.customTargetWarning', {
+      system: state.device.target.system,
+      subtarget: state.device.target.subtarget,
+      profile: state.device.target.profileLabel,
+    })));
     const useCatalog = document.createElement('button');
     useCatalog.type = 'button';
     useCatalog.className = 'text-btn';
-    useCatalog.textContent = uiText('改用网页 Target', '改用網頁 Target', 'Use page Target');
+    useCatalog.textContent = t('runtime.18dcdf64d0ed');
     useCatalog.onclick = async () => {
-      if (!confirm(uiText(
-        '改用网页 Target 会退出上传配置工作区，并放弃上传文件中的自定义配置。继续吗？',
-        '改用網頁 Target 會離開上傳設定工作區，並放棄上傳檔案中的自訂設定。繼續嗎？',
-        'Using the page Target exits the imported-config workspace and discards custom settings from the uploaded file. Continue?'))) return;
+      if (!confirm(t('runtime.a352a881b384'))) return;
       const sourceId = state.source.id;
       const branchId = state.version.id;
       clearImportedWorkspace();
@@ -165,10 +160,7 @@ function renderImportedWorkspace() {
   }
   const box = $('importUnknownBox');
   box.hidden = importedUnknownOriginal.size === 0;
-  $('importUnknownSummary').textContent = uiText(
-    `仅导入配置项（${importedUnknownOriginal.size}，已修改 ${importedUnknownEdits.size}）`,
-    `僅匯入設定項（${importedUnknownOriginal.size}，已修改 ${importedUnknownEdits.size}）`,
-    `Import-only settings (${importedUnknownOriginal.size}, modified ${importedUnknownEdits.size})`);
+  $('importUnknownSummary').textContent = t('runtime.ec5893323111', { value1: importedUnknownOriginal.size, value2: importedUnknownEdits.size });
   const list = $('importUnknownOptions');
   list.textContent = '';
   const query = $('importUnknownSearch').value.trim().toLowerCase();
@@ -188,8 +180,8 @@ function renderImportedWorkspace() {
     const empty = document.createElement('p');
     empty.className = 'hint';
     empty.textContent = query.length === 1
-      ? uiText('请再输入一个字符。', '請再輸入一個字元。', 'Type one more character.')
-      : uiText('没有符合条件的配置项。', '沒有符合條件的設定項。', 'No matching settings.');
+      ? t('runtime.9f5987feadba')
+      : t('runtime.4065a8e2ef46');
     list.appendChild(empty);
   }
   $('importUnknownMore').hidden = symbols.length <= importedUnknownLimit;
@@ -213,6 +205,5 @@ function clearImportedWorkspace() {
 function resetImportedChanges() {
   if (!state.importedConfig) return;
   restoreSelections(state.importedConfig, null);
-  showToast(uiText('已恢复上传配置的原始值', '已還原上傳設定的原始值',
-    'Restored the original uploaded settings'));
+  showToast(t('runtime.ad61809aa910'));
 }

@@ -28,15 +28,11 @@
   let replayingLegacyConfirm = false;
   let activeInteraction = null;
 
-  function text(zhCN, zhTW, en) {
-    return typeof uiText === 'function' ? uiText(zhCN, zhTW, en) : en;
-  }
-
   function noticeTitle(kind) {
-    if (kind === 'success') return text('完成', '完成', 'Done');
-    if (kind === 'warning') return text('请注意', '請注意', 'Attention');
-    if (kind === 'error') return text('操作失败', '操作失敗', 'Action failed');
-    return text('提示', '提示', 'Notice');
+    if (kind === 'success') return t('runtime.0cab91c99de4');
+    if (kind === 'warning') return t('runtime.f484416c890c');
+    if (kind === 'error') return t('runtime.9f4e3cc54b49');
+    return t('runtime.bb6a7a1f4169');
   }
 
   function importedConfigPresentation(message) {
@@ -97,9 +93,9 @@
   globalThis.alert = (message) => renderNotice(message, { kind: 'warning' });
 
   globalThis.confirmModal = (message, options = {}) => new Promise((resolve) => {
-    const title = options.title || text('确认操作', '確認操作', 'Confirm action');
-    const confirmText = options.confirmText || text('继续', '繼續', 'Continue');
-    const cancelText = options.cancelText || text('取消', '取消', 'Cancel');
+    const title = options.title || t('runtime.4434398a8687');
+    const confirmText = options.confirmText || t('runtime.9906f10a8da3');
+    const cancelText = options.cancelText || t('runtime.fa67f2c4dd9b');
     let settled = false;
     const modal = document.getElementById('modal')?.querySelector('.modal');
     const body = document.getElementById('modalBody');

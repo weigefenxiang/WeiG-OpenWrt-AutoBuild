@@ -59,11 +59,10 @@ function renderCatalogApplicationsState(box) {
   const detail = catalogApplicationsError.length > 160
     ? `${catalogApplicationsError.slice(0, 157)}…` : catalogApplicationsError;
   message.textContent = failed
-    ? uiText(`精选插件加载失败：${detail}。点击重试`, `精選套件載入失敗：${detail}。點擊重試`,
-      `Curated plugins failed to load: ${detail}. Click to retry`)
+    ? t('runtime.63941ac41ca8', { value1: detail })
     : empty
-      ? uiText('当前 Catalog 没有精选插件', '目前 Catalog 沒有精選套件', 'This Catalog has no curated plugins')
-      : uiText('精选插件后台加载中…', '精選套件背景載入中…', 'Loading curated plugins…');
+      ? t('runtime.e9cdb3a9cf41')
+      : t('runtime.df1f88866ee9');
   row.appendChild(message);
   box.appendChild(row);
   return true;
@@ -203,9 +202,7 @@ function renderPlugin(p) {
   // V10:灰色项只看双开关,其余沿用旧规则 / V10: grey items obey the double gate; everything else keeps the old rule
   cb.disabled = st === 'loading' || lockedItem || catalogLocked ||
     (st === 'unavailable' ? !canForce : (!adv && st !== 'ok'));
-  if (catalogLocked) bindUiTooltipContent(item, { body: uiText(
-    '由当前 Target / Profile 基础配置锁定', '由目前 Target / Profile 基礎設定鎖定',
-    'Locked by the current Target / Profile baseline') });
+  if (catalogLocked) bindUiTooltipContent(item, { body: t('runtime.df77507c4802') });
   cb.setAttribute('aria-label', pName(p));
   const applyChecked = (checked) => {
     cb.checked = checked;
@@ -279,14 +276,14 @@ function renderPlugin(p) {
       nameBtn.appendChild(f);
     }
   }
-  const detail = (st === 'loading' ? uiText('Catalog 菜单加载中', 'Catalog 選單載入中', 'Catalog menu is loading')
+  const detail = (st === 'loading' ? t('runtime.eb7b1b411bf8')
     : st === 'builtin' ? t('plugin.builtin')
     : st === 'unavailable' ? t('plugin.unavailable')
     : pDesc(p)) + (catalogOrigin && catalogOrigin.kind !== 'inactive'
-      ? `\n${uiText('来源', '來源', 'Origin')}: ${catalogOrigin.label}` : '') +
+      ? `\n${t('runtime.463daf3dbfcf')}: ${catalogOrigin.label}` : '') +
     (p.warn ? '\n' + t(p.warn) : '');
   const pkg = p.pkgs?.[state.source.id] || p.pkg || p.catalogCandidates?.[0] || p.id;
-  const size = p.sizeBytes === null ? uiText('大小未知', '大小未知', 'Size unknown')
+  const size = p.sizeBytes === null ? t('runtime.7b4f86f4a586')
     : t('drawer.size', { n: fmtSize(p.sizeBytes) });
   const tooltipBody = detail + '\n' + pkg + ' · ' + size;
   bindUiTooltipContent(item, { title: pName(p), body: tooltipBody });
@@ -423,7 +420,7 @@ function openRootfsCapacityGuidance() {
   const info = rootfsPartitionInfo();
   if (!info) return;
   modalCancelHandler = null;
-  openModal(uiText('RootFS 容量', 'RootFS 容量', 'RootFS capacity'));
+  openModal(t('runtime.b5c369e34dc1'));
   $('modal').querySelector('.modal').classList.add('rootfs-guidance');
   const body = $('modalBody');
   body.textContent = '';
@@ -431,33 +428,30 @@ function openRootfsCapacityGuidance() {
   const row = document.createElement('div');
   row.className = 'rootfs-guidance-row';
   const project = document.createElement('span');
-  project.textContent = `${uiText('项目', '項目', 'Item')}：${info.project}`;
+  project.textContent = `${t('runtime.2be977a1c305')}：${info.project}`;
   const current = document.createElement('strong');
-  current.textContent = `${uiText('当前值', '目前值', 'Current')}：${info.value} MiB`;
+  current.textContent = `${t('runtime.0204d291b0db')}：${info.value} MiB`;
   row.append(project, current);
 
   const path = document.createElement('div');
   path.className = 'rootfs-guidance-path';
-  path.textContent = `${uiText('路径', '路徑', 'Path')}：${[...(info.path.length ? info.path : ['Target Images']), ROOTFS_PARTSIZE_SYMBOL].join(' → ')}`;
+      path.textContent = `${t('runtime.c2e92eeeb4e6')}：${[...(info.path.length ? info.path : [t('menu.targetImages')]), ROOTFS_PARTSIZE_SYMBOL].join(' → ')}`;
 
   const note = document.createElement('p');
   note.className = 'rootfs-guidance-note';
-  note.textContent = uiText(
-    '这个值决定 RootFS 分区上限。基础系统、依赖与所选软件包都会占用空间；如果构建日志出现 ext4 out of space，请增大此值后重建。',
-    '這個值決定 RootFS 分區上限。基礎系統、相依套件與所選軟體包都會佔用空間；如果建置日誌出現 ext4 out of space，請增大此值後重建。',
-    'This value limits the RootFS partition. The base system, dependencies, and selected packages all consume space. Increase it and rebuild if the build log reports ext4 out of space.');
+  note.textContent = t('runtime.0e8a6d518ade');
 
   const actions = document.createElement('div');
   actions.className = 'modal-actions';
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'btn';
-  close.textContent = uiText('关闭', '關閉', 'Close');
+  close.textContent = t('runtime.36463e27a8e1');
   close.onclick = closeModal;
   const edit = document.createElement('button');
   edit.type = 'button';
   edit.className = 'btn btn-primary';
-  edit.textContent = uiText('去修改', '去修改', 'Modify');
+  edit.textContent = t('runtime.2195ea1653d1');
   edit.onclick = async () => {
     closeModal();
     try {
@@ -481,9 +475,7 @@ function updateStats() {
     capText.disabled = false;
     capText.classList.add('rootfs-capacity');
     capText.textContent = `${rootfs.value} MiB`;
-    bindUiTooltipContent(capText, { body: uiText(
-      '查看 RootFS 容量与修改位置', '查看 RootFS 容量與修改位置',
-      'View RootFS capacity and where to modify it') });
+    bindUiTooltipContent(capText, { body: t('runtime.2b2a5917809a') });
   } else {
     $('capBox').hidden = false;
     capText.disabled = true;
@@ -493,13 +485,11 @@ function updateStats() {
     $('capFill').style.width = '0';
     $('capFill').className = 'cap-fill';
     capText.textContent = knownBytes
-      ? `${uiText('已知软件包体积', '已知軟體包體積', 'Known package size')} ${fmtSize(knownBytes)}`
-      : uiText('软件包体积未知', '軟體包體積未知', 'Package size unknown');
+      ? `${t('runtime.5d97d13c4b9d')} ${fmtSize(knownBytes)}`
+      : t('runtime.df187d1a812b');
     bindUiTooltipContent(capText, { body: unknownCount
-      ? uiText(`另有 ${unknownCount} 项暂无官方体积数据`, `另有 ${unknownCount} 項暫無官方體積資料`,
-        `${unknownCount} selected item(s) have no official size observation`)
-      : uiText('来自 Catalog 的跨源官方软件包观测', '來自 Catalog 的跨源官方軟體包觀測',
-        'Cross-source official package observations from Catalog') });
+      ? t('runtime.9fa9e63322ab', { value1: unknownCount })
+      : t('runtime.a6286fdab37d') });
   }
   updateGroupBadges();
   renderBuildContract();
@@ -534,7 +524,7 @@ function openSelectedDrawer() {
     }
     const sz = document.createElement('span');
     sz.className = 'sel-size';
-    sz.textContent = p.sizeBytes === null ? uiText('大小未知', '大小未知', 'Size unknown')
+    sz.textContent = p.sizeBytes === null ? t('runtime.7b4f86f4a586')
       : t('drawer.size', { n: fmtSize(p.sizeBytes) });
     const rm = document.createElement('button');
     rm.type = 'button';

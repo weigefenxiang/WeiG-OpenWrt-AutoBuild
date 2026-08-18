@@ -72,6 +72,7 @@ for (const path of scripts) run(`syntax ${relative(ROOT, path)}`, process.execPa
 
 const regressionTests = [
   'check-public-terminology.mjs',
+  'test-frontend-architecture.mjs',
   'test-site-release.mjs',
   'test-theme-bootstrap.mjs',
   'test-ui-modules.mjs',

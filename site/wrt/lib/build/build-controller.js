@@ -44,10 +44,9 @@ function updateSubmitGate() {
   const readiness = submitReadiness();
   button.disabled = !readiness.ok;
   button.setAttribute('aria-disabled', String(!readiness.ok));
-  bindUiTooltipContent(button, { body: readiness.ok ? '' : uiText(
-    `请等待构建参数就绪：${readiness.missing.join('、')}`,
-    `請等待建置參數就緒：${readiness.missing.join('、')}`,
-    `Waiting for build stages: ${readiness.missing.join(', ')}`) });
+  bindUiTooltipContent(button, { body: readiness.ok ? '' : t('build.waitingStages', {
+    list: formatList(readiness.missing),
+  }) });
 }
 async function mobileIssuePayload(payload) {
   if (!mobileIssueClient()) return '';
@@ -105,10 +104,7 @@ function openSubmitModal() {
   const readiness = submitReadiness();
   if (!readiness.ok) {
     updateSubmitGate();
-    showToast(uiText(
-      `尚未就绪：${readiness.missing.join('、')}`,
-      `尚未就緒：${readiness.missing.join('、')}`,
-      `Not ready: ${readiness.missing.join(', ')}`));
+    showToast(t('build.notReady', { list: formatList(readiness.missing) }));
     return;
   }
   const repo = targetRepo();
@@ -132,10 +128,7 @@ function openSubmitModal() {
   const titleSuffix = '/' + requestTargetProfilePart() + '/' + state.source.id + '/' + state.version.id + '/' + selectedTargetProfileName();
   const titleTag = BUILD_IDENTITY_MODULE.fitBuildIssueTag(tag, titlePrefix, titleSuffix, 'anonymous');
   if (!titleTag) {
-    showToast(uiText(
-      'GitHub Issue 标题固定字段过长，无法保留构建标识。',
-      'GitHub Issue 標題固定欄位過長，無法保留建置標識。',
-      'The fixed GitHub Issue title fields are too long to retain a build tag.'));
+    showToast(t('runtime.611eaffc726e'));
     return;
   }
   const title = titlePrefix + titleTag + titleSuffix;
@@ -158,7 +151,7 @@ function openSubmitModal() {
   if (state.importedConfig && !importedTargetVerified) {
     const warning = document.createElement('p');
     warning.className = 'import-error';
-    warning.textContent = '⚠ Custom Target 未经当前 Catalog 验证；Actions 将按上传配置直接构建，是否可用由所选源码决定。';
+    warning.textContent = t('build.customTargetWarning');
     mb.appendChild(warning);
   }
 

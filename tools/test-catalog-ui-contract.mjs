@@ -20,6 +20,7 @@ const pageShell = readFileSync(join(root, 'site', 'wrt', 'lib', 'page-shell-ui.j
 const packageProbeV3 = readFileSync(join(root, 'site', 'wrt', 'lib', 'package-probe-v3-ui.js'), 'utf8');
 const uiComponentsCss = readFileSync(join(root, 'site', 'wrt', 'ui-components.css'), 'utf8');
 const project = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
+const i18nSource = readFileSync(join(root, 'tools', 'i18n-source.json'), 'utf8');
 const expect = (condition, message) => { if (!condition) throw new Error(message); };
 
 expect(html.includes("if (meta && !releaseMeta) throw new Error('Site release metadata does not match its release pointer')"),
@@ -105,7 +106,8 @@ expect(app.includes('function schema6TargetIdentity(target = state.device?.targe
 
 expect(app.includes('const recommendationSteps = plans.recommended?.steps?.length') &&
   app.includes('plans.recommended?.automaticChanges || []') &&
-  app.includes("`按顺序取消：${recommendationStepNames.join(' → ')}`") &&
+  app.includes("t('runtime.3a95242a9e37', { value1: recommendationStepNames.join(' → ') })") &&
+  app.includes("t('menu.automaticLinkage', {") &&
   app.includes('for (const step of recommendationSteps) {') &&
   app.includes('applyCatalogIntent(menuOptionBySymbol.get(step.symbol) || { symbol: step.symbol },') &&
   !app.includes('warning.records.find((item) => item.configSymbol === plans.recommended.symbol)'),
@@ -124,7 +126,8 @@ expect(!uiSession.includes('compatibilityRememberDefault') &&
   !app.includes('getRememberDefault') && !app.includes('setRememberDefault') &&
   app.includes("finish(rememberInput.checked ? 'forced-remember' : 'forced')") &&
   app.includes('remembered.size === forced.size') &&
-  app.includes('仅当前页面有效；刷新或重新打开网页、清除站点数据后失效。') &&
+  app.includes("tooltipBody: t('runtime.e8bd8b88ed27')") &&
+  i18nSource.includes('仅当前页面有效；刷新或重新打开网页、清除站点数据后失效。') &&
   !app.includes('wrt_compatibility_remember') && !uiSession.includes('localStorage') &&
   uiComponents.includes('export function createUiCheckboxControl') &&
   uiComponentsCss.includes('.ui-checkbox-control{display:inline-flex;') &&
@@ -164,7 +167,7 @@ expect(html.includes('id="menuconfigFilterTrigger"') &&
   app.includes('function refreshMenuconfigFilterSummary()') &&
   app.includes("? menuFilterText('selectedOnly')") &&
   app.includes(": userSettableOnly ? menuFilterText('userSettable') : menuFilterText('filter')") &&
-  app.includes("filter: '筛选'") &&
+  app.includes("const menuFilterText = (key) => t('menu.filter.' + key);") &&
   !app.includes('userSettable（可直接设置）') &&
   app.includes("!menuUserSettableOnly || option.userSettable !== false") &&
   app.includes("event.target.closest('input[name=\"menuconfigOrigin\"]')") &&
@@ -258,8 +261,10 @@ expect(html.includes('class="ui-tooltip" id="uiTooltip"') &&
   !app.includes('function showMenuPopup(') && !app.includes('function showPopover('),
   'shared pointer-following tooltip template or content-bound positioning regressed');
 expect(app.includes("dataset.uiTooltipTitle = 'D · Defconfig'") &&
-  app.includes('⚠ 当前版本加载时已完成基准配置解析。通常直接在现有结果上增减即可，无需开启 D。') &&
-  app.includes('可能把你手工删减的默认项重新补回。') &&
+  app.includes("const defconfigEmphasis = t('runtime.f891591b9e6d')") &&
+  app.includes("const defconfigHelp = t('runtime.095a4944190f')") &&
+  i18nSource.includes('⚠ 当前版本加载时已完成基准配置解析。通常直接在现有结果上增减即可，无需开启 D。') &&
+  i18nSource.includes('可能把你手工删减的默认项重新补回。') &&
   app.includes("dataset.uiTooltipEmphasis = defconfigEmphasis") &&
   app.includes("dataset.uiTooltipBody = defconfigHelp") &&
   app.includes("removeAttribute('title')"),
@@ -273,14 +278,14 @@ expect(pluginRenderContract.includes('const applyChecked = (checked) => {') &&
   !pluginRenderContract.includes('nameBtn.title = detail'),
   'plugin card selection or shared double-click tooltip binding regressed');
 const originSlotContract = app.match(/function renderCatalogOriginSlot\(option, origin\) \{[\s\S]*?\n\}/)?.[0] || '';
-expect(app.includes("kind: 'user', label: uiText('自选'") &&
-  app.includes("kind: 'user-exclude', label: uiText('排除'") &&
-  app.includes("kind: 'dependency', label: uiText('自动依赖'") &&
+expect(app.includes("kind: 'user', label: t('runtime.3a8e2a20d9e6')") &&
+  app.includes("kind: 'user-exclude', label: t('runtime.97312fbcf425')") &&
+  app.includes("kind: 'dependency', label: t('runtime.dcaa0b4fbf15')") &&
   app.includes('catalogConditionalDefaultSymbols.has(symbol)') &&
-  app.includes('当前值由 Catalog Kconfig 的条件默认值自动计算') &&
+  app.includes("detail: t('runtime.b8449dfad59f')") &&
   app.includes('preferredValues: catalogPreferredValues()') &&
-  app.includes('活动 select 暂时把实际值提升为') &&
-  app.includes("displayKind: 'default', label: uiText('默认'") &&
+  app.includes("const forcedDetail = forced ? t('runtime.3cac4bbb48cb'") &&
+  app.includes("displayKind: 'default', label: t('runtime.1e1ebdf2f697')") &&
   originSlotContract.includes("slot.className = 'menuconfig-origin-slot'") &&
   originSlotContract.includes("const displayKind = origin.displayKind || origin.kind") &&
   originSlotContract.includes("restorable ? ' ↶' : ''") &&
@@ -383,7 +388,8 @@ expect(probeChoices.includes('searchMenuOptionsSync(normalized)') &&
   probeChoices.includes('optionVisible(option) && catalogOriginMatches(option)') &&
   probeChoices.includes('.map(probeChoiceFromMenuOption)') &&
   !probeChoices.includes('applications?.items') && !probeChoices.includes('item.id') &&
-  app.includes('const PROBE_UI_TEXT = Object.freeze({') &&
+  app.includes("function probeUiText(key) { return t('probe.legacy.' + key); }") &&
+  !app.includes('const PROBE_UI_TEXT = Object.freeze({') &&
   !app.match(/function probeUiText\(key\) \{[\s\S]*?catalogApplicationsDocument/),
   'probe no longer projects directly from the shared Advanced menuconfig search model');
 const normalizeMenuSearchQueryContract = app.match(/function normalizeMenuSearchQuery\(value\) \{[\s\S]*?\n\}/)?.[0] || '';
@@ -466,8 +472,9 @@ expect(hiddenDerivedContract.includes("option.origin === 'packageinfo-only'") &&
   importedDefaultContract.includes('CATALOG_ENGINE.reconcileKconfigDerivedValues') &&
   importedDefaultContract.includes("derivedReasons.get(symbol) === 'conditional-default'") &&
   app.includes('reconcileImportedConditionalDefaults();') &&
-  app.includes('该符号没有可操作提示；当前状态由 Kconfig 条件默认值自动计算') &&
-  app.includes('option.defaults?.length ? uiText(`默认：${option.defaults.join') &&
+  app.includes("emphasis = t('runtime.2338fb34620f')") &&
+  app.includes("option.defaults?.length ? t('menu.defaults'") &&
+  i18nSource.includes('该符号没有可操作提示；当前状态由 Kconfig 条件默认值自动计算') &&
   !app.includes("PACKAGE_luci-i18n-openvpn-server-zh-cn"),
   'promptless conditional defaults no longer hide at N, reconcile imports, explain their read-only cause, or remain package-agnostic');
 expect(!app.includes('button.hidden = button.disabled && !active') &&

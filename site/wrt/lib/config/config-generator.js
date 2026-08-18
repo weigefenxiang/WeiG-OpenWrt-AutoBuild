@@ -192,8 +192,7 @@ function downloadBlob(text, type, filename) {
 }
 
 function generationErrorItems(error) {
-  const message = String(error?.message || error || '').trim() || uiText(
-    '发生未知错误。', '發生未知錯誤。', 'An unknown error occurred.');
+  const message = String(error?.message || error || '').trim() || t('runtime.b4dbf4eeb0e4');
   const parts = message.split(/;\s*/).map((part) => part.trim()).filter(Boolean);
   return parts.length > 1 ? parts : [message];
 }

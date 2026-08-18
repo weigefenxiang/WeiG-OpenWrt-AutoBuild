@@ -146,7 +146,7 @@ function chooseImportedSourceBranch(meta) {
     const sourceField = document.createElement('label');
     sourceField.className = 'import-source-field';
     const sourceLabel = document.createElement('span');
-    sourceLabel.textContent = 'Source';
+    sourceLabel.textContent = t('target.field.source');
     const sourceSelect = document.createElement('select');
     sourceSelect.className = 'target-select';
     const detectedSource = sources.find((source) => source.id === meta.sourceHint);
@@ -163,7 +163,7 @@ function chooseImportedSourceBranch(meta) {
     const branchField = document.createElement('label');
     branchField.className = 'import-source-field';
     const branchLabel = document.createElement('span');
-    branchLabel.textContent = 'Branch';
+    branchLabel.textContent = t('target.field.branch');
     const branchSelect = document.createElement('select');
     branchSelect.className = 'target-select';
     branchField.append(branchLabel, branchSelect);
@@ -592,9 +592,7 @@ async function importConfigFile(file) {
     restoreSelections(state.importedConfig, payload);
     finishImportLog('success');
     showToast(legacyJsonRecovered
-      ? uiText('已兼容加载旧版 JSON，请重新下载以保存为标准格式。',
-        '已相容載入舊版 JSON，請重新下載以儲存為標準格式。',
-        'Legacy JSON loaded. Download it again to save a standards-compliant file.')
+      ? t('runtime.8527b3686481')
       : t('import.ok', { id: configId }));
     updateSubmitGate();
   } finally {

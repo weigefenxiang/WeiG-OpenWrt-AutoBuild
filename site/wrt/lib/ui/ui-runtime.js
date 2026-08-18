@@ -1,10 +1,10 @@
 /*
  * SPDX-FileCopyrightText: 2026 weigefenxiang <weigefenxiang@gmail.com>
  * SPDX-License-Identifier: GPL-3.0-or-later
-+ *
-+ * Shared notice, tooltip, and build-information UI runtime.
-+ */
-+'use strict';
+ *
+ * Shared notice, tooltip, and build-information UI runtime.
+ */
+'use strict';
 
 /* ============ 轻提示 / Toast ============ */
 let toastTimer = 0;

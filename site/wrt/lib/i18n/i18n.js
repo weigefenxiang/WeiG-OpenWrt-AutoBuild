@@ -1,10 +1,10 @@
 /*
  * SPDX-FileCopyrightText: 2026 weigefenxiang <weigefenxiang@gmail.com>
  * SPDX-License-Identifier: GPL-3.0-or-later
-+ *
-+ * Shared browser localization runtime.
-+ */
-+'use strict';
+ *
+ * Shared browser localization runtime.
+ */
+'use strict';
 
 /* ============ 多语言 / i18n ============ */
 function pickLang() {
@@ -47,7 +47,8 @@ async function initializeI18n() {
   state.lang = pickLang();
   await Promise.all([...new Set([I18N.source, I18N.fallback, state.lang])].map(ensureI18nLanguage));
 }
-const uiText = (zhCN, zhTW, en) => state.lang === 'zh-CN' ? zhCN : state.lang === 'zh-TW' ? zhTW : en;
+const formatList = (values) => values.join(t('format.listSeparator'));
+const formatSemicolonList = (values) => values.join(t('format.semicolonSeparator'));
 const isZh = () => String(state.lang).startsWith('zh');
 const isZhCn = () => state.lang === 'zh-CN';
 
@@ -98,35 +99,23 @@ function applyI18n() {
   }
   refreshTargetLabels();
   if ($('importReset')) $('importReset').textContent =
-    uiText('恢复上传原值', '還原上傳原值', 'Restore uploaded values');
-  if ($('importUnknownHint')) $('importUnknownHint').textContent = uiText(
-    'Catalog 未收录这些配置项，不自动推断依赖。关闭会写入 “is not set”；删除配置行则交给所选源码的构建系统决定默认值。',
-    'Catalog 未收錄這些設定項，不自動推斷相依性。關閉會寫入 “is not set”；刪除設定列則交由所選原始碼的建置系統決定預設值。',
-    'These items are not in the Catalog, so dependencies are not inferred. Disable writes “is not set”; deleting a line leaves the default to the selected upstream build system.');
+    t('runtime.71ed139e097f');
+  if ($('importUnknownHint')) $('importUnknownHint').textContent = t('runtime.279cccfa9205');
   if ($('importUnknownSearch')) $('importUnknownSearch').placeholder =
-    uiText('搜索 CONFIG 名称', '搜尋 CONFIG 名稱', 'Search CONFIG symbol');
+    t('runtime.7125a3d6b707');
   if ($('importUnknownDisabledLabel')) $('importUnknownDisabledLabel').textContent =
-    uiText('显示已关闭项', '顯示已關閉項目', 'Show disabled');
+    t('runtime.abfe46e1f08f');
   if ($('importUnknownMore')) $('importUnknownMore').textContent =
-    uiText('再显示 50 项', '再顯示 50 項', 'Show 50 more');
+    t('runtime.a26bd51a0821');
   refreshMenuconfigFilterText();
   if ($('menuconfigStateHelp')) {
-    const help = uiText(
-      'N：禁用，不编译。\nM：模块化或编译为可安装软件包，默认不写入固件。\nY：启用并编译进固件。',
-      'N：停用，不編譯。\nM：模組化或編譯為可安裝軟體套件，預設不寫入韌體。\nY：啟用並編譯進韌體。',
-      'N: Disabled; not built.\nM: Modular or built as an installable package; not included in the firmware by default.\nY: Enabled and built into the firmware.');
+    const help = t('runtime.e1885f83e039');
     bindUiTooltipContent($('menuconfigStateHelp'), { body: help });
     $('menuconfigStateHelp').setAttribute('aria-label',
-      uiText('N、M、Y 状态说明', 'N、M、Y 狀態說明', 'N, M, and Y state help'));
+      t('runtime.31a0e02fd530'));
   }
-  const defconfigEmphasis = uiText(
-    '⚠ 当前版本加载时已完成基准配置解析。通常直接在现有结果上增减即可，无需开启 D。',
-    '⚠ 目前版本載入時已完成基準設定解析。通常直接在現有結果上增減即可，無需開啟 D。',
-    '⚠ The current version baseline is already resolved when loaded. Normally you can adjust the existing result directly without enabling D.');
-  const defconfigHelp = uiText(
-    '开启 D 会在构建前重新执行 Defconfig，按当前选择补齐 Kconfig 默认值和依赖，可能把你手工删减的默认项重新补回。',
-    '開啟 D 會在建置前重新執行 Defconfig，依目前選擇補齊 Kconfig 預設值與相依性，可能把你手動刪減的預設項目重新補回。',
-    'Enabling D reruns Defconfig before the build, refilling Kconfig defaults and dependencies from the current selection and potentially restoring defaults you removed manually.');
+  const defconfigEmphasis = t('runtime.f891591b9e6d');
+  const defconfigHelp = t('runtime.095a4944190f');
   if ($('defconfigLabel')) $('defconfigLabel').textContent = 'D';
   if ($('defconfigSwitch')) {
     $('defconfigSwitch').removeAttribute('title');

@@ -13,7 +13,7 @@ async function selectCatalogLocatorTarget(values) {
   if (!selected.target || !selected.profile) return;
   await applyCatalogTarget();
   const label = state.device?.target?.profileLabel || selected.profile.name || selected.profile.id;
-  showToast(uiText(`已选择 ${label}`, `已選擇 ${label}`, `Selected ${label}`), 'device');
+  showToast(t('runtime.514df6b0e7e0', { value1: label }), 'device');
 }
 function buildCatalogLocatorEntries() {
   const entries = [];
@@ -81,7 +81,7 @@ function renderCatalogLocatorResults() {
   if (catalogLoadMode === 'loading') {
     const loading = document.createElement('p');
     loading.className = 'hint catalog-locator-loading';
-    loading.textContent = uiText('正在加载 Target 数据…', '正在載入 Target 資料…', 'Loading Target data…');
+    loading.textContent = t('runtime.141caa8588b5');
     results.appendChild(loading);
     results.hidden = false;
     return;
@@ -90,7 +90,7 @@ function renderCatalogLocatorResults() {
     const empty = document.createElement('p');
     empty.className = 'hint';
     empty.textContent = catalogLoadMode === 'error'
-      ? uiText('Catalog 加载失败，请重试。', 'Catalog 載入失敗，請重試。', 'Catalog failed to load. Retry.')
+      ? t('runtime.23f7b1f827bf')
       : t('search.empty');
     results.appendChild(empty);
     results.hidden = false;
@@ -173,7 +173,7 @@ function renderDevices() {
     if (!select || !select.closest('#targetPicker')) return;
     const id = select.id;
     if (state.importedConfig) {
-      if (!confirm('切换 Target 会退出上传配置工作区，并改为网页新建配置。继续吗？')) {
+      if (!confirm(t('import.leaveWorkspaceConfirm'))) {
         renderDevices();
         return;
       }
@@ -500,7 +500,7 @@ function renderFirmwareSettings() {
     .filter((symbol) => symbol.startsWith('PACKAGE_luci-theme-'))
     .map((symbol) => symbol.slice('PACKAGE_'.length));
   const available = MENU_CATALOG ? catalogThemes : [];
-  const themes = [['@base', uiText('跟随基础配置', '跟隨基礎設定', 'Follow base config')]]
+  const themes = [['@base', t('runtime.6df8b248e6c5')]]
     .concat([...new Set(available)].map((id) => {
       const option = menuOptionBySymbol.get(`PACKAGE_${id}`);
       return [id, menuOptionTranslation(option || {}).title || menuOptionLabel(option || { symbol: id })];

@@ -1,12 +1,12 @@
 async function openPackageProbeV3Modal() {
   selfTestViewToken += 1;
-  openModal(uiText('插件兼容探针', '套件相容性探針', 'Package Compatibility Probe'));
+  openModal(t('runtime.b9923e1a6d82'));
   const modal = $('modal').querySelector('.modal');
   modal.classList.add('package-probe');
   const body = $('modalBody');
   body.textContent = '';
   const loading = document.createElement('p');
-  loading.className = 'probe-loading'; loading.textContent = uiText('正在加载 Catalog 探针数据…', '正在載入 Catalog 探針資料…', 'Loading Catalog probe data…');
+  loading.className = 'probe-loading'; loading.textContent = t('runtime.adea101d8e62');
   body.appendChild(loading);
   try {
     await ensureCatalogMenuLoaded(true);
@@ -299,7 +299,7 @@ async function openPackageProbeV3Modal() {
       setProbeFilter(filters.profiles, [currentTarget.profile]);
     }).disabled = !currentTarget;
     shortcutButton(currentTarget
-      ? `${currentTarget.targetSystem} / ${currentTarget.subtarget} / ${currentTarget.profileLabel} · ${uiText('跨 Source / Branch', '跨 Source / Branch', 'across Source / Branch')}`
+      ? `${currentTarget.targetSystem} / ${currentTarget.subtarget} / ${currentTarget.profileLabel} · ${t('runtime.ebd8c457c647')}`
       : probeV3UiText('crossSourceTarget'), () => {
       if (!currentTarget) return;
       setProbeFilter(filters.sources, ['*']);
@@ -611,7 +611,6 @@ async function openPackageProbeV3Modal() {
     const failure = document.createElement('p'); failure.className = 'import-error'; failure.textContent = String(error?.message || error); body.appendChild(failure);
   }
 }
-
 
 // Replace only the Probe launcher after app.js has finished registering the
 // legacy listener. If the V3 adapter fails to load, no partially initialized

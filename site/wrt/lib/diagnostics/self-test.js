@@ -1,20 +1,17 @@
 /*
  * SPDX-FileCopyrightText: 2026 weigefenxiang <weigefenxiang@gmail.com>
  * SPDX-License-Identifier: GPL-3.0-or-later
-+ *
-+ * Browser self-test diagnostics controller.
-+ */
-+'use strict';
+ *
+ * Browser self-test diagnostics controller.
+ */
+'use strict';
 
 async function runSelfTest() {
   const viewToken = ++selfTestViewToken;
   openModal(t('st.title'));
   const probe = $('modalProbe');
-  probe.textContent = uiText('插件兼容探针', '外掛相容性探針', 'Package compatibility probe');
-  bindUiTooltipContent(probe, { body: uiText(
-    '按 Catalog Source/Branch 探测软件包编译与同装兼容性',
-    '依 Catalog Source/Branch 探測套件編譯與共裝相容性',
-    'Probe package compilation and co-install compatibility across Catalog Source/Branch entries') });
+  probe.textContent = t('runtime.db01903c8942');
+  bindUiTooltipContent(probe, { body: t('runtime.e0dfb5e2cd46') });
   probe.hidden = false;
   const mb = $('modalBody');
   mb.textContent = '';
@@ -124,7 +121,7 @@ async function runSelfTest() {
   }
   else if (state.device?.id === 'custom-target' && state.importedConfig) {
     cfgText = state.importedConfig;
-    tierHit = uiText('已上传权威配置', '已上傳權威設定', 'Uploaded authoritative config');
+    tierHit = t('runtime.f40ba241387b');
     d3('ok', t('st.config.ok', { tier: tierHit }));
   } else {
     d3('fail', t('st.config.noData'));
@@ -142,9 +139,7 @@ async function runSelfTest() {
         /^CONFIG_[A-Za-z0-9_.+@-]+=/.test(line) || /^# CONFIG_[A-Za-z0-9_.+@-]+ is not set$/.test(line));
       const okAll = headerOk && targets.length > 0 && configLines.length > 0;
       d4(okAll ? 'ok' : 'fail', okAll
-        ? uiText(`真实生成成功 · ${configLines.length} 配置项 · ${targets.length} 目标签名`,
-          `真實產生成功 · ${configLines.length} 設定項 · ${targets.length} 目標簽章`,
-          `Real generation passed · ${configLines.length} settings · ${targets.length} target signatures`)
+        ? t('runtime.f56ecdc153cc', { value1: configLines.length, value2: targets.length })
         : `${t('st.gen.fail')} · header=${headerOk} target=${targets.length} config=${configLines.length}`);
     } catch (error) {
       if (viewToken !== selfTestViewToken) return;
@@ -199,7 +194,7 @@ async function runSelfTest() {
   selfTestViewToken += 1;
   modalCancelHandler = null;
   openModal(t('st.title'));
-  probe.textContent = uiText('插件兼容探针', '外掛相容性探針', 'Package compatibility probe');
+  probe.textContent = t('runtime.db01903c8942');
   probe.hidden = false;
   mb.textContent = '';
   mb.appendChild(savedResults);
