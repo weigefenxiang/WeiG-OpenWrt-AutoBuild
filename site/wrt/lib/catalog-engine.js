@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Public Catalog/Kconfig facade. Core Kconfig semantics stay in catalog-engine-core.js.
- * Known build-failure recommendations only promote active selector releases to explicit
- * user steps; ordinary reverse dependents remain automatic applyUserIntent effects.
+ * When a known build-failure target is locked by an active selector, recommendations
+ * release only that selector chain explicitly; ordinary reverse dependents remain
+ * automatic applyUserIntent effects from the shared runtime.
  */
 import * as CORE from './catalog-engine-core.js';
 export * from './catalog-engine-core.js';
@@ -25,20 +26,14 @@ function packageName(record) {
   return String(record?.configSymbol || '').replace(/^PACKAGE_/, '');
 }
 
-function buildFailureTriggered(rule, records, values, options = {}) {
-  if (rule?.if) {
-    const condition = CORE.evaluateExpressionState(rule.if, values, options);
-    if (condition.status !== 'satisfied') return condition.status === 'deferred';
-  }
-  if (rule?.match === 'all-installed') {
-    return records.every((record) => normalized(values.get(record.configSymbol)) === 'y');
-  }
-  return records.every((record) => ['m', 'y'].includes(normalized(values.get(record.configSymbol))));
+function activeSelectors(model, record, values, intent = {}) {
+  return CORE.kconfigStateConstraints(
+    model, record, values, intent.validationOptions || {},
+  ).selectors || [];
 }
 
 function selectorDisableSteps(model, record, inputValues, intent = {}) {
   const values = new Map(valuesMap(inputValues));
-  const options = intent.validationOptions || {};
   const ordered = [];
   const planned = new Set();
   const visiting = new Set();
@@ -48,8 +43,7 @@ function selectorDisableSteps(model, record, inputValues, intent = {}) {
     if (!symbol || normalized(values.get(symbol)) === 'n') return true;
     if (candidate.canDisable === false || candidate.userSettable === false || visiting.has(symbol)) return false;
     visiting.add(symbol);
-    const constraints = CORE.kconfigStateConstraints(model, candidate, values, options);
-    for (const selector of constraints.selectors || []) {
+    for (const selector of activeSelectors(model, candidate, values, intent)) {
       const source = model.bySymbol.get(selector.sourceSymbol);
       if (!source || !visit(source)) return false;
     }
@@ -79,13 +73,11 @@ function planChanges(startingValues, resultValues, rawChanges) {
   })).filter((change) => change.from !== change.to);
 }
 
-function deriveBuildFailurePlans(model, inputValues, warning, intent = {}) {
-  const rule = warning?.rule;
+function deriveSelectorReleasePlans(model, inputValues, warning, intent = {}) {
   const records = warning?.records || [];
   const startingValues = warning?.values || inputValues;
-  if (!rule || !records.length) return CORE.deriveCompatibilityPlans(model, inputValues, warning, intent);
-
   const candidates = [];
+
   for (const record of records) {
     if (!record.canDisable) continue;
     try {
@@ -116,7 +108,7 @@ function deriveBuildFailurePlans(model, inputValues, warning, intent = {}) {
         allChanges.push(...result.changes);
       }
 
-      if (buildFailureTriggered(rule, records, values, intent.validationOptions || {})) continue;
+      if (normalized(values.get(record.configSymbol)) !== 'n') continue;
       const changes = planChanges(startingValues, values, allChanges);
       const stepSymbols = new Set(steps.map((step) => step.symbol));
       candidates.push({
@@ -129,7 +121,7 @@ function deriveBuildFailurePlans(model, inputValues, warning, intent = {}) {
         cost: steps.length,
       });
     } catch {
-      // Invalid selector sequences are not recommendation candidates.
+      // Invalid selector-release sequences are not recommendation candidates.
     }
   }
 
@@ -140,8 +132,11 @@ function deriveBuildFailurePlans(model, inputValues, warning, intent = {}) {
 }
 
 export function deriveCompatibilityPlans(model, inputValues, warning, intent = {}) {
-  if (warning?.rule?.issue !== 'build-failure') {
+  const startingValues = warning?.values || inputValues;
+  const selectorLockedBuildFailure = warning?.rule?.issue === 'build-failure' &&
+    (warning?.records || []).some((record) => activeSelectors(model, record, startingValues, intent).length > 0);
+  if (!selectorLockedBuildFailure) {
     return CORE.deriveCompatibilityPlans(model, inputValues, warning, intent);
   }
-  return deriveBuildFailurePlans(model, inputValues, warning, intent);
+  return deriveSelectorReleasePlans(model, inputValues, warning, intent);
 }
