@@ -740,6 +740,61 @@ assert(buildPlans.recommended?.package === 'core-service' &&
     sourceId: 'Demo', branchName: 'stable',
   }).warnings.length === 0,
 'single-package compatibility rule did not derive and apply a generic disable intent');
+assert(buildPlans.recommended.steps.map((step) => step.package).join('>') === 'ui-service>core-service',
+  'compatibility planning did not order the enabled upstream dependent before the requested disable target');
+assert(buildPlans.recommended.automaticChanges.some((change) =>
+  change.symbol === 'PACKAGE_i18n-service' && change.to === 'n') &&
+  buildPlans.recommended.values.get('PACKAGE_i18n-service') === 'n',
+  'compatibility planning did not preserve shared Kconfig automatic dependent cleanup');
+
+const staleImportedValues = new Map(ownershipValues);
+staleImportedValues.set('PACKAGE_core-service', 'n');
+staleImportedValues.set('PACKAGE_ui-service', 'n');
+staleImportedValues.set('PACKAGE_i18n-service', 'y');
+const repairedImportedValues = reconcileKconfigDerivedValues(model, staleImportedValues);
+assert(repairedImportedValues.values.get('PACKAGE_i18n-service') === 'n' &&
+  repairedImportedValues.changes.some((change) =>
+    change.symbol === 'PACKAGE_i18n-service' && change.to === 'n' && change.reason === 'dependency-unsatisfied'),
+  'a hidden imported dependent remained enabled after its parent became unavailable');
+
+const compatibilityReverseSelectCatalog = {
+  schema: 5,
+  targets: [],
+  relations: {
+    schema: 2,
+    records: [
+      { kind: 'package', package: 'selected-core', configSymbol: 'PACKAGE_selected-core',
+        kconfigSymbol: 'PACKAGE_selected-core', states: ['n', 'y'] },
+      { kind: 'package', package: 'selector-ui', configSymbol: 'PACKAGE_selector-ui',
+        kconfigSymbol: 'PACKAGE_selector-ui', states: ['n', 'y'],
+        kconfig: { selectsExpressions: [['PACKAGE_selected-core']] } },
+    ],
+    indexes: { providers: {}, reverseDependencies: {}, reverseKconfig: {}, choices: {} },
+  },
+};
+const compatibilityReverseSelectModel = createCatalogModel(compatibilityReverseSelectCatalog);
+const compatibilityReverseSelectRule = {
+  schema: 2,
+  rules: [{ id: 'BLD-SELECT', issue: 'build-failure', match: 'all-selected',
+    scope: { Demo: ['stable'] }, packages: ['selected-core'], refs: ['run:4'] }],
+};
+const compatibilityReverseSelectValues = parseConfigDocument([
+  'CONFIG_PACKAGE_selector-ui=y', 'CONFIG_PACKAGE_selected-core=y',
+].join('\n'));
+const compatibilityReverseSelectWarning = evaluateCompatibilityRules(
+  compatibilityReverseSelectModel,
+  compatibilityReverseSelectRule,
+  compatibilityReverseSelectValues,
+  { sourceId: 'Demo', branchName: 'stable' },
+).warnings[0];
+const compatibilityReverseSelectPlans = deriveCompatibilityPlans(
+  compatibilityReverseSelectModel,
+  compatibilityReverseSelectValues,
+  compatibilityReverseSelectWarning,
+);
+assert(compatibilityReverseSelectPlans.recommended?.steps
+  .map((step) => step.package).join('>') === 'selector-ui>selected-core',
+  'compatibility planning did not reuse the shared reverse-select graph for ordered disables');
 
 const wildcardCompatibility = structuredClone(buildFailure);
 wildcardCompatibility.rules[0].scope = { '*': ['openwrt-*'] };

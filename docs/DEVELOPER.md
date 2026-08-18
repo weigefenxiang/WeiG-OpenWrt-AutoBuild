@@ -55,7 +55,7 @@ applyMenuValue → catalog-engine.applyUserIntent → menuValues
 
 Advanced menuconfig 的 `Root Kconfig options / 根级 Kconfig 选项` 是 `path: []` 的通用展示容器，承载没有父菜单的 Catalog 顶层选项；它不等于上游 `Global build settings`，不得合并或删除。菜单文字属于 UI，选项、类型、状态、依赖和层级仍全部来自 Catalog。
 
-兼容性推荐也只能调用 `applyUserIntent`。N/M/Y 由 option 类型、可见性、依赖和合法 states 判断；不可选状态在 UI 灰化/隐藏，不能仅在点击后报错。
+兼容性推荐也只能调用 `applyUserIntent`，并与 Advanced menuconfig 共用同一个 Catalog/Kconfig runtime。N/M/Y 由 option 类型、可见性、依赖和合法 states 判断；不可选状态在 UI 灰化/隐藏，不能仅在点击后报错。若为了达到兼容目标需要先关闭上级选择，`deriveCompatibilityPlans` 只能读取共享 runtime 已建立的反向 Kconfig/package 关系并生成有序步骤，`app.js` 不得再实现一套依赖扫描器。
 
 通用回归至少覆盖：bool、tristate、string empty/non-empty、literal `n`、escaping、int、hex、unknown symbol，以及默认表达式的条件、括号、`&&`/`||`、deferred 和闭世界边界。
 
@@ -69,13 +69,15 @@ Advanced menuconfig 的 `Root Kconfig options / 根级 Kconfig 选项` 是 `path
 evaluateCompatibilityRules → deriveCompatibilityPlans → applyUserIntent
 ```
 
+推荐计划可以包含“先关闭上级选择、再关闭兼容目标”的有序用户步骤，以及由共享 Kconfig runtime 自动产生的下级失效/依赖清理；两者都必须来自同一次通用状态计算。页面只负责展示并按顺序把步骤送回 `applyUserIntent`，不得自行推导依赖关系。
+
 页面文案按 `issue` 通用渲染。推荐按钮应用后弹窗保留；相关值再次变化时按钮恢复为“推荐方案”；强制继续必须进入第二确认视图。`app.js` 内不得出现规则 ID、插件名或冲突文件路径。
 
 ## 6. 构建请求和后端
 
-只接受一个 schema 5 `build-request.json`。解析器从固定 Catalog revision 的 index 获取 Source repository、Branch 和 `build.diy1/diy2`；完整 `.config` 是权威配置。请求不再接受第二套 `packages` 字段，也不读取本地机型或插件白名单。
+只接受 schema 6 `build-request.json`。请求锁定 Catalog 身份并只携带最小 Target/Profile 身份与 semantic overrides；Worker 从请求锁定的 exact Native Profile baseline 加上 semantic overrides 确定性重建 `reconstructed.config`，它才是最终构建语义权威。不得恢复 submitted full `.config` 第二权威、Worker 端点击重放或用户意图猜测。
 
-Defconfig 开启时上游只运行一次 `make defconfig`；关闭时保持网页配置。后端只做格式、Target/Profile、Catalog 契约、固件参数和路径安全校验，不重新判断插件依赖。
+Defconfig 默认关闭。开启时只能在 `reconstructed.config` 已经确定之后运行上游 `make defconfig` 做可选 normalization；Defconfig 不得补全缺失 baseline、推导用户意图或替代 Catalog 身份。后端只做格式、最小 Target/Profile 身份、Catalog 契约、固件参数和路径安全校验，不重新判断插件依赖。
 
 ## 7. Actions 命名、并发和保留
 

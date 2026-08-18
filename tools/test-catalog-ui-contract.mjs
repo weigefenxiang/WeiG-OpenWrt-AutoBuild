@@ -102,6 +102,14 @@ expect(app.includes('function schema6TargetIdentity(target = state.device?.targe
   app.includes('const allowedSymbols = CATALOG_MODEL?.bySymbol instanceof Map'),
   'schema6 request Target identity is not minimal or schema6 import lost the active Catalog symbol allowlist');
 
+expect(app.includes('const recommendationSteps = plans.recommended?.steps?.length') &&
+  app.includes('plans.recommended?.automaticChanges || []') &&
+  app.includes("`按顺序取消：${recommendationStepNames.join(' → ')}`") &&
+  app.includes('for (const step of recommendationSteps) {') &&
+  app.includes('applyCatalogIntent(menuOptionBySymbol.get(step.symbol) || { symbol: step.symbol },') &&
+  !app.includes('warning.records.find((item) => item.configSymbol === plans.recommended.symbol)'),
+  'compatibility recommendation UI stopped consuming the shared ordered Kconfig plan');
+
 const defconfigTogglePosition = html.indexOf('id="defconfigToggle"');
 const menuconfigHeaderPosition = html.indexOf('<div class="menuconfig-header">');
 const menuconfigBodyPosition = html.indexOf('<div id="menuconfigBody"');

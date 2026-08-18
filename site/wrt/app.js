@@ -3840,22 +3840,37 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       recommendationTitle.textContent = recommendationApplied
         ? uiText('推荐方案已应用', '推薦方案已套用', 'Recommended plan applied')
         : uiText('推荐方案', '推薦方案', 'Recommended plan');
+      const recommendationSteps = plans.recommended?.steps?.length
+        ? plans.recommended.steps
+        : plans.recommended ? [{ symbol: plans.recommended.symbol, package: plans.recommended.package, value: 'n' }] : [];
+      const recommendationStepNames = recommendationSteps.map((step) =>
+        step.package || String(step.symbol || '').replace(/^PACKAGE_/, '')).filter(Boolean);
+      const automaticChangeNames = (plans.recommended?.automaticChanges || [])
+        .filter((change) => change.to === 'n')
+        .map((change) => String(change.symbol || '').replace(/^PACKAGE_/, '')).filter(Boolean);
       const recommendationAction = document.createElement('span');
       recommendationAction.className = 'compatibility-recommendation-action';
-      recommendationAction.textContent = plans.recommended ? uiText(
-        `关闭 ${plans.recommended.package}`,
-        `關閉 ${plans.recommended.package}`,
-        `Disable ${plans.recommended.package}`) : uiText(
+      recommendationAction.textContent = plans.recommended ? (recommendationStepNames.length > 1 ? uiText(
+        `按顺序取消：${recommendationStepNames.join(' → ')}`,
+        `依序取消：${recommendationStepNames.join(' → ')}`,
+        `Disable in order: ${recommendationStepNames.join(' → ')}`) : uiText(
+        `关闭 ${recommendationStepNames[0] || plans.recommended.package}`,
+        `關閉 ${recommendationStepNames[0] || plans.recommended.package}`,
+        `Disable ${recommendationStepNames[0] || plans.recommended.package}`)) : uiText(
         '当前没有唯一推荐方案', '目前沒有唯一推薦方案', 'No unique recommended plan is available');
       const recommendationDetail = document.createElement('small');
       recommendationDetail.className = 'compatibility-recommendation-detail';
+      const automaticDetail = automaticChangeNames.length ? uiText(
+        `；自动联动：${automaticChangeNames.join('、')}`,
+        `；自動連動：${automaticChangeNames.join('、')}`,
+        `; automatic linkage: ${automaticChangeNames.join(', ')}`) : '';
       recommendationDetail.textContent = recommendationApplied ? uiText(
         '配置已更新，请检查上方状态；关闭窗口后继续。',
         '設定已更新，請檢查上方狀態；關閉視窗後繼續。',
-        'The configuration is updated. Review the states above, then close this dialog to continue.') : plans.recommended ? uiText(
+        'The configuration is updated. Review the states above, then close this dialog to continue.') : plans.recommended ? `${uiText(
         `预计调整 ${plans.recommended.cost} 个相关配置项`,
         `預計調整 ${plans.recommended.cost} 個相關設定項`,
-        `Estimated changes: ${plans.recommended.cost} related settings`) : uiText(
+        `Estimated changes: ${plans.recommended.cost} related settings`)}${automaticDetail}` : uiText(
         '请在上方自定义 N/M/Y，或确认风险后强制继续。',
         '請在上方自訂 N/M/Y，或確認風險後強制繼續。',
         'Choose custom N/M/Y states above, or confirm the risk before forcing continuation.');
@@ -3873,9 +3888,12 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
         : uiText('推荐方案', '推薦方案', 'Recommended plan');
       recommendedButton.disabled = !plans.recommended || recommendationApplied;
       recommendedButton.onclick = () => applyAndVerify(() => {
-        const record = warning.records.find((item) => item.configSymbol === plans.recommended.symbol);
-        applyCatalogIntent(menuOptionBySymbol.get(record.configSymbol) || { symbol: record.configSymbol },
-          'n', false, 'user');
+        for (const step of recommendationSteps) {
+          const value = step.value || 'n';
+          if ((menuValues.get(step.symbol) ?? 'n') === value) continue;
+          applyCatalogIntent(menuOptionBySymbol.get(step.symbol) || { symbol: step.symbol },
+            value, false, 'user');
+        }
       }, { keepOpen: true });
       customButton = document.createElement('button');
       customButton.type = 'button';

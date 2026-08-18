@@ -55,7 +55,7 @@ applyMenuValue → catalog-engine.applyUserIntent → menuValues
 
 Advanced menuconfig's `Root Kconfig options / 根级 Kconfig 选项` is the generic display container for Catalog `path: []` records without a parent menu. It is not upstream `Global build settings` and must not be merged or removed. Only the container label is UI text; records, types, states, dependencies, and hierarchy remain Catalog-owned.
 
-Compatibility recommendations also call `applyUserIntent`. Legal N/M/Y states come from option type, visibility, dependencies, and Catalog states; unavailable states must be disabled/hidden before a click.
+Compatibility recommendations also call `applyUserIntent` and share the same Catalog/Kconfig runtime as Advanced menuconfig. Legal N/M/Y states come from option type, visibility, dependencies, and Catalog states; unavailable states must be disabled/hidden before a click. When reaching a compatibility target requires first disabling an upstream selection, `deriveCompatibilityPlans` may only use the reverse Kconfig/package relations already built by the shared runtime; `app.js` must not implement a second dependency scanner.
 
 Generic mutation coverage includes bool, tristate, empty/non-empty string, literal `n`, escaping, int, hex, unknown symbols, conditional defaults, parentheses, `&&`/`||`, deferred state, and closed-world boundaries.
 
@@ -69,13 +69,15 @@ The executor stays:
 evaluateCompatibilityRules → deriveCompatibilityPlans → applyUserIntent
 ```
 
+A recommendation may contain ordered user steps such as disabling an upstream selection before the compatibility target, plus automatic dependent invalidation/cleanup produced by the shared Kconfig runtime. Both must come from the same generic state calculation. The page only renders the plan and sends its ordered steps back through `applyUserIntent`; it never derives dependency facts itself.
+
 The modal renders generic text by `issue`. Applying a recommendation keeps it open; a relevant state change restores the action; force-continue requires a second confirmation view. No rule ID, package name, or conflict path belongs in `app.js`.
 
 ## 6. Request and backend
 
-The backend accepts one schema-5 `build-request.json`. From the pinned Catalog revision it reads Source repository, Branch, and `build.diy1/diy2`; the full `.config` is authoritative. There is no second `packages` field and no local device/plugin allowlist.
+The backend accepts schema-6 `build-request.json`. The request pins Catalog identity and carries only minimal Target/Profile identity plus semantic overrides. The Worker deterministically reconstructs `reconstructed.config` from the request-pinned exact Native Profile baseline plus semantic overrides; that reconstructed file is the authoritative build semantics. A submitted full `.config`, Worker-side click replay, or Worker-side user-intent guessing must not become a second authority.
 
-An enabled Defconfig runs upstream `make defconfig` once. Otherwise the browser config remains unchanged. The backend validates format, Target/Profile identity, Catalog contract, firmware settings, and path safety; it does not re-decide plugin dependencies.
+Defconfig defaults off. When enabled, upstream `make defconfig` may run only after `reconstructed.config` is already determined, as optional normalization. Defconfig must not complete a missing baseline, infer user intent, or replace the pinned Catalog identity. The backend validates format, minimal Target/Profile identity, Catalog contract, firmware settings, and path safety; it does not re-decide plugin dependencies.
 
 ## 7. Actions identity, concurrency, retention
 
