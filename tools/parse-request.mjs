@@ -9,8 +9,8 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import {
-  artifactBuildRef, buildEnvironmentIdentity, normalizeBuildCommit, normalizeBuildEnvironment,
-  parseBuildIssueTitleIdentity,
+  artifactBuildRef, artifactBuildTag, buildEnvironmentIdentity, isValidBuildTag, normalizeBuildCommit,
+  normalizeBuildEnvironment, normalizeBuildTag, parseBuildIssueTitleIdentity,
 } from '../site/wrt/lib/build-identity.js';
 import { createCatalogModel } from '../site/wrt/lib/catalog-engine.js';
 import {
@@ -358,7 +358,10 @@ for (const rawPlugin of rawPlugins) {
   if (!items.includes(rawPlugin)) items.push(rawPlugin);
 }
 
-const tag = String(req.tag || '').replace(/[^\w一-龥-]/g, '').slice(0, 24) || 'anonymous';
+const requestedTag = String(req.tag || '');
+if (requestedTag && !isValidBuildTag(requestedTag)) fail('构建标识必须为 1-160 个可见 Unicode 字符且不能包含控制字符');
+const tag = normalizeBuildTag(requestedTag, 'anonymous');
+const artifactTag = artifactBuildTag(tag, 'anonymous');
 const cleanIdentity = (value) => String(value || '').replace(/[^\w一-龥-]/g, '').slice(0, 24);
 const titleIdentity = parseBuildIssueTitleIdentity(process.env.ISSUE_TITLE || '');
 const attachmentRef = requestAttachmentName.match(/^([A-Za-z0-9]+_[A-Za-z0-9]+)[.-]/)?.[1] || '';
@@ -387,7 +390,7 @@ if (expectedRequestCommit && requestCommit !== expectedRequestCommit) {
   fail(`requestCommit 与实际 Worker 提交不一致: request=${requestCommit}, worker=${expectedRequestCommit}`);
 }
 const requestRef = cleanIdentity(req.requestId || attachmentRef || titleIdentity.requestId);
-const buildRef = requestRef ? `${requestRef}-${tag}` : tag;
+const buildRef = requestRef ? `${requestRef}-${artifactTag}` : artifactTag;
 const artifactRef = artifactBuildRef(buildRef, sourceEnv, Number(process.env.ISSUE_NUMBER || 0));
 
 const lanip = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/.test(String(req.lanip || ''))

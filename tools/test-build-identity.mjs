@@ -6,13 +6,19 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   artifactBuildRef,
+  artifactBuildTag,
+  BUILD_TAG_MAX_CODE_POINTS,
   catalogDataBranch,
   buildActionRunTitle,
   buildEnvironmentIdentity,
   buildEnvironmentPrefix,
   buildIssueRequestPrefix,
+  fitBuildIssueTag,
+  ISSUE_TITLE_MAX_CODE_POINTS,
+  isValidBuildTag,
   normalizeBuildEnvironment,
   normalizeBuildCommit,
+  normalizeBuildTag,
   normalizeDeploymentIdentity,
   parseBuildIssueTitleIdentity,
 } from '../site/wrt/lib/build-identity.js';
@@ -253,6 +259,25 @@ assert.equal(
   '',
 );
 
+assert.equal(BUILD_TAG_MAX_CODE_POINTS, 160);
+assert.equal(ISSUE_TITLE_MAX_CODE_POINTS, 256);
+assert.equal(normalizeBuildTag('  测试🧪  '), '测试🧪');
+assert.equal(Array.from(normalizeBuildTag('🧪'.repeat(161))).length, 160);
+assert.equal(normalizeBuildTag('bad\nTag'), 'badTag');
+assert.equal(isValidBuildTag('🧪'.repeat(160)), true);
+assert.equal(isValidBuildTag('🧪'.repeat(161)), false);
+assert.equal(isValidBuildTag('bad\tTag'), false);
+assert.equal(artifactBuildTag('测试🧪 Build Tag'), '测试BuildTag');
+assert.equal(Array.from(artifactBuildTag('构'.repeat(40))).length, 24);
+
+const issuePrefix = '[build] dev/260812_1849/';
+const issueSuffix = '/Generic_x86/64/ImmortalWrt/master/generic';
+assert.equal(fitBuildIssueTag('A/B', issuePrefix, issueSuffix), 'A／B');
+const budgetedTag = fitBuildIssueTag('界'.repeat(160), 'X'.repeat(150), 'Y'.repeat(50));
+assert.equal(Array.from(budgetedTag).length, 56);
+assert.equal(Array.from('X'.repeat(150) + budgetedTag + 'Y'.repeat(50)).length, 256);
+assert.equal(fitBuildIssueTag('test', 'X'.repeat(256), ''), '');
+
 assert.equal(
   buildActionRunTitle('weigefenxiang', 141, '[build] wrong/260809_0741/test', 'dev'),
   '',
@@ -286,6 +311,8 @@ const buildIdentitySource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'build
 const feedbackSource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'ui-feedback.js'), 'utf8');
 const feedbackCss = readFileSync(join(ROOT, 'site', 'wrt', 'ui-feedback.css'), 'utf8');
 const appSource = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
+const indexSource = readFileSync(join(ROOT, 'site', 'wrt', 'index.html'), 'utf8');
+const parserSource = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
 assert(buildIdentitySource.includes("new URL('./ui-feedback.js', import.meta.url)") &&
   buildIdentitySource.includes('await import(feedbackUrl.href)'),
   'mandatory browser startup module does not await the shared UI feedback adapter');
@@ -301,3 +328,13 @@ assert(feedbackSource.includes("t('import.ok', { id: marker })") &&
   'UI feedback does not preserve human-readable import details or mobile action-bar avoidance');
 assert((appSource.match(/\bconfirm\(/g) || []).length === 4 && (appSource.match(/\balert\(/g) || []).length === 1,
   'native popup callsite count changed; route new feedback through the shared adapter instead');
+assert(indexSource.includes('id="tagBox" data-max-code-points="160"') && !indexSource.includes('id="tagBox" maxlength="24"'),
+  'Build Tag input must use the shared 160-code-point contract instead of the old HTML maxlength');
+assert(appSource.includes('BUILD_IDENTITY_MODULE.normalizeBuildTag(payload.tag)') &&
+  appSource.includes('BUILD_IDENTITY_MODULE.fitBuildIssueTag(tag, titlePrefix, titleSuffix') &&
+  !appSource.includes("String(payload.tag).slice(0, 24)") &&
+  !appSource.includes("t('tag.anonymous')).slice(0, 24)"),
+  'browser Build Tag import/submission still contains the retired 24-character truncation');
+assert(parserSource.includes('isValidBuildTag(requestedTag)') && parserSource.includes('artifactBuildTag(tag') &&
+  !parserSource.includes("String(req.tag || '').replace(/[^\\w一-龥-]/g, '').slice(0, 24)"),
+  'worker must preserve the validated display tag while keeping a separate artifact-safe tag');

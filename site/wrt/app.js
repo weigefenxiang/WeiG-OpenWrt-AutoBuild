@@ -894,6 +894,13 @@ async function init() {
       import(releaseAssetUrl('./lib/catalog-schema6.js')),
       import(releaseAssetUrl('./lib/build-identity.js')),
     ]);
+    $('tagBox')?.addEventListener('input', () => {
+      const input = $('tagBox');
+      const points = Array.from(input.value);
+      if (points.length > BUILD_IDENTITY_MODULE.BUILD_TAG_MAX_CODE_POINTS) {
+        input.value = points.slice(0, BUILD_IDENTITY_MODULE.BUILD_TAG_MAX_CODE_POINTS).join('');
+      }
+    });
     I18N = await loadJson('i18n.json');
     state.lang = pickLang();
     renderLangSel();
@@ -6608,7 +6615,7 @@ function restoreSelections(config, payload) {
     skippedPlugins: skipped,
   });
   if (payload) {
-    if (payload.tag) $('tagBox').value = String(payload.tag).slice(0, 24);
+    if (payload.tag) $('tagBox').value = BUILD_IDENTITY_MODULE.normalizeBuildTag(payload.tag);
     if (LANIP_RE.test(String(payload.lanip || ''))) $('lanipBox').value = state.lanip = payload.lanip;
     if (payload.rootpw === '@empty' || /^[A-Za-z0-9@#%^&*_+=.,:!?-]{4,32}$/.test(String(payload.rootpw || ''))) {
       $('rootpwBox').value = state.rootpw = payload.rootpw;
@@ -6954,7 +6961,8 @@ function openSubmitModal() {
   const repo = targetRepo();
   if (!repo) { alert(t('owner.required')); $('ownerBox').focus(); return; }
   const sel = effectiveSelection();
-  const tag = ($('tagBox').value.trim() || t('tag.anonymous')).slice(0, 24);
+  const tag = BUILD_IDENTITY_MODULE.normalizeBuildTag($('tagBox').value, t('tag.anonymous'));
+  $('tagBox').value = tag;
   const plugins = sel.normal.map((p) => p.id)
     .concat(sel.forced.map((p) => '+' + p.id))
     .concat(sel.removed.map((p) => '-' + p.id));
@@ -6967,8 +6975,17 @@ function openSubmitModal() {
   Object.assign(state, firmware);
   const requestStamp = localStamp();
   const sourceEnv = BUILD_IDENTITY_MODULE.normalizeBuildEnvironment(state.buildMeta?.branch);
-  const titleTag = safeDownloadNamePart(tag, 'anonymous');
-  const title = '[build] ' + BUILD_IDENTITY_MODULE.buildIssueRequestPrefix(sourceEnv) + requestStamp + '/' + titleTag + '/' + requestTargetProfilePart() + '/' + state.source.id + '/' + state.version.id + '/' + selectedTargetProfileName();
+  const titlePrefix = '[build] ' + BUILD_IDENTITY_MODULE.buildIssueRequestPrefix(sourceEnv) + requestStamp + '/';
+  const titleSuffix = '/' + requestTargetProfilePart() + '/' + state.source.id + '/' + state.version.id + '/' + selectedTargetProfileName();
+  const titleTag = BUILD_IDENTITY_MODULE.fitBuildIssueTag(tag, titlePrefix, titleSuffix, 'anonymous');
+  if (!titleTag) {
+    showToast(uiText(
+      'GitHub Issue 标题固定字段过长，无法保留构建标识。',
+      'GitHub Issue 標題固定欄位過長，無法保留建置標識。',
+      'The fixed GitHub Issue title fields are too long to retain a build tag.'));
+    return;
+  }
+  const title = titlePrefix + titleTag + titleSuffix;
 
   openModal(t('btn.submit'));
   const mb = $('modalBody');

@@ -25,14 +25,45 @@ if (typeof document !== 'undefined') {
 const REQUEST_ID_RE = /^\d{6}_\d{4}$/;
 const BRANCH_RE = /^[A-Za-z0-9._/-]{1,160}$/;
 const DISPLAY_RE = /^[A-Za-z0-9._-]{1,160}$/;
-const BUILD_TAG_MAX_CODE_POINTS = 160;
+export const BUILD_TAG_MAX_CODE_POINTS = 160;
+export const ISSUE_TITLE_MAX_CODE_POINTS = 256;
+const ARTIFACT_BUILD_TAG_MAX_CODE_POINTS = 24;
 const BUILD_TAG_CONTROL_RE = /\p{Cc}/u;
+const BUILD_TAG_CONTROLS_RE = /\p{Cc}+/gu;
 
-function isValidBuildTag(value) {
+function codePointLength(value) {
+  return Array.from(String(value ?? '')).length;
+}
+
+export function normalizeBuildTag(value, fallback = '') {
+  const clean = (input) => String(input ?? '').replace(BUILD_TAG_CONTROLS_RE, '').trim();
+  const tag = clean(value) || clean(fallback);
+  return Array.from(tag).slice(0, BUILD_TAG_MAX_CODE_POINTS).join('');
+}
+
+export function isValidBuildTag(value) {
   const tag = String(value ?? '');
   return tag.trim().length > 0 &&
-    Array.from(tag).length <= BUILD_TAG_MAX_CODE_POINTS &&
+    codePointLength(tag) <= BUILD_TAG_MAX_CODE_POINTS &&
     !BUILD_TAG_CONTROL_RE.test(tag);
+}
+
+export function buildIssueTag(value, fallback = 'anonymous') {
+  return normalizeBuildTag(value, fallback).replaceAll('/', '／');
+}
+
+export function fitBuildIssueTag(value, prefix, suffix, fallback = 'anonymous') {
+  const budget = ISSUE_TITLE_MAX_CODE_POINTS - codePointLength(prefix) - codePointLength(suffix);
+  if (budget <= 0) return '';
+  return Array.from(buildIssueTag(value, fallback))
+    .slice(0, Math.min(BUILD_TAG_MAX_CODE_POINTS, budget))
+    .join('');
+}
+
+export function artifactBuildTag(value, fallback = 'anonymous') {
+  const clean = (input) => normalizeBuildTag(input).replace(/[^\w一-龥-]/g, '');
+  return Array.from(clean(value)).slice(0, ARTIFACT_BUILD_TAG_MAX_CODE_POINTS).join('') ||
+    Array.from(clean(fallback)).slice(0, ARTIFACT_BUILD_TAG_MAX_CODE_POINTS).join('') || 'anonymous';
 }
 const SITE_SHA256_RE = /^[a-f0-9]{64}$/;
 const CATALOG_DATA_BRANCHES = Object.freeze({

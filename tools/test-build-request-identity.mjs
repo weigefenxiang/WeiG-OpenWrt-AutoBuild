@@ -58,6 +58,21 @@ try {
     assert.match(result.stdout, new RegExp(`^run_title=dev-260808_2242/${tag}#141/Generic_x86/64/ImmortalWrt/25\\.12/generic$`, 'm'));
   }
 
+  const maxTag = '界'.repeat(160);
+  result = run(schema6, {
+    title: `[build] dev/260808_2242/${maxTag}/Generic_x86/64/ImmortalWrt/25.12/generic`,
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, new RegExp(`^run_title=dev-260808_2242/${maxTag}#141/Generic_x86/64/ImmortalWrt/25\.12/generic$`, 'm'));
+
+  const oversizedTag = '界'.repeat(161);
+  result = run(schema6, {
+    title: `[build] dev/260808_2242/${oversizedTag}/Generic_x86/64/ImmortalWrt/25.12/generic`,
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /^run_title=$/m);
+  assert.match(result.stderr, /routing continues without display metadata/);
+
   result = run(schema6, {
     title: '[build] dev/260808_2242/   /Generic_x86/64/ImmortalWrt/25.12/generic',
   });
