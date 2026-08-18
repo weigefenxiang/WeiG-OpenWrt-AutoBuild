@@ -18,6 +18,7 @@
     'lib/core/data-loader.js',
     'lib/ui/ui-runtime.js',
     'lib/core/application-controller.js',
+    'lib/build/build-controller.js',
     'lib/diagnostics/self-test.js',
     'lib/core/bootstrap.js',
   ];

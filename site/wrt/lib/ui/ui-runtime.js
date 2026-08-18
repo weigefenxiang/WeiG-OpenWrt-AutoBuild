@@ -381,3 +381,36 @@ function renderBuildInfo() {
     if (panel.classList.contains('is-open')) positionBuildInfoPanel(trigger, card);
   });
 }
+
+let lastFocus = null;
+let modalCancelHandler = null;
+function openModal(title) {
+  $('modalTitle').textContent = title;
+  $('modalProbe').hidden = true;
+  lastFocus = document.activeElement;
+  $('modal').hidden = false;
+  document.body.classList.add('modal-open');
+  $('modalClose').focus();
+}
+function closeModal() {
+  if ($('modal').hidden) return;
+  selfTestViewToken += 1;
+  const cancel = modalCancelHandler;
+  modalCancelHandler = null;
+  $('modal').hidden = true;
+  $('modalProbe').hidden = true;
+  $('modal').querySelector('.modal').classList.remove('modal-wide', 'modal-import-source', 'recommended-config', 'profile-package-config', 'generation-error', 'catalog-conflict', 'compatibility-warning', 'rootfs-guidance', 'package-probe');
+  document.body.classList.remove('modal-open');
+  if (lastFocus && lastFocus.focus) lastFocus.focus();
+  if (cancel) cancel();
+}
+$('modalClose').addEventListener('click', closeModal);
+$('modal').addEventListener('click', (e) => { if (e.target === $('modal')) closeModal(); });
+$('modal').addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab') return;
+  const els = [...$('modal').querySelectorAll('button, a[href], input, textarea, select')].filter((el) => !el.disabled && el.offsetParent !== null);
+  if (!els.length) return;
+  const first = els[0], last = els[els.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
