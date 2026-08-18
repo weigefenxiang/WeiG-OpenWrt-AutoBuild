@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // 合并 tools/i18n-source.json(zh-CN 源语言)+ tools/i18n-translations.json(其余语言) / Merges tools/i18n-source.json (zh-CN source) with tools/i18n-translations.json (other languages).
-// 产出 site/wrt/data/i18n.json(页面用) / Outputs site/wrt/data/i18n.json for the web app.
+// 产出 site/wrt/data/i18n/<language>.json(页面用) / Outputs one site/wrt/data/i18n/<language>.json file per language.
 // zh-CN 与 en 缺任何词条直接报错;其他语言缺条只警告,页面运行时回退英文 / Missing zh-CN/en entries are fatal; other languages only warn — the page falls back to English at runtime.
 // 用法 / Usage: node tools/gen-i18n.mjs
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -58,11 +58,21 @@ if (errors.length) {
   process.exit(1);
 }
 
-writeFileSync(join(ROOT, 'site', 'wrt', 'data', 'i18n.json'),
-  JSON.stringify({ version: 1, fallback: 'en', languages: LANGS, strings }, null, 1) + '\n');
+const outputDirectory = join(ROOT, 'site', 'wrt', 'data', 'i18n');
+mkdirSync(outputDirectory, { recursive: true });
+writeFileSync(join(outputDirectory, 'index.json'),
+  JSON.stringify({ version: 2, fallback: 'en', source: 'zh-CN', languages: LANGS }, null, 1) + '\n');
+for (const language of LANGS) {
+  const languageStrings = Object.fromEntries(keys.map((key) => [key,
+    strings[key][language.id] || strings[key].en || strings[key]['zh-CN'],
+  ]));
+  writeFileSync(join(outputDirectory, `${language.id}.json`),
+    JSON.stringify({ version: 2, language: language.id, strings: languageStrings }, null, 1) + '\n');
+}
+rmSync(join(ROOT, 'site', 'wrt', 'data', 'i18n.json'), { force: true });
 
 
-console.log(`i18n.json: ${keys.length} 词条 × ${LANGS.length} 语言`);
+console.log(`data/i18n: ${keys.length} 词条 × ${LANGS.length} 语言`);
 for (const l of LANGS) {
   const n = keys.filter((k) => strings[k][l.id]).length;
   console.log(`  ${l.id.padEnd(6)} ${n}/${keys.length}` + (n < keys.length ? ' (缺的运行时回退英文)' : ''));

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { readFrontendRuntimeSource } from './lib/frontend-source.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const buildIdentityText = fs.readFileSync(path.join(root, 'site/wrt/lib/build-identity.js'), 'utf8');
@@ -8,7 +9,7 @@ const probeText = fs.readFileSync(path.join(root, 'site/wrt/lib/package-probe-v3
   fs.readFileSync(path.join(root, 'site/wrt/lib/package-probe-v3-ui.js'), 'utf8');
 const probeCss = fs.readFileSync(path.join(root, 'site/wrt/package-probe-v3.css'), 'utf8');
 const feedbackText = fs.readFileSync(path.join(root, 'site/wrt/lib/ui-feedback.js'), 'utf8');
-const appText = fs.readFileSync(path.join(root, 'site/wrt/app.js'), 'utf8');
+const appText = readFrontendRuntimeSource(root);
 const indexText = fs.readFileSync(path.join(root, 'site/wrt/index.html'), 'utf8');
 const feedbackCss = fs.readFileSync(path.join(root, 'site/wrt/ui-feedback.css'), 'utf8');
 

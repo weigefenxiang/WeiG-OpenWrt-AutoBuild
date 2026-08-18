@@ -1,5 +1,6 @@
 {
- "_note": "多语言词条源表(zh-CN 为源语言)。{x} 是占位符,翻译时必须原样保留。译文由 tools/gen-i18n.mjs 生成到 site/wrt/data/i18n/。",
+ "version": 2,
+ "language": "zh-CN",
  "strings": {
   "app.title": "OpenWrt 固件在线定制",
   "app.subtitle": "选好插件,云端自动编译,喝杯卡布奇诺，迎接开“源”盛世",

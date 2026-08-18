@@ -3,9 +3,10 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readFrontendRuntimeSource } from './lib/frontend-source.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const source = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
+const source = readFrontendRuntimeSource(ROOT);
 
 assert.ok(source.includes(
   "setConfigSymbol(text, symbol, String(menuValues.get(symbol) ?? 'n'), option.type)"),

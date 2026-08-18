@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createUiSessionState } from '../site/wrt/lib/ui-session-state.js';
+import { readFrontendRuntimeSource } from './lib/frontend-source.mjs';
 
 const session = createUiSessionState();
 assert.equal(session.compatibility.getAcknowledgement(), null);
@@ -13,13 +16,17 @@ assert.equal(session.compatibility.getAcknowledgement(), acknowledgement);
 session.compatibility.clearAcknowledgement();
 assert.equal(session.compatibility.getAcknowledgement(), null);
 
-const app = readFileSync(new URL('../site/wrt/app.js', import.meta.url), 'utf8');
+const appRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+const app = readFrontendRuntimeSource(appRoot);
+const orchestrator = readFileSync(new URL('../site/wrt/app.js', import.meta.url), 'utf8');
 const html = readFileSync(new URL('../site/wrt/index.html', import.meta.url), 'utf8');
 const components = readFileSync(new URL('../site/wrt/lib/ui-components.js', import.meta.url), 'utf8');
 const shell = readFileSync(new URL('../site/wrt/lib/page-shell-ui.js', import.meta.url), 'utf8');
 assert.match(html, /lib\/ui-session-state\.js/);
 assert.match(html, /lib\/ui-components\.js/);
 assert.match(html, /lib\/page-shell-ui\.js/);
+assert.match(orchestrator, /lib\/core\/runtime\.js/);
+assert.match(orchestrator, /lib\/diagnostics\/self-test\.js/);
 assert.match(app, /UI_SESSION\.compatibility\.getAcknowledgement/);
 assert.match(app, /UI_COMPONENTS\.createUiCheckboxControl/);
 assert.match(app, /PAGE_SHELL_UI\.installPageShellUi/);

@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFrontendRuntimeSource } from './lib/frontend-source.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 let failures = 0;
@@ -110,7 +111,18 @@ if (license.includes('GNU GENERAL PUBLIC LICENSE') && license.includes('Version 
 
 console.log('[2/4] Canonical local data / 本地权威数据');
 const dataFiles = [
-  'site/wrt/data/i18n.json',
+  'site/wrt/data/i18n/index.json',
+  'site/wrt/data/i18n/zh-CN.json',
+  'site/wrt/data/i18n/zh-TW.json',
+  'site/wrt/data/i18n/en.json',
+  'site/wrt/data/i18n/ru.json',
+  'site/wrt/data/i18n/es.json',
+  'site/wrt/data/i18n/pt.json',
+  'site/wrt/data/i18n/ja.json',
+  'site/wrt/data/i18n/ko.json',
+  'site/wrt/data/i18n/de.json',
+  'site/wrt/data/i18n/fr.json',
+  'site/wrt/data/i18n/vi.json',
   'site/wrt/data/package-mirrors.json',
   'site/wrt/data/project.json',
   'site/wrt/data/site-version.json',
@@ -144,10 +156,15 @@ if (configEntries.length === 1 && configEntries[0] === 'config/policies/package-
 run('package mirror public projection matches its canonical policy', process.execPath,
   [join(ROOT, 'tools', 'gen-package-mirrors.mjs'), '--check']);
 
-const i18n = parsed.get('site/wrt/data/i18n.json');
-if (i18n?.languages?.length === 11 && Object.values(i18n.strings || {}).every((row) =>
-  i18n.languages.every((language) => String(row[language.id] || '').length))) {
-  pass(`${Object.keys(i18n.strings).length} UI strings are complete in 11 languages`);
+const i18n = parsed.get('site/wrt/data/i18n/index.json');
+const i18nDocuments = (i18n?.languages || []).map((language) =>
+  parsed.get(`site/wrt/data/i18n/${language.id}.json`));
+const i18nKeys = Object.keys(i18nDocuments[0]?.strings || {});
+if (i18n?.version === 2 && i18n.languages?.length === 11 && i18nDocuments.every((document) =>
+  document?.version === 2 && i18n.languages.some((language) => language.id === document.language) &&
+  Object.keys(document.strings || {}).length === i18nKeys.length &&
+  i18nKeys.every((key) => String(document.strings[key] || '').length))) {
+  pass(`${i18nKeys.length} UI strings are complete in 11 language files`);
 } else fail('i18n completeness');
 
 const timezones = parsed.get('site/wrt/data/timezones.json')?.zones || [];
@@ -156,7 +173,7 @@ if (timezones.length >= 400 && new Set(timezones.map((row) => row.zonename)).siz
 else fail('timezone mapping contract');
 
 console.log('[3/4] Catalog-only architecture / Catalog-only 架构');
-const app = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
+const app = readFrontendRuntimeSource(ROOT);
 const html = readFileSync(join(ROOT, 'site', 'wrt', 'index.html'), 'utf8');
 const loader = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-loader.js'), 'utf8');
 const engine = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'catalog-engine.js'), 'utf8');

@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFrontendRuntimeSource } from './lib/frontend-source.mjs';
 import {
   catalogFileNameTokenMatch,
   catalogTargetPreference,
@@ -10,7 +11,7 @@ import {
 } from '../site/wrt/lib/catalog-engine.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const app = readFileSync(join(root, 'site', 'wrt', 'app.js'), 'utf8');
+const app = readFrontendRuntimeSource(root);
 const html = readFileSync(join(root, 'site', 'wrt', 'index.html'), 'utf8');
 const css = readFileSync(join(root, 'site', 'wrt', 'app.css'), 'utf8');
 const uiSession = readFileSync(join(root, 'site', 'wrt', 'lib', 'ui-session-state.js'), 'utf8');

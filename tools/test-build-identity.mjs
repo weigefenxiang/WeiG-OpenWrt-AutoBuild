@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFrontendRuntimeSource } from './lib/frontend-source.mjs';
 import {
   artifactBuildRef,
   artifactBuildTag,
@@ -310,7 +311,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const buildIdentitySource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'build-identity.js'), 'utf8');
 const feedbackSource = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'ui-feedback.js'), 'utf8');
 const feedbackCss = readFileSync(join(ROOT, 'site', 'wrt', 'ui-feedback.css'), 'utf8');
-const appSource = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
+const appSource = readFrontendRuntimeSource(ROOT);
 const indexSource = readFileSync(join(ROOT, 'site', 'wrt', 'index.html'), 'utf8');
 const parserSource = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
 assert(buildIdentitySource.includes("new URL('./ui-feedback.js', import.meta.url)") &&

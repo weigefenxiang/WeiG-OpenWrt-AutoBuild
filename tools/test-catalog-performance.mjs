@@ -6,6 +6,7 @@ import { performance } from 'node:perf_hooks';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { readFrontendRuntimeSource } from './lib/frontend-source.mjs';
 import { createCatalogModel } from '../site/wrt/lib/catalog-engine.js';
 import { createRuntimeMenu, mergeHiddenShard, mergeMenuShards } from '../site/wrt/lib/catalog-schema6.js';
 
@@ -76,7 +77,7 @@ assert.equal(mergeHiddenShard(catalog, model, {
 assert.equal(catalog.menu.hiddenLoaded, true);
 assert.equal(catalog.menu.displayOptions.find((row) => row.symbol === 'PACKAGE_fixture-00001').promptEn, 'Hidden fixture');
 
-const appSource = readFileSync(join(ROOT, 'site', 'wrt', 'app.js'), 'utf8');
+const appSource = readFrontendRuntimeSource(ROOT);
 const searchTextSource = appFunctionSource(appSource, 'catalogSearchText', 'rebuildMenuSearchIndex');
 const searchTextContext = { Set, String, Object };
 vm.runInNewContext(searchTextSource, searchTextContext, { filename: 'app-search-text-fixture.js' });
