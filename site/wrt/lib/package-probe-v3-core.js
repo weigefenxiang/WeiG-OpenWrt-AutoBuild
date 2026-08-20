@@ -32,6 +32,15 @@ function probeV3UiText(key) {
   }[key] || key;
   return t('probe.v3.' + fallback);
 }
+function probeV3CoveragePolicy() {
+  const coverage = catalogApplicationsDocument?.probeUi?.coverage;
+  const defaultLimit = Number(coverage?.defaultLimit);
+  const maxLimit = Number(coverage?.maxLimit);
+  if (!Number.isInteger(defaultLimit) || !Number.isInteger(maxLimit) || defaultLimit < 1 || defaultLimit > maxLimit) {
+    throw new Error('Catalog Probe coverage contract is unavailable');
+  }
+  return { defaultLimit, maxLimit };
+}
 function probeV3CodeChannel() {
   const branch = String(state.buildMeta?.branch || 'main');
   if (branch.startsWith('fix/')) return branch;
