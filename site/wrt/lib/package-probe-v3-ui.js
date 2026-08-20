@@ -429,9 +429,7 @@ async function openPackageProbeV3Modal() {
     const buildRequestSnapshot = () => {
       const coverageMode = currentCoverageMode();
       const packageIntent = probeV3IntentRows(intent);
-      const packageConfigs = probeV3RequestPackageConfigs(
-        selectedProbeDepth.mode, baselinePackageConfig, packageConfigSnapshot, packageIntent,
-      );
+      const packageConfigs = probeV3RequestPackageConfigs(packageIntent);
       return {
         schema: 3, channel: probeV3CodeChannel(), mode: selectedProbeDepth.mode, useDefconfig: true,
         ...packageConfigs, packageIntent,

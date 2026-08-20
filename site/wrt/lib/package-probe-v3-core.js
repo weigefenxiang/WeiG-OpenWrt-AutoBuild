@@ -144,8 +144,7 @@ function probeV3PackageStateMap(text) {
   }
   return states;
 }
-function probeV3RequestPackageConfigs(mode, baselinePackageConfig, packageConfig, packageIntent) {
-  if (mode !== 'config-resolve') return { baselinePackageConfig, packageConfig };
+function probeV3RequestPackageConfigs(packageIntent) {
   const intentConfig = (stateKey) => packageIntent
     .filter((row) => ['m', 'y'].includes(row[stateKey]))
     .map((row) => `CONFIG_PACKAGE_${row.package}=${row[stateKey]}`)

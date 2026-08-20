@@ -34,12 +34,20 @@ assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__depthOptions.map((opti
   ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7'],
   'missing Catalog depth copy must degrade to protocol labels without a second description database');
 const intent = [{ package: 'example', before: 'n', after: 'y' }];
-assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__requestConfigs('config-resolve', 'CONFIG_PACKAGE_base=y\n', 'CONFIG_PACKAGE_final=y\n', intent))), {
+assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__requestConfigs(intent))), {
   baselinePackageConfig: '', packageConfig: 'CONFIG_PACKAGE_example=y\n',
-}, 'L1 must send only direct package roots for each target Kconfig resolver');
-assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__requestConfigs('rootfs-integration', 'CONFIG_PACKAGE_base=y\n', 'CONFIG_PACKAGE_final=y\n', intent))), {
-  baselinePackageConfig: 'CONFIG_PACKAGE_base=y\n', packageConfig: 'CONFIG_PACKAGE_final=y\n',
-}, 'L2-L7 must send the complete Baseline and Final PACKAGE state');
+}, 'every depth must send only direct package roots to the target Kconfig resolver');
+const mixedIntent = [
+  { package: 'module-root', before: 'n', after: 'm' },
+  { package: 'builtin-root', before: 'm', after: 'y' },
+  { package: 'removed-root', before: 'y', after: 'n' },
+];
+assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__requestConfigs(mixedIntent))), {
+  baselinePackageConfig: 'CONFIG_PACKAGE_builtin-root=m\nCONFIG_PACKAGE_removed-root=y\n',
+  packageConfig: 'CONFIG_PACKAGE_module-root=m\nCONFIG_PACKAGE_builtin-root=y\n',
+}, 'compact projections must preserve direct N/M/Y intent without automatic dependencies');
+assert.doesNotMatch(probeCoreText, /mode !== 'config-resolve'/,
+  'L2-L7 must not retain the obsolete full Advanced menuconfig request branch');
 assert.match(probeText, /mode:\s*selectedProbeDepth\.mode/, 'selected L1-L7 mode must be submitted');
 assert.match(probeText, /useDefconfig:\s*true/, 'Probe must preserve the approved Defconfig request default');
 assert.match(probeText, /coverage:\s*coverageMode === 'all'/, 'every depth must send backend coverage controls');
