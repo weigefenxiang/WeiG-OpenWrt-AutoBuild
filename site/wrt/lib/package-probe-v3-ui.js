@@ -10,6 +10,7 @@ async function openPackageProbeV3Modal() {
   body.appendChild(loading);
   try {
     await ensureCatalogMenuLoaded(true);
+    const coveragePolicy = probeV3CoveragePolicy();
     const baselineResolvedConfig = await generateResolvedConfigText();
     const baselinePackageConfig = probeV3PackageConfigFromText(baselineResolvedConfig);
     const baselineStates = probeV3PackageStateMap(baselinePackageConfig);
@@ -167,7 +168,7 @@ async function openPackageProbeV3Modal() {
       });
     }
     renderSelectedProbeDepth();
-    const autoLimit = document.createElement('input'); autoLimit.type = 'number'; autoLimit.min = '1'; autoLimit.max = '256'; autoLimit.step = '1'; autoLimit.value = '40'; autoLimit.className = 'probe-auto-limit';
+    const autoLimit = document.createElement('input'); autoLimit.type = 'number'; autoLimit.min = '1'; autoLimit.max = String(coveragePolicy.maxLimit); autoLimit.step = '1'; autoLimit.value = String(coveragePolicy.defaultLimit); autoLimit.className = 'probe-auto-limit';
 
     const environmentRow = document.createElement('div'); environmentRow.className = 'probe-environment-row'; settings.appendChild(environmentRow);
     const environmentHead = document.createElement('div'); environmentHead.className = 'probe-environment-head';
@@ -382,7 +383,8 @@ async function openPackageProbeV3Modal() {
     const scopeSummary = (selected, optionMap) => selected.has('*') ? probeV3UiText('all') :
       [...selected].map((value) => optionMap.get(value) || value || 'Default').join(', ');
     const currentCoverageMode = () => exhaustiveInput.checked ? 'all' : 'auto';
-    const normalizedAutoLimit = () => Math.max(1, Math.min(256, Number.parseInt(autoLimit.value || '40', 10) || 40));
+    const normalizedAutoLimit = () => Math.max(1, Math.min(coveragePolicy.maxLimit,
+      Number.parseInt(autoLimit.value || String(coveragePolicy.defaultLimit), 10) || coveragePolicy.defaultLimit));
     const renderAccordion = (request) => {
       accordionBody.textContent = '';
       if (!accordionMode) return;
