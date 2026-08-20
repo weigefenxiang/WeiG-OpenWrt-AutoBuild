@@ -11,6 +11,7 @@ async function openPackageProbeV3Modal() {
   try {
     await ensureCatalogMenuLoaded(true);
     await ensureCatalogApplications();
+    await ensureCatalogApplications(true);
     const coveragePolicy = probeV3CoveragePolicy();
     const baselineResolvedConfig = await generateResolvedConfigText();
     const baselinePackageConfig = probeV3PackageConfigFromText(baselineResolvedConfig);
