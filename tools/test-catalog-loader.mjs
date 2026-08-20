@@ -206,8 +206,10 @@ const fallback = await fallbackLoader.fetchBundle({
 });
 assert(fallback.indexProvider === 'github-raw', 'index provider fallback did not reach GitHub Raw');
 assert(fallback.provider === 'github-raw', 'valid GitHub Raw immutable asset was not accepted');
-assert(fallbackCalls[0].includes('cdn.jsdelivr.net') && fallbackCalls[0].includes('wrt_refresh=456'),
-'jsDelivr refresh-busted index was not attempted first');
+assert(fallbackCalls[0].includes('raw.githubusercontent.com') && fallbackCalls[0].includes('wrt_refresh=456'),
+'forced refresh did not ask GitHub Raw for the mutable index first');
+assert(fallbackCalls[1].includes('cdn.jsdelivr.net') && fallbackCalls[1].includes(asset),
+'forced index refresh unexpectedly stopped immutable assets from using CDN-first delivery');
 
 const apiCalls = [];
 const apiFetch = async (url, options = {}) => {
@@ -241,17 +243,53 @@ const apiFallback = await apiLoader.fetchBundle({
 });
 assert(apiFallback.indexProvider === 'github-api' && apiFallback.provider === 'github-api',
   'GitHub Contents API did not recover the Catalog index and immutable asset');
-assert(apiCalls.slice(0, 3).map((call) => new URL(call.url).hostname).join(',') ===
-  'cdn.jsdelivr.net,raw.githubusercontent.com,api.github.com',
-  'Catalog index providers no longer run in jsDelivr -> Raw -> GitHub API order');
+assert(apiCalls.slice(0, 2).map((call) => new URL(call.url).hostname).join(',') ===
+  'raw.githubusercontent.com,api.github.com',
+  'forced Catalog index refresh no longer runs GitHub Raw -> GitHub API first');
 assert(apiCalls.filter((call) => call.url.includes('api.github.com')).every((call) =>
   call.options.headers?.accept === 'application/vnd.github.raw+json'),
   'GitHub Contents API requests lost the raw response media type');
 assert(apiCalls.some((call) => call.url.includes(`/contents/${asset}?ref=${index.assetRef}`)),
   'GitHub Contents API asset request did not use the immutable assetRef');
 assert(apiFallback.diagnostics.filter((row) => row.stage === 'index' && !row.ok)
-  .map((row) => row.provider).join(',') === 'jsdelivr,github-raw',
-  'GitHub API recovery diagnostics did not preserve the two prior provider failures');
+  .map((row) => row.provider).join(',') === 'github-raw',
+  'GitHub API recovery diagnostics did not preserve the prior Raw failure');
+
+const freshCdnCalls = [];
+const freshCdnFetch = async (url, options = {}) => {
+  freshCdnCalls.push({ url, options });
+  if (url.includes('raw.githubusercontent.com') && url.includes('index.json')) {
+    return new Response('raw unavailable', { status: 503 });
+  }
+  if (url.includes('api.github.com') && url.includes('/contents/index.json?ref=catalog-main')) {
+    return new Response('api unavailable', { status: 503 });
+  }
+  if (url.includes('cdn.jsdelivr.net') && url.includes('index.json')) {
+    return new Response(JSON.stringify(index), { status: 200 });
+  }
+  if (url.includes('cdn.jsdelivr.net') && url.includes(asset)) {
+    return new Response(valid.bytes, { status: 200 });
+  }
+  return new Response('missing', { status: 404 });
+};
+const freshCdnLoader = createCatalogLoader({
+  repository: 'owner/catalog',
+  dataRef: 'catalog-main',
+  allowReleaseFallback: false,
+  engine: { createCatalogModel },
+  fetchImpl: freshCdnFetch,
+  cacheStorage: fakeCaches(),
+  subtle: null,
+  now: () => 777,
+});
+const freshCdn = await freshCdnLoader.fetchBundle({
+  sourceId: 'ImmortalWrt', branchName: 'openwrt-25.12', forceRefresh: true,
+});
+assert(freshCdn.indexProvider === 'jsdelivr' && freshCdn.provider === 'jsdelivr',
+  'jsDelivr did not remain the final mutable-index fallback and first immutable-asset provider');
+assert(freshCdnCalls.slice(0, 3).map((call) => new URL(call.url).hostname).join(',') ===
+  'raw.githubusercontent.com,api.github.com,cdn.jsdelivr.net',
+  'forced Catalog index fallback no longer runs Raw -> GitHub API -> jsDelivr');
 
 const releaseCalls = [];
 const releaseFetch = async (url) => {
@@ -296,6 +334,48 @@ assert(releaseCalls.some((url) => url.includes('/releases/download/menuconfig-ca
 'GitHub Release index URL was not refresh-busted');
 assert(releaseFallback.diagnostics.filter((row) => row.stage === 'index' && !row.ok).length === 3,
 'GitHub Release index fallback diagnostics did not preserve all prior failures');
+assert(releaseCalls.slice(0, 4).map((url) => new URL(url).hostname).join(',') ===
+  'raw.githubusercontent.com,api.github.com,cdn.jsdelivr.net,github.com',
+  'forced production index fallback no longer keeps GitHub Release last');
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((done) => { resolve = done; });
+  return { promise, resolve };
+}
+const ordinaryIndex = { ...index, assetRef: '8'.repeat(40) };
+const refreshedIndex = { ...index, assetRef: '9'.repeat(40) };
+const ordinaryIndexResponse = deferred();
+const refreshedIndexResponse = deferred();
+const raceCalls = [];
+const raceLoader = createCatalogLoader({
+  repository: 'owner/catalog',
+  dataRef: 'catalog-main',
+  allowReleaseFallback: false,
+  engine: { createCatalogModel },
+  cacheStorage: fakeCaches(),
+  subtle: null,
+  fetchImpl: async (url) => {
+    raceCalls.push(url);
+    if (url.includes('cdn.jsdelivr.net') && url.includes('index.json')) return ordinaryIndexResponse.promise;
+    if (url.includes('raw.githubusercontent.com') && url.includes('index.json')) return refreshedIndexResponse.promise;
+    return new Response('missing', { status: 404 });
+  },
+});
+const ordinaryIndexRun = raceLoader.fetchIndex();
+await Promise.resolve();
+const refreshedIndexRun = raceLoader.fetchIndex({ forceRefresh: true });
+await Promise.resolve();
+ordinaryIndexResponse.resolve(new Response(JSON.stringify(ordinaryIndex), { status: 200 }));
+await ordinaryIndexRun;
+const followerIndexRun = raceLoader.fetchIndex();
+refreshedIndexResponse.resolve(new Response(JSON.stringify(refreshedIndex), { status: 200 }));
+const [refreshedIndexResult, followerIndexResult] = await Promise.all([refreshedIndexRun, followerIndexRun]);
+assert(refreshedIndexResult.index.assetRef === refreshedIndex.assetRef &&
+  followerIndexResult.index.assetRef === refreshedIndex.assetRef,
+  'an older index request cleared or outranked the newer forced-refresh promise');
+assert(raceCalls.filter((url) => url.includes('index.json')).length === 2,
+  'index refresh race unexpectedly started a third mutable-index request');
 
 const stale = compressedDocument(catalog(commit, 4, 1));
 let staleError = null;
