@@ -60,8 +60,8 @@ assert.match(probeText, /autoLimit\.max = String\(coveragePolicy\.maxLimit\)/,
   'Probe input maximum must come from the Catalog coverage contract');
 assert.match(probeText, /autoLimit\.value = String\(coveragePolicy\.defaultLimit\)/,
   'Probe input default must come from the Catalog coverage contract');
-assert.match(probeText, /await ensureCatalogMenuLoaded\(true\);\s*await ensureCatalogApplications\(\);\s*const coveragePolicy = probeV3CoveragePolicy\(\);/,
-  'Probe must load the Catalog applications contract before reading coverage policy');
+assert.match(probeText, /await ensureCatalogMenuLoaded\(true\);\s*await ensureCatalogApplications\(\);\s*await ensureCatalogApplications\(true\);\s*const coveragePolicy = probeV3CoveragePolicy\(\);/,
+  'Probe must settle any lazy applications load, then force-refresh before reading coverage policy');
 assert.doesNotMatch(probeText, /autoLimit\.max = '256'|autoLimit\.value = '40'/,
   'Probe UI must not retain a second hard-coded environment budget');
 assert.match(probeText, /sources:/, 'Probe scope must include Source');
