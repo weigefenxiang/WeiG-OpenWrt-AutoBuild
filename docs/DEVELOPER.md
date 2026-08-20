@@ -94,13 +94,13 @@ GitHub Actions 原生 Run 日志的保留天数属于仓库 Settings，不由 Wo
 
 网页右下角“检”立即打开原自检界面；标题栏可进入“插件兼容探针”。Probe 与 Advanced menuconfig 直接共用同一份 `menuValues`，两边点击都只把真实 Kconfig symbol 交给 `setMenuValue()` / `applyMenuValue()`；前端不再把 `PACKAGE_<name>` 反向改写为 `PACKAGE_luci-app-<name>`。因此选择 `PACKAGE_x` 不会反选依赖它的 LuCI 应用，而选择 `PACKAGE_luci-app-x` 时，只有上游 Kconfig/package 关系声明的正向依赖才会自动启用 `PACKAGE_x` 等依赖。Probe 的“已选择”只展示相对当前 Source/Branch/Target Kconfig baseline 发生变化的 `PACKAGE_*`，上游默认启用项不计入；摘要固定一行，超出通过 `+N` 弹层查看。搜索结果本身仍显示完整实时 Kconfig 状态。底部长说明不再常驻，改为“说明”按钮，放在“预览计划”左侧并用弹层展示。
 
-Probe 提交使用 schema 2：先调用与 Advanced menuconfig 相同的最终配置生成链，再提取全部已解析 `CONFIG_PACKAGE_*=m/y` 状态并保留每项精确的 M/Y 值；Source/Branch 与 Target 覆盖作为独立探测参数。Catalog 直接消费这份 package Kconfig 状态，不再通过 curated application ID 或 `applications.json.gz` 二次映射软件包。
+Probe 提交使用 schema 3：先调用与 Advanced menuconfig 相同的最终配置生成链，再提取全部已解析 `CONFIG_PACKAGE_*=m/y` 状态并保留每项精确的 M/Y 值，同时单独保留 Baseline 与用户直接 Intent。L1 只向每个目标的上游 Kconfig resolver 发送直接 Root；L2-L7 发送完整 Baseline/Final PACKAGE 状态。Source/Branch/Target/Profile 与覆盖参数独立传递，Catalog 不通过 curated application ID 或 `applications.json.gz` 二次映射软件包。
 
-Catalog 资产契约校验是隐含 `L0`，不是用户可选深度。四个可选深度依次是：`L1 package-compile` 编译包与依赖闭包；`L2 rootfs-integration` 安装进 RootFS 发现 ownership/同装问题；`L3 firmware-integration` 在同一环境构建基础固件与加入软件包的固件作 A/B 对照；实验性的 `L4 boot-smoke`（界面中文固定为“启动自检”）只检查 Catalog 允许目标的通用启动标志。自动目标可在一个 Job 内顺序尝试合法后备目标。Matrix 最多 256 项；仓库所有者使用完整计划并发，其他写协作者强制最多 3，普通访客不能启动 Matrix。规范化证据保留 60 天，完整日志保留 30 天；只有所有合法环境都因软件包原因失败才能判为完全不兼容，证据只供审查，不自动修改规则。
+Catalog 资产契约校验是隐含 `L0`，不是用户可选深度。页面把七个短按钮固定在“探测深度”右侧同一行，当前项高亮并显示勾号；完整名称与说明由 Catalog `probeUi.strings` 提供，并通过全站共享 tooltip 展示。顺序固定为：`L1 config-resolve` 官方配置求解、`L2 package-compile` 软件包编译、`L3 rootfs-integration` 根系统集成、`L4 firmware-integration` 单次 Final 固件集成、`L5 boot-smoke` 上游 qemustart 启动自检、`L6 runtime-health` 运行健康、`L7 reboot-validation` 重启验证。L2-L7 只走 Final 执行链并逐级复用已完成 Stage，不构建对照固件。自动目标可在一个 Job 内顺序尝试合法后备目标。Matrix 最多 256 项；仓库所有者使用完整计划并发，其他写协作者强制最多 3，普通访客不能启动 Matrix。规范化证据保留 60 天，完整日志保留 30 天；只有所有合法环境都因软件包原因失败才能判为完全不兼容，证据只供审查，不自动修改规则。
 
 多包共同失败只在全部已计划目标都属于软件包阶段失败后执行有限预算的通用 delta 缩减；它只输出候选最小失败集合。依赖安装、克隆、feeds、构建和启动输出共同组成 30 天完整日志；基础设施、下载、超时和基线固件失败不得进入兼容性结论。
 
-网页不生成或上传独立的 `probe-request.json` / 配置文件；它把 schema-2 状态压缩进 Catalog 专用 Issue 的预填状态字段。默认分支上的轻量 Issue 网关验证状态哈希、权限和 Issue 身份，再把 worker 派发到请求中的精确代码通道；worker 重新读取同一 Issue 状态后才创建 Matrix。网关由 Issue 事件触发，不轮询；它本身必须先晋级到默认分支，之后才能从网页验证 dev/staging/main 全链路。`workflow_dispatch` 仍是管理员回退入口。请求者或具有 write/maintain/admin 权限的协作者可在同一 Issue 准确回复 `/cancel`。
+网页不生成或上传独立的 `probe-request.json` / 配置文件；它把 schema-3 状态压缩进 Catalog 专用 Issue 的预填状态字段。默认分支上的轻量 Issue 网关验证状态哈希、权限和 Issue 身份，再把 worker 派发到请求中的精确代码通道；worker 重新读取同一 Issue 状态后才创建 Matrix。网关由 Issue 事件触发，不轮询；它本身必须先晋级到默认分支，之后才能从网页验证 dev/staging/main 全链路。`workflow_dispatch` 仍是管理员回退入口。请求者或具有 write/maintain/admin 权限的协作者可在同一 Issue 准确回复 `/cancel`。
 
 新增插件或规则必须先复用 Catalog 现有数据，横向审计同类型、同执行路径和同风险，再运行探针取得证据；AutoBuild `app.js` 不得新增插件名或专用执行器。探针并发、覆盖、超时和保留期只记录在 Catalog `.github/automation-policy.json`；AutoBuild 只保留通道映射，测试负责阻止数据重复与 YAML/JSON 漂移。
 

@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import vm from 'node:vm';
 import { readFrontendRuntimeSource } from './lib/frontend-source.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const buildIdentityText = fs.readFileSync(path.join(root, 'site/wrt/lib/build-identity.js'), 'utf8');
-const probeText = fs.readFileSync(path.join(root, 'site/wrt/lib/package-probe-v3-core.js'), 'utf8') + '\n' +
+const probeCoreText = fs.readFileSync(path.join(root, 'site/wrt/lib/package-probe-v3-core.js'), 'utf8');
+const probeText = probeCoreText + '\n' +
   fs.readFileSync(path.join(root, 'site/wrt/lib/package-probe-v3-ui.js'), 'utf8');
 const probeCss = fs.readFileSync(path.join(root, 'site/wrt/package-probe-v3.css'), 'utf8');
+const appCss = fs.readFileSync(path.join(root, 'site/wrt/app.css'), 'utf8');
 const feedbackText = fs.readFileSync(path.join(root, 'site/wrt/lib/ui-feedback.js'), 'utf8');
 const appText = readFrontendRuntimeSource(root);
 const indexText = fs.readFileSync(path.join(root, 'site/wrt/index.html'), 'utf8');
@@ -19,10 +22,28 @@ assert.match(probeText, /WEIG_PACKAGE_PROBE_STATE_V3:/, 'Probe must emit V3 stat
 assert.match(probeText, /baselinePackageConfig/, 'Probe must preserve current Profile baseline state for UI evidence');
 assert.match(probeText, /packageIntent/, 'Probe must preserve direct user intent');
 assert.match(probeText, /environmentScope/, 'Probe must send five-dimensional environment constraints');
-assert.match(probeText, /mode:\s*'config-resolve'/, 'L1 must submit official config-resolve mode');
-assert.match(probeText, /useDefconfig:\s*true/, 'L1 must require official Defconfig semantics');
-assert.match(probeText, /coverage:\s*coverageMode === 'all'/, 'L1 must send backend coverage controls');
-assert.match(probeText, /autoLimit\.value = '40'/, 'L1 must default to 40 environments');
+const expectedDepthModes = [
+  'config-resolve', 'package-compile', 'rootfs-integration', 'firmware-integration',
+  'boot-smoke', 'runtime-health', 'reboot-validation',
+];
+const probeContext = { catalogApplicationsDocument: null, state: { lang: 'zh-CN' }, t: (key) => key };
+vm.runInNewContext(`${probeCoreText}\nglobalThis.__depthOptions = PROBE_V3_DEPTH_OPTIONS; globalThis.__requestConfigs = probeV3RequestPackageConfigs; globalThis.__uiText = probeV3UiText;`, probeContext);
+assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__depthOptions.map((option) => option.mode))), expectedDepthModes,
+  'Probe depth order must match the Catalog L1-L7 controller contract');
+assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__depthOptions.map((option) => probeContext.__uiText(option.shortKey)))),
+  ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7'],
+  'missing Catalog depth copy must degrade to protocol labels without a second description database');
+const intent = [{ package: 'example', before: 'n', after: 'y' }];
+assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__requestConfigs('config-resolve', 'CONFIG_PACKAGE_base=y\n', 'CONFIG_PACKAGE_final=y\n', intent))), {
+  baselinePackageConfig: '', packageConfig: 'CONFIG_PACKAGE_example=y\n',
+}, 'L1 must send only direct package roots for each target Kconfig resolver');
+assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__requestConfigs('rootfs-integration', 'CONFIG_PACKAGE_base=y\n', 'CONFIG_PACKAGE_final=y\n', intent))), {
+  baselinePackageConfig: 'CONFIG_PACKAGE_base=y\n', packageConfig: 'CONFIG_PACKAGE_final=y\n',
+}, 'L2-L7 must send the complete Baseline and Final PACKAGE state');
+assert.match(probeText, /mode:\s*selectedProbeDepth\.mode/, 'selected L1-L7 mode must be submitted');
+assert.match(probeText, /useDefconfig:\s*true/, 'Probe must preserve the approved Defconfig request default');
+assert.match(probeText, /coverage:\s*coverageMode === 'all'/, 'every depth must send backend coverage controls');
+assert.match(probeText, /autoLimit\.value = '40'/, 'the existing explicit environment budget must remain stable across depth changes');
 assert.match(probeText, /sources:/, 'Probe scope must include Source');
 assert.match(probeText, /branches:/, 'Probe scope must include Branch');
 assert.match(probeText, /targetSystems:/, 'Probe scope must include Target System');
@@ -46,6 +67,16 @@ assert.match(probeText, /menuOptionBySymbol\.get\(`PACKAGE_\$\{row\.package\}`\)
   'linked dependency descriptions must reuse the current menu option objects');
 assert.match(probeText, /bindUiTooltipContent\(row, \{ body: rowDetails \}\)/,
   'Probe package descriptions must reuse the shared tooltip template');
+assert.match(probeText, /for \(const option of PROBE_V3_DEPTH_OPTIONS\)/,
+  'Probe depth buttons must be rendered from one seven-level interface contract');
+assert.match(probeText, /bindUiTooltipContent\(button, \{ title: shortText, body: `\$\{titleText\}\\n\$\{helpText\}` \}\)/,
+  'Probe depth buttons must reuse the shared tooltip with short, full, and help text');
+assert.match(appCss, /\.ui-tooltip-body\s*\{[^}]*white-space:\s*pre-line/,
+  'the shared tooltip must preserve the full-title/help line break');
+assert.match(probeText, /button\.setAttribute\('aria-pressed', String\(selected\)\)/,
+  'Probe depth selection must expose pressed state to assistive technology');
+assert.match(probeText, /selectedProbeDepth = option;[\s\S]*?renderSelectedProbeDepth\(\);[\s\S]*?refreshRequestPreview\(\);/,
+  'changing depth must refresh only the request snapshot');
 assert.doesNotMatch(probeText, /probe-depth-tooltip|showMenuPopup|probeTextIsTruncated/,
   'Probe V3 retained an independent tooltip implementation');
 assert.doesNotMatch(probeCss, /\.probe-depth-tooltip/,
@@ -53,9 +84,17 @@ assert.doesNotMatch(probeCss, /\.probe-depth-tooltip/,
 assert.doesNotMatch(probeText, /openvpn-openssl|luci-app-openvpn-server/,
   'Probe V3 must not hardcode package special cases');
 assert.match(probeCss, /\.probe-accordion-triggers\s*\{[^}]*repeat\(2/,
-  'L1 keeps only the two lightweight optional detail entry points');
-assert.match(probeCss, /\.probe-depth\s*\{[^}]*grid-template-columns:\s*minmax\(128px,\s*1fr\)/,
-  'L1-only depth UI must not retain four unused depth columns');
+  'Probe keeps only the two lightweight optional detail entry points');
+assert.match(probeCss, /\.probe-depth\s*\{[^}]*display:\s*flex[^}]*overflow-x:\s*auto/,
+  'seven short depth buttons must stay on one horizontally scrollable row');
+assert.match(probeCss, /\.probe-depth-option\s*\{[^}]*white-space:\s*nowrap/,
+  'depth button labels must never wrap');
+assert.match(probeCss, /\.probe-depth-option\.is-selected\s*\{/,
+  'the selected depth needs a distinct presentation state');
+assert.doesNotMatch(probeCss, /\.probe-depth-row\s*\{[^}]*flex-wrap/,
+  'responsive layouts must not move depth buttons onto another row');
+assert.doesNotMatch(probeCss, /\.probe-depth-title\s*\{[^}]*font-size:\s*0|\.probe-depth-title::after/,
+  'responsive layouts must keep the real Catalog short label visible');
 assert.match(probeCss, /\.probe-environment-row\s*\{[^}]*grid-template-columns:\s*auto\s+minmax\(0,\s*1fr\)/,
   'environment heading and five dimensions should share one desktop row');
 assert.match(probeCss, /\.probe-filter-grid\s*\{[^}]*\.9fr[^}]*1\.35fr/,

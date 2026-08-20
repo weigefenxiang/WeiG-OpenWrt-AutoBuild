@@ -24,13 +24,13 @@ async function openPackageProbeV3Modal() {
     const intro = document.createElement('section');
     intro.className = 'probe-intro';
     const introTitle = document.createElement('h4'); introTitle.textContent = probeV3UiText('title');
-    const introText = document.createElement('p'); introText.textContent = probeV3UiText('l1Intro');
+    const introText = document.createElement('p'); introText.textContent = probeV3UiText('intro');
     bindUiTooltipContent(introText, { body: introText.textContent });
     const guide = document.createElement('details'); guide.className = 'probe-guide';
     const guideButton = document.createElement('summary'); guideButton.textContent = 'ⓘ';
-    guideButton.setAttribute('aria-label', probeV3UiText('l1HowTo'));
+    guideButton.setAttribute('aria-label', probeV3UiText('howTo'));
     const guideCopy = document.createElement('span'); guideCopy.className = 'probe-guide-copy';
-    const howTo = document.createElement('span'); howTo.textContent = probeV3UiText('l1HowTo');
+    const howTo = document.createElement('span'); howTo.textContent = probeV3UiText('howTo');
     guideCopy.append(howTo); guide.append(guideButton, guideCopy);
     intro.append(introTitle, introText, guide); body.appendChild(intro);
 
@@ -72,6 +72,7 @@ async function openPackageProbeV3Modal() {
     let packageRefresh = null;
     let latestPreview = null;
     let autoLimitTimer = 0;
+    let selectedProbeDepth = PROBE_V3_DEPTH_OPTIONS[0];
     const filters = {
       sources: new Set(['*']), branches: new Set(['*']), targetSystems: new Set(['*']),
       subtargets: new Set(['*']), profiles: new Set(['*']),
@@ -139,11 +140,33 @@ async function openPackageProbeV3Modal() {
     const depthRow = document.createElement('div'); depthRow.className = 'probe-depth-row'; settings.appendChild(depthRow);
     const depthLabel = document.createElement('strong'); depthLabel.className = 'probe-inline-label'; depthLabel.textContent = probeV3UiText('depth'); depthRow.appendChild(depthLabel);
     const depth = document.createElement('div'); depth.className = 'probe-depth'; depthRow.appendChild(depth);
-    const depthOption = document.createElement('span'); depthOption.className = 'probe-depth-option is-selected';
-    const level = document.createElement('span'); level.className = 'probe-level'; level.textContent = probeV3UiText('level1');
-    const depthTitle = document.createElement('strong'); depthTitle.className = 'probe-depth-title'; depthTitle.textContent = probeV3UiText('configResolve');
-    bindUiTooltipContent(depthOption, { title: `${probeV3UiText('level1')} · ${probeV3UiText('configResolve')}`, body: probeV3UiText('configResolveHelp') });
-    depthOption.append(level, depthTitle); depth.appendChild(depthOption);
+    const depthButtons = new Map();
+    const renderSelectedProbeDepth = () => {
+      for (const [option, button] of depthButtons) {
+        const selected = option === selectedProbeDepth;
+        button.classList.toggle('is-selected', selected);
+        button.setAttribute('aria-pressed', String(selected));
+        button.querySelector('.probe-depth-check').hidden = !selected;
+      }
+    };
+    for (const option of PROBE_V3_DEPTH_OPTIONS) {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'probe-depth-option';
+      const shortText = probeV3UiText(option.shortKey);
+      const titleText = probeV3UiText(option.titleKey);
+      const helpText = probeV3UiText(option.helpKey);
+      const depthTitle = document.createElement('strong'); depthTitle.className = 'probe-depth-title'; depthTitle.textContent = shortText;
+      const check = document.createElement('span'); check.className = 'probe-depth-check'; check.textContent = '✓'; check.setAttribute('aria-hidden', 'true');
+      button.setAttribute('aria-label', `${shortText}: ${titleText}. ${helpText}`);
+      bindUiTooltipContent(button, { title: shortText, body: `${titleText}\n${helpText}` });
+      button.append(depthTitle, check); depth.appendChild(button); depthButtons.set(option, button);
+      button.addEventListener('click', () => {
+        if (selectedProbeDepth === option) return;
+        selectedProbeDepth = option;
+        renderSelectedProbeDepth();
+        refreshRequestPreview();
+      });
+    }
+    renderSelectedProbeDepth();
     const autoLimit = document.createElement('input'); autoLimit.type = 'number'; autoLimit.min = '1'; autoLimit.max = '256'; autoLimit.step = '1'; autoLimit.value = '40'; autoLimit.className = 'probe-auto-limit';
 
     const environmentRow = document.createElement('div'); environmentRow.className = 'probe-environment-row'; settings.appendChild(environmentRow);
@@ -406,13 +429,12 @@ async function openPackageProbeV3Modal() {
     const buildRequestSnapshot = () => {
       const coverageMode = currentCoverageMode();
       const packageIntent = probeV3IntentRows(intent);
-      const intentConfig = (stateKey) => packageIntent
-        .filter((row) => ['m', 'y'].includes(row[stateKey]))
-        .map((row) => `CONFIG_PACKAGE_${row.package}=${row[stateKey]}`)
-        .join('\n') + (packageIntent.some((row) => ['m', 'y'].includes(row[stateKey])) ? '\n' : '');
+      const packageConfigs = probeV3RequestPackageConfigs(
+        selectedProbeDepth.mode, baselinePackageConfig, packageConfigSnapshot, packageIntent,
+      );
       return {
-        schema: 3, channel: probeV3CodeChannel(), mode: 'config-resolve', useDefconfig: true,
-        baselinePackageConfig: intentConfig('before'), packageConfig: intentConfig('after'), packageIntent,
+        schema: 3, channel: probeV3CodeChannel(), mode: selectedProbeDepth.mode, useDefconfig: true,
+        ...packageConfigs, packageIntent,
         environmentScope: probeV3FilterRequest(filters),
         coverage: coverageMode === 'all' ? { mode: 'all' } : { mode: 'auto', limit: normalizedAutoLimit() },
         maxParallel: 0, execute: true,
@@ -457,7 +479,8 @@ async function openPackageProbeV3Modal() {
     const actions = document.createElement('div'); actions.className = 'modal-actions probe-actions';
     const helpButton = document.createElement('button'); helpButton.type = 'button'; helpButton.className = 'btn probe-help-button'; helpButton.textContent = probeV3UiText('help');
     helpButton.addEventListener('click', () => showProbeOverlay(probeV3UiText('help'), [
-      probeV3UiText('l1StateInstruction'), probeV3UiText('l1HowTo'), probeV3UiText('cancelInstruction'),
+      `${probeV3UiText(selectedProbeDepth.shortKey)} · ${probeV3UiText(selectedProbeDepth.titleKey)}`,
+      probeV3UiText(selectedProbeDepth.helpKey), probeV3UiText('howTo'), probeV3UiText('cancelInstruction'),
       probeV3UiText('permission'), probeV3UiText('retention'),
     ]));
     const actionsSpacer = document.createElement('span'); actionsSpacer.className = 'probe-actions-spacer'; actionsSpacer.setAttribute('aria-hidden', 'true');
@@ -472,7 +495,7 @@ async function openPackageProbeV3Modal() {
         if (!request) return;
         const token = await probeV3StateToken(request);
         const issueUrl = probeV3IssueUrl(request, token);
-        showToast(probeV3UiText('l1Submitted'));
+        showToast(probeV3UiText('submittedState'));
         const issueWindow = window.open(issueUrl, '_blank');
         if (issueWindow) issueWindow.opener = null; else window.location.assign(issueUrl);
       } catch (error) {

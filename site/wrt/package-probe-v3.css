@@ -33,7 +33,7 @@
   position: absolute; top: calc(100% + 7px); right: 0; z-index: 20; display: grid;
   width: min(650px, calc(100vw - 52px)); gap: 7px; padding: 11px 13px;
   border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border)); border-radius: 9px;
-  background: var(--card2); box-shadow: var(--shadow); color: var(--text); font-size: var(--menuconfig-body-size); line-height: 1.55;
+  background: var(--card2); box-shadow: var(--shadow); color: var(--text); font-size: var(--font-description); line-height: 1.55;
 }
 .probe-layout {
   position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(150px, 1fr) auto;
@@ -44,13 +44,13 @@
 .probe-picker { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; gap: 8px; }
 .probe-search {
   width: 100%; min-height: 40px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 9px;
-  background: var(--card); color: var(--text); font: inherit; font-size: var(--menuconfig-title-size); outline: none;
+  background: var(--card); color: var(--text); font: inherit; font-size: var(--font-item-title); outline: none;
 }
 .probe-search:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
 
 .probe-state-summary {
   display: flex; min-width: 0; align-items: center; gap: 10px; padding: 7px 9px;
-  border-radius: 9px; background: var(--card); color: var(--text2); font-size: var(--menuconfig-body-size); white-space: nowrap;
+  border-radius: 9px; background: var(--card); color: var(--text2); font-size: var(--font-description); white-space: nowrap;
 }
 .probe-state-summary > span { min-width: 0; }
 .probe-state-summary > span + span::before { content: "·"; margin-right: 10px; color: var(--muted); }
@@ -62,20 +62,24 @@
 .probe-linkage-button:disabled { color: var(--muted); cursor: default; }
 .probe-linkage-button:not(:disabled):hover, .probe-linkage-button:not(:disabled):focus-visible { text-decoration: underline; outline: none; }
 
-.probe-depth-row { display: flex; min-width: 0; align-items: center; gap: 10px; }
-.probe-inline-label { flex: none; color: var(--text); font-size: var(--menuconfig-title-size); }
-.probe-depth { display: grid; grid-template-columns: minmax(128px, 1fr); min-width: 0; flex: 1; gap: 7px; }
+.probe-depth-row { display: flex; min-width: 0; align-items: center; gap: 10px; overflow: hidden; }
+.probe-inline-label { flex: none; color: var(--text); font-size: var(--font-item-title); }
+.probe-depth {
+  display: flex; min-width: 0; flex: 1; align-items: stretch; gap: 7px; overflow-x: auto; overflow-y: hidden;
+  overscroll-behavior-inline: contain; scrollbar-width: thin;
+}
 .probe-depth-option {
-  position: relative; display: flex; min-width: 0; align-items: center; gap: 6px; padding: 7px 9px;
-  border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); cursor: pointer;
+  position: relative; display: inline-flex; min-width: max-content; flex: 1 1 auto; align-items: center; justify-content: center;
+  gap: 4px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--card);
+  color: var(--muted); cursor: pointer; font: inherit; white-space: nowrap;
 }
-.probe-depth-option input { margin: 0; accent-color: var(--accent); }
-.probe-depth-option:has(input:checked) {
+.probe-depth-option:hover, .probe-depth-option:focus-visible { border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); color: var(--text); outline: none; }
+.probe-depth-option.is-selected {
   border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
-  background: color-mix(in srgb, var(--accent) 9%, var(--card));
+  background: color-mix(in srgb, var(--accent) 12%, var(--card)); color: var(--accent-text);
 }
-.probe-level { flex: none; padding: 2px 5px; border-radius: 6px; background: var(--card2); color: var(--accent-text); font-size: 11.5px; font-weight: 800; }
-.probe-depth-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--menuconfig-title-size); }
+.probe-depth-title { min-width: 0; white-space: nowrap; font-size: var(--font-item-title-fit-1); }
+.probe-depth-check { flex: none; color: var(--accent-text); font-weight: 900; }
 .probe-defconfig {
   display: inline-flex; flex: none; align-items: center; gap: 6px; min-height: 36px; padding: 0 5px; color: var(--text); cursor: pointer; white-space: nowrap;
 }
@@ -87,7 +91,7 @@
   display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1.15fr) minmax(0, 1.35fr); gap: 8px;
 }
 .probe-multiselect-field { display: grid; min-width: 0; gap: 5px; }
-.probe-multiselect-field > strong { color: var(--text2); font-size: var(--menuconfig-body-size); }
+.probe-multiselect-field > strong { color: var(--text2); font-size: var(--font-description); }
 .probe-multiselect { position: relative; min-width: 0; }
 .probe-multiselect > summary {
   display: flex; min-width: 0; min-height: 40px; align-items: center; justify-content: space-between; gap: 8px;
@@ -117,7 +121,7 @@
 .probe-multiselect-option.is-all { border-bottom: 1px solid var(--border); margin-bottom: 3px; font-weight: 650; }
 
 .probe-shortcuts { display: flex; min-width: 0; flex-wrap: wrap; gap: 7px; }
-.probe-shortcut { min-height: 34px; padding: 5px 9px; font-size: var(--menuconfig-body-size); }
+.probe-shortcut { min-height: 34px; padding: 5px 9px; font-size: var(--font-description); }
 .probe-coverage-row { display: flex; min-width: 0; align-items: center; gap: 12px; flex-wrap: wrap; }
 .probe-coverage-choice { display: inline-flex; align-items: center; gap: 5px; color: var(--text); cursor: pointer; white-space: nowrap; }
 .probe-coverage-choice input { margin: 0; accent-color: var(--accent); }
@@ -131,7 +135,7 @@
 .probe-accordion-triggers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .probe-accordion-trigger {
   min-width: 0; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--card);
-  color: var(--text2); font: inherit; font-size: var(--menuconfig-body-size); text-align: left; cursor: pointer;
+  color: var(--text2); font: inherit; font-size: var(--font-description); text-align: left; cursor: pointer;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .probe-accordion-trigger[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-bg); color: var(--accent-text); }
@@ -155,10 +159,10 @@
 .probe-package.is-direct { box-shadow: inset 3px 0 0 var(--accent); }
 .probe-package-mark { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 7px; background: var(--card2); color: var(--accent); font-weight: 800; }
 .probe-package.is-selected .probe-package-mark { background: var(--accent); color: #fff; }
-.probe-package-id { min-width: 0; color: var(--text); font-size: var(--menuconfig-title-size); font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; white-space: normal; }
+.probe-package-id { min-width: 0; color: var(--text); font-size: var(--font-item-title); font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; white-space: normal; }
 .probe-package-title, .probe-package-usage { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.probe-package-title { color: var(--text); font-size: var(--menuconfig-title-size); font-weight: 650; }
-.probe-package-usage { color: var(--text2); font-size: var(--menuconfig-body-size); }
+.probe-package-title { color: var(--text); font-size: var(--font-item-title); font-weight: 650; }
+.probe-package-usage { color: var(--text2); font-size: var(--font-description); }
 .probe-package-info { display: none; width: 24px; height: 24px; place-items: center; border-radius: 50%; background: var(--card2); color: var(--accent); font-weight: 800; line-height: 1; }
 .probe-empty { padding: 24px 8px; color: var(--text2); text-align: center; }
 
@@ -178,7 +182,6 @@
 
 @media (max-width: 1000px) {
   .modal.package-probe { width: calc(100vw - 24px); }
-  .probe-depth-row { align-items: flex-start; flex-wrap: wrap; }
   .probe-defconfig { margin-left: auto; }
   .probe-environment-row { grid-template-columns: 1fr; align-items: stretch; }
   .probe-environment-head { min-height: 24px; padding-bottom: 0; }
@@ -197,10 +200,8 @@
   .modal-body .probe-intro > p { grid-column: 1 / -1; white-space: normal; }
   .probe-guide { grid-column: 2; grid-row: 1; }
   .probe-state-summary { overflow-x: auto; }
-  .probe-depth { grid-template-columns: minmax(74px, 1fr); width: 100%; }
+  .probe-depth { width: 100%; }
   .probe-depth-option { justify-content: center; padding-inline: 5px; }
-  .probe-depth-title { font-size: 0; }
-  .probe-depth-title::after { content: attr(data-short); font-size: 13px; }
   .probe-filter-grid { grid-template-columns: 1fr; }
   .probe-multiselect-field, .probe-multiselect-field:nth-child(4), .probe-multiselect-field:nth-child(5) { grid-column: auto; }
   .probe-multiselect-panel { min-width: 100%; }
@@ -217,11 +218,8 @@
   .probe-state-summary > span + span::before { margin-right: 7px; }
   .probe-linkage-button { max-width: 150px; }
   .probe-depth-row { gap: 7px; }
-  .probe-inline-label { width: 100%; }
   .probe-depth { gap: 4px; }
-  .probe-depth-option { gap: 3px; padding: 6px 3px; }
-  .probe-depth-option input { display: none; }
-  .probe-level { padding: 2px 3px; font-size: 10.5px; }
+  .probe-depth-option { gap: 3px; padding: 6px 7px; }
   .probe-defconfig { min-height: 30px; margin-left: 0; }
   .probe-shortcuts .btn { flex: 1 1 100%; }
   .probe-accordion-trigger { font-size: 11.5px; white-space: normal; }

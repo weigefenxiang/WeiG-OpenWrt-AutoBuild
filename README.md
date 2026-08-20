@@ -60,7 +60,7 @@ node tools/serve.mjs
 - Catalog 是 Kconfig、dependency、menu、symbol/type、Source/Branch、精选应用、体积和兼容性规则的权威数据源。
 - `site/wrt/app.js` 不得写具体插件或规则特判；构建端不加插件冲突锁。
 - 新增或调整精选应用请在 Catalog 运行人工刷新工具并审核介绍；体积由官方 OPKG/APK 索引自动计算。
-- 包级回归使用网页自检中的“插件兼容探针”。它由 Catalog 数据驱动，可选择软件包编译、RootFS 集成、固件 A/B 或实验性“启动自检”；GitHub 在创建 Matrix 前重新校验权限和请求。
+- 包级回归使用网页自检中的“插件兼容探针”。它复用 Advanced menuconfig 的 Kconfig 状态，并按 Catalog 说明提供 L1 配置求解到 L7 重启验证七级深度；L4 只构建一次 Final 固件，GitHub 在创建 Matrix 前重新校验权限和请求。
 - 每次修改 AutoBuild 必须运行 `prepare`，按 Asia/Shanghai 更新 `VERSION` 与 `site-version.json`。
 
 更完整的边界和流程见 [ARCHITECTURE.md](ARCHITECTURE.md) 与 [开发者指南](docs/DEVELOPER.md)。

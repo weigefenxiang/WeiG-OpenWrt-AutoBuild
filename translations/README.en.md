@@ -55,7 +55,7 @@ Open <http://localhost:8642/> and test Source/Branch switching, Target/Profile, 
 - Catalog is authoritative for Kconfig, dependency, menu, symbol/type, Source/Branch, curated applications, sizes, and compatibility evidence.
 - Do not put rule- or plugin-specific conditions in `site/wrt/app.js`, and do not add build-side conflict locks.
 - Refresh curated applications manually in Catalog and review their descriptions. Official OPKG/APK indexes update sizes automatically.
-- Use the in-page **Package Compatibility Probe** for package regression. Catalog data drives package compile, RootFS integration, firmware A/B, and experimental Boot smoke; GitHub revalidates permissions and requests before creating a Matrix.
+- Use the in-page **Package Compatibility Probe** for package regression. It reuses Advanced menuconfig Kconfig state and exposes seven Catalog-described depths from L1 config resolution through L7 reboot validation; L4 builds one Final firmware, and GitHub revalidates permissions and requests before creating a Matrix.
 - Every AutoBuild modification must run `prepare`, which updates `VERSION` and `site-version.json` in Asia/Shanghai time.
 
 See [ARCHITECTURE.md](../ARCHITECTURE.md) and the [Developer Guide](../docs/DEVELOPER.en.md).
