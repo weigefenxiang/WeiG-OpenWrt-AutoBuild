@@ -10,6 +10,7 @@ async function openPackageProbeV3Modal() {
   body.appendChild(loading);
   try {
     await ensureCatalogMenuLoaded(true);
+    await ensureCatalogApplications();
     const coveragePolicy = probeV3CoveragePolicy();
     const baselineResolvedConfig = await generateResolvedConfigText();
     const baselinePackageConfig = probeV3PackageConfigFromText(baselineResolvedConfig);
