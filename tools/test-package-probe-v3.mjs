@@ -27,7 +27,7 @@ const expectedDepthModes = [
   'boot-smoke', 'runtime-health', 'reboot-validation',
 ];
 const probeContext = { catalogApplicationsDocument: null, state: { lang: 'zh-CN' }, t: (key) => key };
-vm.runInNewContext(`${probeCoreText}\nglobalThis.__depthOptions = PROBE_V3_DEPTH_OPTIONS; globalThis.__requestConfigs = probeV3RequestPackageConfigs; globalThis.__uiText = probeV3UiText;`, probeContext);
+vm.runInNewContext(`${probeCoreText}\nglobalThis.__depthOptions = PROBE_V3_DEPTH_OPTIONS; globalThis.__requestConfigs = probeV3RequestPackageConfigs; globalThis.__uiText = probeV3UiText; globalThis.__coveragePolicy = probeV3CoveragePolicy;`, probeContext);
 assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__depthOptions.map((option) => option.mode))), expectedDepthModes,
   'Probe depth order must match the Catalog L1-L7 controller contract');
 assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__depthOptions.map((option) => probeContext.__uiText(option.shortKey)))),
@@ -51,7 +51,17 @@ assert.doesNotMatch(probeCoreText, /mode !== 'config-resolve'/,
 assert.match(probeText, /mode:\s*selectedProbeDepth\.mode/, 'selected L1-L7 mode must be submitted');
 assert.match(probeText, /useDefconfig:\s*true/, 'Probe must preserve the approved Defconfig request default');
 assert.match(probeText, /coverage:\s*coverageMode === 'all'/, 'every depth must send backend coverage controls');
-assert.match(probeText, /autoLimit\.value = '40'/, 'the existing explicit environment budget must remain stable across depth changes');
+assert.throws(() => probeContext.__coveragePolicy(), /coverage contract is unavailable/,
+  'Probe must not invent a browser fallback when the Catalog coverage contract is missing');
+probeContext.catalogApplicationsDocument = { probeUi: { coverage: { defaultLimit: 32, maxLimit: 128 } } };
+assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__coveragePolicy())), { defaultLimit: 32, maxLimit: 128 },
+  'Probe must consume the coverage budget published by Catalog');
+assert.match(probeText, /autoLimit\.max = String\(coveragePolicy\.maxLimit\)/,
+  'Probe input maximum must come from the Catalog coverage contract');
+assert.match(probeText, /autoLimit\.value = String\(coveragePolicy\.defaultLimit\)/,
+  'Probe input default must come from the Catalog coverage contract');
+assert.doesNotMatch(probeText, /autoLimit\.max = '256'|autoLimit\.value = '40'/,
+  'Probe UI must not retain a second hard-coded environment budget');
 assert.match(probeText, /sources:/, 'Probe scope must include Source');
 assert.match(probeText, /branches:/, 'Probe scope must include Branch');
 assert.match(probeText, /targetSystems:/, 'Probe scope must include Target System');
