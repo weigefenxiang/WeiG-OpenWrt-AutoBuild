@@ -18,6 +18,19 @@ const PROBE_V3_DEPTH_OPTIONS = Object.freeze([
   Object.freeze({ level: 7, mode: 'reboot-validation', shortKey: 'depth7Short', titleKey: 'rebootValidation', helpKey: 'rebootValidationHelp' }),
 ]);
 
+const PROBE_V3_COMPARISON = Object.freeze({
+  mode: 'paired-exclusion',
+  executionOrder: Object.freeze(['baseline', 'final']),
+});
+
+function probeV3ComparisonRequest(enabled) {
+  if (!enabled) return null;
+  return {
+    mode: PROBE_V3_COMPARISON.mode,
+    executionOrder: [...PROBE_V3_COMPARISON.executionOrder],
+  };
+}
+
 function probeV3UiText(key) {
   const external = catalogApplicationsDocument?.probeUi?.strings?.[key];
   if (external && typeof external === 'object') {

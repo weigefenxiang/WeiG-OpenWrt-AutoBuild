@@ -302,18 +302,29 @@ async function openPackageProbeV3Modal() {
     const environmentText = document.createElement('span'); environmentText.textContent = probeV3UiText('environments');
     limitGroup.append(limitText, autoLimit, environmentText);
     const exhaustiveLabel = document.createElement('label'); exhaustiveLabel.className = 'probe-coverage-choice';
+    exhaustiveLabel.dataset.probeControl = 'all';
     const exhaustiveInput = document.createElement('input'); exhaustiveInput.type = 'checkbox';
     exhaustiveLabel.append(exhaustiveInput, document.createTextNode(probeV3UiText('exhaustiveCoverage')));
-    coverageRow.append(coverageLabel, limitGroup, exhaustiveLabel);
+    const comparisonLabel = document.createElement('label'); comparisonLabel.className = 'probe-coverage-choice probe-comparison-choice';
+    comparisonLabel.dataset.probeControl = 'comparison';
+    const comparisonInput = document.createElement('input'); comparisonInput.type = 'checkbox'; comparisonInput.checked = false;
+    const comparisonText = probeV3UiText('comparison');
+    const comparisonHelpText = probeV3UiText('comparisonHelp');
+    comparisonLabel.append(comparisonInput, document.createTextNode(comparisonText));
+    comparisonLabel.setAttribute('aria-label', `${comparisonText}: ${comparisonHelpText}`);
+    bindUiTooltipContent(comparisonLabel, { title: comparisonText, body: comparisonHelpText });
     autoLimit.addEventListener('input', () => {
       clearTimeout(autoLimitTimer);
       autoLimitTimer = setTimeout(() => refreshRequestPreview(), 150);
     });
     exhaustiveInput.addEventListener('change', refreshRequestPreview);
+    comparisonInput.addEventListener('change', refreshRequestPreview);
 
-    const accordion = document.createElement('div'); accordion.className = 'probe-accordion'; settings.appendChild(accordion);
-    const accordionTriggers = document.createElement('div'); accordionTriggers.className = 'probe-accordion-triggers'; accordion.appendChild(accordionTriggers);
+    const accordion = document.createElement('div'); accordion.className = 'probe-accordion';
+    const accordionTriggers = document.createElement('div'); accordionTriggers.className = 'probe-accordion-triggers';
     const accordionBody = document.createElement('div'); accordionBody.className = 'probe-accordion-body'; accordionBody.hidden = true; accordion.appendChild(accordionBody);
+    coverageRow.append(coverageLabel, limitGroup, exhaustiveLabel, comparisonLabel, accordionTriggers);
+    settings.appendChild(accordion);
     let accordionMode = '';
     const accordionButtons = new Map();
     const setAccordion = (mode) => {
@@ -324,6 +335,7 @@ async function openPackageProbeV3Modal() {
     };
     for (const [mode, labelKey] of [['scope', 'scopeDetail'], ['execution', 'executionPreview']]) {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'probe-accordion-trigger'; button.textContent = `▸ ${probeV3UiText(labelKey)}`;
+      button.dataset.probeControl = mode === 'scope' ? 'scope' : 'execution';
       button.setAttribute('aria-expanded', 'false'); button.addEventListener('click', () => setAccordion(mode));
       accordionButtons.set(mode, button); accordionTriggers.appendChild(button);
     }
@@ -405,6 +417,20 @@ async function openPackageProbeV3Modal() {
         }
         accordionBody.appendChild(grid);
       } else {
+        if (request?.comparison?.mode === 'paired-exclusion') {
+          const comparisonSummary = document.createElement('section'); comparisonSummary.className = 'probe-execution-summary';
+          const comparisonTitle = document.createElement('strong'); comparisonTitle.textContent = probeV3UiText('comparisonPreviewTitle');
+          const comparisonList = document.createElement('ul');
+          const comparisonLines = [
+            'comparisonMatrix', 'comparisonShared', 'comparisonOrder', 'comparisonShortCircuit',
+            'comparisonSampling', selectedProbeDepth.level === 1 ? 'comparisonL1' : 'comparisonDeep', 'comparisonCaveat',
+          ];
+          for (const key of comparisonLines) {
+            const item = document.createElement('li'); item.textContent = probeV3UiText(key); comparisonList.appendChild(item);
+          }
+          comparisonSummary.append(comparisonTitle, comparisonList);
+          accordionBody.appendChild(comparisonSummary);
+        }
         const preview = document.createElement('pre'); preview.className = 'probe-preview'; preview.textContent = request ? JSON.stringify(request, null, 2) : probeV3UiText('invalid'); accordionBody.appendChild(preview);
       }
     };
@@ -434,11 +460,13 @@ async function openPackageProbeV3Modal() {
       const coverageMode = currentCoverageMode();
       const packageIntent = probeV3IntentRows(intent);
       const packageConfigs = probeV3RequestPackageConfigs(packageIntent);
+      const comparison = probeV3ComparisonRequest(comparisonInput.checked);
       return {
         schema: 3, channel: probeV3CodeChannel(), mode: selectedProbeDepth.mode, useDefconfig: true,
         ...packageConfigs, packageIntent,
         environmentScope: probeV3FilterRequest(filters),
         coverage: coverageMode === 'all' ? { mode: 'all' } : { mode: 'auto', limit: normalizedAutoLimit() },
+        ...(comparison ? { comparison } : {}),
         maxParallel: 0, execute: true,
       };
     };

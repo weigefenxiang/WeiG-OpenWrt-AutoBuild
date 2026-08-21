@@ -27,7 +27,7 @@ const expectedDepthModes = [
   'boot-smoke', 'runtime-health', 'reboot-validation',
 ];
 const probeContext = { catalogApplicationsDocument: null, state: { lang: 'zh-CN' }, t: (key) => key };
-vm.runInNewContext(`${probeCoreText}\nglobalThis.__depthOptions = PROBE_V3_DEPTH_OPTIONS; globalThis.__requestConfigs = probeV3RequestPackageConfigs; globalThis.__uiText = probeV3UiText; globalThis.__coveragePolicy = probeV3CoveragePolicy;`, probeContext);
+vm.runInNewContext(`${probeCoreText}\nglobalThis.__depthOptions = PROBE_V3_DEPTH_OPTIONS; globalThis.__requestConfigs = probeV3RequestPackageConfigs; globalThis.__comparisonRequest = probeV3ComparisonRequest; globalThis.__uiText = probeV3UiText; globalThis.__coveragePolicy = probeV3CoveragePolicy;`, probeContext);
 assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__depthOptions.map((option) => option.mode))), expectedDepthModes,
   'Probe depth order must match the Catalog L1-L7 controller contract');
 assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__depthOptions.map((option) => probeContext.__uiText(option.shortKey)))),
@@ -46,6 +46,17 @@ assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__requestConfigs(mixedIn
   baselinePackageConfig: 'CONFIG_PACKAGE_builtin-root=m\nCONFIG_PACKAGE_removed-root=y\n',
   packageConfig: 'CONFIG_PACKAGE_module-root=m\nCONFIG_PACKAGE_builtin-root=y\n',
 }, 'compact projections must preserve direct N/M/Y intent without automatic dependencies');
+assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__comparisonRequest(true))), {
+  mode: 'paired-exclusion', executionOrder: ['baseline', 'final'],
+}, 'A/B comparison helper must return the backend comparison contract when enabled');
+assert.equal(probeContext.__comparisonRequest(false), null,
+  'A/B comparison helper must omit the optional contract when disabled');
+assert.doesNotMatch(probeText, /pairedComparison/,
+  'Probe request must not retain the obsolete pairedComparison field');
+assert.match(probeText, /\.\.\.\(comparison \? \{ comparison \} : \{\}\)/,
+  'Probe request must include comparison only when the toggle is enabled');
+assert.match(probeText, /request\?\.comparison\?\.mode === 'paired-exclusion'/,
+  'execution preview must recognize the structured comparison contract');
 assert.doesNotMatch(probeCoreText, /mode !== 'config-resolve'/,
   'L2-L7 must not retain the obsolete full Advanced menuconfig request branch');
 assert.match(probeText, /mode:\s*selectedProbeDepth\.mode/, 'selected L1-L7 mode must be submitted');
@@ -105,6 +116,18 @@ assert.doesNotMatch(probeText, /openvpn-openssl|luci-app-openvpn-server/,
   'Probe V3 must not hardcode package special cases');
 assert.match(probeCss, /\.probe-accordion-triggers\s*\{[^}]*repeat\(2/,
   'Probe keeps only the two lightweight optional detail entry points');
+assert.match(probeText, /coverageRow\.append\(coverageLabel, limitGroup, exhaustiveLabel, comparisonLabel, accordionTriggers\)/,
+  'coverage controls must append in the required All, A/B, scope, execution order');
+assert.match(probeText, /exhaustiveLabel\.dataset\.probeControl = 'all'[\s\S]*?comparisonLabel\.dataset\.probeControl = 'comparison'[\s\S]*?button\.dataset\.probeControl = mode === 'scope' \? 'scope' : 'execution'/,
+  'the four visible coverage/detail controls must expose their DOM order');
+assert.match(probeCss, /\.probe-accordion\s*\{[^}]*grid-column:\s*1 \/ -1[^}]*width:\s*100%/,
+  'the accordion must occupy the full settings-panel row');
+assert.match(probeCss, /\.probe-accordion-body\s*\{[^}]*grid-column:\s*1 \/ -1[^}]*width:\s*100%[^}]*min-width:\s*0/,
+  'expanded accordion content must use the full available width');
+assert.match(probeCss, /\.probe-preview\s*\{[^}]*width:\s*100%[^}]*max-width:\s*100%[^}]*overflow:\s*auto/,
+  'execution preview must remain bounded and scrollable on narrow screens');
+assert.match(probeCss, /\.probe-accordion-trigger\s*\{[^}]*overflow-wrap:\s*anywhere/,
+  'accordion labels must wrap safely when the controls become narrow');
 assert.match(probeCss, /\.probe-depth\s*\{[^}]*display:\s*flex[^}]*overflow-x:\s*auto/,
   'seven short depth buttons must stay on one horizontally scrollable row');
 assert.match(probeCss, /\.probe-depth-option\s*\{[^}]*white-space:\s*nowrap/,
