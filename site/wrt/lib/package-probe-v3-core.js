@@ -23,11 +23,53 @@ const PROBE_V3_COMPARISON = Object.freeze({
   executionOrder: Object.freeze(['baseline', 'final']),
 });
 
+const PROBE_V3_RESULT_STATUSES = Object.freeze([
+  'compatible', 'incompatible', 'blocked', 'skipped', 'unresolved',
+]);
+
 function probeV3ComparisonRequest(enabled) {
   if (!enabled) return null;
   return {
     mode: PROBE_V3_COMPARISON.mode,
     executionOrder: [...PROBE_V3_COMPARISON.executionOrder],
+  };
+}
+
+function probeV3ResultStatus(result) {
+  const raw = String(result?.status || result?.outcome || result?.result || '').trim().toLowerCase();
+  return PROBE_V3_RESULT_STATUSES.includes(raw) ? raw : 'unresolved';
+}
+
+function probeV3ResultReason(result) {
+  const values = [
+    result?.reason, result?.cause, result?.failureCause, result?.attribution,
+    result?.diagnosis?.reason, result?.classification?.reason,
+  ];
+  return values.map((value) => String(value || '').trim()).find(Boolean) || '';
+}
+
+// Result cards are rendered by the Catalog/Actions side, but keep one small
+// browser-side presentation model for any future result viewer. In particular,
+// a Base Profile blocker must never look like a plugin incompatibility.
+function probeV3ResultPresentation(result) {
+  const status = probeV3ResultStatus(result);
+  const reason = probeV3ResultReason(result);
+  const attribution = String(result?.attribution || '').trim().toLowerCase().replaceAll('_', '-');
+  const normalizedReason = reason.toLowerCase().replaceAll('_', '-');
+  const baseProfile = status === 'blocked' || attribution === 'base-profile' ||
+    /(?:^|[- ])base[- ]?profile(?:[- ]|$)/.test(normalizedReason);
+  const pluginEvaluated = status === 'compatible' || status === 'incompatible'
+    ? true : status === 'unresolved' ? null : false;
+  return {
+    status,
+    reason,
+    baseProfile,
+    pluginEvaluated,
+    pluginEvaluation: pluginEvaluated === true ? 'evaluated' :
+      pluginEvaluated === false ? 'not-evaluated' : 'unknown',
+    statusKey: `result${status[0].toUpperCase()}${status.slice(1)}`,
+    evaluationKey: pluginEvaluated === true ? 'pluginEvaluated' :
+      pluginEvaluated === false ? 'pluginNotEvaluated' : 'pluginEvaluationUnknown',
   };
 }
 

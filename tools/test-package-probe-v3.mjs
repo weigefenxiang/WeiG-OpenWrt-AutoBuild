@@ -27,7 +27,7 @@ const expectedDepthModes = [
   'boot-smoke', 'runtime-health', 'reboot-validation',
 ];
 const probeContext = { catalogApplicationsDocument: null, state: { lang: 'zh-CN' }, t: (key) => key };
-vm.runInNewContext(`${probeCoreText}\nglobalThis.__depthOptions = PROBE_V3_DEPTH_OPTIONS; globalThis.__requestConfigs = probeV3RequestPackageConfigs; globalThis.__comparisonRequest = probeV3ComparisonRequest; globalThis.__uiText = probeV3UiText; globalThis.__coveragePolicy = probeV3CoveragePolicy;`, probeContext);
+vm.runInNewContext(`${probeCoreText}\nglobalThis.__depthOptions = PROBE_V3_DEPTH_OPTIONS; globalThis.__requestConfigs = probeV3RequestPackageConfigs; globalThis.__comparisonRequest = probeV3ComparisonRequest; globalThis.__uiText = probeV3UiText; globalThis.__coveragePolicy = probeV3CoveragePolicy; globalThis.__filterRequest = probeV3FilterRequest; globalThis.__resultPresentation = probeV3ResultPresentation;`, probeContext);
 assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__depthOptions.map((option) => option.mode))), expectedDepthModes,
   'Probe depth order must match the Catalog L1-L7 controller contract');
 assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__depthOptions.map((option) => probeContext.__uiText(option.shortKey)))),
@@ -46,6 +46,56 @@ assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__requestConfigs(mixedIn
   baselinePackageConfig: 'CONFIG_PACKAGE_builtin-root=m\nCONFIG_PACKAGE_removed-root=y\n',
   packageConfig: 'CONFIG_PACKAGE_module-root=m\nCONFIG_PACKAGE_builtin-root=y\n',
 }, 'compact projections must preserve direct N/M/Y intent without automatic dependencies');
+const environmentScope = probeContext.__filterRequest({
+  sources: new Set(['immortalwrt']), branches: new Set(['openwrt-23.05']),
+  targetSystems: new Set(['x86']), subtargets: new Set(['64']), profiles: new Set(['generic']),
+});
+assert.deepEqual(JSON.parse(JSON.stringify(environmentScope)), {
+  sources: ['immortalwrt'], branches: ['openwrt-23.05'], targetSystems: ['x86'],
+  subtargets: ['64'], profiles: ['generic'],
+}, 'Probe request must carry the five-dimensional environment identity');
+const compactRequest = {
+  schema: 3, channel: 'main', mode: 'package-compile', useDefconfig: true,
+  baselinePackageConfig: 'CONFIG_PACKAGE_existing=m\n',
+  packageConfig: 'CONFIG_PACKAGE_example=y\n',
+  packageIntent: [{ package: 'example', before: 'n', after: 'y' }],
+  environmentScope,
+  coverage: { mode: 'auto', limit: 1 }, maxParallel: 0, execute: true,
+};
+const forbiddenRequestKeys = /(?:^|\.)(?:config|resolvedConfig|fullConfig|dependencies|dependencyClosure|nativeHash|baseProfileHash|websiteBaseProfileHash)$/i;
+const collectRequestKeys = (value, path = '') => {
+  if (!value || typeof value !== 'object') return [];
+  return Object.entries(value).flatMap(([key, child]) => {
+    const nextPath = path ? `${path}.${key}` : key;
+    return [nextPath, ...collectRequestKeys(child, nextPath)];
+  });
+};
+assert.equal(collectRequestKeys(compactRequest).some((key) => forbiddenRequestKeys.test(key)), false,
+  'Probe request must not contain full config, dependency closure, or Base Profile hash fields');
+assert.doesNotMatch(JSON.stringify(compactRequest), /nativeHash|baseProfileHash|websiteBaseProfileHash|resolvedConfig|dependencyClosure/,
+  'serialized Probe request must not leak website/Base Profile metadata');
+assert.doesNotMatch(probeText, /nativeHash|baseProfileHash|websiteBaseProfileHash|fullConfig|dependencyClosure/,
+  'Probe browser code must not define or forward full-config, dependency, or Base Profile hash fields');
+const blockedPresentation = probeContext.__resultPresentation({
+  status: 'blocked', attribution: 'base-profile', reason: 'base-profile-prepare-failure', failedStage: 'prepare',
+});
+assert.deepEqual(JSON.parse(JSON.stringify(blockedPresentation)), {
+  status: 'blocked', reason: 'base-profile-prepare-failure', baseProfile: true,
+  pluginEvaluated: false, pluginEvaluation: 'not-evaluated', statusKey: 'resultBlocked',
+  evaluationKey: 'pluginNotEvaluated',
+}, 'blocked Base Profile results must explicitly mark the plugin as not evaluated');
+assert.equal(probeContext.__resultPresentation({ status: 'incompatible', reason: 'plugin-direct-link-failure' }).pluginEvaluated, true,
+  'incompatible results must remain distinct from blocked/not-evaluated results');
+assert.equal(probeContext.__resultPresentation({ status: 'compatible' }).status, 'compatible',
+  'formal compatible results must remain accepted');
+assert.equal(probeContext.__resultPresentation({ status: 'unresolved' }).pluginEvaluation, 'unknown',
+  'unresolved results must remain distinct from a confirmed plugin evaluation');
+assert.equal(probeContext.__resultPresentation({ status: 'skipped', reason: 'root-absent' }).pluginEvaluation, 'not-evaluated',
+  'skipped results must remain distinct from incompatible results and show not-evaluated');
+for (const legacyOrExecutionState of ['pass', 'passed', 'success', 'fail', 'failed', 'inconclusive', 'pending']) {
+  assert.equal(probeContext.__resultPresentation({ status: legacyOrExecutionState }).status, 'unresolved',
+    `${legacyOrExecutionState} must not be treated as a compatibility conclusion`);
+}
 assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__comparisonRequest(true))), {
   mode: 'paired-exclusion', executionOrder: ['baseline', 'final'],
 }, 'A/B comparison helper must return the backend comparison contract when enabled');
