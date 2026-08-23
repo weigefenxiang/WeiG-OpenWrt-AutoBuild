@@ -6,6 +6,97 @@
  */
 'use strict';
 
+function kconfigRequirementText(requirements = []) {
+  return requirements.map((group) => (group || []).filter(Boolean).join(' && ')).filter(Boolean).join(' || ');
+}
+
+function openKconfigPrerequisiteModal(option, value, error) {
+  const plan = error?.prerequisitePlans?.recommended;
+  if (!plan?.steps?.length) return false;
+  modalCancelHandler = null;
+  openModal(t('runtime.kconfigPrerequisiteTitle'));
+  const modal = $('modal').querySelector('.modal');
+  modal.classList.remove('modal-wide', 'modal-import-source', 'recommended-config',
+    'profile-package-config', 'generation-error', 'catalog-conflict', 'compatibility-warning', 'rootfs-guidance');
+  modal.classList.add('catalog-conflict', 'compatibility-warning');
+  const body = $('modalBody');
+  body.textContent = '';
+  const packageName = option.symbol?.startsWith('PACKAGE_')
+    ? option.symbol.slice('PACKAGE_'.length) : option.symbol;
+  const copy = document.createElement('p');
+  copy.className = 'catalog-conflict-copy';
+  copy.textContent = t('runtime.kconfigPrerequisiteSummary', { value1: packageName });
+  body.appendChild(copy);
+  const requirement = kconfigRequirementText(
+    error.constraints?.dependencyExpressions || error.violations?.[0]?.requirements || [],
+  );
+  if (requirement) {
+    const requirementLine = document.createElement('p');
+    requirementLine.className = 'catalog-conflict-warning';
+    requirementLine.textContent = t('runtime.kconfigPrerequisiteRequirement', { value1: requirement });
+    body.appendChild(requirementLine);
+  }
+  const heading = document.createElement('strong');
+  heading.className = 'compatibility-recommendation-title';
+  heading.textContent = t('runtime.kconfigPrerequisitePlan');
+  body.appendChild(heading);
+  const list = document.createElement('ol');
+  list.className = 'catalog-conflict-list';
+  for (const step of plan.steps) {
+    const item = document.createElement('li');
+    const symbol = document.createElement('code');
+    symbol.textContent = `CONFIG_${step.symbol}=${String(step.value || 'n').toUpperCase()}`;
+    item.appendChild(symbol);
+    list.appendChild(item);
+  }
+  const target = document.createElement('li');
+  target.className = 'compatibility-recommendation-action';
+  target.textContent = `${t('runtime.kconfigPrerequisiteTarget')}: CONFIG_${option.symbol}=${String(value).toUpperCase()}`;
+  list.appendChild(target);
+  body.appendChild(list);
+  const automatic = (plan.automaticChanges || []).filter((change) => change.symbol !== option.symbol);
+  if (automatic.length) {
+    const automaticLine = document.createElement('p');
+    automaticLine.className = 'compatibility-recommendation-detail';
+    automaticLine.textContent = t('runtime.kconfigPrerequisiteAutomatic', {
+      value1: automatic.map((change) => `CONFIG_${change.symbol}=${String(change.to).toUpperCase()}`).join(', '),
+    });
+    body.appendChild(automaticLine);
+  }
+  const warning = document.createElement('p');
+  warning.className = 'catalog-conflict-warning';
+  body.appendChild(warning);
+  const actions = document.createElement('div');
+  actions.className = 'modal-actions compatibility-actions';
+  const cancel = document.createElement('button');
+  cancel.type = 'button'; cancel.className = 'btn'; cancel.textContent = t('btn.close');
+  cancel.onclick = closeModal;
+  const apply = document.createElement('button');
+  apply.type = 'button'; apply.className = 'btn btn-primary';
+  apply.textContent = t('runtime.kconfigPrerequisiteApply');
+  apply.onclick = () => {
+    const snapshot = snapshotCatalogUiState();
+    try {
+      for (const step of plan.steps) {
+        const stepOption = menuOptionBySymbol.get(step.symbol) || { symbol: step.symbol };
+        applyCatalogIntent(stepOption, step.value, false, 'user');
+      }
+      applyCatalogIntent(option, value, false, 'user');
+      renderCatalogUiAfterIntent(false, option, menuValues.get(option.symbol) ?? value);
+      modalCancelHandler = null;
+      closeModal();
+    } catch (applyError) {
+      const rollback = snapshot;
+      restoreCatalogUiState(rollback);
+      warning.textContent = String(applyError?.message || applyError).split(';')[0];
+    }
+  };
+  actions.append(cancel, apply);
+  body.appendChild(actions);
+  modalCancelHandler = closeModal;
+  return true;
+}
+
 function openCatalogConflictModal(option, value, violations, openChildren = false) {
   const rows = catalogConflictRows(option, value, violations);
   if (rows.length < 2) return false;

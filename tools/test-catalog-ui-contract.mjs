@@ -614,9 +614,12 @@ expect(intentContract.includes('catalogUserOverrides.has(option.symbol)') &&
   intentContract.includes("return state.sel.has(plugin.id) ? 'selected' : 'none'"),
   'Catalog and legacy curated intent authorities are not explicit');
 const intentApplyContract = app.match(/function applyCatalogIntent\(option, value, force = false, source = 'user'\) \{([\s\S]*?)\n\}/)?.[1] || '';
-expect(intentApplyContract.includes('resolveCatalogUserOverride(catalogInheritedValue(change.symbol), change.to)') &&
-  intentApplyContract.includes('catalogUserOverrides.delete(change.symbol)') &&
-  intentApplyContract.includes("curatedSource = 'restore'"),
+const explicitIntentContract = app.match(/function recordCatalogExplicitIntent\(option, value\) \{([\s\S]*?)\n\}/)?.[1] || '';
+expect(explicitIntentContract.includes('resolveCatalogUserOverride(catalogInheritedValue(option.symbol), value)') &&
+  explicitIntentContract.includes('catalogUserOverrides.delete(option.symbol)') &&
+  explicitIntentContract.includes("return 'restore'") &&
+  intentApplyContract.includes('recordCatalogExplicitIntent(changedOption || option, change.to)') &&
+  intentApplyContract.includes('!result.changes.some((change) => change.symbol === option.symbol)'),
   'returning to an inherited Catalog value leaves a zombie explicit override');
 const groupBadgeContract = app.match(/function updateGroupBadges\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
 const statsContract = app.match(/function updateStats\(\) \{([\s\S]*?)\n\}/)?.[1] || '';

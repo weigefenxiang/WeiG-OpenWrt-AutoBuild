@@ -6,6 +6,7 @@ import {
   createCatalogModel,
   createCatalogValidationContext,
   deriveCompatibilityPlans,
+  deriveKconfigPrerequisitePlans,
   evaluateCompatibilityRules,
   evaluateExpressionState,
   kconfigStateConstraints,
@@ -411,6 +412,144 @@ const remainingSelector = applyUserIntent(selectModel,
     preferredValues: new Map([['TARGET_TRI', 'n']]) });
 assert(remainingSelector.values.get('TARGET_TRI') === 'm',
   'removing one of multiple selectors ignored the remaining M lower bound');
+
+// Generic negative-dependency repair: a package may be legal only after a
+// negated Kconfig prerequisite is changed.  The planner must discover the
+// smallest operation from the expression, replay normal select reconciliation,
+// and refuse to cross an explicit user lock.
+const prerequisiteRecords = [
+  { kind: 'config', configSymbol: 'OPENSSL_ENGINE', kconfigSymbol: 'OPENSSL_ENGINE',
+    type: 'bool', states: ['n', 'y'] },
+  { kind: 'config', configSymbol: 'OPENSSL_ENGINE_BUILTIN', kconfigSymbol: 'OPENSSL_ENGINE_BUILTIN',
+    type: 'bool', states: ['n', 'y'] },
+  { kind: 'config', configSymbol: 'SELECT_TARGET', kconfigSymbol: 'SELECT_TARGET',
+    type: 'bool', states: ['n', 'y'] },
+  { kind: 'package', package: 'generic-devcrypto', configSymbol: 'PACKAGE_generic-devcrypto',
+    kconfigSymbol: 'PACKAGE_generic-devcrypto', type: 'bool', states: ['n', 'y'],
+    kconfig: {
+      dependsExpressions: [['OPENSSL_ENGINE && !OPENSSL_ENGINE_BUILTIN']],
+      selectsExpressions: [['SELECT_TARGET']],
+    } },
+];
+const prerequisiteModel = createCatalogModel({
+  schema: 5, targets: [], relations: { schema: 2, records: prerequisiteRecords, indexes: {} },
+});
+const prerequisiteValues = new Map([
+  ['OPENSSL_ENGINE', 'y'], ['OPENSSL_ENGINE_BUILTIN', 'y'],
+  ['SELECT_TARGET', 'n'], ['PACKAGE_generic-devcrypto', 'n'],
+]);
+const prerequisiteRecord = prerequisiteModel.bySymbol.get('PACKAGE_generic-devcrypto');
+const prerequisitePlan = deriveKconfigPrerequisitePlans(
+  prerequisiteModel, prerequisiteValues, prerequisiteRecord, 'y',
+);
+assert(prerequisitePlan.recommended?.cost === 1 &&
+  prerequisitePlan.recommended.steps[0]?.symbol === 'OPENSSL_ENGINE_BUILTIN' &&
+  prerequisitePlan.recommended.steps[0]?.value === 'n',
+  'negative Kconfig dependency did not produce the unique one-step prerequisite plan');
+assert(prerequisitePlan.recommended.values.get('OPENSSL_ENGINE_BUILTIN') === 'n' &&
+  prerequisitePlan.recommended.values.get('PACKAGE_generic-devcrypto') === 'y' &&
+  prerequisitePlan.recommended.automaticChanges.some((change) =>
+    change.symbol === 'SELECT_TARGET' && change.reason === 'select'),
+  'prerequisite replay did not preserve direct package intent or separate select changes');
+const lockedPrerequisitePlan = deriveKconfigPrerequisitePlans(
+  prerequisiteModel, prerequisiteValues, prerequisiteRecord, 'y',
+  { explicitSymbols: new Set(['OPENSSL_ENGINE_BUILTIN']) },
+);
+assert(!lockedPrerequisitePlan.recommended,
+  'an explicitly locked Kconfig prerequisite received an automatic repair plan');
+expectThrow(() => applyUserIntent(prerequisiteModel, prerequisiteValues, {
+  symbol: 'PACKAGE_generic-devcrypto', value: 'y',
+  explicitSymbols: new Set(['OPENSSL_ENGINE_BUILTIN']),
+}), /requires OPENSSL_ENGINE && !OPENSSL_ENGINE_BUILTIN/,
+  'an explicitly locked negative prerequisite did not remain a blocking intent error');
+expectThrow(() => applyUserIntent(prerequisiteModel, prerequisiteValues, {
+  symbol: 'PACKAGE_generic-devcrypto', value: 'y',
+  explicitSymbols: new Map([['OPENSSL_ENGINE_BUILTIN', 'n']]).keys(),
+}), /requires OPENSSL_ENGINE && !OPENSSL_ENGINE_BUILTIN/,
+  'an iterator-shaped explicit lock was not preserved through prerequisite planning');
+const directPrerequisiteIntent = applyUserIntent(prerequisiteModel, new Map([
+  ['OPENSSL_ENGINE', 'y'], ['OPENSSL_ENGINE_BUILTIN', 'n'],
+  ['SELECT_TARGET', 'n'], ['PACKAGE_generic-devcrypto', 'n'],
+]), { symbol: 'PACKAGE_generic-devcrypto', value: 'y' });
+assert(directPrerequisiteIntent.values.get('PACKAGE_generic-devcrypto') === 'y' &&
+  directPrerequisiteIntent.values.get('SELECT_TARGET') === 'y' &&
+  directPrerequisiteIntent.changes.some((change) =>
+    change.symbol === 'PACKAGE_generic-devcrypto' && change.reason === 'user'),
+  'a legal prerequisite state did not preserve the package direct intent');
+const activeSelectValues = new Map([
+  ['OPENSSL_ENGINE', 'n'], ['OPENSSL_ENGINE_BUILTIN', 'n'],
+  ['SELECT_TARGET', 'n'], ['PACKAGE_generic-devcrypto', 'n'],
+]);
+const activeSelectModel = createCatalogModel({
+  schema: 5, targets: [], relations: {
+    schema: 2,
+    records: prerequisiteRecords.map((record) => record.configSymbol === 'OPENSSL_ENGINE'
+      ? { ...record, kconfig: { selectsExpressions: [['PACKAGE_generic-devcrypto']] } }
+      : record),
+    indexes: {},
+  },
+});
+const activeSelectPlan = deriveKconfigPrerequisitePlans(
+  activeSelectModel, activeSelectValues,
+  activeSelectModel.bySymbol.get('PACKAGE_generic-devcrypto'), 'y',
+);
+assert(activeSelectPlan.recommended?.cost === 1 &&
+  activeSelectPlan.recommended.steps[0]?.symbol === 'OPENSSL_ENGINE' &&
+  activeSelectPlan.recommended.values.get('PACKAGE_generic-devcrypto') === 'y',
+  'a prerequisite select that activates the target was not replayed as an automatic change');
+
+// Equal-cost Kconfig alternatives are deliberately ambiguous.  The planner
+// may enumerate both legal one-step repairs, but must not silently choose one
+// merely because its symbol sorts first.  This is the positive-dependency
+// counterpart to the negative dependency fixture above.
+const ambiguousPrerequisiteRecords = [
+  { kind: 'config', configSymbol: 'PREREQUISITE_A', kconfigSymbol: 'PREREQUISITE_A',
+    type: 'bool', states: ['n', 'y'] },
+  { kind: 'config', configSymbol: 'PREREQUISITE_B', kconfigSymbol: 'PREREQUISITE_B',
+    type: 'bool', states: ['n', 'y'] },
+  { kind: 'package', package: 'ambiguous-target', configSymbol: 'PACKAGE_ambiguous-target',
+    kconfigSymbol: 'PACKAGE_ambiguous-target', type: 'bool', states: ['n', 'y'],
+    kconfig: { dependsExpressions: [['PREREQUISITE_A'], ['PREREQUISITE_B']] } },
+];
+const ambiguousPrerequisiteModel = createCatalogModel({
+  schema: 5, targets: [], relations: { schema: 2, records: ambiguousPrerequisiteRecords, indexes: {} },
+});
+const ambiguousPrerequisitePlan = deriveKconfigPrerequisitePlans(
+  ambiguousPrerequisiteModel,
+  new Map([['PREREQUISITE_A', 'n'], ['PREREQUISITE_B', 'n'], ['PACKAGE_ambiguous-target', 'n']]),
+  ambiguousPrerequisiteModel.bySymbol.get('PACKAGE_ambiguous-target'), 'y',
+);
+assert(ambiguousPrerequisitePlan.candidates.length === 2 &&
+  ambiguousPrerequisitePlan.candidates.every((candidate) => candidate.cost === 1) &&
+  ambiguousPrerequisitePlan.candidates.every((candidate) => candidate.values.get('PACKAGE_ambiguous-target') === 'y') &&
+  ambiguousPrerequisitePlan.recommended === null,
+  'equal-cost Kconfig prerequisite alternatives were not preserved as ambiguous');
+
+// A prerequisite may satisfy the target through an active imply.  The imply
+// result is automatic; only the prerequisite step is a user action and the
+// target remains eligible for the caller to record as a direct Intent.
+const implyPrerequisiteRecords = [
+  { kind: 'config', configSymbol: 'IMPLY_PREREQUISITE', kconfigSymbol: 'IMPLY_PREREQUISITE',
+    type: 'bool', states: ['n', 'y'], kconfig: { impliesExpressions: [['IMPLIED_SUPPORT']] } },
+  { kind: 'config', configSymbol: 'IMPLIED_SUPPORT', kconfigSymbol: 'IMPLIED_SUPPORT',
+    type: 'bool', states: ['n', 'y'] },
+  { kind: 'package', package: 'imply-target', configSymbol: 'PACKAGE_imply-target',
+    kconfigSymbol: 'PACKAGE_imply-target', type: 'bool', states: ['n', 'y'],
+    kconfig: { dependsExpressions: [['IMPLY_PREREQUISITE']] } },
+];
+const implyPrerequisiteModel = createCatalogModel({
+  schema: 5, targets: [], relations: { schema: 2, records: implyPrerequisiteRecords, indexes: {} },
+});
+const implyPrerequisitePlan = deriveKconfigPrerequisitePlans(
+  implyPrerequisiteModel,
+  new Map([['IMPLY_PREREQUISITE', 'n'], ['IMPLIED_SUPPORT', 'n'], ['PACKAGE_imply-target', 'n']]),
+  implyPrerequisiteModel.bySymbol.get('PACKAGE_imply-target'), 'y',
+);
+assert(implyPrerequisitePlan.recommended?.cost === 1 &&
+  implyPrerequisitePlan.recommended.steps[0]?.symbol === 'IMPLY_PREREQUISITE' &&
+  implyPrerequisitePlan.recommended.automaticChanges.some((change) =>
+    change.symbol === 'IMPLIED_SUPPORT' && change.reason === 'imply'),
+  'an active imply prerequisite was not separated from the explicit plan step');
 
 const tristateChoiceModel = createCatalogModel({ schema: 5, targets: [], relations: {
   schema: 2,

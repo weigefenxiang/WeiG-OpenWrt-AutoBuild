@@ -11,6 +11,8 @@ function setMenuValue(option, value, openChildren = false) {
     applyMenuValue(option, value, false);
   } catch (error) {
     const violations = Array.isArray(error?.violations) ? error.violations : [];
+    if (error?.prerequisitePlans?.recommended &&
+        openKconfigPrerequisiteModal(option, value, error)) return false;
     if (violations.some((item) => item.code === 'package-conflict' || item.code === 'choice-conflict') &&
         openCatalogConflictModal(option, value, violations, false)) return false;
     const first = String(error?.message || error).split(';')[0];
@@ -186,9 +188,12 @@ function kconfigConstraintTooltip(option, stateValue, constraints) {
   } else {
     emphasis = t('runtime.c6f6222ba9fe');
   }
+  const dependencyExpressions = (constraints.dependencyExpressions || [])
+    .map((group) => (group || []).filter(Boolean).join(' && ')).filter(Boolean).join(' || ');
   const body = [range,
     selectorLines.length ? t('runtime.8e296151802b', { value1: selectorLines.join('\n') }) : '',
-    option.depends?.length ? t('runtime.67e6fec23983', { value1: option.depends.join(' && ') }) : '',
+    dependencyExpressions ? t('runtime.67e6fec23983', { value1: dependencyExpressions }) :
+      option.depends?.length ? t('runtime.67e6fec23983', { value1: option.depends.join(' && ') }) : '',
     option.defaults?.length ? t('menu.defaults', {
       list: formatSemicolonList(option.defaults),
     }) : '',

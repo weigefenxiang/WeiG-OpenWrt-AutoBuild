@@ -443,6 +443,22 @@ function catalogPreferredValues() {
   for (const [symbol, value] of catalogUserOverrides) values.set(symbol, value);
   return values;
 }
+function recordCatalogExplicitIntent(option, value) {
+  if (!option?.symbol) return 'user';
+  const override = CATALOG_ENGINE?.resolveCatalogUserOverride
+    ? CATALOG_ENGINE.resolveCatalogUserOverride(catalogInheritedValue(option.symbol), value)
+    : (catalogInheritedValue(option.symbol) === value ? null : value);
+  if (override === null) {
+    catalogUserOverrides.delete(option.symbol);
+    if (!catalogRecommendedValues.has(option.symbol) && !catalogImportedSymbols.has(option.symbol)) {
+      menuTouched.delete(option.symbol);
+    }
+    return 'restore';
+  }
+  catalogUserOverrides.set(option.symbol, override);
+  menuTouched.add(option.symbol);
+  return 'user';
+}
 function applyCatalogIntent(option, value, force = false, source = 'user') {
   if (!option) return { changes: [], violations: [] };
   const snapshot = snapshotCatalogUiState();
@@ -461,6 +477,7 @@ function applyCatalogIntent(option, value, force = false, source = 'user') {
         explicitSymbols: catalogUserOverrides.keys(),
         validationOptions: context.validationOptions,
       });
+    let directIntentChanged = false;
     for (const change of result.changes) {
       menuValues.set(change.symbol, change.to);
       const explicit = change.symbol === option.symbol;
@@ -481,18 +498,7 @@ function applyCatalogIntent(option, value, force = false, source = 'user') {
       }
       let curatedSource = explicit ? source : 'dependency';
       if (source === 'user' && explicit) {
-        const override = CATALOG_ENGINE?.resolveCatalogUserOverride
-          ? CATALOG_ENGINE.resolveCatalogUserOverride(catalogInheritedValue(change.symbol), change.to)
-          : (catalogInheritedValue(change.symbol) === change.to ? null : change.to);
-        if (override === null) {
-          catalogUserOverrides.delete(change.symbol);
-          if (!catalogRecommendedValues.has(change.symbol) && !catalogImportedSymbols.has(change.symbol)) {
-            menuTouched.delete(change.symbol);
-          }
-          curatedSource = 'restore';
-        } else {
-          catalogUserOverrides.set(change.symbol, override);
-        }
+        curatedSource = recordCatalogExplicitIntent(changedOption || option, change.to);
       } else if (source === 'recommended' && explicit) catalogRecommendedValues.set(change.symbol, change.to);
       else if (source === 'imported' && changedOption?.userSettable !== false) {
         catalogImportedSymbols.add(change.symbol);
@@ -507,7 +513,27 @@ function applyCatalogIntent(option, value, force = false, source = 'user') {
       syncMenuToCurated(changedOption, change.to, curatedSource);
       if (source === 'user' && explicit) syncFirmwareThemeFromMenu(changedOption, change.to);
     }
-    if (result.changes.length) markCatalogStateChanged();
+    // A prerequisite step can activate an explicit target through Kconfig
+    // select before the target Intent is replayed. In that case the target
+    // applyUserIntent call is still meaningful even though it returns no
+    // value changes; record only this user call as direct Intent. The select
+    // change above remains dependency-owned and is never promoted here.
+    if (source === 'user' && !result.changes.some((change) => change.symbol === option.symbol)) {
+      const beforeOverride = catalogUserOverrides.has(option.symbol)
+        ? catalogUserOverrides.get(option.symbol) : undefined;
+      const beforeTouched = menuTouched.has(option.symbol);
+      const beforeDependency = catalogDependencySymbols.has(option.symbol);
+      const curatedSource = recordCatalogExplicitIntent(option, value);
+      catalogConditionalDefaultSymbols.delete(option.symbol);
+      catalogDependencySymbols.delete(option.symbol);
+      syncMenuToCurated(option, menuValues.get(option.symbol) ?? value, curatedSource);
+      syncFirmwareThemeFromMenu(option, menuValues.get(option.symbol) ?? value);
+      directIntentChanged = beforeOverride !== (catalogUserOverrides.has(option.symbol)
+        ? catalogUserOverrides.get(option.symbol) : undefined) ||
+        beforeTouched !== menuTouched.has(option.symbol) ||
+        beforeDependency !== catalogDependencySymbols.has(option.symbol);
+    }
+    if (result.changes.length || directIntentChanged) markCatalogStateChanged();
     return result;
   } catch (error) {
     restoreCatalogUiState(snapshot);

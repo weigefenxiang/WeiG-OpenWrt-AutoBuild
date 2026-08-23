@@ -84,6 +84,7 @@ const regressionTests = [
   'test-build-diagnostics.mjs',
   'test-catalog-loader.mjs',
   'test-catalog-engine.mjs',
+  'test-menuconfig-direct-intent.mjs',
   'test-compatibility-recommendation.mjs',
   'test-catalog-ui-contract.mjs',
   'test-package-probe-v3.mjs',
