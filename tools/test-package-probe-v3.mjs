@@ -99,6 +99,12 @@ for (const legacyOrExecutionState of ['pass', 'passed', 'success', 'fail', 'fail
 assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__comparisonRequest(true))), {
   mode: 'paired-exclusion', executionOrder: ['baseline', 'final'],
 }, 'A/B comparison helper must return the backend comparison contract when enabled');
+assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__comparisonRequest())), {
+  mode: 'paired-exclusion', executionOrder: ['baseline', 'final'],
+}, 'A/B comparison helper must migrate an omitted legacy state to enabled');
+assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__comparisonRequest(undefined))), {
+  mode: 'paired-exclusion', executionOrder: ['baseline', 'final'],
+}, 'A/B comparison helper must migrate an explicit missing field to enabled');
 assert.equal(probeContext.__comparisonRequest(false), null,
   'A/B comparison helper must omit the optional contract when disabled');
 assert.doesNotMatch(probeText, /pairedComparison/,
@@ -168,6 +174,8 @@ assert.match(probeCss, /\.probe-accordion-triggers\s*\{[^}]*repeat\(2/,
   'Probe keeps only the two lightweight optional detail entry points');
 assert.match(probeText, /coverageRow\.append\(coverageLabel, limitGroup, exhaustiveLabel, comparisonLabel, accordionTriggers\)/,
   'coverage controls must append in the required All, A/B, scope, execution order');
+assert.match(probeText, /comparisonInput\.type = 'checkbox'; comparisonInput\.checked = true/,
+  'A/B comparison must be checked by default when the Probe opens');
 assert.match(probeText, /exhaustiveLabel\.dataset\.probeControl = 'all'[\s\S]*?comparisonLabel\.dataset\.probeControl = 'comparison'[\s\S]*?button\.dataset\.probeControl = mode === 'scope' \? 'scope' : 'execution'/,
   'the four visible coverage/detail controls must expose their DOM order');
 assert.match(probeCss, /\.probe-accordion\s*\{[^}]*grid-column:\s*1 \/ -1[^}]*width:\s*100%/,

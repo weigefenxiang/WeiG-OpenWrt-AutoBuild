@@ -307,7 +307,10 @@ async function openPackageProbeV3Modal() {
     exhaustiveLabel.append(exhaustiveInput, document.createTextNode(probeV3UiText('exhaustiveCoverage')));
     const comparisonLabel = document.createElement('label'); comparisonLabel.className = 'probe-coverage-choice probe-comparison-choice';
     comparisonLabel.dataset.probeControl = 'comparison';
-    const comparisonInput = document.createElement('input'); comparisonInput.type = 'checkbox'; comparisonInput.checked = false;
+    // A/B is the safe default for newly opened and legacy Probe state. The
+    // change handler still leaves an explicit user opt-out unchecked for the
+    // rest of this request's lifetime.
+    const comparisonInput = document.createElement('input'); comparisonInput.type = 'checkbox'; comparisonInput.checked = true;
     const comparisonText = probeV3UiText('comparison');
     const comparisonHelpText = probeV3UiText('comparisonHelp');
     comparisonLabel.append(comparisonInput, document.createTextNode(comparisonText));

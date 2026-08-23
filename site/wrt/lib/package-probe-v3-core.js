@@ -27,8 +27,12 @@ const PROBE_V3_RESULT_STATUSES = Object.freeze([
   'compatible', 'incompatible', 'blocked', 'skipped', 'unresolved',
 ]);
 
-function probeV3ComparisonRequest(enabled) {
-  if (!enabled) return null;
+function probeV3ComparisonRequest(enabled = true) {
+  // The comparison field was introduced after the original Probe state
+  // contract. Treat an omitted/legacy value as enabled, while preserving an
+  // explicit user opt-out. Keeping this distinction here makes every caller
+  // follow the same migration rule instead of relying on truthiness.
+  if (enabled === false) return null;
   return {
     mode: PROBE_V3_COMPARISON.mode,
     executionOrder: [...PROBE_V3_COMPARISON.executionOrder],
