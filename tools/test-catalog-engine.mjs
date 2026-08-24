@@ -344,6 +344,144 @@ expectThrow(() => applyUserIntent(selectModel, selectMValues, { symbol: 'TARGET_
 const raisedTarget = applyUserIntent(selectModel, selectMValues, { symbol: 'TARGET_TRI', value: 'y' });
 assert(raisedTarget.values.get('TARGET_TRI') === 'y', 'a target with select m could not be raised to Y');
 
+// A reverse select whose target has dir_dep=N is suppressed by the native
+// Kconfig resolver: the selector/root succeeds, while the target remains N.
+// A direct user request for that target still obeys its own dependency.
+const selectDependencyRecords = [
+  { kind: 'config', configSymbol: 'SELECTOR_ROOT', kconfigSymbol: 'SELECTOR_ROOT',
+    type: 'bool', states: ['n', 'y'],
+    kconfig: { selectsExpressions: [['PACKAGE_oscam']] } },
+  { kind: 'package', package: 'oscam', configSymbol: 'PACKAGE_oscam',
+    kconfigSymbol: 'PACKAGE_oscam', type: 'bool', states: ['n', 'y'],
+    kconfig: { selectsExpressions: [['PACKAGE_selected-target']] } },
+  { kind: 'config', configSymbol: 'BUILTIN_GATE', kconfigSymbol: 'BUILTIN_GATE',
+    type: 'bool', states: ['n', 'y'] },
+  { kind: 'package', package: 'selected-target', configSymbol: 'PACKAGE_selected-target',
+    kconfigSymbol: 'PACKAGE_selected-target', type: 'bool', states: ['n', 'y'],
+    kconfig: { dependsExpressions: [['!BUILTIN_GATE']] } },
+  { kind: 'package', package: 'selected-downstream', configSymbol: 'PACKAGE_selected-downstream',
+    kconfigSymbol: 'PACKAGE_selected-downstream', type: 'bool', states: ['n', 'y'],
+    kconfig: { dependsExpressions: [['PACKAGE_selected-target']] } },
+];
+const selectDependencyModel = createCatalogModel({
+  schema: 5, targets: [], relations: {
+    schema: 2, records: selectDependencyRecords,
+    indexes: { reverseKconfig: { 'PACKAGE_selected-target': ['PACKAGE_selected-downstream'] } },
+  },
+});
+const selectDependencyValues = new Map([
+  ['SELECTOR_ROOT', 'n'], ['BUILTIN_GATE', 'y'],
+  ['PACKAGE_oscam', 'n'],
+  ['PACKAGE_selected-target', 'n'],
+  ['PACKAGE_selected-downstream', 'n'],
+]);
+const selectedByRoot = applyUserIntent(selectDependencyModel,
+  selectDependencyValues, { symbol: 'SELECTOR_ROOT', value: 'y' });
+assert(selectedByRoot.values.get('SELECTOR_ROOT') === 'y' &&
+  selectedByRoot.values.get('PACKAGE_oscam') === 'y' &&
+  selectedByRoot.values.get('PACKAGE_selected-target') === 'n' &&
+  validateConfig(selectDependencyModel, selectedByRoot.values).length === 0,
+  'a select with dir_dep=N did not preserve the selector while suppressing the target');
+const suppressedDiagnostic = selectedByRoot.diagnostics.find((item) =>
+  item.code === 'kconfig-select-suppressed' && item.target === 'PACKAGE_selected-target');
+assert(suppressedDiagnostic?.symbol === 'PACKAGE_selected-target' &&
+  suppressedDiagnostic.dependencyMaximum === 0 && suppressedDiagnostic.blocking === false &&
+  suppressedDiagnostic.selectedBy?.some((selector) => selector.sourceSymbol === 'PACKAGE_oscam'),
+  'a suppressed reverse select did not retain non-blocking provenance diagnostics');
+const suppressedTargetConstraints = kconfigStateConstraints(
+  selectDependencyModel,
+  selectDependencyModel.bySymbol.get('PACKAGE_selected-target'),
+  selectedByRoot.values,
+);
+assert(suppressedTargetConstraints.minimum === 'n' && suppressedTargetConstraints.maximum === 'n' &&
+  suppressedTargetConstraints.selectors.length === 0 &&
+  suppressedTargetConstraints.selectableStates.join(',') === 'n',
+  'a suppressed reverse select exposed the target as an active selectable state');
+expectThrow(() => applyUserIntent(selectDependencyModel,
+  selectDependencyValues, { symbol: 'PACKAGE_selected-target', value: 'y' }),
+  /requires !BUILTIN_GATE/,
+  'direct selection of a target with an unsatisfied dependency bypassed its own Kconfig constraint');
+expectThrow(() => applyUserIntent(selectDependencyModel,
+  selectedByRoot.values, { symbol: 'PACKAGE_selected-target', value: 'y' }),
+  /requires !BUILTIN_GATE/,
+  'direct selection remained unblocked while an active reverse selector suppressed the target');
+const directSelectedWithRoot = new Map(selectDependencyValues)
+  .set('SELECTOR_ROOT', 'y').set('PACKAGE_oscam', 'y').set('PACKAGE_selected-target', 'y');
+expectThrow(() => applyUserIntent(selectDependencyModel,
+  directSelectedWithRoot, { symbol: 'PACKAGE_selected-target', value: 'y' }),
+  /requires !BUILTIN_GATE/,
+  'a selected target with an unsatisfied dependency was incorrectly accepted as a direct intent');
+const dependencyRepaired = applyUserIntent(selectDependencyModel,
+  selectedByRoot.values, { symbol: 'BUILTIN_GATE', value: 'n' });
+assert(dependencyRepaired.values.get('PACKAGE_oscam') === 'y' &&
+  dependencyRepaired.values.get('PACKAGE_selected-target') === 'y' &&
+  !dependencyRepaired.diagnostics.some((item) => item.target === 'PACKAGE_selected-target') &&
+  validateConfig(selectDependencyModel, dependencyRepaired.values).length === 0,
+  'an active select did not resume when the target direct dependency became satisfiable');
+const reconciledSuppressed = reconcileKconfigDerivedValues(selectDependencyModel,
+  selectedByRoot.values);
+assert(reconciledSuppressed.diagnostics.some((item) =>
+  item.code === 'kconfig-select-suppressed' && item.target === 'PACKAGE_selected-target'),
+  'derived-value reconciliation did not expose suppressed select provenance');
+const selectedDownstream = applyUserIntent(selectDependencyModel,
+  dependencyRepaired.values, { symbol: 'PACKAGE_selected-downstream', value: 'y' });
+assert(selectedDownstream.values.get('PACKAGE_selected-downstream') === 'y' &&
+  validateConfig(selectDependencyModel, selectedDownstream.values).length === 0,
+  'a dependent of a re-enabled selected target could not be enabled');
+const dependencyDisabled = applyUserIntent(selectDependencyModel,
+  selectedDownstream.values, { symbol: 'BUILTIN_GATE', value: 'y' });
+assert(dependencyDisabled.values.get('SELECTOR_ROOT') === 'y' &&
+  dependencyDisabled.values.get('PACKAGE_oscam') === 'y' &&
+  dependencyDisabled.values.get('PACKAGE_selected-target') === 'n' &&
+  dependencyDisabled.values.get('PACKAGE_selected-downstream') === 'n' &&
+  dependencyDisabled.diagnostics.some((item) =>
+    item.code === 'kconfig-select-suppressed' && item.target === 'PACKAGE_selected-target') &&
+  validateConfig(selectDependencyModel, dependencyDisabled.values).length === 0,
+  'a select target was not lowered to N when its direct dependency became N');
+const dependencyReenabled = applyUserIntent(selectDependencyModel,
+  dependencyDisabled.values, { symbol: 'BUILTIN_GATE', value: 'n' });
+assert(dependencyReenabled.values.get('SELECTOR_ROOT') === 'y' &&
+  dependencyReenabled.values.get('PACKAGE_oscam') === 'y' &&
+  dependencyReenabled.values.get('PACKAGE_selected-target') === 'y' &&
+  dependencyReenabled.values.get('PACKAGE_selected-downstream') === 'n' &&
+  !dependencyReenabled.diagnostics.some((item) => item.target === 'PACKAGE_selected-target') &&
+  validateConfig(selectDependencyModel, dependencyReenabled.values).length === 0,
+  'a suppressed select target did not re-enable after its direct dependency recovered');
+
+// A non-zero tristate dependency ceiling does not suppress a Y select.  The
+// target is kept at Y and the resulting dependency overflow is diagnostic,
+// not a blocker for the selector intent.
+const partialSelectModel = createCatalogModel({ schema: 5, targets: [], relations: {
+  schema: 2, records: [
+    { kind: 'config', configSymbol: 'SELECTOR_PARTIAL', kconfigSymbol: 'SELECTOR_PARTIAL',
+      type: 'bool', states: ['n', 'y'],
+      kconfig: { selectsExpressions: [['TARGET_PARTIAL']] } },
+    { kind: 'config', configSymbol: 'PARTIAL_GATE', kconfigSymbol: 'PARTIAL_GATE',
+      type: 'tristate', states: ['n', 'm', 'y'] },
+    { kind: 'config', configSymbol: 'TARGET_PARTIAL', kconfigSymbol: 'TARGET_PARTIAL',
+      type: 'tristate', states: ['n', 'm', 'y'],
+      kconfig: { dependsExpressions: [['PARTIAL_GATE']] } },
+  ], indexes: {},
+} });
+const partialSelectValues = new Map([
+  ['SELECTOR_PARTIAL', 'n'], ['PARTIAL_GATE', 'm'], ['TARGET_PARTIAL', 'n'],
+]);
+const selectedWithPartialDependency = applyUserIntent(partialSelectModel,
+  partialSelectValues, { symbol: 'SELECTOR_PARTIAL', value: 'y' });
+const partialWarning = selectedWithPartialDependency.violations.find((item) =>
+  item.code === 'kconfig-select-warning' && item.symbol === 'TARGET_PARTIAL');
+assert(selectedWithPartialDependency.values.get('SELECTOR_PARTIAL') === 'y' &&
+  selectedWithPartialDependency.values.get('TARGET_PARTIAL') === 'y' &&
+  partialWarning?.maximum === 1 &&
+  partialWarning.selectedBy?.some((selector) => selector.sourceSymbol === 'SELECTOR_PARTIAL') &&
+  !validateConfig(partialSelectModel, selectedWithPartialDependency.values)
+    .some((item) => item.code === 'kconfig-dependency-unsatisfied'),
+  'a Y select above a non-zero tristate dependency ceiling was incorrectly blocked');
+expectThrow(() => applyUserIntent(partialSelectModel, partialSelectValues,
+  { symbol: 'TARGET_PARTIAL', value: 'y' }),
+  /requires PARTIAL_GATE/,
+  'direct target selection without a selector bypassed a tristate dependency ceiling');
+
 const noDowngrade = applyUserIntent(selectModel,
   new Map([['SELECT_Y', 'y'], ['TARGET_TRI', 'y'], ['SELECT_M', 'n']]),
   { symbol: 'SELECT_M', value: 'm' });
