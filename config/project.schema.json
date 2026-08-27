@@ -1,0 +1,304 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/config/project.schema.json",
+  "title": "WeiG OpenWrt AutoBuild project configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "catalog", "ui", "firmware", "build", "admission"],
+  "properties": {
+    "project": {
+      "$ref": "#/$defs/project"
+    },
+    "catalog": {
+      "$ref": "#/$defs/catalog"
+    },
+    "ui": {
+      "$ref": "#/$defs/ui"
+    },
+    "firmware": {
+      "$ref": "#/$defs/firmware"
+    },
+    "build": {
+      "$ref": "#/$defs/build"
+    },
+    "admission": {
+      "$ref": "#/$defs/admission"
+    }
+  },
+  "$defs": {
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["displayName", "shortName", "repository", "blogUrl"],
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 96
+        },
+        "shortName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[\\p{L}\\p{N}\\p{M}][\\p{L}\\p{N}\\p{M} ._+@()\\-]*$"
+        },
+        "repository": {
+          "$ref": "#/$defs/repository"
+        },
+        "blogUrl": {
+          "anyOf": [
+            {
+              "const": ""
+            },
+            {
+              "type": "string",
+              "pattern": "^https://[^\\s/?#]+(?:/[^\\s?#]*)?(?:\\?[^\\s#]*)?(?:#\\S*)?$"
+            }
+          ]
+        }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "releaseTag", "selection", "loading"],
+      "properties": {
+        "repository": {
+          "$ref": "#/$defs/repository"
+        },
+        "releaseTag": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$"
+        },
+        "selection": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sourcePriority", "defaultSource", "developmentBranches", "preferredTarget"],
+          "properties": {
+            "sourcePriority": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/identifier"
+              }
+            },
+            "defaultSource": {
+              "$ref": "#/$defs/identifier"
+            },
+            "developmentBranches": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/branch"
+              }
+            },
+            "preferredTarget": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["selectors"],
+              "properties": {
+                "selectors": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["system", "subtarget", "profile"],
+                  "properties": {
+                    "system": {
+                      "$ref": "#/$defs/symbol"
+                    },
+                    "subtarget": {
+                      "$ref": "#/$defs/symbol"
+                    },
+                    "profile": {
+                      "$ref": "#/$defs/symbol"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "loading": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["startup", "idle", "startupConcurrency", "idleConcurrency", "idleDelayMs"],
+          "properties": {
+            "startup": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/task"
+              }
+            },
+            "idle": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/task"
+              }
+            },
+            "startupConcurrency": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "idleConcurrency": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "idleDelayMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 60000
+            }
+          }
+        }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["defaultLanguage", "colorMode"],
+      "properties": {
+        "defaultLanguage": {
+          "enum": ["auto", "zh-CN", "en"]
+        },
+        "colorMode": {
+          "enum": ["auto", "light", "dark"]
+        }
+      }
+    },
+    "firmware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lanIp", "timezone", "theme", "ntp", "packageMirror", "password"],
+      "properties": {
+        "lanIp": {
+          "type": "string",
+          "pattern": "^(?:(?:10|192\\.168)\\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|172\\.(?:1[6-9]|2[0-9]|3[01])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9]))$"
+        },
+        "timezone": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["zonename", "timezone"],
+          "properties": {
+            "zonename": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._+-]+(?:/[A-Za-z0-9._+-]+)+$"
+            },
+            "timezone": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._+<>,:/-]{1,128}$"
+            }
+          }
+        },
+        "theme": {
+          "type": "string",
+          "pattern": "^luci-theme-[A-Za-z0-9._+-]{1,48}$"
+        },
+        "ntp": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["preset", "servers"],
+          "properties": {
+            "preset": {
+              "enum": ["cn", "global", "cloudflare"]
+            },
+            "servers": {
+              "type": "array",
+              "minItems": 4,
+              "maxItems": 4,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/hostname"
+              }
+            }
+          }
+        },
+        "packageMirror": {
+          "$ref": "#/$defs/identifier",
+          "$comment": "Must match a canonical preset id in config/policies/package-mirrors.json; aliases are not accepted."
+        },
+        "password": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": {
+              "enum": ["prompt", "empty", "secret"]
+            }
+          }
+        }
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["defaultTag", "compileJobs", "downloadJobs"],
+      "properties": {
+        "defaultTag": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "compileJobs": {
+          "$ref": "#/$defs/jobCount"
+        },
+        "downloadJobs": {
+          "$ref": "#/$defs/jobCount"
+        }
+      }
+    },
+    "admission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["publicActiveBuilds"],
+      "properties": {
+        "publicActiveBuilds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        }
+      }
+    },
+    "repository": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$"
+    },
+    "branch": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,159}$"
+    },
+    "symbol": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_+@./-]{1,160}$"
+    },
+    "task": {
+      "type": "string",
+      "pattern": "^[a-z][A-Za-z0-9:-]{0,63}$"
+    },
+    "hostname": {
+      "type": "string",
+      "pattern": "^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
+    },
+    "jobCount": {
+      "oneOf": [
+        {
+          "const": "auto"
+        },
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        }
+      ]
+    }
+  }
+}

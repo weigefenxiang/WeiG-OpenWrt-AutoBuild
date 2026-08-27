@@ -9,9 +9,11 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const WRT = join(ROOT, 'site', 'wrt');
 const appPath = join(WRT, 'app.js');
 const controllerPath = join(WRT, 'lib', 'core', 'application-controller.js');
+const i18nPath = join(WRT, 'lib', 'i18n', 'i18n.js');
 const htmlPath = join(WRT, 'index.html');
 const app = readFileSync(appPath, 'utf8');
 const controller = readFileSync(controllerPath, 'utf8');
+const i18n = readFileSync(i18nPath, 'utf8');
 const html = readFileSync(htmlPath, 'utf8');
 const runtimeFiles = frontendRuntimeFiles(ROOT);
 const moduleNames = runtimeFiles.slice(1).map((path) => relative(WRT, path).replaceAll('\\', '/'));
@@ -84,6 +86,18 @@ assert.doesNotMatch(frontendJs,
 assert.match(readFileSync(join(WRT, 'lib', 'i18n', 'i18n.js'), 'utf8'),
   /i18n\/index\.json/,
   'i18n runtime must discover language files from the generated manifest');
+assert.match(html, /<title[^>]+data-project-display-name/,
+  'the document title must provide a safe project-display-name target');
+assert.match(html, /class="brand-name"[^>]+data-project-short-name/,
+  'the header must provide a safe short-name target');
+assert.match(i18n, /function applyProjectBranding\(\)/,
+  'project branding must be applied after the project projection is loaded');
+assert.match(i18n, /element\.textContent = shortName/,
+  'configured short names must be rendered as text, not HTML');
+assert.match(i18n, /titleElement\.textContent = title/,
+  'configured display names must be rendered as title text');
+assert.doesNotMatch(i18n, /(?:innerHTML|insertAdjacentHTML).*PROJECT|PROJECT.*(?:innerHTML|insertAdjacentHTML)/,
+  'project fields must never be inserted as HTML');
 
 for (const path of frontendJsFiles) {
   const source = readFileSync(path, 'utf8');

@@ -17,6 +17,27 @@ An online OpenWrt customizer and GitHub Actions build tool. The browser reads So
 
 The page also imports `build-request.json`, `.config`, and `config.buildinfo`. Upstream `make defconfig` runs only when the user explicitly enables **Defconfig**; otherwise the exported full `.config` is authoritative.
 
+## Cloning and project configuration
+
+The single source for clone-specific project defaults is `config/project.json`. After cloning, edit that file and run:
+
+```powershell
+node tools/dev-assistant.mjs prepare
+```
+
+`prepare` validates the configuration and regenerates `site/wrt/data/project.json` and `Shell/build-defaults.conf`; both are generated projections and must not be edited directly. The field boundaries are:
+
+| Block | Configurable content | Boundary |
+| --- | --- | --- |
+| `project` | `displayName`, `shortName`, repository, and blog URL | Names are presentation only; gateway identity, the `[build]` protocol, and Run/Artifact title formats stay unchanged |
+| `catalog` | Catalog repository, release tag, Source/Branch preference, and preferred Target selectors | Catalog data remains authoritative for Source, Branch, Target/Profile, packages, and compatibility facts |
+| `ui` | Default language and color mode | Controls only the initial web appearance |
+| `firmware` | LAN address, timezone, theme, NTP, package mirror, and password mode | Supplies build defaults only; sensitive values never belong here |
+| `build` | Default build tag and compile/download concurrency | Defaults cannot bypass request validation |
+| `admission` | Public active-build limit | Controls admission policy only |
+
+With password mode `prompt`, the submitter supplies the password; `empty` explicitly requests an empty password; `secret` requires the repository Secret `DEFAULT_ROOT_PASSWORD`. Never write the actual password to `config/project.json`, generated site data, build requests, Issues, or logs.
+
 ## Names and retention
 
 Run title:
@@ -55,8 +76,10 @@ Open <http://localhost:8642/> and test Source/Branch switching, Target/Profile, 
 - Catalog is authoritative for Kconfig, dependency, menu, symbol/type, Source/Branch, curated applications, sizes, and compatibility evidence.
 - Do not put rule- or plugin-specific conditions in `site/wrt/app.js`, and do not add build-side conflict locks.
 - Refresh curated applications manually in Catalog and review their descriptions. Official OPKG/APK indexes update sizes automatically.
+- Edit `tools/i18n-source.json` and `tools/i18n-translations.json` for web translations; `site/wrt/data/i18n/` contains generated bundles and must not be edited directly.
 - Use the in-page **Package Compatibility Probe** for package regression. It reuses Advanced menuconfig Kconfig state and exposes seven Catalog-described depths from L1 config resolution through L7 reboot validation; L4 builds one Final firmware, and GitHub revalidates permissions and requests before creating a Matrix.
 - Every AutoBuild modification must run `prepare`, which updates `VERSION` and `site-version.json` in Asia/Shanghai time.
+- After cloning, edit only `config/project.json` for project defaults, then run `prepare` to regenerate public projections. Do not copy Catalog Source/Branch, Target/Profile, or package facts into this repository.
 
 See [ARCHITECTURE.md](../ARCHITECTURE.md) and the [Developer Guide](../docs/DEVELOPER.en.md).
 

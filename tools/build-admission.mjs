@@ -1,4 +1,14 @@
-export const PUBLIC_BUILD_LIMIT = 3;
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const PROJECT = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
+const configuredLimit = Number(PROJECT?.customization?.admission?.publicActiveBuilds);
+if (!Number.isSafeInteger(configuredLimit) || configuredLimit < 1 || configuredLimit > 20) {
+  throw new Error('project admission.publicActiveBuilds is invalid');
+}
+export const PUBLIC_BUILD_LIMIT = configuredLimit;
 
 function normalizedRun(run) {
   const id = Number(run?.id);

@@ -5,6 +5,7 @@
   "app.title": "OpenWrt 固件在线定制",
   "app.subtitle": "选好插件,云端自动编译,喝杯卡布奇诺，迎接开“源”盛世",
   "app.desc": "OpenWrt 固件在线定制:选源码、勾插件,GitHub Actions 云编译,免费自取",
+  "brand.blog": "博客",
   "btn.selfTest": "自检",
   "btn.selfTest.title": "一键自检:检测数据源与提交链路",
   "btn.repo": "GitHub 仓库",

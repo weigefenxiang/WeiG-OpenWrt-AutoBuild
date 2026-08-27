@@ -28,11 +28,17 @@
   let replayingLegacyConfirm = false;
   let activeInteraction = null;
 
+  function projectNoticePrefix() {
+    const project = typeof PROJECT !== 'undefined' && PROJECT && typeof PROJECT === 'object' ? PROJECT : null;
+    return typeof project?.shortName === 'string' && project.shortName.trim() ? project.shortName.trim() : '';
+  }
+
   function noticeTitle(kind) {
-    if (kind === 'success') return t('runtime.0cab91c99de4');
-    if (kind === 'warning') return t('runtime.f484416c890c');
-    if (kind === 'error') return t('runtime.9f4e3cc54b49');
-    return t('runtime.bb6a7a1f4169');
+    const title = kind === 'success' ? t('runtime.0cab91c99de4')
+      : kind === 'warning' ? t('runtime.f484416c890c')
+        : kind === 'error' ? t('runtime.9f4e3cc54b49') : t('runtime.bb6a7a1f4169');
+    const prefix = projectNoticePrefix();
+    return prefix ? `${prefix} · ${title}` : title;
   }
 
   function importedConfigPresentation(message) {

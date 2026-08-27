@@ -17,6 +17,27 @@ OpenWrt 固件在线定制与 GitHub Actions 云编译工具。网页直接读�
 
 网页也可导入 `build-request.json`、`.config` 或 `config.buildinfo`。只有主动启用 **Defconfig** 时，构建端才运行一次上游 `make defconfig`；否则网页导出的完整 `.config` 是权威输入。
 
+## 克隆与项目配置
+
+克隆者或部署者的项目级默认值唯一源是 `config/project.json`。复制仓库后编辑这一个文件，然后运行：
+
+```powershell
+node tools/dev-assistant.mjs prepare
+```
+
+`prepare` 会校验配置，并重新生成 `site/wrt/data/project.json` 与 `Shell/build-defaults.conf`；这两个文件都是生成投影，不要直接编辑后提交。配置字段边界如下：
+
+| 区块 | 可配置内容 | 边界 |
+| --- | --- | --- |
+| `project` | `displayName`、`shortName`、仓库地址、博客地址 | 名称只用于站点展示；不会改变网关身份、`[build]` 协议或 Run/Artifact 标题格式 |
+| `catalog` | Catalog 仓库、发布标签、Source/Branch 首选顺序、首选 Target selector | Source、Branch、Target/Profile、插件和兼容性事实仍由 Catalog 数据负责，不在这里维护清单 |
+| `ui` | 默认语言、颜色模式 | 仅控制网页初始外观 |
+| `firmware` | LAN 地址、时区、主题、NTP、软件包镜像、密码模式 | 只提供构建默认值；敏感内容不得写入配置 |
+| `build` | 默认构建标识、编译/下载并发 | 仅控制默认值，不能绕过构建请求校验 |
+| `admission` | 公共活动构建上限 | 只控制准入策略 |
+
+密码模式为 `prompt` 时由提交者填写；`empty` 表示明确使用空密码；`secret` 模式必须在该仓库的 Secrets 中配置 `DEFAULT_ROOT_PASSWORD`。实际密码绝不能写入 `config/project.json`、生成的站点数据、构建请求、Issue 或日志。
+
 ## 产物与命名
 
 Run 显示名采用：
@@ -60,8 +81,10 @@ node tools/serve.mjs
 - Catalog 是 Kconfig、dependency、menu、symbol/type、Source/Branch、精选应用、体积和兼容性规则的权威数据源。
 - `site/wrt/app.js` 不得写具体插件或规则特判；构建端不加插件冲突锁。
 - 新增或调整精选应用请在 Catalog 运行人工刷新工具并审核介绍；体积由官方 OPKG/APK 索引自动计算。
+- 修改网页翻译请编辑 `tools/i18n-source.json` 与 `tools/i18n-translations.json`；`site/wrt/data/i18n/` 是生成包，不要直接编辑。
 - 包级回归使用网页自检中的“插件兼容探针”。它复用 Advanced menuconfig 的 Kconfig 状态，并按 Catalog 说明提供 L1 配置求解到 L7 重启验证七级深度；L4 只构建一次 Final 固件，GitHub 在创建 Matrix 前重新校验权限和请求。
 - 每次修改 AutoBuild 必须运行 `prepare`，按 Asia/Shanghai 更新 `VERSION` 与 `site-version.json`。
+- 克隆后修改默认值只编辑 `config/project.json`，再运行 `prepare` 生成公开投影；不要把 Catalog 的 Source/Branch、Target/Profile 或插件事实复制到本仓库。
 
 更完整的边界和流程见 [ARCHITECTURE.md](ARCHITECTURE.md) 与 [开发者指南](docs/DEVELOPER.md)。
 

@@ -5,6 +5,7 @@
   "app.title": "OpenWrt ファームウェアのオンラインカスタマイズ",
   "app.subtitle": "パッケージを選び、クラウドで自動ビルド。カプチーノを飲みながらオープンソースの時代を迎えよう",
   "app.desc": "OpenWrt ファームウェアのオンラインカスタマイズ:ソースを選び、プラグインにチェックを入れて GitHub Actions でクラウドビルド、無料で入手できます",
+  "brand.blog": "ブログ",
   "btn.selfTest": "自己診断",
   "btn.selfTest.title": "ワンクリック自己診断:データソースと送信経路を確認します",
   "btn.repo": "GitHub リポジトリ",

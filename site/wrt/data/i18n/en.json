@@ -5,6 +5,7 @@
   "app.title": "OpenWrt Firmware Customizer",
   "app.subtitle": "Pick your packages, let the cloud build, enjoy a cappuccino, and welcome the open-source era",
   "app.desc": "Customize OpenWrt firmware online: pick a source tree, tick plugins, build on GitHub Actions, download for free",
+  "brand.blog": "Blog",
   "btn.selfTest": "Self-test",
   "btn.selfTest.title": "One-click self-test: check the data sources and the submit path",
   "btn.repo": "GitHub Repo",

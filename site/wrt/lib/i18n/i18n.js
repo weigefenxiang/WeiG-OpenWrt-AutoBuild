@@ -77,9 +77,39 @@ function fmtSize(bytes) {
   return format(value, 'B');
 }
 
+function configuredProjectText(value, fallback) {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+function applyProjectBranding() {
+  const project = typeof PROJECT !== 'undefined' && PROJECT && typeof PROJECT === 'object' ? PROJECT : {};
+  const shortName = configuredProjectText(project.shortName, 'Wei.G');
+  const displayName = configuredProjectText(project.name, shortName);
+  const title = `${displayName} · ${t('app.title')}`;
+  const titleElement = document.querySelector('title[data-project-display-name], title');
+  if (titleElement) titleElement.textContent = title;
+  else document.title = title;
+  document.querySelectorAll('[data-project-short-name]').forEach((element) => {
+    element.textContent = shortName;
+  });
+  document.querySelectorAll('[data-project-short-name-attribute="alt"]').forEach((element) => {
+    element.setAttribute('alt', shortName);
+  });
+  const translatedBlogWord = t('brand.blog');
+  const blogWord = translatedBlogWord === 'brand.blog' ? 'Blog' : translatedBlogWord;
+  const blogLabel = `${shortName} ${blogWord}`;
+  document.querySelectorAll('[data-project-blog-aria]').forEach((element) => {
+    element.setAttribute('aria-label', blogLabel);
+    element.setAttribute('data-ui-tooltip-body', blogLabel);
+  });
+  document.querySelectorAll('[data-project-blog-label]').forEach((element) => {
+    element.textContent = blogLabel;
+  });
+}
+
 function applyI18n() {
   document.documentElement.lang = state.lang;
-  document.title = 'Wei.G · ' + t('app.title');   // 品牌名不随语言变 / brand name stays across languages
+  applyProjectBranding();
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     const value = t(el.dataset.i18n);
     // 缺词条时保留 HTML 中的人类可读兜底,绝不把 adv.grey.toggle 之类内部键名显示给用户 / Keep the human-readable HTML fallback when a key is missing; never expose internal keys such as adv.grey.toggle

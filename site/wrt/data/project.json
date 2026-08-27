@@ -1,6 +1,7 @@
 {
   "schema": 1,
   "name": "WeiG-OpenWrt-AutoBuild",
+  "shortName": "Wei.G",
   "repository": "weigefenxiang/WeiG-OpenWrt-AutoBuild",
   "catalogRepository": "weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog",
   "blogUrl": "https://www.weigeshare.cc.cd/",
@@ -47,5 +48,40 @@
     "dev": "catalog-dev",
     "staging": "catalog-staging",
     "main": "catalog-main"
+  },
+  "customization": {
+    "ui": {
+      "defaultLanguage": "auto",
+      "colorMode": "auto"
+    },
+    "firmware": {
+      "lanIp": "192.168.1.1",
+      "timezone": {
+        "zonename": "Asia/Shanghai",
+        "timezone": "CST-8"
+      },
+      "theme": "luci-theme-argon",
+      "ntp": {
+        "preset": "cn",
+        "servers": [
+          "ntp.aliyun.com",
+          "time1.cloud.tencent.com",
+          "cn.ntp.org.cn",
+          "cn.pool.ntp.org"
+        ]
+      },
+      "packageMirror": "source-default",
+      "password": {
+        "mode": "prompt"
+      }
+    },
+    "build": {
+      "defaultTag": "anonymous",
+      "compileJobs": "auto",
+      "downloadJobs": "auto"
+    },
+    "admission": {
+      "publicActiveBuilds": 3
+    }
   }
 }

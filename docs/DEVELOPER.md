@@ -1,5 +1,24 @@
 # 开发者指南
 
+## 0. 克隆与项目配置
+
+克隆者的项目级配置唯一源是 `config/project.json`。克隆仓库后只编辑这个文件，再执行：
+
+```powershell
+node tools/dev-assistant.mjs prepare
+```
+
+`prepare` 会验证配置，并生成网页使用的 `site/wrt/data/project.json` 与构建脚本使用的 `Shell/build-defaults.conf`。生成文件不能作为配置源直接修改。字段职责固定如下：
+
+- `project.displayName` 与 `project.shortName` 只用于页面标题、短品牌和通知等展示文案；不会参与网关身份、`[build]` 请求标记或 Run/Artifact 标题协议。
+- `project.repository` 与 `project.blogUrl` 只提供经校验的链接目标。
+- `catalog.repository`、`catalog.releaseTag` 和 `catalog.selection` 只控制 Catalog 地址与首选项；`catalog.loading` 仅保留现有运行时调度 contract，不是克隆者新增可调项。Source、Branch、Target/Profile、插件、Kconfig 和兼容性事实必须继续从 Catalog 数据读取。
+- `ui`、`firmware`、`build`、`admission` 分别提供网页、固件、构建默认值和准入上限；它们不扩大请求协议或事实权威边界。
+
+密码 `mode` 为 `prompt` 时由提交者输入，`empty` 明确使用空密码，`secret` 必须使用仓库 Secret `DEFAULT_ROOT_PASSWORD`。实际密码绝不写入 `config/project.json`、任何生成投影、构建请求、Issue 或日志。
+
+网页翻译只编辑 `tools/i18n-source.json` 与 `tools/i18n-translations.json`；`site/wrt/data/i18n/` 是生成包，不能直接修改。
+
 ## 1. 不可突破的边界
 
 1. Catalog 是 Source/Branch、Target/Profile、Kconfig、dependency、menu、symbol/type、精选应用、体积与兼容性证据的权威源。
@@ -11,7 +30,7 @@
 
 ## 2. 数据加载
 
-`site/wrt/data/project.json` 是加载顺序参数：
+`config/project.json` 是加载顺序的编辑源；`site/wrt/data/project.json` 是由 `prepare` 生成的公开投影：
 
 ```json
 {

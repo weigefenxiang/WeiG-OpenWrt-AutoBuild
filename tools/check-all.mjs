@@ -151,9 +151,17 @@ if (!unexpectedData.length && !missingData.length) {
 }
 
 const configEntries = filesUnder(join(ROOT, 'config')).map((path) => relative(ROOT, path).replaceAll('\\', '/'));
-if (configEntries.length === 1 && configEntries[0] === 'config/policies/package-mirrors.json') {
-  pass('AutoBuild has one small runtime policy and no device/seed config database');
+const expectedConfigEntries = new Set([
+  'config/policies/package-mirrors.json',
+  'config/project.json',
+  'config/project.schema.json',
+]);
+if (configEntries.length === expectedConfigEntries.size && configEntries.every((entry) => expectedConfigEntries.has(entry))) {
+  pass('AutoBuild has one canonical project config and one small runtime policy');
 } else fail('config allowlist', configEntries.join(','));
+
+run('project config projections match their canonical source', process.execPath,
+  [join(ROOT, 'tools', 'gen-project-config.mjs'), '--check']);
 
 run('package mirror public projection matches its canonical policy', process.execPath,
   [join(ROOT, 'tools', 'gen-package-mirrors.mjs'), '--check']);

@@ -5,6 +5,7 @@
   "app.title": "OpenWrt 韌體線上客製",
   "app.subtitle": "選好套件,雲端自動編譯,喝杯卡布奇諾，迎接開「源」盛世",
   "app.desc": "OpenWrt 韌體線上客製:選原始碼、勾套件,GitHub Actions 雲端編譯,免費自取",
+  "brand.blog": "部落格",
   "btn.selfTest": "自我檢測",
   "btn.selfTest.title": "一鍵自我檢測:檢測資料來源與送出流程",
   "btn.repo": "GitHub 儲存庫",

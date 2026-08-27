@@ -5,6 +5,7 @@
   "app.title": "Firmware OpenWrt personalizado online",
   "app.subtitle": "Escolha os pacotes, compile na nuvem, tome um cappuccino e celebre a era do código aberto",
   "app.desc": "Firmware OpenWrt personalizado online: escolha o código-fonte, marque os plugins, compile na nuvem com o GitHub Actions e baixe de graça",
+  "brand.blog": "Blog",
   "btn.selfTest": "Autoteste",
   "btn.selfTest.title": "Autoteste com um clique: verifica as fontes de dados e o caminho de envio",
   "btn.repo": "Repositório no GitHub",

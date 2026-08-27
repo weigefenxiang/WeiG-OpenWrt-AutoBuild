@@ -5,6 +5,7 @@
   "app.title": "Tùy chỉnh firmware OpenWrt trực tuyến",
   "app.subtitle": "Chọn gói, để đám mây tự biên dịch, nhâm nhi cappuccino và chào đón kỷ nguyên mã nguồn mở",
   "app.desc": "Tùy chỉnh firmware OpenWrt trực tuyến: chọn mã nguồn, tích chọn plugin, biên dịch cloud bằng GitHub Actions, tải về miễn phí",
+  "brand.blog": "Blog",
   "btn.selfTest": "Tự kiểm tra",
   "btn.selfTest.title": "Tự kiểm tra nhanh: kiểm tra nguồn dữ liệu và đường gửi yêu cầu",
   "btn.repo": "Kho GitHub",

@@ -1,0 +1,81 @@
+{
+  "project": {
+    "displayName": "WeiG-OpenWrt-AutoBuild",
+    "shortName": "Wei.G",
+    "repository": "weigefenxiang/WeiG-OpenWrt-AutoBuild",
+    "blogUrl": "https://www.weigeshare.cc.cd/"
+  },
+  "catalog": {
+    "repository": "weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog",
+    "releaseTag": "menuconfig-catalog-complete",
+    "selection": {
+      "sourcePriority": [
+        "ImmortalWrt",
+        "lede",
+        "OpenWrt",
+        "hanwckf"
+      ],
+      "defaultSource": "ImmortalWrt",
+      "developmentBranches": [
+        "main",
+        "master"
+      ],
+      "preferredTarget": {
+        "selectors": {
+          "system": "x86",
+          "subtarget": "64",
+          "profile": "DEVICE_generic"
+        }
+      }
+    },
+    "loading": {
+      "startup": [
+        "menu",
+        "menu:language",
+        "package-mirrors"
+      ],
+      "idle": [
+        "applications",
+        "hidden",
+        "help",
+        "compatibility"
+      ],
+      "startupConcurrency": 3,
+      "idleConcurrency": 1,
+      "idleDelayMs": 15000
+    }
+  },
+  "ui": {
+    "defaultLanguage": "auto",
+    "colorMode": "auto"
+  },
+  "firmware": {
+    "lanIp": "192.168.1.1",
+    "timezone": {
+      "zonename": "Asia/Shanghai",
+      "timezone": "CST-8"
+    },
+    "theme": "luci-theme-argon",
+    "ntp": {
+      "preset": "cn",
+      "servers": [
+        "ntp.aliyun.com",
+        "time1.cloud.tencent.com",
+        "cn.ntp.org.cn",
+        "cn.pool.ntp.org"
+      ]
+    },
+    "packageMirror": "source-default",
+    "password": {
+      "mode": "prompt"
+    }
+  },
+  "build": {
+    "defaultTag": "anonymous",
+    "compileJobs": "auto",
+    "downloadJobs": "auto"
+  },
+  "admission": {
+    "publicActiveBuilds": 3
+  }
+}

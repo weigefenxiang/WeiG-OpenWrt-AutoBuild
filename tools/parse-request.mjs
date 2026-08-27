@@ -20,6 +20,12 @@ import { normalizeRequestAudit } from './request-audit.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PROJECT = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
+const CUSTOMIZATION = PROJECT?.customization && typeof PROJECT.customization === 'object'
+  ? PROJECT.customization : {};
+const PROJECT_FIRMWARE = CUSTOMIZATION.firmware && typeof CUSTOMIZATION.firmware === 'object'
+  ? CUSTOMIZATION.firmware : {};
+const PROJECT_BUILD = CUSTOMIZATION.build && typeof CUSTOMIZATION.build === 'object'
+  ? CUSTOMIZATION.build : {};
 const PACKAGE_MIRROR_RULES = JSON.parse(
   readFileSync(join(ROOT, 'config', 'policies', 'package-mirrors.json'), 'utf8'));
 const SHA256_RE = /^[a-f0-9]{64}$/;
@@ -37,6 +43,19 @@ function semanticHash(values) {
     .map(([symbol, value]) => `CONFIG_${symbol}=${value}`);
   return sha256(lines.length ? `${lines.join('\n')}\n` : '');
 }
+
+function own(value, key) {
+  return value !== null && typeof value === 'object' && Object.hasOwn(value, key);
+}
+
+function projectJobCount(value) {
+  if (value === 'auto') return value;
+  if (Number.isInteger(value) && Number.isSafeInteger(value) && value >= 1 && value <= 32) return value;
+  throw new Error('project build job policy must be auto or an integer from 1 to 32');
+}
+
+const PROJECT_COMPILE_JOBS = projectJobCount(PROJECT_BUILD.compileJobs);
+const PROJECT_DOWNLOAD_JOBS = projectJobCount(PROJECT_BUILD.downloadJobs);
 
 async function fetchCatalogResource(revision, path, { binary = false } = {}) {
   const repo = PROJECT.catalogRepository;
@@ -347,6 +366,38 @@ writeFileSync(String(process.env.RECONSTRUCTED_CONFIG_OUT || 'reconstructed.conf
 writeFileSync(String(process.env.REQUEST_OVERRIDES_OUT || 'request-overrides.json'),
   JSON.stringify({ schema: 1, overrides: rawOverrides }, null, 2) + '\n', 'utf8');
 
+const fw = req.firmware && typeof req.firmware === 'object' && !Array.isArray(req.firmware) ? req.firmware : {};
+const themeSymbolRe = /^PACKAGE_(luci-theme-[A-Za-z0-9._+-]{1,48})$/;
+  const enabledBaselineThemes = [...baseline.values]
+  .filter(([symbol, value]) => themeSymbolRe.test(String(symbol)) && value !== 'n' && value !== '')
+  .map(([symbol]) => themeSymbolRe.exec(String(symbol))[1]);
+const catalogThemePackages = [...catalogKconfigSymbols]
+  .map((symbol) => themeSymbolRe.exec(String(symbol))?.[1])
+  .filter(Boolean)
+  .sort((left, right) => left.localeCompare(right));
+const hasExplicitTheme = own(fw, 'theme');
+const requestedTheme = hasExplicitTheme ? fw.theme : PROJECT_FIRMWARE.theme;
+if (typeof requestedTheme !== 'string' ||
+    (hasExplicitTheme
+      ? !/^luci-theme-[A-Za-z0-9._+-]{1,48}$/.test(requestedTheme)
+      : (requestedTheme && !/^luci-theme-[A-Za-z0-9._+-]{1,48}$/.test(requestedTheme)))) {
+  fail('固件主题格式非法');
+}
+  const preferredTheme = requestedTheme || '';
+  const fallbackTheme = [...new Set([
+    ...enabledBaselineThemes,
+    ...catalogThemePackages,
+])].find((packageName) => catalogKconfigSymbols.has(`PACKAGE_${packageName}`));
+// The current Catalog/Kconfig symbol set is the only availability allowlist. A
+// missing project preference falls back to Native baseline (or Catalog default),
+// while an explicit unavailable request is rejected above.
+if (hasExplicitTheme && preferredTheme && !catalogKconfigSymbols.has(`PACKAGE_${preferredTheme}`)) {
+  fail(`固件主题不在当前 Catalog/Kconfig 范围:${preferredTheme}`);
+}
+const theme = preferredTheme && catalogKconfigSymbols.has(`PACKAGE_${preferredTheme}`)
+  ? preferredTheme : fallbackTheme;
+if (!theme) fail('Catalog/Kconfig 没有可用的 LuCI 主题');
+
 
 const rawPlugins = Array.isArray(req.plugins) ? req.plugins : [];
 if (rawPlugins.length > 200) fail('插件显示列表数量超过 200，拒绝');
@@ -358,9 +409,11 @@ for (const rawPlugin of rawPlugins) {
   if (!items.includes(rawPlugin)) items.push(rawPlugin);
 }
 
-const requestedTag = String(req.tag || '');
+const hasExplicitTag = own(req, 'tag');
+const requestedTag = String(hasExplicitTag ? (req.tag ?? '') : (PROJECT_BUILD.defaultTag || ''));
 if (requestedTag && !isValidBuildTag(requestedTag)) fail('构建标识必须为 1-160 个可见 Unicode 字符且不能包含控制字符');
-const tag = normalizeBuildTag(requestedTag, 'anonymous');
+const tag = normalizeBuildTag(requestedTag,
+  hasExplicitTag ? 'anonymous' : String(PROJECT_BUILD.defaultTag || 'anonymous'));
 const artifactTag = artifactBuildTag(tag, 'anonymous');
 const cleanIdentity = (value) => String(value || '').replace(/[^\w一-龥-]/g, '').slice(0, 24);
 const titleIdentity = parseBuildIssueTitleIdentity(process.env.ISSUE_TITLE || '');
@@ -393,26 +446,66 @@ const requestRef = cleanIdentity(req.requestId || attachmentRef || titleIdentity
 const buildRef = requestRef ? `${requestRef}-${artifactTag}` : artifactTag;
 const artifactRef = artifactBuildRef(buildRef, sourceEnv, Number(process.env.ISSUE_NUMBER || 0));
 
-const lanip = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/.test(String(req.lanip || ''))
-  ? String(req.lanip) : '192.168.1.1';
-const rp = String(req.rootpw || '');
-const rootpw = (rp === '@empty' || /^[A-Za-z0-9@#%^&*_+=.,:!?-]{4,32}$/.test(rp)) ? rp : '';
+const privateIpv4 = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/;
+const projectLanip = String(PROJECT_FIRMWARE.lanIp || '192.168.1.1');
+const requestedLanip = own(req, 'lanip') ? req.lanip : projectLanip;
+if (!privateIpv4.test(String(requestedLanip))) fail('LAN IP 地址非法');
+const lanip = String(requestedLanip);
 
-const fw = req.firmware && typeof req.firmware === 'object' && !Array.isArray(req.firmware) ? req.firmware : {};
+const projectPasswordMode = String(PROJECT_FIRMWARE.password?.mode || 'prompt');
+const passwordModes = new Set(['prompt', 'empty', 'secret']);
+if (!passwordModes.has(projectPasswordMode)) fail(`项目密码策略非法:${projectPasswordMode}`);
+let rootpw = '';
+let explicitRootpw = false;
+if (own(req, 'rootpw')) {
+  const rp = req.rootpw;
+  if (rp === '@empty') {
+    rootpw = rp;
+    explicitRootpw = true;
+  } else if (typeof rp === 'string' && /^[A-Za-z0-9@#%^&*_+=.,:!?-]{4,32}$/.test(rp)) {
+    rootpw = rp;
+    explicitRootpw = true;
+  } else if (rp !== '' && rp !== null && rp !== undefined) {
+    fail('初始密码格式非法');
+  }
+}
+// The project policy's empty mode is materialized as @empty, while secret mode
+// remains unresolved until the dedicated workflow password step reads its Secret.
+if (!explicitRootpw && projectPasswordMode === 'empty') rootpw = '@empty';
+
 const TIMEZONES = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'timezones.json'), 'utf8')).zones;
 const NTP = {
   cn: ['ntp.aliyun.com', 'time1.cloud.tencent.com', 'cn.ntp.org.cn', 'cn.pool.ntp.org'],
   global: ['0.openwrt.pool.ntp.org', '1.openwrt.pool.ntp.org', '2.openwrt.pool.ntp.org', '3.openwrt.pool.ntp.org'],
   cloudflare: ['time.cloudflare.com', 'time.google.com', 'time.apple.com', 'pool.ntp.org'],
 };
-const selectedZone = TIMEZONES.find((zone) => zone.zonename === fw.zonename) ||
-  TIMEZONES.find((zone) => zone.zonename === fw.timezone) ||
-  TIMEZONES.find((zone) => zone.timezone === fw.timezone) ||
+const projectTimezone = PROJECT_FIRMWARE.timezone && typeof PROJECT_FIRMWARE.timezone === 'object'
+  ? PROJECT_FIRMWARE.timezone : {};
+const timezoneCandidates = [
+  own(fw, 'zonename') ? fw.zonename : null,
+  own(fw, 'timezone') ? fw.timezone : null,
+  projectTimezone.zonename,
+  projectTimezone.timezone,
+].filter((value) => value !== null && value !== undefined && value !== '');
+const selectedZone = timezoneCandidates.reduce((selected, candidate) => selected ||
+  TIMEZONES.find((zone) => zone.zonename === candidate || zone.timezone === candidate), null) ||
   TIMEZONES.find((zone) => zone.zonename === 'Asia/Shanghai');
+if (!selectedZone) fail('没有可用的时区默认值');
 const zonename = selectedZone.zonename;
 const timezone = selectedZone.timezone;
-const ntpId = Object.hasOwn(NTP, fw.ntp) ? fw.ntp : 'cn';
-const requestedMirrorInput = String(fw.packageMirror || fw.opkg || 'source-default').toLowerCase();
+const projectNtp = PROJECT_FIRMWARE.ntp && typeof PROJECT_FIRMWARE.ntp === 'object'
+  ? PROJECT_FIRMWARE.ntp : {};
+const projectNtpId = Object.hasOwn(NTP, projectNtp.preset) ? projectNtp.preset : 'cn';
+const requestedNtp = own(fw, 'ntp') ? fw.ntp : projectNtpId;
+if (!Object.hasOwn(NTP, requestedNtp)) fail(`未知 NTP 预设:${requestedNtp}`);
+const ntpId = requestedNtp;
+const configuredNtpServers = Array.isArray(projectNtp.servers) && projectNtp.servers.length === 4 &&
+  projectNtp.servers.every((server) => typeof server === 'string' && server.length > 0)
+  ? projectNtp.servers.map(String) : null;
+const ntpServers = configuredNtpServers && ntpId === projectNtpId ? configuredNtpServers : NTP[ntpId];
+const projectMirror = String(PROJECT_FIRMWARE.packageMirror || 'source-default');
+const requestedMirrorInput = String(own(fw, 'packageMirror') ? fw.packageMirror
+  : own(fw, 'opkg') ? fw.opkg : projectMirror).toLowerCase();
 const requestedMirrorId = String(PACKAGE_MIRROR_RULES.aliases?.[requestedMirrorInput] || requestedMirrorInput);
 const mirrorPreset = (PACKAGE_MIRROR_RULES.presets || []).find((preset) => preset.id === requestedMirrorId);
 if (!mirrorPreset) fail(`未知软件包镜像预设:${requestedMirrorInput}`);
@@ -422,8 +515,6 @@ if (mirrorPreset.kind === 'mirror' && !mirrorPreset.roots?.[sourceFamily]) {
   fail(`${source.id} 不接受所选软件包镜像预设:${requestedMirrorInput}`);
 }
 const packageMirrorId = mirrorPreset.id;
-const theme = String(fw.theme || '');
-if (!/^luci-theme-[A-Za-z0-9._+-]{1,48}$/.test(theme)) fail('固件主题格式非法');
 const hasFirmwareSnapshot = Boolean(req.firmware);
 let pageVersion = String(req.pageVersion || '');
 if (!/^v\d{8}(?:\d{2})?$/.test(pageVersion)) pageVersion = 'unknown';
@@ -457,16 +548,19 @@ const out = [
   `request_commit=${requestCommit}`,
   `lanip=${lanip}`,
   `rootpw=${rootpw}`,
+  `password_mode=${projectPasswordMode}`,
   `page_version=${pageVersion}`,
   `zonename=${zonename}`,
   `timezone=${timezone}`,
   `theme=${theme}`,
   `ntp_id=${ntpId}`,
-  `ntp_1=${NTP[ntpId][0]}`,
-  `ntp_2=${NTP[ntpId][1]}`,
-  `ntp_3=${NTP[ntpId][2]}`,
-  `ntp_4=${NTP[ntpId][3]}`,
+  `ntp_1=${ntpServers[0]}`,
+  `ntp_2=${ntpServers[1]}`,
+  `ntp_3=${ntpServers[2]}`,
+  `ntp_4=${ntpServers[3]}`,
   `package_mirror_id=${packageMirrorId}`,
+  `compile_jobs=${PROJECT_COMPILE_JOBS}`,
+  `download_jobs=${PROJECT_DOWNLOAD_JOBS}`,
   `firmware_snapshot=${hasFirmwareSnapshot ? 1 : 0}`,
   `use_defconfig=${useDefconfig ? 1 : 0}`,
   `request_mode=${requestMode}`,

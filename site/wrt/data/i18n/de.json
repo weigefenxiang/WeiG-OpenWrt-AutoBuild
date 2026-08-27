@@ -5,6 +5,7 @@
   "app.title": "OpenWrt-Firmware online konfigurieren",
   "app.subtitle": "Pakete auswählen, in der Cloud bauen, einen Cappuccino genießen und das Open-Source-Zeitalter begrüßen",
   "app.desc": "OpenWrt-Firmware online konfigurieren: Quelle wählen, Pakete anhaken, Cloud-Build mit GitHub Actions, kostenlos abholen",
+  "brand.blog": "Blog",
   "btn.selfTest": "Selbsttest",
   "btn.selfTest.title": "Selbsttest per Klick: Datenquellen und Übermittlungsweg prüfen",
   "btn.repo": "GitHub-Repository",

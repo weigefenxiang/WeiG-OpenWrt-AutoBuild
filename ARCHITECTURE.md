@@ -32,6 +32,8 @@ Catalog is the data layer. AutoBuild is a generic consumer and build orchestrato
 WeiG-OpenWrt-AutoBuild/
 ├─ .github/workflows/          build routing, worker, cancellation, CI and Pages
 ├─ Shell/                      generic upstream/build adapters
+├─ config/project.json         canonical clone/project configuration
+├─ config/project.schema.json  project configuration schema
 ├─ config/policies/            one small package-mirror policy
 ├─ docs/                       bilingual developer documentation
 ├─ site/wrt/
@@ -50,6 +52,20 @@ WeiG-OpenWrt-AutoBuild/
 
 There is intentionally no local device tree, public base config, generated package page, or weekly upstream-data synchronizer.
 
+### 项目配置 / Project configuration
+
+`config/project.json` 是克隆者唯一需要编辑的项目级配置源。运行 `node tools/dev-assistant.mjs prepare` 会校验它，并生成 `site/wrt/data/project.json` 与 `Shell/build-defaults.conf`；生成投影不能反向作为配置源直接编辑。`project.displayName` 和 `project.shortName` 只负责页面标题、短品牌和通知展示，前端在配置加载后通过文本节点呈现；它们不会改变网关身份、`[build]` 请求协议或 Run/Artifact 标题格式。
+
+`catalog.repository`、`catalog.releaseTag` 与 `catalog.selection` 只描述 Catalog 地址与首选项；`catalog.loading` 仅保留现有运行时调度 contract，不作为本期新增可选参数。Source、Branch、Target/Profile、Kconfig、插件、依赖和兼容性事实仍由 Catalog runtime data 负责，不能在项目配置中复制一份清单。`ui`、`firmware`、`build` 与 `admission` 只提供对应的默认值和准入上限。
+
+密码模式 `prompt` 由提交者输入，`empty` 明确使用空密码；`secret` 模式必须配置仓库 Secret `DEFAULT_ROOT_PASSWORD`。实际密码不得写入配置源、任何生成投影、构建请求、Issue 或日志。
+
+网页翻译的权威源是 `tools/i18n-source.json` 与 `tools/i18n-translations.json`；`site/wrt/data/i18n/` 只保存生成包。公开文案保持中性，不把工具、模型或厂商名称写进公共界面。
+
+The clone-specific source of truth is `config/project.json`. `node tools/dev-assistant.mjs prepare` validates it and generates the site and build-script projections. Project names are presentation-only and are rendered as text after the projection loads; they do not alter gateway identity, the `[build]` request protocol, or Run/Artifact title formats. `catalog.loading` preserves the existing runtime scheduling contract and is not a new clone-specific option. Catalog inventory and package facts remain Catalog-owned, and password mode `secret` requires the repository Secret `DEFAULT_ROOT_PASSWORD`; the password itself must never be stored in configuration, projections, requests, Issues, or logs.
+
+The translation authorities are `tools/i18n-source.json` and `tools/i18n-translations.json`; `site/wrt/data/i18n/` contains generated bundles only. Keep public wording neutral and do not add tool, model, or vendor names to the public interface.
+
 ## 3. Catalog channels and loading / Catalog 通道与加载
 
 AutoBuild code channels bind to data branches:
@@ -63,7 +79,7 @@ AutoBuild code channels bind to data branches:
 
 These are **runtime consumption channels**, not Catalog build destinations. Catalog code and production data have independent lifecycles: Catalog `main` builds only `catalog-candidate`; only the Catalog Production Gate may promote that verified snapshot to `catalog-data`. AutoBuild therefore keeps `main → catalog-data` and never reads `catalog-candidate` at runtime. This separation lets Catalog code reach `main` without implicitly changing production users, while `dev` and `staging` continue to consume their matching data branches.
 
-The browser loads the current menu, language shard, and package-mirror projection together with bounded startup concurrency. `site/wrt/data/project.json` then controls a low-priority queue for applications, hidden options, help, and compatibility. Every asset is checked against its index byte length and SHA-256 contract. A matching immutable cache entry is reused; submit and self-check still await the assets they actually validate.
+The browser loads the current menu, language shard, and package-mirror projection together with bounded startup concurrency. The generated `site/wrt/data/project.json` projection then controls a low-priority queue for applications, hidden options, help, and compatibility. Every asset is checked against its index byte length and SHA-256 contract. A matching immutable cache entry is reused; submit and self-check still await the assets they actually validate.
 
 Catalog 自动发现由 Catalog 配置决定。当前策略覆盖：
 

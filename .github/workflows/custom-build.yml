@@ -392,19 +392,50 @@ jobs:
           grep -n '${{ steps.req.outputs.lanip }}' package/base-files/files/bin/config_generate | head -3
 
       - name: Set initial root password / 设置初始密码(uci-defaults,首次开机生效)
-        if: steps.req.outputs.rootpw != ''
+        if: steps.req.outputs.rootpw != '' || steps.req.outputs.password_mode == 'empty' || steps.req.outputs.password_mode == 'secret'
         env:
-          RPW: ${{ steps.req.outputs.rootpw }}
+          REQUEST_ROOT_PASSWORD: ${{ steps.req.outputs.rootpw }}
+          PASSWORD_MODE: ${{ steps.req.outputs.password_mode }}
+          DEFAULT_ROOT_PASSWORD: ${{ secrets.DEFAULT_ROOT_PASSWORD }}
         run: |
+          set -euo pipefail
+          RPW="$REQUEST_ROOT_PASSWORD"
+          if [ -z "$RPW" ]; then
+            case "$PASSWORD_MODE" in
+              empty)
+                RPW='@empty'
+                ;;
+              secret)
+                if [ -z "$DEFAULT_ROOT_PASSWORD" ]; then
+                  echo "::error::DEFAULT_ROOT_PASSWORD is required by the project password policy."
+                  exit 1
+                fi
+                RPW="$DEFAULT_ROOT_PASSWORD"
+                ;;
+              *)
+                echo "::error::Invalid project password mode."
+                exit 1
+                ;;
+            esac
+          fi
+          if [ "$RPW" != '@empty' ]; then
+            echo "::add-mask::$RPW"
+          fi
           mkdir -p openwrt/files/etc/uci-defaults
-          # 字符集已在 parse-request 白名单校验,单引号包裹安全 / charset whitelisted upstream, single-quoting is safe
           if [ "$RPW" = "@empty" ]; then
             printf '#!/bin/sh\npasswd -d root\nexit 0\n' > openwrt/files/etc/uci-defaults/99-init-password
           else
-            printf '#!/bin/sh\nprintf '\''%%s\\n%%s\\n'\'' '\''%s'\'' '\''%s'\'' | passwd root\nexit 0\n' "$RPW" "$RPW" > openwrt/files/etc/uci-defaults/99-init-password
+            ROOT_HASH="$(printf '%s' "$RPW" | openssl passwd -6 -stdin)"
+            case "$ROOT_HASH" in
+              '$6$'*) ;;
+              *) echo "::error::Unable to derive the root password hash."; exit 1 ;;
+            esac
+            echo "::add-mask::$ROOT_HASH"
+            printf '%s\n' '#!/bin/sh' "sed -i 's|^root:[^:]*:|root:${ROOT_HASH}:|' /etc/shadow" 'exit 0' > openwrt/files/etc/uci-defaults/99-init-password
           fi
           chmod +x openwrt/files/etc/uci-defaults/99-init-password
           echo "Initial password script created / 初始密码脚本已创建"
+          unset DEFAULT_ROOT_PASSWORD REQUEST_ROOT_PASSWORD PASSWORD_MODE RPW
 
       - name: Prepare authoritative .config / 准备权威配置
         run: |
@@ -550,7 +581,11 @@ jobs:
       - name: Download packages / 下载依赖包
         run: |
           cd openwrt
-          JOBS=$(( $(nproc) + 1 ))
+          case "${{ steps.req.outputs.download_jobs }}" in
+            auto) JOBS=$(( $(nproc) + 1 )) ;;
+            ''|*[!0-9]*) echo "::error::Invalid project download job policy."; exit 1 ;;
+            *) JOBS="${{ steps.req.outputs.download_jobs }}" ;;
+          esac
           echo "下载并发 / download jobs: $JOBS"
           set +e
           set -o pipefail
@@ -576,7 +611,11 @@ jobs:
         continue-on-error: true
         run: |
           cd openwrt
-          JOBS=$(( $(nproc) + 1 ))
+          case "${{ steps.req.outputs.compile_jobs }}" in
+            auto) JOBS=$(( $(nproc) + 1 )) ;;
+            ''|*[!0-9]*) echo "::error::Invalid project compile job policy."; exit 1 ;;
+            *) JOBS="${{ steps.req.outputs.compile_jobs }}" ;;
+          esac
           echo "编译并发 / compile jobs: $JOBS"
           set +e
           set -o pipefail

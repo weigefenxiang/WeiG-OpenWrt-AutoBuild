@@ -5,6 +5,7 @@
   "app.title": "Personaliza tu firmware OpenWrt en línea",
   "app.subtitle": "Elige los paquetes, compila en la nube, toma un capuchino y da la bienvenida a la era del código abierto",
   "app.desc": "Personalización de firmware OpenWrt en línea: elige el código fuente, marca los plugins, compila con GitHub Actions y descarga gratis",
+  "brand.blog": "Blog",
   "btn.selfTest": "Autodiagnóstico",
   "btn.selfTest.title": "Autodiagnóstico en un clic: revisa las fuentes de datos y la ruta de envío",
   "btn.repo": "Repositorio de GitHub",
