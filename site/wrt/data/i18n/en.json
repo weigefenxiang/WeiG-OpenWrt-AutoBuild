@@ -427,7 +427,7 @@
   "probe.v3.finalState": "Final",
   "probe.v3.depth": "Probe depth",
   "probe.v3.defconfig": "Defconfig",
-  "probe.v3.defconfigHelp": "Run the selected Source's own make defconfig to normalize the submitted state with upstream Kconfig. Enabled by default and optional.",
+  "probe.v3.defconfigHelp": "Run the selected Source's own make defconfig to normalize the submitted state with upstream Kconfig. Disabled by default and runs only when explicitly enabled.",
   "probe.v3.environment": "Test environment scope",
   "probe.v3.source": "Source",
   "probe.v3.branch": "Branch",

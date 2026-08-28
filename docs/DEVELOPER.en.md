@@ -108,6 +108,8 @@ The backend accepts schema-6 `build-request.json`. The request pins Catalog iden
 
 Defconfig defaults off. When enabled, upstream `make defconfig` may run only after `reconstructed.config` is already determined, as optional normalization. Defconfig must not complete a missing baseline, infer user intent, or replace the pinned Catalog identity. The backend validates format, minimal Target/Profile identity, Catalog contract, firmware settings, and path safety; it does not re-decide plugin dependencies.
 
+Whether Defconfig is enabled or not, the workflow verifies only the effective Kconfig values listed in `request-overrides.json` before download and compilation. The gate does not compare the whole `.config`, read `plugins`, or check untouched baseline entries. If an explicit value changes, it stops with `configuration-override-mismatch` and preserves `config-verification.json`.
+
 ## 7. Actions identity, concurrency, retention
 
 - Run: `staging-time/tag#Issue/Target/Source/Branch/Profile`

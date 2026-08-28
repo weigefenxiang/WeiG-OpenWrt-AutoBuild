@@ -1005,6 +1005,38 @@ const buildFailure = {
     scope: { Demo: ['stable'] }, packages: ['core-service'], refs: ['run:3'],
   }],
 };
+const scopedBuildFailure = {
+  schema: 3,
+  rules: [{
+    id: 'BLD-SCOPED', issue: 'build-failure', match: 'all-selected',
+    scope: { Demo: ['stable'] }, sourceCommits: ['a'.repeat(40)],
+    targetScope: { system: ['x86'], subtarget: ['64'], profile: ['DEVICE_generic'] },
+    packages: ['core-service'], refs: ['run:scoped'],
+    failure: { phase: 'package-compile', cause: 'package-caused', code: 'fixture-package-failure',
+      observed: { package: 'core-service', version: '1.0' } },
+  }],
+};
+const scopedValues = new Map(ownershipValues).set('PACKAGE_core-service', 'y');
+const scopedContext = { sourceId: 'Demo', branchName: 'stable', sourceCommit: 'a'.repeat(40),
+  targetSystem: 'x86', targetSubtarget: '64', targetProfile: 'DEVICE_generic' };
+const scopedWarning = evaluateCompatibilityRules(model, scopedBuildFailure, scopedValues, scopedContext).warnings[0];
+assert(scopedWarning?.rule.failure.code === 'fixture-package-failure',
+  'schema-3 compatibility evidence did not survive normalization');
+for (const changed of [
+  { sourceCommit: 'b'.repeat(40) }, { sourceCommit: '' }, { targetSystem: 'armvirt' },
+  { targetSubtarget: 'generic' }, { targetProfile: 'DEVICE_other' },
+]) {
+  assert(evaluateCompatibilityRules(model, scopedBuildFailure, scopedValues,
+    { ...scopedContext, ...changed }).warnings.length === 0,
+  'schema-3 compatibility scope survived a source commit or Target mismatch');
+}
+const branchWideBuildFailure = structuredClone(scopedBuildFailure);
+delete branchWideBuildFailure.rules[0].targetScope;
+assert(evaluateCompatibilityRules(model, branchWideBuildFailure, scopedValues,
+  { ...scopedContext, targetSystem: 'armsr', targetSubtarget: 'armv8', targetProfile: 'DEVICE_generic' }).warnings.length === 1,
+'a target-independent schema-3 rule was incorrectly restricted to the sampled Target');
+expectThrow(() => normalizeCompatibilityDocument({ ...scopedBuildFailure, schema: 2 }), /unsupported field|compatibility/i,
+  'schema-2 compatibility accepted schema-3 fields');
 for (const [value, expected] of [['n', 0], ['m', 1], ['y', 1]]) {
   const values = new Map(ownershipValues).set('PACKAGE_core-service', value);
   assert(evaluateCompatibilityRules(model, buildFailure, values, {
@@ -1125,7 +1157,6 @@ assert(tiedWarning && deriveCompatibilityPlans(model, tiedValues, tiedWarning).r
 for (const mutate of [
   (value) => { value.schema = 1; },
   (value) => { value.schema = 0; },
-  (value) => { value.schema = 3; },
   (value) => { value.rules[0].kind = 'ownership'; },
   (value) => { value.rules[0].symbols = ['PACKAGE_duplicate']; },
   (value) => { delete value.rules[0].paths; },
@@ -1161,7 +1192,8 @@ expectThrow(() => evaluateCompatibilityRules(model, missingPackage, ownershipVal
 
 const acknowledgement = {
   sha256: 'a'.repeat(64), dataRef: 'catalog-fix-F', sourceId: 'Demo', branchName: 'stable',
-  revision: 7, ruleIds: ['OWN-TEST', 'OWN-TIE'],
+  sourceCommit: 'a'.repeat(40), targetKey: 'x86/64/DEVICE_generic', revision: 7,
+  ruleIds: ['OWN-TEST', 'OWN-TIE'],
 };
 for (const dataRef of ['catalog-fix-F', 'catalog-dev', 'catalog-staging', 'catalog-main']) {
   assert(safeCatalogDataRef(dataRef) === dataRef, `Catalog loader rejected canonical dataRef ${dataRef}`);
@@ -1179,7 +1211,8 @@ assert(acknowledgementKey === compatibilityAcknowledgementKey({
 }), 'acknowledgement key depended on rule ordering');
 for (const changed of [
   { sha256: 'b'.repeat(64) }, { dataRef: 'catalog-dev' }, { sourceId: 'Other' },
-  { branchName: 'next' }, { revision: 8 }, { ruleIds: ['OWN-TEST'] },
+  { branchName: 'next' }, { sourceCommit: 'b'.repeat(40) }, { targetKey: 'armsr/armv8/DEVICE_generic' },
+  { revision: 8 }, { ruleIds: ['OWN-TEST'] },
 ]) {
   assert(compatibilityAcknowledgementKey({ ...acknowledgement, ...changed }) !== acknowledgementKey,
     'compatibility acknowledgement survived a bound context change');

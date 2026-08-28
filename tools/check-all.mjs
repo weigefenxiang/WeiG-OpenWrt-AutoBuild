@@ -94,6 +94,7 @@ const regressionTests = [
   'test-menuconfig-scalar.mjs',
   'test-kconfig-serializer.mjs',
   'test-profile-baseline.mjs',
+  'test-effective-config.mjs',
   'test-package-mirror.mjs',
   'test-artifact-publish.mjs',
 ];

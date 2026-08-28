@@ -427,7 +427,7 @@
   "probe.v3.finalState": "最終",
   "probe.v3.depth": "探測深度",
   "probe.v3.defconfig": "Defconfig",
-  "probe.v3.defconfigHelp": "使用目前 Source 自己的 make defconfig 對提交狀態進行上游 Kconfig 規範化；預設開啟，可關閉。",
+  "probe.v3.defconfigHelp": "使用目前 Source 自己的 make defconfig 對提交狀態進行上游 Kconfig 規範化；預設關閉，只有主動開啟時才會執行。",
   "probe.v3.environment": "測試環境範圍",
   "probe.v3.source": "Source",
   "probe.v3.branch": "Branch",

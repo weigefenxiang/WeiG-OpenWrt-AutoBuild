@@ -232,9 +232,19 @@ function openCatalogConflictModal(option, value, violations, openChildren = fals
 
 function compatibilityContext() {
   const catalog = catalogValidationContext(menuValues, 'interactive');
+  const branch = state.version || selectedCatalogBranch() || {};
+  const target = state.device?.target || {};
+  const targetSystem = String(target.system || '');
+  const targetSubtarget = String(target.subtarget || '');
+  const targetProfile = String(target.profileSymbol || target.profile || '');
   return {
     sourceId: state.source?.id || selectedCatalogSource()?.id || '',
-    branchName: state.version?.branch || selectedCatalogBranch()?.branch || '',
+    branchName: branch.branch || '',
+    sourceCommit: String(branch.commit || '').toLowerCase(),
+    targetSystem,
+    targetSubtarget,
+    targetProfile,
+    targetKey: [targetSystem, targetSubtarget, targetProfile].join('/'),
     values: catalog.values,
     validationOptions: catalog.validationOptions,
   };
@@ -295,6 +305,8 @@ function compatibilitySignature(evaluation) {
     dataRef: evaluation.loaded.dataRef || MENU_CATALOG_DATA_REF,
     sourceId: evaluation.context.sourceId,
     branchName: evaluation.context.branchName,
+    sourceCommit: evaluation.context.sourceCommit,
+    targetKey: evaluation.context.targetKey,
     revision: catalogStateRevision,
     ruleIds: evaluation.warnings.map((warning) => warning.rule.id),
   });
@@ -307,6 +319,8 @@ function forcedCompatibilityAudit(evaluation, forced) {
     sha256: evaluation.loaded.hash,
     source: evaluation.context.sourceId,
     branch: evaluation.context.branchName,
+    sourceCommit: evaluation.context.sourceCommit,
+    target: evaluation.context.targetKey,
     forced: ruleIds,
   };
 }
@@ -465,6 +479,7 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       metadata.className = 'compatibility-evidence';
       metadata.textContent = [
         `${t('runtime.7d39a1536cbf')} ${warning.rule.id}`,
+        ...(warning.rule.failure ? [`${warning.rule.failure.cause} · ${warning.rule.failure.code}`] : []),
         `${t('runtime.b95bb82a0431')} ${warning.rule.refs.join(' · ')}`,
       ].join(' · ');
       summaryLine.append(pathLabel, metadata);

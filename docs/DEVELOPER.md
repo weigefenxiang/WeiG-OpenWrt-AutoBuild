@@ -108,6 +108,8 @@ evaluateCompatibilityRules → deriveCompatibilityPlans → applyUserIntent
 
 Defconfig 默认关闭。开启时只能在 `reconstructed.config` 已经确定之后运行上游 `make defconfig` 做可选 normalization；Defconfig 不得补全缺失 baseline、推导用户意图或替代 Catalog 身份。后端只做格式、最小 Target/Profile 身份、Catalog 契约、固件参数和路径安全校验，不重新判断插件依赖。
 
+无论是否开启 Defconfig，下载和编译前都会只核对 `request-overrides.json` 中的有效 Kconfig 值。门禁不比较整份 `.config`、不读取 `plugins`，也不检查未被覆盖的 baseline 项；显式值被改写时以 `configuration-override-mismatch` 停止，并保存 `config-verification.json`。
+
 ## 7. Actions 命名、并发和保留
 
 - Run：`staging-时间/标签#Issue/Target/Source/Branch/Profile`

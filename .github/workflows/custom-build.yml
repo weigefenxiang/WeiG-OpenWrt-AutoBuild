@@ -441,19 +441,31 @@ jobs:
         run: |
           cp reconstructed.config openwrt/.config
           cp reconstructed.config openwrt/pre-defconfig.config
-          if [ "${{ steps.req.outputs.use_defconfig }}" = "1" ]; then
-            cd openwrt
-            echo "Defconfig enabled / 官方补全已启用: make defconfig"
-            set -o pipefail
-            make defconfig 2>&1 | tee "$GITHUB_WORKSPACE/defconfig.log"
-            cp .config "$GITHUB_WORKSPACE/defconfig.config"
-            diff -u pre-defconfig.config "$GITHUB_WORKSPACE/defconfig.config" > "$GITHUB_WORKSPACE/defconfig.diff" || true
-            cd ..
-          else
-            cp reconstructed.config defconfig.config
-            : > defconfig.diff
-            : > defconfig.log
-          fi
+
+      - name: Optional upstream defconfig / 可选上游配置规范化
+        if: steps.req.outputs.use_defconfig == '1'
+        run: |
+          cd openwrt
+          echo "Defconfig enabled / 官方补全已启用: make defconfig"
+          set -o pipefail
+          make defconfig 2>&1 | tee "$GITHUB_WORKSPACE/defconfig.log"
+          cp .config "$GITHUB_WORKSPACE/defconfig.config"
+          diff -u pre-defconfig.config "$GITHUB_WORKSPACE/defconfig.config" > "$GITHUB_WORKSPACE/defconfig.diff" || true
+
+      - name: Record disabled defconfig evidence / 记录未启用官方规范化
+        if: steps.req.outputs.use_defconfig != '1'
+        run: |
+          cp reconstructed.config defconfig.config
+          : > defconfig.diff
+          : > defconfig.log
+
+      - name: Verify explicit configuration overrides / 核验显式配置覆盖
+        run: |
+          node tools/verify-effective-config.mjs \
+            --overrides request-overrides.json \
+            --config openwrt/.config \
+            --out config-verification.json \
+            --stage post-defconfig
 
       - name: Apply package mirror / 应用软件包镜像（APK/OPKG）
         env:
@@ -565,6 +577,7 @@ jobs:
             profile-baseline.config
             reconstructed.config
             request-overrides.json
+            config-verification.json
             pre-defconfig.config
             defconfig.config
             defconfig.diff
@@ -714,7 +727,7 @@ jobs:
           mkdir -p failure-logs
           cp download.log failure-logs/ 2>/dev/null || true
           cp build-metadata.txt failure-logs/ 2>/dev/null || true
-          cp profile-baseline.config reconstructed.config request-overrides.json request-audit.json package-mirror-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig.log build.config failure-logs/ 2>/dev/null || true
+          cp profile-baseline.config reconstructed.config request-overrides.json config-verification.json request-audit.json package-mirror-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig.log build.config failure-logs/ 2>/dev/null || true
           cp openwrt/.config failure-logs/final.config 2>/dev/null || true
 
           PARALLEL_OUTCOME="${{ steps.compile.outcome }}"
@@ -724,6 +737,8 @@ jobs:
           PARALLEL_RESULT="NOT STARTED"
           DIAGNOSTIC_RESULT="NOT RUN"
           FINAL_RESULT="BUILD FAILED"
+          CONFIG_RESULT="$(node -p 'try { JSON.parse(require("fs").readFileSync("failure-logs/config-verification.json", "utf8")).result || "NOT RUN" } catch { "NOT RUN" }')"
+          CONFIG_CODE="$(node -p 'try { JSON.parse(require("fs").readFileSync("failure-logs/config-verification.json", "utf8")).code || "none" } catch { "none" }')"
           if [ "$PARALLEL_OUTCOME" = "success" ]; then
             PARALLEL_RESULT="SUCCEEDED"
             FINAL_RESULT="FAILED AFTER COMPILE"
@@ -766,6 +781,9 @@ jobs:
             echo "本次构建 / this run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             echo ""
             echo "-------- 阶段结果 / STAGE RESULTS --------"
+            echo "Configuration overrides"
+            echo "  result : $CONFIG_RESULT"
+            echo "  code   : $CONFIG_CODE"
             echo "Parallel compile"
             echo "  result : $PARALLEL_RESULT"
             echo "  exit   : ${PARALLEL_EXIT:-n/a}"
