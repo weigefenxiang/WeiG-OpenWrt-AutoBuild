@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// 合并 tools/i18n-source.json(zh-CN 源语言)+ tools/i18n-translations.json(其余语言) / Merges tools/i18n-source.json (zh-CN source) with tools/i18n-translations.json (other languages).
+// 合并 tools/i18n-source.json(英文源语言)+ tools/i18n-translations.json(其余语言) / Merges tools/i18n-source.json (English source) with tools/i18n-translations.json (other languages).
 // 产出 site/wrt/data/i18n/<language>.json(页面用) / Outputs one site/wrt/data/i18n/<language>.json file per language.
-// zh-CN 与 en 缺任何词条直接报错;其他语言缺条只警告,页面运行时回退英文 / Missing zh-CN/en entries are fatal; other languages only warn — the page falls back to English at runtime.
+// en 缺任何词条直接报错;其他语言缺条只警告,页面运行时回退英文 / Missing English entries are fatal; other languages only warn — the page falls back to English at runtime.
 // 用法 / Usage: node tools/gen-i18n.mjs
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -12,10 +12,13 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = JSON.parse(readFileSync(join(ROOT, 'tools', 'i18n-source.json'), 'utf8'));
 const TR = JSON.parse(readFileSync(join(ROOT, 'tools', 'i18n-translations.json'), 'utf8'));
 
+const SOURCE_LANGUAGE = 'en';
+const REQUIRED_TRANSLATIONS = new Set(['zh-CN']);
+
 const LANGS = [
+  { id: 'en', name: 'English', native: 'English' },
   { id: 'zh-CN', name: 'Chinese (Simplified)', native: '简体中文' },
   { id: 'zh-TW', name: 'Chinese (Traditional)', native: '繁體中文' },
-  { id: 'en', name: 'English', native: 'English' },
   { id: 'ru', name: 'Russian', native: 'Русский' },
   { id: 'es', name: 'Spanish', native: 'Español' },
   { id: 'pt', name: 'Portuguese', native: 'Português' },
@@ -33,20 +36,20 @@ const errors = [];
 const PH = /\{(\w+)\}/g;
 
 for (const k of keys) {
-  const zh = SRC.strings[k];
-  strings[k] = { 'zh-CN': zh };
-  const want = (zh.match(PH) || []).sort().join(',');
+  const english = SRC.strings[k];
+  strings[k] = { [SOURCE_LANGUAGE]: english };
+  const want = (english.match(PH) || []).sort().join(',');
   for (const l of LANGS) {
-    if (l.id === 'zh-CN') continue;
+    if (l.id === SOURCE_LANGUAGE) continue;
     const v = TR[l.id] && TR[l.id][k];
     if (v === undefined || v === '') {
-      (l.id === 'en' ? errors : warnings).push(`${l.id} 缺词条: ${k}`);
+      (REQUIRED_TRANSLATIONS.has(l.id) ? errors : warnings).push(`${l.id} 缺词条: ${k}`);
       continue;
     }
     const got = (v.match(PH) || []).sort().join(',');
     if (got !== want) {
-      (l.id === 'en' ? errors : warnings).push(`${l.id} 占位符不符 ${k}: 期望 [${want}] 实得 [${got}]`);
-      if (l.id === 'en') continue;   // 英文是运行时兜底,占位符错了不能收 / en is the runtime fallback, so a placeholder mismatch must not be accepted
+      (REQUIRED_TRANSLATIONS.has(l.id) ? errors : warnings).push(`${l.id} 占位符不符 ${k}: 期望 [${want}] 实得 [${got}]`);
+      if (REQUIRED_TRANSLATIONS.has(l.id)) continue;
     }
     strings[k][l.id] = v;
   }
@@ -61,10 +64,10 @@ if (errors.length) {
 const outputDirectory = join(ROOT, 'site', 'wrt', 'data', 'i18n');
 mkdirSync(outputDirectory, { recursive: true });
 writeFileSync(join(outputDirectory, 'index.json'),
-  JSON.stringify({ version: 2, fallback: 'en', source: 'zh-CN', languages: LANGS }, null, 1) + '\n');
+  JSON.stringify({ version: 2, fallback: SOURCE_LANGUAGE, source: SOURCE_LANGUAGE, languages: LANGS }, null, 1) + '\n');
 for (const language of LANGS) {
   const languageStrings = Object.fromEntries(keys.map((key) => [key,
-    strings[key][language.id] || strings[key].en || strings[key]['zh-CN'],
+    strings[key][language.id] || strings[key][SOURCE_LANGUAGE],
   ]));
   writeFileSync(join(outputDirectory, `${language.id}.json`),
     JSON.stringify({ version: 2, language: language.id, strings: languageStrings }, null, 1) + '\n');

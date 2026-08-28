@@ -3,7 +3,7 @@
     "displayName": "WeiG-OpenWrt-AutoBuild",
     "shortName": "Wei.G",
     "repository": "weigefenxiang/WeiG-OpenWrt-AutoBuild",
-    "blogUrl": "https://www.weigeshare.cc.cd/"
+    "blogUrl": "https://www.weigshare.com/"
   },
   "catalog": {
     "repository": "weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog",
@@ -46,7 +46,7 @@
     }
   },
   "ui": {
-    "defaultLanguage": "auto",
+    "defaultLanguage": "en",
     "colorMode": "auto"
   },
   "firmware": {

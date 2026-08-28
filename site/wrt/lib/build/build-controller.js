@@ -6,7 +6,7 @@
  */
 'use strict';
 
-/* ============ 提交云编译 / Submit a cloud build ============ */
+/* ============ Submit a cloud build ============ */
 function targetRepo() {
   if (state.mode === 'self') {
     const owner = state.owner.replace(/[^A-Za-z0-9-]/g, '');
@@ -50,7 +50,7 @@ function updateSubmitGate() {
 }
 async function mobileIssuePayload(payload) {
   if (!mobileIssueClient()) return '';
-  if (!('CompressionStream' in window)) throw new Error('手机浏览器不支持压缩请求，请改用浏览器上传 JSON');
+  if (!('CompressionStream' in window)) throw new Error('This mobile browser does not support compressed requests; use a browser to upload the JSON file');
   const raw = JSON.stringify(payload);
   const zipped = new Uint8Array(await new Response(
     new Blob([raw]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
@@ -58,7 +58,7 @@ async function mobileIssuePayload(payload) {
   for (let i = 0; i < zipped.length; i += 0x4000) binary += String.fromCharCode(...zipped.subarray(i, i + 0x4000));
   const body = '<!-- WEIG_BUILD_REQUEST_GZIP_BASE64\n' + btoa(binary) + '\n-->';
   if (encodeURIComponent(body).length > MOBILE_ISSUE_URL_LIMIT) {
-    throw new Error('手机请求过大，请用浏览器上传刚下载的 JSON 文件');
+    throw new Error('The mobile request is too large; use a browser to upload the JSON file you just downloaded');
   }
   return body;
 }

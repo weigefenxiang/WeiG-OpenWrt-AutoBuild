@@ -273,7 +273,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issueNumber,
-              body: `@${process.env.REQUESTER}\n\n❌ 构建请求路由校验未通过，Worker 未启动。\n\n日志 / Log: ${url}\n\n请从当前网页重新生成并上传完整 build-request.json 后再提交。`,
+              body: `@${process.env.REQUESTER}\n\n❌ Build request routing validation failed; the Worker was not started.\n\nLog: ${url}\n\nRegenerate the request on the current web page, upload the complete build-request.json, and submit again.\n\n中文说明：构建请求路由校验未通过，Worker 未启动。请从当前网页重新生成并上传完整 build-request.json 后再提交。`,
             });
             await github.rest.issues.update({
               owner: context.repo.owner,

@@ -239,7 +239,7 @@ const catalogOnly =
   engine.includes('compatibility document requires schema 2') && engine.includes('compatibilityPatternMatches') &&
   app.includes('ensureCatalogApplications') && app.includes('CATALOG_ENGINE.evaluateCompatibilityRules') &&
   app.includes('CATALOG_ENGINE.deriveCompatibilityPlans') && app.includes('CATALOG_ENGINE.applyUserIntent') &&
-  parser.includes('Catalog Source 缺少有效构建工具') && parser.includes('schema 6 only accepts a Catalog target') &&
+  parser.includes('Catalog Source is missing a valid build tool') && parser.includes('schema 6 only accepts a Catalog target') &&
   parser.includes('createProfileBaselineStore') && parser.includes('applyProfileOverrides') &&
   parser.includes('loadCatalogKconfigSymbols') && parser.includes('createCatalogModel') &&
   parser.includes('allowedSymbols: catalogKconfigSymbols') &&
@@ -255,7 +255,7 @@ const minimalSchema6Target =
   app.includes('payload.customTarget = schema6TargetIdentity();') &&
   !app.includes('payload.customTarget = state.device.target') &&
   parser.includes("const CUSTOM_TARGET_FIELDS = Object.freeze(['profileSelector', 'profileSymbol', 'subtarget', 'system']);") &&
-  parser.includes('customTarget 只接受最小 Target/Profile 身份字段') &&
+  parser.includes('customTarget accepts only the minimal Target/Profile identity fields') &&
   !parser.includes('targetContract.arch') && !parser.includes('targetContract.archPackages') &&
   !parser.includes('targetContract.profilePackagesAdd') &&
   !parser.includes('catalog_arch=') && !parser.includes('catalog_arch_packages=') &&

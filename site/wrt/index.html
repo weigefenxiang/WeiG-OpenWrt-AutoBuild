@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- SPDX-FileCopyrightText: 2026 weigefenxiang <weigefenxiang@gmail.com> -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -40,8 +40,8 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
 }
 </style>
 <!-- WEIG_THEME_BOOTSTRAP_END -->
-<meta name="description" data-i18n="app.desc" content="OpenWrt 固件在线定制:选源码、勾插件,GitHub Actions 云编译,免费自取">
-<title data-project-display-name>Wei.G · OpenWrt 固件在线定制</title>
+<meta name="description" data-i18n="app.desc" content="Customize OpenWrt firmware online: pick a source tree, tick plugins, build on GitHub Actions, download for free">
+<title data-project-display-name>Wei.G · OpenWrt Firmware Customizer</title>
 <link rel="icon" data-release-href="Wei.G.ico">
 <script>
 (() => {
@@ -88,12 +88,12 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
     return window.__WEIG_RELEASE__;
   });
   window.__WEIG_RELEASE_PROMISE__.catch((error) => {
-    console.error('Release bootstrap failed / 发布身份加载失败', error);
+    console.error('Release bootstrap failed', error);
     const show = () => {
       const banner = document.createElement('div');
       banner.setAttribute('role', 'alert');
       banner.style.cssText = 'margin:16px;padding:12px;border:1px solid #dc2626;border-radius:8px;color:#b91c1c;background:#fef2f2;font:14px/1.6 sans-serif';
-      banner.textContent = '站点版本信息加载失败，请稍后刷新。 / Site release metadata failed to load. Please refresh later.';
+      banner.textContent = 'Site release metadata failed to load. Please refresh later.';
       document.body.prepend(banner);
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show, { once: true });
@@ -108,12 +108,12 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
     <div class="brand">
       <img class="brand-icon" data-release-src="Wei.G-favicon_little.png" alt="Wei.G" data-project-short-name-attribute="alt" width="34" height="34">
       <div>
-        <h1><span class="brand-name" data-project-short-name>Wei.G</span> <span data-i18n="app.title">OpenWrt 固件在线定制</span></h1>
-        <p class="sub" data-i18n="app.subtitle">选好插件,云端自动编译,喝杯卡布奇诺，迎接开“源”盛世</p>
+        <h1><span class="brand-name" data-project-short-name>Wei.G</span> <span data-i18n="app.title">OpenWrt Firmware Customizer</span></h1>
+        <p class="sub" data-i18n="app.subtitle">Pick your packages, let the cloud build, enjoy a cappuccino, and welcome the open-source era</p>
       </div>
     </div>
     <div class="header-actions">
-      <button class="text-btn" id="helpBtn" type="button" data-i18n="help.btn">说明</button>
+      <button class="text-btn" id="helpBtn" type="button" data-i18n="help.btn">Guide</button>
       <a class="icon-btn" id="repoLink" data-project-repository-link target="_blank" rel="noopener" data-i18n-aria="btn.repo" data-i18n-title="btn.repo">
         <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
       </a>
@@ -127,49 +127,49 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
 <div class="side-dock" id="sideDock">
   <button class="icon-btn dock-toggle" id="dockToggle" type="button" aria-label="toggle dock" aria-expanded="true">⚙</button>
   <div class="dock-items">
-    <select id="langSel" class="lang-sel" aria-label="界面语言"></select>
-    <button class="icon-btn dock-selftest" id="selfTestBtn" type="button" data-i18n-title="btn.selfTest.title" data-i18n-aria="btn.selfTest.title">检</button>
+    <select id="langSel" class="lang-sel" aria-label="Language" data-i18n-aria="lang.label"></select>
+    <button class="icon-btn dock-selftest" id="selfTestBtn" type="button" data-i18n="btn.selfTest.short" data-i18n-title="btn.selfTest.title" data-i18n-aria="btn.selfTest.title">Test</button>
     <button class="icon-btn" id="densityBtn" type="button" data-i18n-title="font.label" data-i18n-aria="font.label" aria-haspopup="dialog" aria-expanded="false" aria-controls="fontPanel">Aa</button>
-    <button class="icon-btn" id="themeBtn" type="button" aria-label="主题">◐</button>
+    <button class="icon-btn" id="themeBtn" type="button" aria-label="Theme">◐</button>
   </div>
 </div>
 
-<!-- V11:Aa 字号面板,毛玻璃小卡,点外部关闭 / V11: Aa font-size panel, small glassy card, closes on outside click -->
+<!-- V11: Aa font-size panel, frosted-glass card, closes on outside click -->
 <div class="font-panel" id="fontPanel" hidden role="dialog" aria-labelledby="fontLabel">
-  <span class="font-title" id="fontLabel" data-i18n="font.label">字号</span>
+  <span class="font-title" id="fontLabel" data-i18n="font.label">Font size</span>
   <div class="font-row">
     <button type="button" class="icon-btn font-btn" id="fontDec" aria-label="A−">A−</button>
     <input type="number" id="fontInput" class="font-input" min="14" max="24" step="1" inputmode="numeric" aria-labelledby="fontLabel">
     <span class="font-unit" aria-hidden="true">px</span>
     <button type="button" class="icon-btn font-btn" id="fontInc" aria-label="A+">A+</button>
-    <button type="button" class="text-btn font-reset" id="fontReset" data-i18n="font.reset">重置</button>
+    <button type="button" class="text-btn font-reset" id="fontReset" data-i18n="font.reset">Reset</button>
   </div>
 </div>
 
 <div class="risk-bar" id="riskBar" hidden>
   <div class="wrap risk-row">
     <div class="risk-text" id="riskText">
-      <strong class="risk-line risk-q0" data-i18n="risk.q0">⚠️刷机前三问:</strong>
-      <span class="risk-line risk-q1" data-i18n="risk.q1">① 我的路由器真是这个型号吗?</span>
-      <span class="risk-line risk-q2" data-i18n="risk.q2">② 固件选对了吗?</span>
-      <span class="risk-line risk-q3" data-i18n="risk.q3">③ 变砖我会救吗?</span>
-      <span class="risk-tail" data-i18n="risk.tail">任何一个不确定,请放下手，今晚不用跪键盘。</span>
-      <span class="risk-disclaimer" data-i18n="risk.disclaimer">固件由社区爱好者提供,刷坏自理，风险自负。</span>
+      <strong class="risk-line risk-q0" data-i18n="risk.q0">⚠️Three questions before flashing:</strong>
+      <span class="risk-line risk-q1" data-i18n="risk.q1">① Is this really my router model?</span>
+      <span class="risk-line risk-q2" data-i18n="risk.q2">② Did I choose the correct firmware?</span>
+      <span class="risk-line risk-q3" data-i18n="risk.q3">③ Can I recover it if it bricks?</span>
+      <span class="risk-tail" data-i18n="risk.tail">If you are unsure about any answer, stop now and spare yourself trouble tonight.</span>
+      <span class="risk-disclaimer" data-i18n="risk.disclaimer">Firmware is provided by community enthusiasts. You flash it at your own risk.</span>
     </div>
-    <button type="button" class="btn risk-ok" id="riskOk" data-i18n="risk.ok">知道了</button>
+    <button type="button" class="btn risk-ok" id="riskOk" data-i18n="risk.ok">Got it</button>
   </div>
 </div>
 
 <main class="wrap" id="app">
   <div class="loading" id="loading">
     <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton sk-short"></div>
-    <p data-i18n="loading">正在加载插件数据…</p>
+    <p data-i18n="loading">Loading plugin data…</p>
   </div>
 
   <div id="form" hidden>
     <section class="step device-step" id="deviceStep" data-floating-boundary>
-      <h2><span class="stepnum">①</span> <span data-i18n="step.device">选择构建参数</span> <span class="hint" data-i18n="step.device.hint"></span>
-        <button class="fold-btn" id="deviceFold" type="button" aria-expanded="true" aria-controls="devicePicker" data-i18n="fold.hide">隐藏</button>
+      <h2><span class="stepnum">①</span> <span data-i18n="step.device">Choose build parameters</span> <span class="hint" data-i18n="step.device.hint"></span>
+        <button class="fold-btn" id="deviceFold" type="button" aria-expanded="true" aria-controls="devicePicker" data-i18n="fold.hide">Hide</button>
       </h2>
       <button class="device-summary" id="deviceSummary" type="button" hidden></button>
       <div id="devicePicker">
@@ -314,40 +314,40 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
     </section>
 
     <section class="step" id="sourceStep">
-      <h2><span class="stepnum">①</span> <span data-i18n="step.source">选择源码</span> <span class="hint" data-i18n="step.source.hint"></span></h2>
+      <h2><span class="stepnum">①</span> <span data-i18n="step.source">Choose source</span> <span class="hint" data-i18n="step.source.hint"></span></h2>
       <div class="pill-row" id="sourceRow"></div>
     </section>
 
     <section class="step" id="versionStep">
-      <h2><span class="stepnum">②</span> <span data-i18n="step.version">选择版本</span> <span class="hint" data-i18n="step.version.hint"></span></h2>
+      <h2><span class="stepnum">②</span> <span data-i18n="step.version">Choose version</span> <span class="hint" data-i18n="step.version.hint"></span></h2>
       <div class="pill-row" id="versionRow"></div>
     </section>
 
     <section class="step" id="variantStep">
-      <h2><span class="stepnum">③</span> <span data-i18n="step.variant">分区变体</span></h2>
+      <h2><span class="stepnum">③</span> <span data-i18n="step.variant">Partition variant</span></h2>
       <div class="pill-row" id="variantRow"></div>
     </section>
 
     <section class="step" id="pluginStep">
-      <h2><span class="stepnum">②</span> <span data-i18n="step.plugins">勾选插件</span> <span class="hint" data-i18n="step.plugins.hint"></span></h2>
+      <h2><span class="stepnum">②</span> <span data-i18n="step.plugins">Select plugins</span> <span class="hint" data-i18n="step.plugins.hint"></span></h2>
       <div class="legend">
         <span class="lg-item"><span class="lg-box"></span><span data-i18n="legend.ok"></span></span>
         <span class="lg-item"><span class="lg-box lg-builtin">✓</span><span data-i18n="legend.builtin"></span></span>
         <span class="lg-item"><span class="lg-box lg-off"></span><span data-i18n="legend.off"></span></span>
-        <label class="adv-toggle" id="advLabel"><input type="checkbox" id="advMode"> <span data-i18n="adv.toggle">高级模式</span></label>
-        <!-- 灰色插件门禁紧挨开发者模式,仅开发者模式开启时显示 / Grey-plugin gate sits beside Developer mode and appears only while it is enabled -->
-        <label class="adv-grey-toggle" id="advGreyRow" for="advGrey" data-i18n-title="adv.grey.hint" hidden><input type="checkbox" id="advGrey"> <span data-i18n="adv.grey.toggle">选择灰色插件</span></label>
+        <label class="adv-toggle" id="advLabel"><input type="checkbox" id="advMode"> <span data-i18n="adv.toggle">Developer mode</span></label>
+        <!-- Grey-plugin gate sits beside Developer mode and appears only while it is enabled -->
+        <label class="adv-grey-toggle" id="advGreyRow" for="advGrey" data-i18n-title="adv.grey.hint" hidden><input type="checkbox" id="advGrey"> <span data-i18n="adv.grey.toggle">Select greyed-out plugins</span></label>
         <span class="lg-stats" id="availStats"></span>
       </div>
       <div class="toolbar">
         <input type="search" id="searchBox" data-i18n-ph="search.placeholder" data-i18n-aria="search.aria">
-        <label class="hot-only"><input type="checkbox" id="hotOnly"> <span data-i18n="filter.hotOnly">只看热门</span></label>
+        <label class="hot-only"><input type="checkbox" id="hotOnly"> <span data-i18n="filter.hotOnly">Popular only</span></label>
       </div>
       <div id="groups"></div>
     </section>
 
     <section class="step" data-floating-boundary>
-      <h2><span class="stepnum">③</span> <span data-i18n="step.submit">提交设置</span></h2>
+      <h2><span class="stepnum">③</span> <span data-i18n="step.submit">Submit settings</span></h2>
       <div class="submit-primary-fields">
         <div>
           <label class="field-label" for="lanipBox" data-i18n="lanip.label"></label>
@@ -364,20 +364,20 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
       </div>
       <p class="hint" data-i18n="lanip.hint"></p>
       <p class="hint" id="loginInfo"></p>
-      <p class="hint rootpw-warning"><strong data-i18n="rootpw.public">⚠️ 提交内容公开可见,密码公开！！</strong><span data-i18n="rootpw.hint">临时登录密码,刷机后必须立即修改! (lede 源 填 @empty 清成空密码）</span></p>
+      <p class="hint rootpw-warning"><strong data-i18n="rootpw.public">⚠️ Submitted content is public; the password will be public!</strong><span data-i18n="rootpw.hint">Temporary login password; change it immediately after flashing. (Use @empty with lede to clear the default password.)</span></p>
       <div class="firmware-settings">
-        <label><span data-i18n="fw.timezone">时区</span><span class="timezone-combo" id="timezoneCombo"><input type="search" id="timezoneBox" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="timezoneMenu"
+        <label><span data-i18n="fw.timezone">Timezone</span><span class="timezone-combo" id="timezoneCombo"><input type="search" id="timezoneBox" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="timezoneMenu"
           data-floating-dropdown data-floating-min-width="360" data-floating-max-width="620" data-floating-height="280"
           autocomplete="off" spellcheck="false"><span class="timezone-menu" id="timezoneMenu" role="listbox" hidden></span></span></label>
-        <label><span data-i18n="fw.theme">固件主题</span><select id="fwThemeBox"></select></label>
-        <label><span data-i18n="fw.ntp">NTP 服务器</span><select id="ntpBox"></select></label>
-        <label><span data-i18n="fw.packageMirror">软件包镜像（APK / OPKG）</span><select id="packageMirrorBox"></select></label>
+        <label><span data-i18n="fw.theme">Firmware theme</span><select id="fwThemeBox"></select></label>
+        <label><span data-i18n="fw.ntp">NTP servers</span><select id="ntpBox"></select></label>
+        <label><span data-i18n="fw.packageMirror">Package mirror (APK / OPKG)</span><select id="packageMirrorBox"></select></label>
       </div>
       <div class="mode-row">
-        <span class="mode-label" data-i18n="mode.label">构建仓库:</span>
+        <span class="mode-label" data-i18n="mode.label">Build repo:</span>
         <div class="pill-row" id="modeRow">
-          <button type="button" class="pill pill-active" data-mode="official" data-i18n="mode.official">官方仓库</button>
-          <button type="button" class="pill" data-mode="self" data-i18n="mode.self">我自己的 Fork</button>
+          <button type="button" class="pill pill-active" data-mode="official" data-i18n="mode.official">Official repo</button>
+          <button type="button" class="pill" data-mode="self" data-i18n="mode.self">My own Fork</button>
         </div>
       </div>
       <div class="self-box" id="selfBox" hidden>
@@ -419,23 +419,23 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
     </div>
     <div class="actions">
       <input id="configImport" type="file" accept=".json,.config,.buildinfo,text/plain,application/json" hidden>
-      <button type="button" class="btn" id="importBtn" data-i18n-aria="btn.import"><span class="action-label-full" data-i18n="btn.import">加载配置</span><span class="action-label-short" data-i18n="btn.import.short">加载</span></button>
-      <button type="button" class="btn" id="importLogBtn" data-i18n="import.downloadLog" hidden>下载加载日志</button>
-      <button type="button" class="btn btn-primary" id="submitBtn" data-i18n-aria="btn.submit" disabled aria-disabled="true"><span class="action-label-full" data-i18n="btn.submit">提交云编译</span><span class="action-label-short" data-i18n="btn.submit.short">提交</span></button>
+      <button type="button" class="btn" id="importBtn" data-i18n-aria="btn.import"><span class="action-label-full" data-i18n="btn.import">Load config</span><span class="action-label-short" data-i18n="btn.import.short">Load</span></button>
+      <button type="button" class="btn" id="importLogBtn" data-i18n="import.downloadLog" hidden>Download import log</button>
+      <button type="button" class="btn btn-primary" id="submitBtn" data-i18n-aria="btn.submit" disabled aria-disabled="true"><span class="action-label-full" data-i18n="btn.submit">Start cloud build</span><span class="action-label-short" data-i18n="btn.submit.short">Submit</span></button>
     </div>
   </div>
 </div>
 
 <footer class="site-footer wrap">
-  <p><span data-i18n="footer.thanksLabel">【鸣谢】</span>
+  <p><span data-i18n="footer.thanksLabel">Acknowledgements:</span>
      <a href="https://openwrt.org/" target="_blank" rel="noopener">OpenWrt</a> /
      <a href="https://immortalwrt.org/" target="_blank" rel="noopener">ImmortalWrt</a> /
      <a href="https://github.com/coolsnowwolf/lede" target="_blank" rel="noopener">Lean</a> /
-     <a data-project-catalog-link target="_blank" rel="noopener" data-i18n="footer.pluginAuthors">全部插件作者</a>
+     <a data-project-catalog-link target="_blank" rel="noopener" data-i18n="footer.pluginAuthors">all plugin authors</a>
   </p>
-  <p><span data-i18n="footer.actionsPrefix">固件在</span>
+  <p><span data-i18n="footer.actionsPrefix">Firmware is on the</span>
      <a id="actionsLink" data-project-actions-link target="_blank" rel="noopener">Actions</a>
-     <span data-i18n="footer.note">页按“构建标识”命名,下载底部的 artifact。本站纯静态、开源、无后端、不收集任何信息。</span>
+     <span data-i18n="footer.note">page, named by the build tag. Download the artifact at the bottom. This site is static and open source, has no backend, and collects no information.</span>
   </p>
   <p><a id="footRepo" data-project-repository-link target="_blank" rel="noopener">GitHub</a> ·
      <a class="blog-link" data-project-blog-label data-project-blog-link target="_blank" rel="noopener">Blog</a> ·
@@ -457,7 +457,7 @@ html[data-theme="dark"], html[data-theme="dark"] body { background: #11151c; col
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-<noscript><p class="wrap" style="padding:2rem 0">本页面需要启用 JavaScript 才能使用。/ JavaScript is required.</p></noscript>
+<noscript><p class="wrap" style="padding:2rem 0">JavaScript is required.</p></noscript>
 <script>
 window.__WEIG_RELEASE_PROMISE__.then(async () => {
   const [session, components, pageShell] = await Promise.all([
@@ -471,7 +471,7 @@ window.__WEIG_RELEASE_PROMISE__.then(async () => {
   script.async = false;
   document.body.appendChild(script);
 }).catch((error) => {
-  console.error('Application UI bootstrap failed / 页面 UI 模块加载失败', error);
+  console.error('Application UI bootstrap failed', error);
 });
 </script>
 </body>

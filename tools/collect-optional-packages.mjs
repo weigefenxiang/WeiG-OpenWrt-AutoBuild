@@ -39,7 +39,10 @@ for (const name of modules) {
 const missing = modules.filter((name) => !copied.some((item) => item.package === name));
 writeFileSync(join(out, 'manifest.json'), JSON.stringify({ schema: 1, modules, copied, missing }, null, 2) + '\n');
 writeFileSync(join(out, 'README.txt'),
-  'OPTIONAL PACKAGES / 可选安装包\n\n这些包在 menuconfig 中选择为 M：已编译，但未写入固件。\n' +
-  '安装前请确认包与本次固件的架构、内核和依赖完全一致。\n' +
-  'Packages selected as M were built but not embedded in the firmware. Install only on this matching build.\n');
+  'OPTIONAL PACKAGES\n\n' +
+  'Packages selected as M were built but not embedded in the firmware.\n' +
+  'Verify that the package architecture, kernel, and dependencies exactly match this firmware before installing.\n\n' +
+  '中文翻译 / Chinese translation:\n' +
+  '这些包在 menuconfig 中选择为 M：已编译，但未写入固件。\n' +
+  '安装前请确认包与本次固件的架构、内核和依赖完全一致。\n');
 console.log(`optional packages: ${copied.length} files for ${modules.length} CONFIG_PACKAGE_*=m symbols; missing=${missing.length}`);

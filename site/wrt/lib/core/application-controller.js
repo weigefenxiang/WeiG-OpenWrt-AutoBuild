@@ -20,7 +20,7 @@ function projectCustomization() {
 
 function applyProjectLinks() {
   const links = PROJECT?.links;
-  if (!links || typeof links !== 'object') throw new Error('站点配置缺少公开链接');
+  if (!links || typeof links !== 'object') throw new Error('Site configuration is missing public links');
   const assign = (id, key) => { const link = $(id); if (link) link.href = links[key]; };
   assign('repoLink', 'repository');
   assign('footRepo', 'repository');
@@ -114,7 +114,7 @@ function applyProjectCatalogDefaults() {
   }
 }
 
-/* ============ 初始化 / Init ============ */
+/* ============ Initialization ============ */
 function startCatalogAfterFirstPaint() {
   const start = () => {
     catalogAutoloadReady = true;
@@ -194,7 +194,7 @@ async function init() {
     initDefconfig();
     applyI18n();
     $('advMode').checked = state.advanced;
-    resetAdvGrey();   // V10:门禁行随记忆的开发者模式显隐,但永远从未勾开始 / V10: gate row follows the remembered developer mode, but always starts unticked
+    resetAdvGrey();   // V10: gate row follows the remembered developer mode, but always starts unticked
     $('loading').hidden = true;
     $('form').hidden = false;
     $('actionbar').hidden = false;
@@ -205,7 +205,7 @@ async function init() {
     state.siteConfigReady = false;
     state.buildMeta = null;
     updateSubmitGate?.();
-    $('loading').textContent = (I18N ? t('loading.fail', { msg: err.message }) : '加载失败: ' + err.message);
+    $('loading').textContent = (I18N ? t('loading.fail', { msg: err.message }) : 'Loading failed: ' + err.message);
   }
 }
 

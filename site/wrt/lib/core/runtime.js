@@ -44,7 +44,7 @@ let OFFICIAL_REPO = 'weigefenxiang/WeiG-OpenWrt-AutoBuild';
 let REPO_NAME = OFFICIAL_REPO.split('/')[1];
 let PROJECT = null;
 const FALLBACK = 'en';               // 译文缺失时的兜底语言 / Fallback language when a translation is missing
-const SOURCE_LANG = 'zh-CN';         // 源语言,词条必须完整 / Source language; its entries must be complete
+const SOURCE_LANG = 'en';            // 权威源语言,词条必须完整 / Canonical source language; its entries must be complete
 const GROUP_ICONS = {
   '系统基础': '🧱', '魔法与加速': '🚀', '广告过滤与DNS': '🛡️', '内网穿透与组网': '🌐',
   '存储与下载': '💾', '多媒体与外设': '🎵', '网络管理': '⚙️',

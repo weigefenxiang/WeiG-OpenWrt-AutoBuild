@@ -81,7 +81,7 @@ jobs:
             const reject = async (message) => {
               await github.rest.issues.createComment({
                 owner, repo, issue_number: issueNumber,
-                body: `@${requester}\n\n❌ ${message}\n\n构建已阻止 / Build blocked.`,
+                body: `@${requester}\n\n❌ ${message}\n\nBuild blocked.\n\n中文说明：构建已阻止。`,
               });
               await github.rest.issues.update({
                 owner, repo, issue_number: issueNumber, state: 'closed', state_reason: 'not_planned',
@@ -90,11 +90,11 @@ jobs:
             };
 
             if (!Number.isSafeInteger(issueNumber) || issueNumber <= 0 || !/^[A-Za-z0-9-]{1,39}$/.test(requester)) {
-              await reject('派发身份字段非法 / Invalid dispatch identity fields.');
+              await reject('Invalid dispatch identity fields. / 派发身份字段非法。');
               return;
             }
             if (workflowBranch !== requestBranch || workflowCommit !== requestCommit) {
-              await reject(`Worker 身份不匹配：request=${requestBranch}@${requestCommit.slice(0, 12)}, workflow=${workflowBranch}@${workflowCommit.slice(0, 12)} / Worker ref does not match the exact request.`);
+              await reject(`Worker ref does not match the exact request: request=${requestBranch}@${requestCommit.slice(0, 12)}, workflow=${workflowBranch}@${workflowCommit.slice(0, 12)}. / Worker 身份不匹配。`);
               return;
             }
             const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
@@ -105,7 +105,7 @@ jobs:
             if (issue.user.login.toLowerCase() !== requester.toLowerCase() ||
                 issue.created_at !== process.env.ISSUE_CREATED_AT || issue.title !== process.env.ISSUE_TITLE ||
                 String(issue.body || '') !== String(process.env.ISSUE_BODY || '')) {
-              await reject('原始 Issue 快照已变化 / Original Issue no longer matches the dispatch snapshot.');
+              await reject('Original Issue no longer matches the dispatch snapshot. / 原始 Issue 快照已变化。');
               return;
             }
             core.setOutput('valid', 'true');
@@ -284,7 +284,7 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: Number(process.env.ISSUE_NUMBER),
-              body: `@${process.env.REQUESTER}\n\n❌ 请求校验未通过,构建未开始。日志:${url}\n\n请核对附件格式与机型字段后重新提交。`,
+              body: `@${process.env.REQUESTER}\n\n❌ Request validation failed; the build was not started.\n\nLog: ${url}\n\nCheck the attachment format and target fields, then submit again.\n\n中文说明：请求校验未通过，构建未开始。请核对附件格式与机型字段后重新提交。`,
             });
             await github.rest.issues.update({
               owner: context.repo.owner, repo: context.repo.repo,
@@ -558,7 +558,7 @@ jobs:
             echo "package_mirror_fallback=$PACKAGE_MIRROR_FALLBACK"
           } | tee "$GITHUB_WORKSPACE/build-metadata.txt"
           {
-            echo "#### 软件包镜像 / Package mirror"
+            echo "#### Package mirror / 软件包镜像"
             echo ""
             echo "- requested / 请求: `${{ steps.req.outputs.package_mirror_id }}`"
             echo "- effective / 生效: `$PACKAGE_MIRROR_EFFECTIVE`"
@@ -599,24 +599,24 @@ jobs:
             ''|*[!0-9]*) echo "::error::Invalid project download job policy."; exit 1 ;;
             *) JOBS="${{ steps.req.outputs.download_jobs }}" ;;
           esac
-          echo "下载并发 / download jobs: $JOBS"
+          echo "Download jobs / 下载并发: $JOBS"
           set +e
           set -o pipefail
           stdbuf -oL -eL make download -j"$JOBS" 2>&1 |
             tee "$GITHUB_WORKSPACE/download.log"
           DOWNLOAD_RC=${PIPESTATUS[0]}
           set -e
-          echo "下载退出码 / download exit code: $DOWNLOAD_RC"
+          echo "Download exit code / 下载退出码: $DOWNLOAD_RC"
           {
-            echo "### 📥 下载阶段 / Download stage"
+            echo "### 📥 Download stage / 下载阶段"
             echo ""
             echo "- jobs: \`$JOBS\`"
             echo "- exit code: \`$DOWNLOAD_RC\`"
-            echo "- Actions 实时显示原始输出,并保存到 \`download.log\`。"
+            echo "- Actions displays the live command output and saves it to \`download.log\`. / Actions 实时显示原始输出，并保存到 \`download.log\`。"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$DOWNLOAD_RC" -ne 0 ]; then
-            echo "::warning::依赖下载存在失败;将继续编译。完整信息已写入 download.log。"
+            echo "::warning::Some dependencies failed to download; compilation will continue. Full details are in download.log. / 部分依赖下载失败，将继续编译；完整信息已写入 download.log。"
           fi
 
       - name: Compile / 编译(原始实时日志)
@@ -629,7 +629,7 @@ jobs:
             ''|*[!0-9]*) echo "::error::Invalid project compile job policy."; exit 1 ;;
             *) JOBS="${{ steps.req.outputs.compile_jobs }}" ;;
           esac
-          echo "编译并发 / compile jobs: $JOBS"
+          echo "Compile jobs / 编译并发: $JOBS"
           set +e
           set -o pipefail
           stdbuf -oL -eL make -j"$JOBS" BUILD_LOG=1 2>&1 |
@@ -638,16 +638,16 @@ jobs:
           echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
           set -e
           {
-            echo "### 🛠️ 编译 / Compile"
+            echo "### 🛠️ Compile / 编译"
             echo ""
             echo "- jobs: \`$JOBS\`"
             echo "- command: \`make -j$JOBS BUILD_LOG=1\`"
             echo "- exit code: \`$RC\`"
-            echo "- Actions 实时显示原始输出,并保存到 \`build.log\`。"
+            echo "- Actions displays the live command output and saves it to \`build.log\`. / Actions 实时显示原始输出，并保存到 \`build.log\`。"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$RC" -ne 0 ]; then
-            echo "::error::并行编译失败;先冻结原始现场，再进入单线程诊断。"
+            echo "::error::Parallel compilation failed; the original workspace will be captured before single-thread diagnosis. / 并行编译失败，将先冻结原始现场，再进入单线程诊断。"
           fi
           exit "$RC"
 
@@ -665,7 +665,7 @@ jobs:
         timeout-minutes: 185
         run: |
           cd openwrt
-          echo "单线程重试 / single-thread retry: make -j1 V=s BUILD_LOG=1 (180 minute limit)"
+          echo "Single-thread retry / 单线程重试: make -j1 V=s BUILD_LOG=1 (180-minute limit)"
           set +e
           set -o pipefail
           timeout 180m stdbuf -oL -eL make -j1 V=s BUILD_LOG=1 2>&1 |
@@ -674,7 +674,7 @@ jobs:
           echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
           set -e
           {
-            echo "### 🔎 单线程重试 / Single-thread retry"
+            echo "### 🔎 Single-thread retry / 单线程重试"
             echo ""
             echo "- command: \`make -j1 V=s BUILD_LOG=1\`"
             echo "- limit: \`180 minutes\`"
@@ -684,9 +684,9 @@ jobs:
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$RC" -eq 124 ]; then
-            echo "::warning::单线程重试超过 180 分钟，已停止；请查看 diagnostic/。"
+            echo "::warning::The single-thread retry exceeded 180 minutes and was stopped; see diagnostic/. / 单线程重试超过 180 分钟，已停止；请查看 diagnostic/。"
           elif [ "$RC" -ne 0 ]; then
-            echo "::error::单线程重试仍失败；请查看 diagnostic/。"
+            echo "::error::The single-thread retry also failed; see diagnostic/. / 单线程重试仍失败；请查看 diagnostic/。"
           fi
           exit "$RC"
 
@@ -708,7 +708,7 @@ jobs:
             exit 0
           fi
           if [ "${{ steps.diagnose.outcome }}" = "success" ]; then
-            echo "::warning::并行编译失败，但单线程重试成功；构建继续。"
+            echo "::warning::Parallel compilation failed, but the single-thread retry succeeded; the build will continue. / 并行编译失败，但单线程重试成功；构建继续。"
             {
               echo "### ✅ 单线程恢复 / Recovered by single-thread retry"
               echo ""
@@ -718,7 +718,7 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          echo "::error::并行与单线程编译均失败；请下载 BUILD-LOGS。"
+          echo "::error::Both parallel compilation and the single-thread retry failed; download BUILD-LOGS. / 并行与单线程编译均失败；请下载 BUILD-LOGS。"
           exit 1
 
       - name: Collect failure logs / 收集失败日志
@@ -766,21 +766,21 @@ jobs:
           fi
 
           {
-            echo "===================== 构建诊断 / BUILD DIAGNOSTICS ====================="
-            echo "测试版本/test version: $(tr -d '\r\n' < VERSION)"
-            echo "机型/device : ${{ steps.req.outputs.device }}"
-            echo "源码/source : ${{ steps.req.outputs.source }} @ ${{ steps.req.outputs.branch }}"
-            echo "版本/version: ${{ steps.req.outputs.version }}   变体/variant: ${{ steps.req.outputs.variant }}"
-            echo "请求分支/request branch: ${{ steps.req.outputs.source_env || 'main' }}"
-            echo "请求提交/request commit: ${{ steps.req.outputs.request_commit || 'unknown' }}"
-            echo "Workflow 分支/workflow branch: ${GITHUB_REF_NAME:-unknown}"
-            echo "Workflow 提交/workflow commit: ${GITHUB_SHA}"
-            echo "网页版本/page version: ${{ steps.req.outputs.page_version }}"
-            echo "插件/plugins: ${{ steps.req.outputs.plugins }}"
-            echo "标识/tag    : ${{ steps.req.outputs.tag }}   run: ${{ github.run_id }}"
-            echo "本次构建 / this run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "===================== BUILD DIAGNOSTICS / 构建诊断 ====================="
+            echo "Test version / 测试版本: $(tr -d '\r\n' < VERSION)"
+            echo "Device / 机型: ${{ steps.req.outputs.device }}"
+            echo "Source / 源码: ${{ steps.req.outputs.source }} @ ${{ steps.req.outputs.branch }}"
+            echo "Version / 版本: ${{ steps.req.outputs.version }}   Variant / 变体: ${{ steps.req.outputs.variant }}"
+            echo "Request branch / 请求分支: ${{ steps.req.outputs.source_env || 'main' }}"
+            echo "Request commit / 请求提交: ${{ steps.req.outputs.request_commit || 'unknown' }}"
+            echo "Workflow branch / Workflow 分支: ${GITHUB_REF_NAME:-unknown}"
+            echo "Workflow commit / Workflow 提交: ${GITHUB_SHA}"
+            echo "Page version / 网页版本: ${{ steps.req.outputs.page_version }}"
+            echo "Packages / 插件: ${{ steps.req.outputs.plugins }}"
+            echo "Tag / 标识: ${{ steps.req.outputs.tag }}   Run / 构建: ${{ github.run_id }}"
+            echo "This build / 本次构建: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             echo ""
-            echo "-------- 阶段结果 / STAGE RESULTS --------"
+            echo "-------- STAGE RESULTS / 阶段结果 --------"
             echo "Configuration overrides"
             echo "  result : $CONFIG_RESULT"
             echo "  code   : $CONFIG_CODE"
@@ -798,19 +798,19 @@ jobs:
             echo "  $FINAL_RESULT"
             if [ "$ROOTFS_TOO_SMALL" = "true" ]; then
               echo ""
-              echo "-------- RootFS 容量 / ROOTFS CAPACITY --------"
+              echo "-------- ROOTFS CAPACITY / RootFS 容量 --------"
               echo "RootFS image is too small."
-              echo "项目：Root filesystem partition size (in MiB)"
+              echo "Project / 项目: Root filesystem partition size (in MiB)"
               if [ -n "$ROOTFS_PARTSIZE" ]; then
-                echo "当前值：$ROOTFS_PARTSIZE MiB"
+                echo "Current value / 当前值: $ROOTFS_PARTSIZE MiB"
               else
-                echo "当前值：unknown"
+                echo "Current value / 当前值: unknown"
               fi
-              echo "路径：Target Images → TARGET_ROOTFS_PARTSIZE"
+              echo "Path / 路径: Target Images → TARGET_ROOTFS_PARTSIZE"
               echo "Please increase TARGET_ROOTFS_PARTSIZE and rebuild."
             fi
             echo ""
-            echo "-------- 已收集日志 / COLLECTED LOGS --------"
+            echo "-------- COLLECTED LOGS / 已收集日志 --------"
             for stage in parallel diagnostic; do
               if [ -d "failure-logs/$stage" ]; then
                 echo "[$stage/]"
@@ -820,40 +820,40 @@ jobs:
               fi
             done
             echo ""
-            echo "-------- 定位关键字 / SEARCH KEYWORDS --------"
+            echo "-------- SEARCH KEYWORDS / 定位关键字 --------"
             for stage in parallel diagnostic; do
               [ -s "failure-logs/$stage/errors.txt" ] || continue
               echo "[$stage/errors.txt]"
               tail -n 40 "failure-logs/$stage/errors.txt"
             done
             echo ""
-            echo "-------- 最后出错的目标 / LAST FAILING TARGETS --------"
+            echo "-------- LAST FAILING TARGETS / 最后出错的目标 --------"
             for stage in parallel diagnostic; do
               [ -s "failure-logs/$stage/last-targets.txt" ] || continue
               echo "[$stage/last-targets.txt]"
               tail -n 20 "failure-logs/$stage/last-targets.txt"
             done
             echo ""
-            echo "完整日志见 parallel/ 与 diagnostic/；两阶段证据互不覆盖。"
+            echo "Full logs are in parallel/ and diagnostic/; evidence from the two stages is kept separate. / 完整日志见 parallel/ 与 diagnostic/；两阶段证据互不覆盖。"
           } > failure-logs/00-SUMMARY.txt
           cat failure-logs/00-SUMMARY.txt >> "$GITHUB_STEP_SUMMARY" || true
 
           {
             echo ''
-            echo '## 📥 完整日志取件 / How to get full logs'
+            echo '## 📥 How to get full logs / 完整日志取件'
             echo ''
-            echo '| 步骤 / Step | 操作 / Action |'
+            echo '| Step / 步骤 | Action / 操作 |'
             echo '| --- | --- |'
-            echo '| 1 | 打开本次构建页面 / Open this run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} |'
-            echo '| 2 | 拉到页面最底部 **Artifacts** 区 / Scroll to the **Artifacts** section at the very bottom |'
-            echo '| 3 | 下载 `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS` 并解压 / Download and unzip `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS` |'
-            echo '| 4 | 先看 `00-SUMMARY.txt`；并行现场看 `parallel/`，单线程诊断看 `diagnostic/` / Read `00-SUMMARY.txt` first; use `parallel/` for the original parallel failure and `diagnostic/` for the single-thread retry |'
-            echo '| 5 | 每阶段依次看 `errors.txt` → `last-targets.txt` → `tail.txt` → `build.log` → `package-logs.tar.gz`（如有） / Per stage, read `errors.txt` → `last-targets.txt` → `tail.txt` → `build.log` → `package-logs.tar.gz` (if present) |'
+            echo '| 1 | Open this run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} / 打开本次构建页面 |'
+            echo '| 2 | Scroll to the **Artifacts** section at the very bottom / 拉到页面最底部 **Artifacts** 区 |'
+            echo '| 3 | Download and unzip `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS` / 下载并解压 `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS` |'
+            echo '| 4 | Read `00-SUMMARY.txt` first; use `parallel/` for the original parallel failure and `diagnostic/` for the single-thread retry / 先看 `00-SUMMARY.txt`；并行现场看 `parallel/`，单线程诊断看 `diagnostic/` |'
+            echo '| 5 | Per stage, read `errors.txt` → `last-targets.txt` → `tail.txt` → `build.log` → `package-logs.tar.gz` (if present) / 每阶段依次查看这些文件（如有） |'
             echo ''
-            echo '> ⏳ 构建 Artifact 统一保留 60 天,过期需重新提交构建 / Build artifacts are kept for 60 days.'
+            echo '> ⏳ Build artifacts are kept for 60 days; submit a new build after expiry. / 构建 Artifact 统一保留 60 天，过期需重新提交构建。'
           } >> "$GITHUB_STEP_SUMMARY" || true
           ls -lh failure-logs
-          echo "📤 artifact:${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS —— parallel/ 保存原始并行现场，diagnostic/ 保存单线程诊断现场。"
+          echo "📤 artifact:${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS — parallel/ contains the original parallel workspace; diagnostic/ contains the single-thread diagnosis. / parallel/ 保存原始并行现场，diagnostic/ 保存单线程诊断现场。"
 
       - name: Collect menuconfig M packages / 收集 menuconfig 的 M 软件包
         if: success()
@@ -882,8 +882,13 @@ jobs:
             cp build.log "$LOGS/" 2>/dev/null || true
           fi
           printf '%s\n' \
-            '完整构建日志 / BUILD LOGS' \
-            '若存在 00-SUMMARY.txt，先看它；parallel/ 是原始并行失败现场，diagnostic/ 是单线程诊断现场。' \
+            'BUILD LOGS' \
+            'Read 00-SUMMARY.txt first if present; parallel/ contains the original parallel failure and diagnostic/ contains the single-thread diagnosis.' \
+            'A successful build without diagnosis keeps only the regular build.log / download.log.' \
+            'Build artifacts are retained for 60 days.' \
+            '' \
+            '中文翻译 / Chinese translation:' \
+            '若存在 00-SUMMARY.txt，请先阅读；parallel/ 是原始并行失败现场，diagnostic/ 是单线程诊断现场。' \
             '成功且未进入诊断时仅保留常规 build.log / download.log。' \
             '构建 Artifact 统一保留 60 天。' > "$LOGS/00-请先读我-README.txt"
 
@@ -904,32 +909,34 @@ jobs:
             cp firmware-settings.txt "$FIRMWARE/${{ steps.req.outputs.artifact_ref }}-00-BUILD-SETTINGS.txt"
           fi
           printf '%s\n' \
-            '其他固件与构建资料 / OTHER FIRMWARE AND BUILD FILES' \
-            '配置为独立发布的固件文件不会放在本目录；其余文件保留在这里。' \
+            'OTHER FIRMWARE AND BUILD FILES' \
             'Firmware files selected by the standalone suffix policy are published separately; all remaining files stay here.' \
-            '首次刷机与升级包取决于具体机型和闪存布局，请先核对上游说明。' \
-            'Always verify the exact model and partition layout before flashing.' > "$FIRMWARE/00-请先读我-README.txt"
+            'Always verify the exact model and partition layout before flashing.' \
+            '' \
+            '中文翻译 / Chinese translation:' \
+            '配置为独立发布的固件文件不会放在本目录；其余文件保留在这里。' \
+            '首次刷机与升级包取决于具体机型和闪存布局，请先核对上游说明。' > "$FIRMWARE/00-请先读我-README.txt"
 
           {
             echo ''
-            echo '## 📦 固件下载与安装选择 / Firmware download guide'
+            echo '## 📦 Firmware download guide / 固件下载与安装选择'
             echo ''
             echo '> [!IMPORTANT]'
-            echo "> 独立发布后缀 / standalone suffixes: \`$STANDALONE_SUFFIXES\`。命中的 $STANDALONE_COUNT 个文件逐个成为 Artifact；新增后缀只需修改自动化策略。"
-            echo "> Files matching the configured suffix policy are uploaded one by one without changing this Workflow."
+            echo "> Standalone suffixes / 独立发布后缀: \`$STANDALONE_SUFFIXES\`. The $STANDALONE_COUNT matching files become separate Artifacts; add a suffix by changing the automation policy."
+            echo "> Files matching the configured suffix policy are uploaded one by one without changing this Workflow. / 命中配置后缀策略的文件会逐个上传，无需修改此 Workflow。"
             echo ''
-            echo '| Artifact | 内容 / Contents |'
+            echo '| Artifact | Contents / 内容 |'
             echo '| --- | --- |'
-            echo '| 📦 `${{ steps.req.outputs.artifact_ref }}-<standalone file>` | 命中独立发布后缀的固件；一个文件对应一个 Artifact |'
-            echo '| 📁 `${{ steps.req.outputs.artifact_ref }}-FIRMWARE-OTHER` | 其余固件文件、manifest、buildinfo 与通用校验和 |'
-            echo '| ⚙️ `${{ steps.req.outputs.artifact_ref }}-CONFIG` | 用户提交配置、实际开编配置和构建元数据 |'
-            echo '| 🧾 `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS` | 完整下载/编译日志；保留 60 天 |'
-            echo '| 🧩 `${{ steps.req.outputs.artifact_ref }}-OPTIONAL-PACKAGES` | menuconfig 选为 M：已编译但未写入固件的软件包 |'
+            echo '| 📦 `${{ steps.req.outputs.artifact_ref }}-<standalone file>` | Firmware matching a standalone suffix; one file becomes one Artifact. / 命中独立发布后缀的固件；一个文件对应一个 Artifact。 |'
+            echo '| 📁 `${{ steps.req.outputs.artifact_ref }}-FIRMWARE-OTHER` | Remaining firmware files, manifest, buildinfo, and common checksums. / 其余固件文件、manifest、buildinfo 与通用校验和。 |'
+            echo '| ⚙️ `${{ steps.req.outputs.artifact_ref }}-CONFIG` | Submitted configuration, effective build configuration, and build metadata. / 用户提交配置、实际开编配置和构建元数据。 |'
+            echo '| 🧾 `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS` | Complete download/compile logs; retained for 60 days. / 完整下载/编译日志；保留 60 天。 |'
+            echo '| 🧩 `${{ steps.req.outputs.artifact_ref }}-OPTIONAL-PACKAGES` | Packages selected as M in menuconfig: built but not embedded in the firmware. / menuconfig 选为 M：已编译但未写入固件的软件包。 |'
             echo ''
             echo '> [!WARNING]'
-            echo '> `sysupgrade` 不是通用更新包。不确定机型、当前固件或布局时不要刷。 / `sysupgrade` is not a universal updater.'
+            echo '> `sysupgrade` is not a universal updater. Do not flash when the model, current firmware, or partition layout is uncertain. / `sysupgrade` 不是通用更新包。不确定机型、当前固件或布局时不要刷。'
             echo ''
-            echo '- 固件、配置、构建信息与完整日志统一保留 **60 天**。'
+            echo '- Firmware, configuration, build metadata, and complete logs are retained for **60 days**. / 固件、配置、构建信息与完整日志统一保留 **60 天**。'
             echo ''
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -1050,8 +1057,8 @@ jobs:
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const ref = process.env.ARTIFACT_REF;
             const body = ok
-              ? `@${process.env.REQUESTER}\n\n✅ 构建和固件发布全部完成。\n\n下载 / Download: ${url}\n\n- 命中自动化策略独立发布后缀的固件会逐文件成为 \`${ref}-<standalone file>\` Artifact。\n- \`${ref}-CONFIG\`、\`${ref}-BUILD-LOGS\`、\`${ref}-OPTIONAL-PACKAGES\`、\`${ref}-FIRMWARE-OTHER\` 为分类资料（没有对应内容时可能不生成）。\n\n首次刷机通常选 \`factory\`；\`sysupgrade\` 只用于当前固件与闪存布局兼容的升级。`
-              : `@${process.env.REQUESTER}\n\n❌ 构建或独立固件发布失败。\n\nBuild: ${process.env.BUILD_RESULT}; standalone publish: ${process.env.PUBLISH_RESULT}\n\n请打开本次 Actions 查看 \`${ref}-CONFIG\` 与 \`${ref}-BUILD-LOGS\`：${url}`;
+              ? `@${process.env.REQUESTER}\n\n✅ Build and standalone firmware publication completed.\n\nDownload: ${url}\n\n- Firmware matching the configured standalone suffix policy is uploaded as one Artifact per file: \`${ref}-<standalone file>\`.\n- \`${ref}-CONFIG\`, \`${ref}-BUILD-LOGS\`, \`${ref}-OPTIONAL-PACKAGES\`, and \`${ref}-FIRMWARE-OTHER\` contain categorized supporting files; an Artifact may be absent when it has no content.\n\nFor the first flash, use \`factory\` in most cases. Use \`sysupgrade\` only when the current firmware and partition layout are compatible.\n\n中文说明：构建和固件发布全部完成。首次刷机通常选 \`factory\`；\`sysupgrade\` 只用于当前固件与闪存布局兼容的升级。`
+              : `@${process.env.REQUESTER}\n\n❌ Build or standalone firmware publication failed.\n\nBuild: ${process.env.BUILD_RESULT}; standalone publication: ${process.env.PUBLISH_RESULT}\n\nOpen this Actions Run and inspect \`${ref}-CONFIG\` and \`${ref}-BUILD-LOGS\`: ${url}\n\n中文说明：构建或独立固件发布失败，请打开本次 Actions 查看配置和完整日志。`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,

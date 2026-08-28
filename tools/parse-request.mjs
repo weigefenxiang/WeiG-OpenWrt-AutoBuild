@@ -38,7 +38,7 @@ const PACKAGE_MIRROR_RULES = JSON.parse(
 const SHA256_RE = /^[a-f0-9]{64}$/;
 const GIT_COMMIT_RE = /^[a-f0-9]{40}$/;
 
-function fail(msg) { console.error('校验失败: ' + msg); process.exit(1); }
+function fail(msg) { console.error('Validation failed: ' + msg); process.exit(1); }
 function normalizeAudit(raw) {
   try { return normalizeRequestAudit(raw); }
   catch (error) { fail(error.message); }
@@ -67,10 +67,10 @@ const PROJECT_DOWNLOAD_JOBS = projectJobCount(PROJECT_BUILD_JOBS.download);
 async function fetchCatalogResource(revision, path, { binary = false } = {}) {
   const repo = PROJECT_CATALOG_REPOSITORY;
   const ref = String(revision || '').trim().toLowerCase();
-  if (!GIT_COMMIT_RE.test(ref)) throw new Error(`Catalog revision 非法:${ref}`);
+  if (!GIT_COMMIT_RE.test(ref)) throw new Error(`Catalog revision is invalid: ${ref}`);
   const safePath = String(path || '').replace(/^\/+/, '');
   if (!safePath || safePath.includes('..') || !/^[A-Za-z0-9._/-]+$/.test(safePath)) {
-    throw new Error(`Catalog asset 路径非法:${path}`);
+    throw new Error(`Catalog asset path is invalid: ${path}`);
   }
   const urls = [
     `https://raw.githubusercontent.com/${repo}/${ref}/${safePath}`,
@@ -86,7 +86,7 @@ async function fetchCatalogResource(revision, path, { binary = false } = {}) {
       errors.push(`${url}: ${error.message}`);
     }
   }
-  throw new Error(`无法读取固定 Catalog 资源 ${safePath}: ${errors.join(' | ')}`);
+  throw new Error(`Unable to read pinned Catalog asset ${safePath}: ${errors.join(' | ')}`);
 }
 
 async function loadCatalogIndex(revision) {
@@ -114,7 +114,7 @@ function legacyCatalogContract(branch) {
 }
 
 function normalizeCatalogContract(raw) {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail('schema 6 请求缺少 catalog 版本契约');
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail('The schema 6 request is missing its Catalog version contract');
   const contract = {
     repository: String(raw.repository || ''),
     revision: String(raw.revision || '').toLowerCase(),
@@ -127,17 +127,17 @@ function normalizeCatalogContract(raw) {
     sourceCommit: String(raw.sourceCommit || '').toLowerCase(),
   };
   const expectedRepo = PROJECT_CATALOG_REPOSITORY;
-  if (contract.repository !== expectedRepo) fail(`Catalog 仓库不在白名单:${contract.repository}`);
-  if (!GIT_COMMIT_RE.test(contract.revision)) fail('Catalog revision 必须是完整 40 位 Git commit');
-  if (contract.asset && !/^[A-Za-z0-9._-]+\.json\.gz$/.test(contract.asset)) fail(`Catalog asset 非法:${contract.asset}`);
-  if (contract.compressedSha256 && !SHA256_RE.test(contract.compressedSha256)) fail('Catalog compressedSha256 非法');
+  if (contract.repository !== expectedRepo) fail(`Catalog repository is not allowlisted: ${contract.repository}`);
+  if (!GIT_COMMIT_RE.test(contract.revision)) fail('Catalog revision must be a full 40-character Git commit');
+  if (contract.asset && !/^[A-Za-z0-9._-]+\.json\.gz$/.test(contract.asset)) fail(`Catalog asset is invalid: ${contract.asset}`);
+  if (contract.compressedSha256 && !SHA256_RE.test(contract.compressedSha256)) fail('Catalog compressedSha256 is invalid');
   if (contract.compressedBytes && (!Number.isSafeInteger(contract.compressedBytes) || contract.compressedBytes <= 0)) {
-    fail('Catalog compressedBytes 非法');
+    fail('Catalog compressedBytes is invalid');
   }
-  if (contract.catalogSchema && contract.catalogSchema < 5) fail('Catalog schema 版本过旧');
-  if (contract.relationsSchema && contract.relationsSchema < 2) fail('Catalog relations schema 版本过旧');
-  if (!GIT_COMMIT_RE.test(contract.sourceCommit)) fail('Catalog sourceCommit 必须是完整 40 位 Git commit');
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(contract.sourceRepository)) fail('Catalog sourceRepository 非法');
+  if (contract.catalogSchema && contract.catalogSchema < 5) fail('Catalog schema version is too old');
+  if (contract.relationsSchema && contract.relationsSchema < 2) fail('Catalog relations schema version is too old');
+  if (!GIT_COMMIT_RE.test(contract.sourceCommit)) fail('Catalog sourceCommit must be a full 40-character Git commit');
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(contract.sourceRepository)) fail('Catalog sourceRepository is invalid');
   return contract;
 }
 
@@ -150,7 +150,7 @@ function profileBaselineContract(branch) {
       Number(contract.schema || 0) < 3 || !String(contract.encoding || '').trim() ||
       !Number.isSafeInteger(Number(contract.profiles)) || Number(contract.profiles) <= 0 ||
       !Number.isSafeInteger(Number(contract.configGroups)) || Number(contract.configGroups) <= 0) {
-    fail('固定 Catalog index 缺少有效 Native Profile baseline 契约');
+    fail('The pinned Catalog index is missing a valid Native Profile baseline contract');
   }
   return {
     ...contract,
@@ -170,7 +170,7 @@ function graphContract(branch) {
       !/^[A-Za-z0-9._-]+\.graph\.json\.gz$/.test(String(contract.asset || '')) ||
       !SHA256_RE.test(String(contract.hash || '').toLowerCase()) ||
       !Number.isSafeInteger(Number(contract.bytes)) || Number(contract.bytes) <= 0) {
-    fail('固定 Catalog index 缺少有效 Kconfig graph 契约');
+    fail('The pinned Catalog index is missing a valid Kconfig graph contract');
   }
   return {
     asset: String(contract.asset),
@@ -183,21 +183,21 @@ async function loadCatalogKconfigSymbols(catalogContract, catalogBranch) {
   const contract = graphContract(catalogBranch);
   const compressed = await fetchCatalogResource(catalogContract.revision, contract.asset, { binary: true });
   if (compressed.byteLength !== contract.bytes) {
-    fail(`Catalog Kconfig graph bytes 不一致:${compressed.byteLength} != ${contract.bytes}`);
+    fail(`Catalog Kconfig graph byte count mismatch: ${compressed.byteLength} != ${contract.bytes}`);
   }
-  if (sha256(compressed) !== contract.hash) fail('Catalog Kconfig graph compressed SHA-256 不一致');
+  if (sha256(compressed) !== contract.hash) fail('Catalog Kconfig graph compressed SHA-256 mismatch');
   let document;
   try { document = JSON.parse(gunzipSync(compressed).toString('utf8')); }
-  catch (error) { fail(`Catalog Kconfig graph 无法解压/解析:${error.message}`); }
+  catch (error) { fail(`Unable to decompress or parse the Catalog Kconfig graph: ${error.message}`); }
   const actualCommit = String(document?.source?.commit || '').toLowerCase();
   if (actualCommit && actualCommit !== catalogContract.sourceCommit) {
-    fail(`Catalog Kconfig graph source commit 不一致:${actualCommit} != ${catalogContract.sourceCommit}`);
+    fail(`Catalog Kconfig graph source commit mismatch: ${actualCommit} != ${catalogContract.sourceCommit}`);
   }
   let model;
   try { model = createCatalogModel({ schema: 6, relations: document?.relations }); }
-  catch (error) { fail(`Catalog Kconfig graph 契约无效:${error.message}`); }
+  catch (error) { fail(`Catalog Kconfig graph contract is invalid: ${error.message}`); }
   const symbols = new Set(model.bySymbol.keys());
-  if (!symbols.size) fail('Catalog Kconfig graph 不包含任何 Kconfig symbol');
+  if (!symbols.size) fail('The Catalog Kconfig graph contains no Kconfig symbols');
   return { symbols, contract };
 }
 
@@ -205,13 +205,13 @@ async function loadNativeProfileStore(catalogContract, catalogSource, catalogBra
   const contract = profileBaselineContract(catalogBranch);
   const compressed = await fetchCatalogResource(catalogContract.revision, contract.asset, { binary: true });
   if (compressed.byteLength !== contract.bytes) {
-    fail(`Native Profile baseline bytes 不一致:${compressed.byteLength} != ${contract.bytes}`);
+    fail(`Native Profile baseline byte count mismatch: ${compressed.byteLength} != ${contract.bytes}`);
   }
   const compressedHash = sha256(compressed);
-  if (compressedHash !== contract.hash) fail('Native Profile baseline compressed SHA-256 不一致');
+  if (compressedHash !== contract.hash) fail('Native Profile baseline compressed SHA-256 mismatch');
   let document;
   try { document = JSON.parse(gunzipSync(compressed).toString('utf8')); }
-  catch (error) { fail(`Native Profile baseline 无法解压/解析:${error.message}`); }
+  catch (error) { fail(`Unable to decompress or parse the Native Profile baseline: ${error.message}`); }
   let store;
   try {
     store = createProfileBaselineStore(document, {
@@ -224,7 +224,7 @@ async function loadNativeProfileStore(catalogContract, catalogSource, catalogBra
       configGroups: contract.configGroups,
     });
   } catch (error) {
-    fail(`Native Profile baseline 契约无效:${error.message}`);
+    fail(`Native Profile baseline contract is invalid: ${error.message}`);
   }
   return { store, contract };
 }
@@ -239,23 +239,23 @@ let selectedFile = requestFile;
 if (requestManifest) {
   let manifest;
   try { manifest = JSON.parse(readFileSync(requestManifest, 'utf8')); }
-  catch (error) { fail('附件清单无法解析: ' + error.message); }
+  catch (error) { fail('Unable to parse the attachment manifest: ' + error.message); }
   const jsonFiles = manifest?.version === 1 && Array.isArray(manifest.files)
     ? manifest.files.filter((entry) => entry.type === 'json') : [];
   if (jsonFiles.length !== 1 || manifest.files.length !== 1) {
-    fail('请只上传一个 schema 6 build-request.json；.config/config.buildinfo 应先在网页导入');
+    fail('Upload exactly one schema 6 build-request.json; import .config/config.buildinfo in the web customizer first');
   }
   selectedFile = jsonFiles[0].path;
   requestAttachmentName = jsonFiles[0].name || '';
 }
-if (!selectedFile) fail('缺少 schema 6 build-request.json');
+if (!selectedFile) fail('Missing schema 6 build-request.json');
 requestAttachmentName ||= basename(selectedFile);
 let raw;
-try { raw = readFileSync(selectedFile); } catch (error) { fail('无法读取 build-request.json: ' + error.message); }
-if (raw.length < 32 || raw.length > 2 * 1024 * 1024) fail(`build-request.json 大小非法: ${raw.length} bytes`);
-try { req = JSON.parse(raw.toString('utf8')); } catch (error) { fail('build-request.json 无法解析: ' + error.message); }
-if (req.schema !== 6) fail(`只接受 build-request schema 6，收到: ${JSON.stringify(req.schema)}`);
-if (Object.hasOwn(req, 'config')) fail('schema 6 不接受浏览器整份 config；只接受 Native baseline + overrides');
+try { raw = readFileSync(selectedFile); } catch (error) { fail('Unable to read build-request.json: ' + error.message); }
+if (raw.length < 32 || raw.length > 2 * 1024 * 1024) fail(`build-request.json size is invalid: ${raw.length} bytes`);
+try { req = JSON.parse(raw.toString('utf8')); } catch (error) { fail('Unable to parse build-request.json: ' + error.message); }
+if (req.schema !== 6) fail(`Only build-request schema 6 is accepted; received: ${JSON.stringify(req.schema)}`);
+if (Object.hasOwn(req, 'config')) fail('Schema 6 does not accept the browser full config; use the Native baseline plus overrides');
 
 requestAudit = normalizeAudit(req.audit);
 const catalogContract = normalizeCatalogContract(req.catalog);
@@ -263,7 +263,7 @@ const requestDefconfig = typeof req.use_defconfig === 'boolean' ? req.use_defcon
 const auditDefconfig = req.audit?.defconfig && typeof req.audit.defconfig.enabled === 'boolean'
   ? req.audit.defconfig.enabled : null;
 if (requestDefconfig !== null && auditDefconfig !== null && requestDefconfig !== auditDefconfig) {
-  fail('defconfig 开关与 audit.defconfig.enabled 不一致');
+  fail('The defconfig switch does not match audit.defconfig.enabled');
 }
 const useDefconfig = requestDefconfig ?? auditDefconfig ?? false;
 const isCustomTarget = ['custom-target', 'catalog-target'].includes(req.device);
@@ -271,18 +271,18 @@ if (!isCustomTarget) fail(`schema 6 only accepts a Catalog target: ${req.device}
 
 let catalogIndex;
 try { catalogIndex = await loadCatalogIndex(catalogContract.revision); }
-catch (error) { fail(`无法读取固定 Catalog index: ${error.message}`); }
+catch (error) { fail(`Unable to read the pinned Catalog index: ${error.message}`); }
 const catalogSource = catalogIndex.sources.find((item) => item.id === req.source);
 const requestedBranch = String(req.branch || '');
 const catalogBranch = catalogSource?.branches?.find((item) =>
   item.id === String(req.version) && (!requestedBranch || item.branch === requestedBranch));
 if (!catalogSource || !catalogBranch || catalogBranch.state === 'unavailable') {
-  fail(`Source/Branch 不在固定 Catalog 范围: ${req.source}/${req.version}/${requestedBranch}`);
+  fail(`Source/Branch is outside the pinned Catalog scope: ${req.source}/${req.version}/${requestedBranch}`);
 }
 const build = catalogSource.build || {};
 if (!/^diy(?:2)?-[A-Za-z0-9._-]+\.sh$/.test(build.diy1 || '') ||
     !/^diy2-[A-Za-z0-9._-]+\.sh$/.test(build.diy2 || '')) {
-  fail(`Catalog Source 缺少有效构建工具: ${catalogSource.id}`);
+  fail(`Catalog Source is missing a valid build tool: ${catalogSource.id}`);
 }
 const version = { id: catalogBranch.id, branch: catalogBranch.branch, label: catalogBranch.branch };
 const source = {
@@ -290,48 +290,48 @@ const source = {
   versions: [version], diy1: build.diy1, diy2: build.diy2, append: true,
 };
 const variant = { id: String(req.variant || 'custom'), name: String(req.variant || 'Custom Target') };
-if (!/^[A-Za-z0-9._+-]{1,96}$/.test(variant.id)) fail(`Target Profile 非法: ${variant.id}`);
+if (!/^[A-Za-z0-9._+-]{1,96}$/.test(variant.id)) fail(`Target Profile is invalid: ${variant.id}`);
 const device = { id: req.device, brand: 'Catalog', name: 'Catalog Target', sources: [source] };
 const configId = [device.id, source.id, version.id, variant.id].join('/');
-if (req.configId !== configId) fail(`configId 不匹配:收到 ${JSON.stringify(req.configId)},应为 ${configId}`);
+if (req.configId !== configId) fail(`configId mismatch: received ${JSON.stringify(req.configId)}, expected ${configId}`);
 
 const indexedLegacy = legacyCatalogContract(catalogBranch);
 if (catalogContract.asset || catalogContract.compressedSha256 || catalogContract.compressedBytes) {
   if (!indexedLegacy || indexedLegacy.asset !== catalogContract.asset ||
       indexedLegacy.hash !== catalogContract.compressedSha256 || indexedLegacy.bytes !== catalogContract.compressedBytes ||
       indexedLegacy.catalogSchema !== catalogContract.catalogSchema || indexedLegacy.relationsSchema !== catalogContract.relationsSchema) {
-    fail('固定 Catalog index 与请求的 legacy 契约不一致');
+    fail('The pinned Catalog index does not match the request legacy contract');
   }
 }
 if (String(catalogSource.repo || '') !== String(source.repo || '') ||
     catalogContract.sourceRepository !== String(source.repo || '')) {
-  fail(`Catalog 上游仓库不匹配:request=${source.repo},contract=${catalogContract.sourceRepository}`);
+  fail(`Catalog upstream repository mismatch: request=${source.repo}, contract=${catalogContract.sourceRepository}`);
 }
 const indexedCommit = String(catalogBranch.commit || catalogBranch.sourceCommit || '').toLowerCase();
 if (indexedCommit && indexedCommit !== catalogContract.sourceCommit) {
-  fail(`Catalog sourceCommit 与固定 index 不一致:index=${indexedCommit},request=${catalogContract.sourceCommit}`);
+  fail(`Catalog sourceCommit does not match the pinned index: index=${indexedCommit}, request=${catalogContract.sourceCommit}`);
 }
 const sourceCommit = catalogContract.sourceCommit;
 const activeCatalogRevision = catalogContract.revision;
 
 const targetContract = req.customTarget && typeof req.customTarget === 'object' && !Array.isArray(req.customTarget)
   ? req.customTarget : null;
-if (!targetContract) fail('Catalog Target 请求缺少 customTarget 身份契约');
+if (!targetContract) fail('The Catalog Target request is missing its customTarget identity contract');
 const CUSTOM_TARGET_FIELDS = Object.freeze(['profileSelector', 'profileSymbol', 'subtarget', 'system']);
 const receivedTargetFields = Object.keys(targetContract).sort();
 if (receivedTargetFields.length !== CUSTOM_TARGET_FIELDS.length ||
     receivedTargetFields.some((field, index) => field !== CUSTOM_TARGET_FIELDS[index])) {
-  fail(`customTarget 只接受最小 Target/Profile 身份字段: ${CUSTOM_TARGET_FIELDS.join(',')}`);
+  fail(`customTarget accepts only the minimal Target/Profile identity fields: ${CUSTOM_TARGET_FIELDS.join(',')}`);
 }
 if (CUSTOM_TARGET_FIELDS.some((field) => typeof targetContract[field] !== 'string')) {
-  fail('customTarget Target/Profile 身份字段必须是字符串');
+  fail('customTarget Target/Profile identity fields must be strings');
 }
 const expectedBoard = String(targetContract.system || '');
 const expectedSubtarget = String(targetContract.subtarget || '');
 const expectedProfile = String(targetContract.profileSymbol || '');
 const expectedSelector = String(targetContract.profileSelector || '');
 if (!expectedBoard || !expectedProfile || !expectedSelector) {
-  fail('customTarget 缺少 system/profile/profileSelector');
+  fail('customTarget is missing system/profile/profileSelector');
 }
 
 const { store: profileStore, contract: baselineContract } = await loadNativeProfileStore(
@@ -343,20 +343,20 @@ const baseline = profileStore.resolve({
   profileSymbol: expectedProfile,
   profileSelector: expectedSelector,
 });
-if (!baseline) fail(`Native Profile baseline 不包含请求 Target/Profile:${expectedBoard}/${expectedSubtarget}/${expectedProfile}`);
+if (!baseline) fail(`The Native Profile baseline does not contain the requested Target/Profile: ${expectedBoard}/${expectedSubtarget}/${expectedProfile}`);
 if (baseline.board !== expectedBoard || baseline.subtarget !== expectedSubtarget ||
     baseline.profile !== expectedProfile || baseline.selector !== expectedSelector) {
-  fail(`Native Profile baseline 身份不一致:baseline=${baseline.board}/${baseline.subtarget}/${baseline.profile}/${baseline.selector}`);
+  fail(`Native Profile baseline identity mismatch: baseline=${baseline.board}/${baseline.subtarget}/${baseline.profile}/${baseline.selector}`);
 }
 const actualNativeHash = semanticHash(baseline.values);
 if (actualNativeHash !== baseline.nativeHash) {
-  fail(`Native Profile baseline semantic hash 不一致:${actualNativeHash} != ${baseline.nativeHash}`);
+  fail(`Native Profile baseline semantic hash mismatch: ${actualNativeHash} != ${baseline.nativeHash}`);
 }
 device.name = [baseline.board || 'Target', baseline.subtarget, baseline.profile].filter(Boolean).join(' / ');
 
 const rawOverrides = req.overrides;
-if (!Array.isArray(rawOverrides)) fail('schema 6 overrides 必须是数组');
-if (rawOverrides.length > 50000) fail('Kconfig override 数量超过 50000，拒绝');
+if (!Array.isArray(rawOverrides)) fail('Schema 6 overrides must be an array');
+if (rawOverrides.length > 50000) fail('More than 50000 Kconfig overrides are not accepted');
 const { symbols: catalogKconfigSymbols } = await loadCatalogKconfigSymbols(catalogContract, catalogBranch);
 let reconstructedValues;
 try {
@@ -364,7 +364,7 @@ try {
     baseline, rawOverrides, { allowedSymbols: catalogKconfigSymbols },
   );
 }
-catch (error) { fail(`Kconfig overrides 无法应用:${error.message}`); }
+catch (error) { fail(`Unable to apply Kconfig overrides: ${error.message}`); }
 const baselineConfig = serializeConfigMap(baseline.values);
 const reconstructedConfig = serializeConfigMap(reconstructedValues);
 const reconstructedSha256 = sha256(reconstructedConfig);
@@ -388,7 +388,7 @@ if (typeof requestedTheme !== 'string' ||
     (hasExplicitTheme
       ? !/^luci-theme-[A-Za-z0-9._+-]{1,48}$/.test(requestedTheme)
       : (requestedTheme && !/^luci-theme-[A-Za-z0-9._+-]{1,48}$/.test(requestedTheme)))) {
-  fail('固件主题格式非法');
+  fail('Firmware theme format is invalid');
 }
   const preferredTheme = requestedTheme || '';
   const fallbackTheme = [...new Set([
@@ -399,26 +399,26 @@ if (typeof requestedTheme !== 'string' ||
 // missing project preference falls back to Native baseline (or Catalog default),
 // while an explicit unavailable request is rejected above.
 if (hasExplicitTheme && preferredTheme && !catalogKconfigSymbols.has(`PACKAGE_${preferredTheme}`)) {
-  fail(`固件主题不在当前 Catalog/Kconfig 范围:${preferredTheme}`);
+  fail(`Firmware theme is outside the current Catalog/Kconfig scope: ${preferredTheme}`);
 }
 const theme = preferredTheme && catalogKconfigSymbols.has(`PACKAGE_${preferredTheme}`)
   ? preferredTheme : fallbackTheme;
-if (!theme) fail('Catalog/Kconfig 没有可用的 LuCI 主题');
+if (!theme) fail('No usable LuCI theme is available in Catalog/Kconfig');
 
 
 const rawPlugins = Array.isArray(req.plugins) ? req.plugins : [];
-if (rawPlugins.length > 200) fail('插件显示列表数量超过 200，拒绝');
+if (rawPlugins.length > 200) fail('More than 200 package display entries are not accepted');
 const items = [];
 for (const rawPlugin of rawPlugins) {
   if (typeof rawPlugin !== 'string' || !/^[+-]?[a-z0-9._-]{1,96}$/i.test(rawPlugin)) {
-    fail(`非法插件显示项: ${JSON.stringify(rawPlugin)}`);
+    fail(`Invalid package display entry: ${JSON.stringify(rawPlugin)}`);
   }
   if (!items.includes(rawPlugin)) items.push(rawPlugin);
 }
 
 const hasExplicitTag = own(req, 'tag');
 const requestedTag = String(hasExplicitTag ? (req.tag ?? '') : (PROJECT_DEFAULT_TAG || ''));
-if (requestedTag && !isValidBuildTag(requestedTag)) fail('构建标识必须为 1-160 个可见 Unicode 字符且不能包含控制字符');
+if (requestedTag && !isValidBuildTag(requestedTag)) fail('The build tag must contain 1-160 visible Unicode characters and no control characters');
 const tag = normalizeBuildTag(requestedTag,
   hasExplicitTag ? 'anonymous' : String(PROJECT_DEFAULT_TAG || 'anonymous'));
 const artifactTag = artifactBuildTag(tag, 'anonymous');
@@ -427,27 +427,27 @@ const titleIdentity = parseBuildIssueTitleIdentity(process.env.ISSUE_TITLE || ''
 const attachmentRef = requestAttachmentName.match(/^([A-Za-z0-9]+_[A-Za-z0-9]+)[.-]/)?.[1] || '';
 const requestedSourceEnv = String(req.sourceEnv || '').trim();
 const normalizedSourceEnv = normalizeBuildEnvironment(requestedSourceEnv);
-if (requestedSourceEnv && !normalizedSourceEnv) fail(`非法 sourceEnv: ${requestedSourceEnv}`);
+if (requestedSourceEnv && !normalizedSourceEnv) fail(`Invalid sourceEnv: ${requestedSourceEnv}`);
 const sourceEnvIdentity = buildEnvironmentIdentity(normalizedSourceEnv);
 if (titleIdentity.sourceEnv && sourceEnvIdentity && titleIdentity.sourceEnv !== sourceEnvIdentity) {
-  fail(`sourceEnv 与 Issue 标题不一致: request=${sourceEnvIdentity}, title=${titleIdentity.sourceEnv}`);
+  fail(`sourceEnv does not match the Issue title: request=${sourceEnvIdentity}, title=${titleIdentity.sourceEnv}`);
 }
-if (titleIdentity.sourceEnv && !normalizedSourceEnv) fail('非 main Issue 标题必须由 build-request.json 提供 sourceEnv');
+if (titleIdentity.sourceEnv && !normalizedSourceEnv) fail('A non-main Issue title must provide sourceEnv in build-request.json');
 const sourceEnv = normalizedSourceEnv;
 const requestCommitInput = String(req.requestCommit || '').trim();
 const requestCommit = normalizeBuildCommit(requestCommitInput);
-if (!requestCommit) fail(`requestCommit 必须是完整 40 位 Git commit:${requestCommitInput}`);
+if (!requestCommit) fail(`requestCommit must be a full 40-character Git commit: ${requestCommitInput}`);
 const expectedSourceEnvInput = String(process.env.EXPECTED_REQUEST_BRANCH || '').trim();
 const expectedSourceEnv = normalizeBuildEnvironment(expectedSourceEnvInput);
-if (expectedSourceEnvInput && !expectedSourceEnv) fail(`非法 EXPECTED_REQUEST_BRANCH: ${expectedSourceEnvInput}`);
+if (expectedSourceEnvInput && !expectedSourceEnv) fail(`Invalid EXPECTED_REQUEST_BRANCH: ${expectedSourceEnvInput}`);
 const expectedRequestCommitInput = String(process.env.EXPECTED_REQUEST_COMMIT || '').trim();
 const expectedRequestCommit = normalizeBuildCommit(expectedRequestCommitInput);
-if (expectedRequestCommitInput && !expectedRequestCommit) fail(`非法 EXPECTED_REQUEST_COMMIT: ${expectedRequestCommitInput}`);
+if (expectedRequestCommitInput && !expectedRequestCommit) fail(`Invalid EXPECTED_REQUEST_COMMIT: ${expectedRequestCommitInput}`);
 if (expectedSourceEnv && sourceEnv !== expectedSourceEnv) {
-  fail(`sourceEnv 与实际 Worker 分支不一致: request=${sourceEnv || '(missing)'}, worker=${expectedSourceEnv}`);
+  fail(`sourceEnv does not match the actual Worker branch: request=${sourceEnv || '(missing)'}, worker=${expectedSourceEnv}`);
 }
 if (expectedRequestCommit && requestCommit !== expectedRequestCommit) {
-  fail(`requestCommit 与实际 Worker 提交不一致: request=${requestCommit}, worker=${expectedRequestCommit}`);
+  fail(`requestCommit does not match the actual Worker commit: request=${requestCommit}, worker=${expectedRequestCommit}`);
 }
 const requestRef = cleanIdentity(req.requestId || attachmentRef || titleIdentity.requestId);
 const buildRef = requestRef ? `${requestRef}-${artifactTag}` : artifactTag;
@@ -456,12 +456,12 @@ const artifactRef = artifactBuildRef(buildRef, sourceEnv, Number(process.env.ISS
 const privateIpv4 = /^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/;
 const projectLanip = String(PROJECT_FIRMWARE.lanIp || '192.168.1.1');
 const requestedLanip = own(req, 'lanip') ? req.lanip : projectLanip;
-if (!privateIpv4.test(String(requestedLanip))) fail('LAN IP 地址非法');
+if (!privateIpv4.test(String(requestedLanip))) fail('LAN IP address is invalid');
 const lanip = String(requestedLanip);
 
 const projectPasswordMode = String(PROJECT_BUILD_PASSWORD.mode || 'prompt');
 const passwordModes = new Set(['prompt', 'empty', 'secret']);
-if (!passwordModes.has(projectPasswordMode)) fail(`项目密码策略非法:${projectPasswordMode}`);
+if (!passwordModes.has(projectPasswordMode)) fail(`Project password policy is invalid: ${projectPasswordMode}`);
 let rootpw = '';
 let explicitRootpw = false;
 if (own(req, 'rootpw')) {
@@ -473,7 +473,7 @@ if (own(req, 'rootpw')) {
     rootpw = rp;
     explicitRootpw = true;
   } else if (rp !== '' && rp !== null && rp !== undefined) {
-    fail('初始密码格式非法');
+    fail('Initial password format is invalid');
   }
 }
 // The project policy's empty mode is materialized as @empty, while secret mode
@@ -497,14 +497,14 @@ const timezoneCandidates = [
 const selectedZone = timezoneCandidates.reduce((selected, candidate) => selected ||
   TIMEZONES.find((zone) => zone.zonename === candidate || zone.timezone === candidate), null) ||
   TIMEZONES.find((zone) => zone.zonename === 'Asia/Shanghai');
-if (!selectedZone) fail('没有可用的时区默认值');
+if (!selectedZone) fail('No usable timezone default is available');
 const zonename = selectedZone.zonename;
 const timezone = selectedZone.timezone;
 const projectNtp = PROJECT_FIRMWARE.ntp && typeof PROJECT_FIRMWARE.ntp === 'object'
   ? PROJECT_FIRMWARE.ntp : {};
 const projectNtpId = Object.hasOwn(NTP, projectNtp.preset) ? projectNtp.preset : 'cn';
 const requestedNtp = own(fw, 'ntp') ? fw.ntp : projectNtpId;
-if (!Object.hasOwn(NTP, requestedNtp)) fail(`未知 NTP 预设:${requestedNtp}`);
+if (!Object.hasOwn(NTP, requestedNtp)) fail(`Unknown NTP preset: ${requestedNtp}`);
 const ntpId = requestedNtp;
 const configuredNtpServers = Array.isArray(projectNtp.servers) && projectNtp.servers.length === 4 &&
   projectNtp.servers.every((server) => typeof server === 'string' && server.length > 0)
@@ -515,11 +515,11 @@ const requestedMirrorInput = String(own(fw, 'packageMirror') ? fw.packageMirror
   : own(fw, 'opkg') ? fw.opkg : projectMirror).toLowerCase();
 const requestedMirrorId = String(PACKAGE_MIRROR_RULES.aliases?.[requestedMirrorInput] || requestedMirrorInput);
 const mirrorPreset = (PACKAGE_MIRROR_RULES.presets || []).find((preset) => preset.id === requestedMirrorId);
-if (!mirrorPreset) fail(`未知软件包镜像预设:${requestedMirrorInput}`);
+if (!mirrorPreset) fail(`Unknown package mirror preset: ${requestedMirrorInput}`);
 const sourceFamily = String(PACKAGE_MIRROR_RULES.sourceFamilies?.[source.id] || '');
-if (!sourceFamily) fail(`软件包镜像没有登记源码:${source.id}`);
+if (!sourceFamily) fail(`No source is registered for the package mirror: ${source.id}`);
 if (mirrorPreset.kind === 'mirror' && !mirrorPreset.roots?.[sourceFamily]) {
-  fail(`${source.id} 不接受所选软件包镜像预设:${requestedMirrorInput}`);
+  fail(`${source.id} does not accept the selected package mirror preset: ${requestedMirrorInput}`);
 }
 const packageMirrorId = mirrorPreset.id;
 const hasFirmwareSnapshot = Boolean(req.firmware);
@@ -527,7 +527,7 @@ let pageVersion = String(req.pageVersion || '');
 if (!/^v\d{8}(?:\d{2})?$/.test(pageVersion)) pageVersion = 'unknown';
 
 const rawPkgs = Array.isArray(req.packages) ? req.packages : [];
-if (rawPkgs.length) fail('schema 6 不接受第二套 packages 字段；Advanced menuconfig 只能由 overrides 表达');
+if (rawPkgs.length) fail('Schema 6 does not accept a second packages field; Advanced menuconfig must be represented by overrides');
 
 const out = [
   `device=${device.id}`,

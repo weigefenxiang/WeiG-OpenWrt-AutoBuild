@@ -1,8 +1,13 @@
 {
  "version": 2,
  "fallback": "en",
- "source": "zh-CN",
+ "source": "en",
  "languages": [
+  {
+   "id": "en",
+   "name": "English",
+   "native": "English"
+  },
   {
    "id": "zh-CN",
    "name": "Chinese (Simplified)",
@@ -12,11 +17,6 @@
    "id": "zh-TW",
    "name": "Chinese (Traditional)",
    "native": "繁體中文"
-  },
-  {
-   "id": "en",
-   "name": "English",
-   "native": "English"
   },
   {
    "id": "ru",

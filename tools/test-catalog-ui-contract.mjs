@@ -22,6 +22,10 @@ const uiComponentsCss = readFileSync(join(root, 'site', 'wrt', 'ui-components.cs
 const siteConfig = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'config', 'site.json'), 'utf8'));
 const catalogLoading = siteConfig.catalog?.loading || {};
 const i18nSource = readFileSync(join(root, 'tools', 'i18n-source.json'), 'utf8');
+const i18nManifest = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'data', 'i18n', 'index.json'), 'utf8'));
+const i18nEnglish = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'data', 'i18n', 'en.json'), 'utf8'));
+const i18nZhCn = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'data', 'i18n', 'zh-CN.json'), 'utf8'));
+const i18nZhTw = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'data', 'i18n', 'zh-TW.json'), 'utf8'));
 const expect = (condition, message) => { if (!condition) throw new Error(message); };
 
 expect(html.includes("if (meta && !releaseMeta) throw new Error('Site release metadata does not match its release pointer')"),
@@ -98,6 +102,18 @@ expect(html.includes('data-i18n="btn.import.short"') && html.includes('data-i18n
   css.includes('.cap-info.rootfs-capacity::before { content: ""; }'),
   'mobile one-line action bar labels or compact RootFS capacity regressed');
 
+expect(html.includes('id="selfTestBtn"') &&
+  html.includes('data-i18n="btn.selfTest.short"') &&
+  html.includes('data-i18n-title="btn.selfTest.title"') &&
+  html.includes('>Test</button>') &&
+  siteConfig.ui?.defaultLanguage === 'en' &&
+  i18nSource.includes('"btn.selfTest.short": "Test"') &&
+  i18nManifest.source === 'en' && i18nManifest.fallback === 'en' &&
+  i18nEnglish.strings['btn.selfTest.short'] === 'Test' &&
+  i18nZhCn.strings['btn.selfTest.short'] === '检' &&
+  i18nZhTw.strings['btn.selfTest.short'] === '检',
+  'self-test dock control must use the English short label and i18n source');
+
 expect(app.includes('function schema6TargetIdentity(target = state.device?.target) {') &&
   app.includes('payload.customTarget = schema6TargetIdentity();') &&
   !app.includes('payload.customTarget = state.device.target') &&
@@ -128,7 +144,7 @@ expect(!uiSession.includes('compatibilityRememberDefault') &&
   app.includes("finish(rememberInput.checked ? 'forced-remember' : 'forced')") &&
   app.includes('remembered.size === forced.size') &&
   app.includes("tooltipBody: t('runtime.e8bd8b88ed27')") &&
-  i18nSource.includes('仅当前页面有效；刷新或重新打开网页、清除站点数据后失效。') &&
+  i18nSource.includes('Valid only on this page. Refreshing or reopening the page, or clearing site data, resets it.') &&
   !app.includes('wrt_compatibility_remember') && !uiSession.includes('localStorage') &&
   uiComponents.includes('export function createUiCheckboxControl') &&
   uiComponentsCss.includes('.ui-checkbox-control{display:inline-flex;') &&
@@ -264,8 +280,8 @@ expect(html.includes('class="ui-tooltip" id="uiTooltip"') &&
 expect(app.includes("dataset.uiTooltipTitle = 'D · Defconfig'") &&
   app.includes("const defconfigEmphasis = t('runtime.f891591b9e6d')") &&
   app.includes("const defconfigHelp = t('runtime.095a4944190f')") &&
-  i18nSource.includes('⚠ 当前版本加载时已完成基准配置解析。通常直接在现有结果上增减即可，无需开启 D。') &&
-  i18nSource.includes('可能把你手工删减的默认项重新补回。') &&
+  i18nSource.includes('⚠ The current version baseline is already resolved when loaded. Normally you can adjust the existing result directly without enabling D.') &&
+  i18nSource.includes('potentially restoring defaults you removed manually.') &&
   app.includes("dataset.uiTooltipEmphasis = defconfigEmphasis") &&
   app.includes("dataset.uiTooltipBody = defconfigHelp") &&
   app.includes("removeAttribute('title')"),
@@ -475,7 +491,7 @@ expect(hiddenDerivedContract.includes("option.origin === 'packageinfo-only'") &&
   app.includes('reconcileImportedConditionalDefaults();') &&
   app.includes("emphasis = t('runtime.2338fb34620f')") &&
   app.includes("option.defaults?.length ? t('menu.defaults'") &&
-  i18nSource.includes('该符号没有可操作提示；当前状态由 Kconfig 条件默认值自动计算') &&
+  i18nSource.includes('This symbol has no user prompt. Kconfig computes it from conditional defaults') &&
   !app.includes("PACKAGE_luci-i18n-openvpn-server-zh-cn"),
   'promptless conditional defaults no longer hide at N, reconcile imports, explain their read-only cause, or remain package-agnostic');
 expect(!app.includes('button.hidden = button.disabled && !active') &&
