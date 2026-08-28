@@ -121,6 +121,25 @@ expect(app.includes('function schema6TargetIdentity(target = state.device?.targe
   app.includes('const allowedSymbols = CATALOG_MODEL?.bySymbol instanceof Map'),
   'schema6 request Target identity is not minimal or schema6 import lost the active Catalog symbol allowlist');
 
+const schema6BuildStart = app.indexOf("card('submit.m1.title'");
+const schema6BuildEnd = app.indexOf("card('submit.existing.title'", schema6BuildStart);
+const schema6BuildContract = schema6BuildStart >= 0 && schema6BuildEnd > schema6BuildStart
+  ? app.slice(schema6BuildStart, schema6BuildEnd) : '';
+const ensureCompatibilityAt = schema6BuildContract.indexOf('await ensureCompatibilityRules()');
+const finalSelectionAt = schema6BuildContract.indexOf('const finalSelection = effectiveSelection();');
+const finalConfigAt = schema6BuildContract.indexOf('const config = await generateResolvedConfigText();');
+const finalOverridesAt = schema6BuildContract.indexOf('const overrides = buildRequestOverrides(config);');
+const finalPayloadAt = schema6BuildContract.indexOf('const payload = {');
+const importConfigContract = app.match(/async function importConfigFile\(file\) \{([\s\S]*?)\n\}\n\$\('importBtn'/)?.[1] || '';
+expect(app.includes('const previewPlugins = previewSelection.normal.map') &&
+  ensureCompatibilityAt >= 0 && finalSelectionAt > ensureCompatibilityAt &&
+  finalConfigAt > finalSelectionAt && finalOverridesAt > finalConfigAt && finalPayloadAt > finalOverridesAt &&
+  schema6BuildContract.includes('plugins, tag, lanip: state.lanip, overrides') &&
+  !importConfigContract.includes('ensureCompatibilityRules') &&
+  app.includes('const compatibilitySchema = Number(evaluation.loaded.compatibility?.schema ??') &&
+  app.includes('schema: compatibilitySchema, rules: [warning.rule]'),
+  'compatibility checks must be on-demand and final schema6 JSON must use selections after the check');
+
 const schema6ImportContract = app.match(/async function reconstructSchema6Import\(payload\) \{([\s\S]*?)\n\}\n\s*async function importConfigFile/)?.[1] || '';
 const schema6ApplicationsLoad = schema6ImportContract.indexOf('await ensureCatalogApplications(!sameSnapshot);');
 const schema6CrossBranch = schema6ImportContract.indexOf('if (!sameSnapshot) {');

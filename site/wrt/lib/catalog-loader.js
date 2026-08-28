@@ -271,13 +271,14 @@ function validateIndex(index, dataRef, repository) {
 
 function compatibilityContract(index) {
   const contract = index?.assets?.compatibility;
+  const schema = Number(contract?.schema);
   if (!contract || safeCatalogAsset(contract.asset) !== 'compatibility.json.gz' ||
       !/^[a-f0-9]{64}$/.test(String(contract.hash || '')) ||
       !Number.isSafeInteger(Number(contract.bytes)) || Number(contract.bytes) <= 0 ||
       Number(contract.bytes) > MAX_COMPATIBILITY_JSON_BYTES + 1024 ||
       !Number.isSafeInteger(Number(contract.jsonBytes)) || Number(contract.jsonBytes) <= 0 ||
       Number(contract.jsonBytes) > MAX_COMPATIBILITY_JSON_BYTES ||
-      Number(contract.schema) !== 2 || !Number.isSafeInteger(Number(contract.rules)) || Number(contract.rules) < 0) {
+      ![2, 3].includes(schema) || !Number.isSafeInteger(Number(contract.rules)) || Number(contract.rules) < 0) {
     throw new Error('Catalog index lacks a valid compatibility asset contract');
   }
   return {
@@ -285,7 +286,7 @@ function compatibilityContract(index) {
     hash: String(contract.hash).toLowerCase(),
     bytes: Number(contract.bytes),
     jsonBytes: Number(contract.jsonBytes),
-    schema: 2,
+    schema,
     rules: Number(contract.rules),
   };
 }
@@ -309,7 +310,7 @@ function applicationsContract(index) {
 
 function validateCompatibilityDocument(data, expected) {
   const actualJsonBytes = new TextEncoder().encode(JSON.stringify(data)).byteLength;
-  if (!data || Number(data.schema) !== 2 || Number(data.schema) !== Number(expected.schema) || !Array.isArray(data.rules) ||
+  if (!data || ![2, 3].includes(Number(data.schema)) || Number(data.schema) !== Number(expected.schema) || !Array.isArray(data.rules) ||
       data.rules.length !== Number(expected.rules) || actualJsonBytes !== Number(expected.jsonBytes)) {
     throw new Error('Catalog compatibility document does not match its index contract');
   }

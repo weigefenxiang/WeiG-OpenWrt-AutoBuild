@@ -235,8 +235,8 @@ if (!concreteInApp.length && !/["'`]PACKAGE_[A-Za-z0-9_.+@-]+["'`]/.test(engine)
 const catalogOnly =
   loader.includes('fetchApplications') && loader.includes('applications.json.gz') &&
   loader.includes('data.probeUi?.schema') && loader.includes("typeof row['zh-CN'] !== 'string'") &&
-  loader.includes('Number(contract.schema) !== 2') && loader.includes('Number(data.schema) !== 2') &&
-  engine.includes('compatibility document requires schema 2') && engine.includes('compatibilityPatternMatches') &&
+  loader.includes('![2, 3].includes(schema)') && loader.includes('![2, 3].includes(Number(data.schema))') &&
+  loader.includes('schema,') && engine.includes('compatibility document requires schema 2 or 3') && engine.includes('compatibilityPatternMatches') &&
   app.includes('ensureCatalogApplications') && app.includes('CATALOG_ENGINE.evaluateCompatibilityRules') &&
   app.includes('CATALOG_ENGINE.deriveCompatibilityPlans') && app.includes('CATALOG_ENGINE.applyUserIntent') &&
   parser.includes('Catalog Source is missing a valid build tool') && parser.includes('schema 6 only accepts a Catalog target') &&
@@ -247,7 +247,7 @@ const catalogOnly =
   profileBaseline.includes('allowedSymbols instanceof Set') &&
   !parser.includes(['submitted', 'config'].join('.')) &&
   !parser.includes('devices.json') && !parser.includes('config-manifest.json');
-if (catalogOnly) pass('Source/Branch/build tools, Kconfig, applications and schema-2 compatibility are Catalog-driven');
+if (catalogOnly) pass('Source/Branch/build tools, Kconfig, applications and schema-2/3 compatibility are Catalog-driven');
 else fail('Catalog-only execution contract');
 
 const minimalSchema6Target =

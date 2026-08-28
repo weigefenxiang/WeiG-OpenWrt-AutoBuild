@@ -88,9 +88,9 @@ Compatibility recommendations also call `applyUserIntent` and share the same Cat
 
 Generic mutation coverage includes bool, tristate, empty/non-empty string, literal `n`, escaping, int, hex, unknown symbols, conditional defaults, parentheses, `&&`/`||`, deferred state, and closed-world boundaries.
 
-## 5. Compatibility schema 2
+## 5. Compatibility schema 2/3
 
-Only schema 2 is accepted. Source can be a named ID or a standalone `*`; Branch can be exact or a glob. Wildcard Source cannot mix with named Sources. One-package rules are valid, so a known single-package build failure never needs a fake pair.
+Schemas 2 and 3 are accepted. Schema 2 retains the legacy rule shape; schema 3 may add `sourceCommits`, `targetScope`, and structured `failure` evidence. Source can be a named ID or a standalone `*`; Branch can be exact or a glob. Wildcard Source cannot mix with named Sources. One-package rules are valid, so a known single-package build failure never needs a fake pair. The browser preserves the loaded document's actual schema and validates the index contract's schema, SHA-256, compressed bytes, JSON bytes, and rule count.
 
 The executor stays:
 
@@ -101,6 +101,8 @@ evaluateCompatibilityRules → deriveCompatibilityPlans → applyUserIntent
 A recommendation may contain ordered user steps such as disabling an upstream selection before the compatibility target, plus automatic dependent invalidation/cleanup produced by the shared Kconfig runtime. Both must come from the same generic state calculation. The page only renders the plan and sends its ordered steps back through `applyUserIntent`; it never derives dependency facts itself.
 
 The modal renders generic text by `issue`. Applying a recommendation keeps it open; a relevant state change restores the action; force-continue requires a second confirmation view. No rule ID, package name, or conflict path belongs in `app.js`.
+
+Compatibility evaluation is on demand: only clicking the bottom-right **Test** control or actually generating/downloading a schema-6 `build-request.json` evaluates the final Source/Branch/Target/Kconfig state and shows recommendations. Page load, `.config`/JSON import, Source/Branch/Target changes, plugin changes, and Menuconfig edits must not evaluate the current selection or open a modal. The existing low-priority queue may prefetch the immutable compatibility asset, but prefetch is not evaluation.
 
 ## 6. Request and backend
 

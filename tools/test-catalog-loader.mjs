@@ -494,13 +494,44 @@ const compatibilityLoader = createCatalogLoader({
 });
 const compatibilityFirst = await compatibilityLoader.fetchCompatibility();
 const compatibilityAssetCalls = () => compatibilityCalls.filter((url) => url.includes('compatibility.json.gz')).length;
-assert(compatibilityFirst.compatibility.rules[0].id === 'OWN-TEST' && compatibilityAssetCalls() === 1,
-  'compatibility asset was not verified and decoded');
+assert(compatibilityFirst.compatibility.schema === 2 && compatibilityFirst.contract.schema === 2 &&
+  compatibilityFirst.compatibility.rules[0].id === 'OWN-TEST' && compatibilityAssetCalls() === 1,
+  'schema-2 compatibility asset was not verified and decoded');
 await compatibilityLoader.fetchCompatibility();
 assert(compatibilityAssetCalls() === 1, 'compatibility in-memory cache did not suppress a second fetch');
 await compatibilityLoader.fetchCompatibility({ forceRefresh: true });
 assert(compatibilityAssetCalls() === 1,
   'unchanged compatibility SHA was downloaded after an index refresh');
+
+const compatibilitySchema3Document = {
+  schema: 3,
+  rules: [{
+    id: 'BLD-TEST', issue: 'build-failure', match: 'all-selected',
+    scope: { ImmortalWrt: ['openwrt-25.12'] }, packages: ['package-a'], refs: ['run:2'],
+    failure: { phase: 'package-compile', cause: 'package-caused', code: 'compile-failure' },
+  }],
+};
+const compatibilitySchema3Payload = compressedDocument(compatibilitySchema3Document);
+const compatibilitySchema3Index = indexFor(asset, valid, commit, '8'.repeat(40));
+compatibilitySchema3Index.assets = {
+  compatibility: {
+    asset: 'compatibility.json.gz', hash: compatibilitySchema3Payload.hash,
+    bytes: compatibilitySchema3Payload.bytes.length,
+    jsonBytes: new TextEncoder().encode(JSON.stringify(compatibilitySchema3Document)).byteLength,
+    schema: 3, rules: 1,
+  },
+};
+const compatibilitySchema3Loader = createCatalogLoader({
+  repository: 'owner/catalog', engine: { createCatalogModel },
+  fetchImpl: async (url) => url.includes('index.json')
+    ? new Response(JSON.stringify(compatibilitySchema3Index), { status: 200 })
+    : new Response(compatibilitySchema3Payload.bytes, { status: 200 }),
+  cacheStorage: fakeCaches(), subtle: null,
+});
+const compatibilitySchema3 = await compatibilitySchema3Loader.fetchCompatibility();
+assert(compatibilitySchema3.compatibility.schema === 3 && compatibilitySchema3.contract.schema === 3 &&
+  compatibilitySchema3.compatibility.rules[0].failure.cause === 'package-caused',
+  'schema-3 compatibility asset was not verified and decoded');
 
 const applicationsDocument = {
   schema: 1,
@@ -602,7 +633,7 @@ assert(!previewCalls.some((url) => url.includes('/releases/')),
 for (const mutate of [
   (value) => { value.assets.compatibility.schema = 1; },
   (value) => { value.assets.compatibility.schema = 0; },
-  (value) => { value.assets.compatibility.schema = 3; },
+  (value) => { value.assets.compatibility.schema = 4; },
   (value) => { delete value.assets.compatibility.jsonBytes; },
   (value) => { value.assets.compatibility.jsonBytes = 512 * 1024 + 1; },
   (value) => { value.assets.compatibility.bytes = 512 * 1024 + 1025; },

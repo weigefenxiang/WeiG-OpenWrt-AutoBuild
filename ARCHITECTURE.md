@@ -103,9 +103,9 @@ AutoBuild code channels bind to data branches:
 
 These are **runtime consumption channels**, not Catalog build destinations. Catalog code and production data have independent lifecycles: Catalog `main` builds only `catalog-candidate`; only the Catalog Production Gate may promote that verified snapshot to `catalog-data`. AutoBuild therefore keeps `main → catalog-data` and never reads `catalog-candidate` at runtime. This separation lets Catalog code reach `main` without implicitly changing production users, while `dev` and `staging` continue to consume their matching data branches.
 
-The browser loads `site/wrt/config/site.json`, then loads the current menu, language shard, and package-mirror projection with bounded startup concurrency. Its `catalog.loading` object controls the low-priority queue for applications, hidden options, help, and compatibility. `config/build.json` is build-side only and is never loaded by the browser. Every asset is checked against its index byte length and SHA-256 contract. A matching immutable cache entry is reused; submit and self-check still await the assets they actually validate.
+The browser loads `site/wrt/config/site.json`, then loads the current menu, language shard, and package-mirror projection with bounded startup concurrency. Its `catalog.loading` object controls the low-priority queue for applications, hidden options, help, and compatibility evidence. `config/build.json` is build-side only and is never loaded by the browser. Every asset is checked against its index byte length and SHA-256 contract. A matching immutable cache entry is reused; submit and self-check still await the assets they actually validate. Prefetching compatibility evidence does not evaluate the current selection.
 
-浏览器先读取 `site/wrt/config/site.json`，再以受限启动并发加载当前菜单、语言分片和软件包镜像投影；其中 `catalog.loading` 控制精选应用、隐藏项、帮助和兼容性规则的低优先级队列。`config/build.json` 只供构建端使用，浏览器永不加载。每项资产都按 index 的字节长度与 SHA-256 contract 校验；匹配的不可变缓存可复用，提交与自检仍必须等待实际需要验证的资产。
+浏览器先读取 `site/wrt/config/site.json`，再以受限启动并发加载当前菜单、语言分片和软件包镜像投影；其中 `catalog.loading` 控制精选应用、隐藏项、帮助和兼容性证据的低优先级队列。`config/build.json` 只供构建端使用，浏览器永不加载。每项资产都按 index 的字节长度与 SHA-256 contract 校验；匹配的不可变缓存可复用，提交与自检仍必须等待实际需要验证的资产。预取兼容性证据不等于评估当前选择。
 
 Catalog 自动发现由 Catalog 配置决定。当前策略覆盖：
 
@@ -134,7 +134,7 @@ Advanced menuconfig preserves parentless Catalog `path: []` records under the sy
 
 ## 5. Compatibility evidence / 兼容性证据
 
-`compatibility.json.gz` accepts schema 2 only. Rules use generic fields:
+`compatibility.json.gz` accepts schema 2 and schema 3. Schema 2 keeps the legacy rule shape; schema 3 may add structured source-commit, target-scope, and failure evidence. Rules use generic fields:
 
 - `issue`: `file-ownership` or `build-failure`;
 - `match`: `all-installed` or `all-selected`;
@@ -150,6 +150,8 @@ evaluateCompatibilityRules
 ```
 
 The browser renders data-driven wording, keeps the modal open after applying a recommendation, resets the action when the user changes a relevant state, and requires a second explicit confirmation for force-continue. The backend does not add conflict locks or feed-time package removals.
+
+Compatibility evaluation is on demand: only the bottom-right **Test** control and actual schema-6 JSON generation/download evaluate the final Source/Branch/Target/Kconfig state. Page load, config import, selector changes, plugin changes, and Menuconfig edits do not evaluate the current selection or open a compatibility modal. The immutable evidence asset may be prefetched by the existing low-priority queue, but that prefetch is not an evaluation.
 
 ## 6. Build request and Actions identity / 构建请求与 Actions 身份
 

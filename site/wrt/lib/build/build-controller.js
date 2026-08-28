@@ -109,12 +109,12 @@ function openSubmitModal() {
   }
   const repo = targetRepo();
   if (!repo) { alert(t('owner.required')); $('ownerBox').focus(); return; }
-  const sel = effectiveSelection();
+  const previewSelection = effectiveSelection();
   const tag = BUILD_IDENTITY_MODULE.normalizeBuildTag($('tagBox').value, t('tag.anonymous'));
   $('tagBox').value = tag;
-  const plugins = sel.normal.map((p) => p.id)
-    .concat(sel.forced.map((p) => '+' + p.id))
-    .concat(sel.removed.map((p) => '-' + p.id));
+  const previewPlugins = previewSelection.normal.map((p) => p.id)
+    .concat(previewSelection.forced.map((p) => '+' + p.id))
+    .concat(previewSelection.removed.map((p) => '-' + p.id));
   const firmware = {
     timezone: state.timezone,
     theme: $('fwThemeBox').value,
@@ -140,7 +140,7 @@ function openSubmitModal() {
   sum.className = 'summary-box';
   sum.textContent = t('submit.confirm', {
     brand: state.device.brand, device: state.device.name, source: state.source.label,
-    version: state.version.label, variant: state.variant.name, n: plugins.length, tag,
+    version: state.version.label, variant: state.variant.name, n: previewPlugins.length, tag,
     timezone: $('timezoneBox').value,
     theme: $('fwThemeBox').selectedOptions[0].textContent,
     ntp: $('ntpBox').selectedOptions[0].textContent,
@@ -179,6 +179,10 @@ function openSubmitModal() {
       try {
         await ensurePackageMirrors();
         const forcedCompatibility = await ensureCompatibilityRules();
+        const finalSelection = effectiveSelection();
+        const plugins = finalSelection.normal.map((p) => p.id)
+          .concat(finalSelection.forced.map((p) => '+' + p.id))
+          .concat(finalSelection.removed.map((p) => '-' + p.id));
         const config = await generateResolvedConfigText();
         const overrides = buildRequestOverrides(config);
         const payload = {

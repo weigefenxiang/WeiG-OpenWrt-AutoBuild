@@ -533,8 +533,10 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
           CATALOG_ENGINE.kconfigStateConstraints(CATALOG_MODEL, row.record, values,
             evaluation.context.validationOptions)]));
         try {
+          const compatibilitySchema = Number(evaluation.loaded.compatibility?.schema ??
+            evaluation.loaded.contract?.schema ?? 0);
           const compatibilityInvalid = CATALOG_ENGINE.evaluateCompatibilityRules(CATALOG_MODEL, {
-            schema: 2, rules: [warning.rule],
+            schema: compatibilitySchema, rules: [warning.rule],
           }, values, evaluation.context).warnings.length > 0;
           const stateInvalid = rows.some((row) => {
             const constraints = constraintsBySymbol.get(row.record.configSymbol);

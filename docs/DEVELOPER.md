@@ -88,9 +88,9 @@ Advanced menuconfig 的 `Root Kconfig options / 根级 Kconfig 选项` 是 `path
 
 通用回归至少覆盖：bool、tristate、string empty/non-empty、literal `n`、escaping、int、hex、unknown symbol，以及默认表达式的条件、括号、`&&`/`||`、deferred 和闭世界边界。
 
-## 5. compatibility schema 2
+## 5. compatibility schema 2/3
 
-规则文档只接受 schema 2。Source 可为具体 ID 或单独的 `*`；Branch 可为精确名或 glob。`*` Source 不得和具体 Source 混用。规则支持一个软件包，因此已知单包构建失败不需要伪造“两包冲突”。
+规则文档接受 schema 2 和 schema 3。schema 2 保留旧规则形状；schema 3 可增加 `sourceCommits`、`targetScope` 和结构化 `failure` 证据。Source 可为具体 ID 或单独的 `*`；Branch 可为精确名或 glob。`*` Source 不得和具体 Source 混用。规则支持一个软件包，因此已知单包构建失败不需要伪造“两包冲突”。浏览器必须保留已加载文档的实际 schema，并校验 index 合同中的 schema、SHA-256、压缩字节数、JSON 字节数和规则数。
 
 执行器固定为：
 
@@ -101,6 +101,8 @@ evaluateCompatibilityRules → deriveCompatibilityPlans → applyUserIntent
 推荐计划可以包含“先关闭上级选择、再关闭兼容目标”的有序用户步骤，以及由共享 Kconfig runtime 自动产生的下级失效/依赖清理；两者都必须来自同一次通用状态计算。页面只负责展示并按顺序把步骤送回 `applyUserIntent`，不得自行推导依赖关系。
 
 页面文案按 `issue` 通用渲染。推荐按钮应用后弹窗保留；相关值再次变化时按钮恢复为“推荐方案”；强制继续必须进入第二确认视图。`app.js` 内不得出现规则 ID、插件名或冲突文件路径。
+
+兼容性检查按需执行：只有用户单击右下角“检”或真正生成/下载 schema 6 `build-request.json` 时，才针对当时的最终 Source/Branch/Target/Kconfig 运行评估并显示推荐。页面加载、导入 `.config`/JSON、切换 Source/Branch/Target、增删插件和修改 Menuconfig 都不得执行当前选择的兼容性检查或弹窗；兼容性资产可以按既有低优先级队列预取，但预取不等于评估。
 
 ## 6. 构建请求和后端
 
