@@ -435,7 +435,7 @@ jobs:
           fi
           chmod +x openwrt/files/etc/uci-defaults/99-init-password
           echo "Initial password script created / 初始密码脚本已创建"
-          unset DEFAULT_ROOT_PASSWORD REQUEST_ROOT_PASSWORD PASSWORD_MODE RPW
+          unset DEFAULT_ROOT_PASSWORD REQUEST_ROOT_PASSWORD PASSWORD_MODE RPW ROOT_HASH
 
       - name: Prepare authoritative .config / 准备权威配置
         run: |

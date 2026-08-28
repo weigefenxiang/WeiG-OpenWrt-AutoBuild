@@ -90,6 +90,7 @@ const state = {
   ntp: 'cn',
   packageMirror: 'source-default',
   siteVersion: 'v----------',
+  siteConfigReady: false,
   buildMeta: null,
   importedConfig: null,
   importedConfigId: '',

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/config/build.schema.json",
+  "title": "WeiG OpenWrt AutoBuild build configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["password", "jobs", "admission"],
+  "properties": {
+    "password": {
+      "$ref": "#/$defs/password"
+    },
+    "jobs": {
+      "$ref": "#/$defs/jobs"
+    },
+    "admission": {
+      "$ref": "#/$defs/admission"
+    }
+  },
+  "$defs": {
+    "password": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "enum": ["prompt", "empty", "secret"]
+        }
+      }
+    },
+    "jobs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compile", "download"],
+      "properties": {
+        "compile": {
+          "$ref": "#/$defs/jobCount"
+        },
+        "download": {
+          "$ref": "#/$defs/jobCount"
+        }
+      }
+    },
+    "admission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["publicActiveBuilds"],
+      "properties": {
+        "publicActiveBuilds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        }
+      }
+    },
+    "jobCount": {
+      "oneOf": [
+        {
+          "const": "auto"
+        },
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        }
+      ]
+    }
+  }
+}

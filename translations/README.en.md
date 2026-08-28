@@ -19,24 +19,41 @@ The page also imports `build-request.json`, `.config`, and `config.buildinfo`. U
 
 ## Cloning and project configuration
 
-The single source for clone-specific project defaults is `config/project.json`. After cloning, edit that file and run:
+Maintain two configuration sources with separate responsibilities after cloning:
+
+- `site/wrt/config/site.json` is the sole public-site configuration source. It contains branding, Catalog location and selection/loading policy, web appearance, firmware defaults, and the default build tag. The browser reads this file only.
+- `config/build.json` is the sole build-side configuration source. It contains only password mode, `jobs.compile`, `jobs.download`, and `admission.publicActiveBuilds`. It stays at the repository root and must never be read by the browser or deployed as static site content.
+
+Edit the relevant file(s), run `prepare` in the working tree, and commit the configuration together with the controlled output produced by `prepare`:
 
 ```powershell
 node tools/dev-assistant.mjs prepare
 ```
 
-`prepare` validates the configuration and regenerates `site/wrt/data/project.json` and `Shell/build-defaults.conf`; both are generated projections and must not be edited directly. The field boundaries are:
+`prepare` validates both configuration sources and updates `Shell/build-defaults.conf` for build scripts; generated files are not configuration sources and must not be edited directly. The field boundaries are:
 
-| Block | Configurable content | Boundary |
+| Configuration file/block | Configurable content | Boundary |
 | --- | --- | --- |
-| `project` | `displayName`, `shortName`, repository, and blog URL | Names are presentation only; gateway identity, the `[build]` protocol, and Run/Artifact title formats stay unchanged |
-| `catalog` | Catalog repository, release tag, Source/Branch preference, and preferred Target selectors | Catalog data remains authoritative for Source, Branch, Target/Profile, packages, and compatibility facts |
-| `ui` | Default language and color mode | Controls only the initial web appearance |
-| `firmware` | LAN address, timezone, theme, NTP, package mirror, and password mode | Supplies build defaults only; sensitive values never belong here |
-| `build` | Default build tag and compile/download concurrency | Defaults cannot bypass request validation |
-| `admission` | Public active-build limit | Controls admission policy only |
+| `site/wrt/config/site.json` → `project` | `displayName`, `shortName`, repository, and blog URL | Presentation and link targets only; gateway identity, the `[build]` protocol, and Run/Artifact title formats stay unchanged |
+| `site/wrt/config/site.json` → `catalog` | Catalog repository, release tag, Source/Branch preference, preferred Target selector, and loading queue | Catalog remains authoritative for Source, Branch, Target/Profile, packages, Kconfig, and compatibility facts; no inventory is maintained here |
+| `site/wrt/config/site.json` → `ui` | Default language and color mode | Controls only the initial web appearance |
+| `site/wrt/config/site.json` → `firmware` | LAN address, timezone, theme, NTP, and package mirror | Public firmware defaults only; sensitive values never belong here |
+| `site/wrt/config/site.json` → `build` | Default build tag `defaultTag` | Supplies a web default only and cannot bypass request validation |
+| `config/build.json` → `password` | `mode`: `prompt`, `empty`, or `secret` | Read by the build side only; not a web setting |
+| `config/build.json` → `jobs` | `compile` and `download` concurrency (`auto` or an integer) | Controls build-side concurrency only and cannot change request semantics |
+| `config/build.json` → `admission` | `publicActiveBuilds` | Controls the public build admission limit only |
 
-With password mode `prompt`, the submitter supplies the password; `empty` explicitly requests an empty password; `secret` requires the repository Secret `DEFAULT_ROOT_PASSWORD`. Never write the actual password to `config/project.json`, generated site data, build requests, Issues, or logs.
+With password mode `prompt`, the submitter supplies the password; `empty` explicitly requests an empty password; `secret` requires the repository Secret `DEFAULT_ROOT_PASSWORD`. Never write the actual password to `config/build.json`, site files, build requests, Issues, or logs.
+
+### Independently deploying `site/wrt`
+
+`site/wrt` is a complete static web site that can be hosted independently. Deploy the entire directory—including `config/`, `data/`, HTML, scripts, and styles—to a Blog, Pages host, or another static host. The actual deployment must run from a clean checkout of the 40-character SHA that contains the committed configuration and controlled output above:
+
+```powershell
+node tools/prepare-web-deployment.mjs --commit <40-character SHA> --branch <dev or main>
+```
+
+This command creates the ignored `site/wrt/data/build-meta.json`. Deployment must include metadata matching `site-version.json`; missing, invalid, or stale metadata disables submission. The Pages workflow's site-preparation stage only runs `node tools/stamp-site-version.mjs --check` and `prepare-web-deployment`; it does not modify configuration at deployment time. Independent hosting changes only where the page is published, not build identity: a build request must still correspond to the same commit in the target AutoBuild repository. Catalog remains the sole source for Source, Branch, Target/Profile, packages, Kconfig, dependencies, and compatibility facts; repository configuration cannot declare or modify advanced Catalog facts.
 
 ## Names and retention
 
@@ -56,7 +73,7 @@ The user build tag is preserved and `#161` is the original Build Issue. All down
 
 ## Data and compatibility
 
-- The current Source/Branch menu and language load first. Applications, hidden options, help, compatibility, and mirror rules follow the idle queue configured in `project.json`.
+- The current Source/Branch menu and language load first. Applications, hidden options, help, compatibility, and mirror rules follow the idle queue in `catalog.loading` from `site/wrt/config/site.json`.
 - Curated IDs, Chinese/English descriptions, and cross-source size observations live in Catalog. Equal IDs are one application. Sizes use three significant digits; missing reliable observations remain explicitly unknown.
 - `compatibility.json` accepts schema 2 only. Source supports `*` and Branch supports globs. Rules provide evidence; the browser uses the same Catalog executor for the minimum plan and preserves the confirmed force-continue path.
 - AutoBuild performs no weekly data sync. Newly published Source/Branch data becomes available through Catalog without an AutoBuild source update.
@@ -79,7 +96,7 @@ Open <http://localhost:8642/> and test Source/Branch switching, Target/Profile, 
 - Edit `tools/i18n-source.json` and `tools/i18n-translations.json` for web translations; `site/wrt/data/i18n/` contains generated bundles and must not be edited directly.
 - Use the in-page **Package Compatibility Probe** for package regression. It reuses Advanced menuconfig Kconfig state and exposes seven Catalog-described depths from L1 config resolution through L7 reboot validation; L4 builds one Final firmware, and GitHub revalidates permissions and requests before creating a Matrix.
 - Every AutoBuild modification must run `prepare`, which updates `VERSION` and `site-version.json` in Asia/Shanghai time.
-- After cloning, edit only `config/project.json` for project defaults, then run `prepare` to regenerate public projections. Do not copy Catalog Source/Branch, Target/Profile, or package facts into this repository.
+- After cloning, edit `site/wrt/config/site.json` for public-site defaults and `config/build.json` for build-side settings, then run `prepare`. Do not copy Catalog Source/Branch, Target/Profile, or package facts into this repository.
 
 See [ARCHITECTURE.md](../ARCHITECTURE.md) and the [Developer Guide](../docs/DEVELOPER.en.md).
 

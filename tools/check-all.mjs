@@ -82,6 +82,7 @@ const regressionTests = [
   'test-build-request-identity.mjs',
   'test-request-audit.mjs',
   'test-build-diagnostics.mjs',
+  'test-project-config.mjs',
   'test-catalog-loader.mjs',
   'test-catalog-engine.mjs',
   'test-menuconfig-direct-intent.mjs',
@@ -126,7 +127,6 @@ const dataFiles = [
   'site/wrt/data/i18n/fr.json',
   'site/wrt/data/i18n/vi.json',
   'site/wrt/data/package-mirrors.json',
-  'site/wrt/data/project.json',
   'site/wrt/data/site-version.json',
   'site/wrt/data/timezones.json',
   'config/policies/package-mirrors.json',
@@ -135,6 +135,10 @@ const dataFiles = [
   'tools/i18n-translations.json',
 ];
 const parsed = new Map(dataFiles.map((name) => [name, parseJson(join(ROOT, name))]));
+const siteConfig = parseJson(join(ROOT, 'site', 'wrt', 'config', 'site.json'));
+const buildConfig = parseJson(join(ROOT, 'config', 'build.json'));
+const siteSchema = parseJson(join(ROOT, 'site', 'wrt', 'config', 'site.schema.json'));
+const buildSchema = parseJson(join(ROOT, 'config', 'build.schema.json'));
 const expectedDataFiles = new Set(dataFiles.filter((name) => name.startsWith('site/wrt/data/'))
   .map((name) => name.slice('site/wrt/data/'.length)));
 const actualDataFiles = filesUnder(join(ROOT, 'site', 'wrt', 'data'))
@@ -153,14 +157,29 @@ if (!unexpectedData.length && !missingData.length) {
 const configEntries = filesUnder(join(ROOT, 'config')).map((path) => relative(ROOT, path).replaceAll('\\', '/'));
 const expectedConfigEntries = new Set([
   'config/policies/package-mirrors.json',
-  'config/project.json',
-  'config/project.schema.json',
+  'config/build.json',
+  'config/build.schema.json',
 ]);
 if (configEntries.length === expectedConfigEntries.size && configEntries.every((entry) => expectedConfigEntries.has(entry))) {
-  pass('AutoBuild has one canonical project config and one small runtime policy');
+  pass('AutoBuild has one canonical build config and one small runtime policy');
 } else fail('config allowlist', configEntries.join(','));
 
-run('project config projections match their canonical source', process.execPath,
+const siteConfigEntries = filesUnder(join(ROOT, 'site', 'wrt', 'config'))
+  .map((path) => relative(ROOT, path).replaceAll('\\', '/'));
+const expectedSiteConfigEntries = new Set([
+  'site/wrt/config/site.json',
+  'site/wrt/config/site.schema.json',
+]);
+if (siteConfigEntries.length === expectedSiteConfigEntries.size &&
+    siteConfigEntries.every((entry) => expectedSiteConfigEntries.has(entry))) {
+  pass('site/wrt has one static canonical site config and schema');
+} else fail('site config allowlist', siteConfigEntries.join(','));
+if (siteSchema?.$schema && buildSchema?.$schema && siteConfig?.build?.defaultTag === 'anonymous' &&
+    buildConfig?.jobs?.compile === 'auto' && buildConfig?.jobs?.download === 'auto') {
+  pass('site/build canonical schemas and defaults are readable');
+} else fail('site/build canonical schema or defaults');
+
+run('build defaults match canonical site/build configs', process.execPath,
   [join(ROOT, 'tools', 'gen-project-config.mjs'), '--check']);
 
 run('package mirror public projection matches its canonical policy', process.execPath,
@@ -191,7 +210,6 @@ const profileBaseline = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'profile-b
 const parser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
 const requestAudit = readFileSync(join(ROOT, 'tools', 'request-audit.mjs'), 'utf8');
 const customBuildWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8');
-const project = parsed.get('site/wrt/data/project.json');
 const automationPolicy = parsed.get('.github/automation-policy.json');
 const architecture = readFileSync(join(ROOT, 'ARCHITECTURE.md'), 'utf8');
 const developerZh = readFileSync(join(ROOT, 'docs', 'DEVELOPER.md'), 'utf8');
@@ -277,13 +295,13 @@ if (app.includes("label: 'Root Kconfig options', uiKey: 'rootOptions', usageUiKe
   pass('parentless Catalog options remain reachable under an explicit root Kconfig label');
 } else fail('root Kconfig menu contract');
 
-const loadPolicy = project?.catalogLoadPolicy;
+const loadPolicy = siteConfig?.catalog?.loading;
 if (loadPolicy?.startup?.join(',') === 'menu,menu:language,package-mirrors' &&
     loadPolicy?.idle?.join(',') === 'applications,hidden,help,compatibility' &&
     loadPolicy.startupConcurrency === 3 && loadPolicy.idleConcurrency === 1 &&
     (app.match(/'package-mirrors': ensurePackageMirrors/g) || []).length === 1 &&
     app.includes('applications: ensureCatalogApplications')) {
-  pass('startup/idle Catalog download order is controlled by project.json');
+  pass('startup/idle Catalog download order is controlled by site/config/site.json');
 } else fail('Catalog load policy');
 
 if (!existsSync(join(ROOT, 'site', 'wrt', 'packages.html')) && !html.includes('packages.html') &&

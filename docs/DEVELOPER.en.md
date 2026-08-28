@@ -2,20 +2,28 @@
 
 ## 0. Cloning and project configuration
 
-The single source for clone-specific project settings is `config/project.json`. After cloning, edit only that file and run:
+Maintain two configuration sources with separate responsibilities after cloning. Edit `site/wrt/config/site.json` for the public web site and firmware defaults, and `config/build.json` for build-side policy. Run `prepare` in the working tree, then commit both configuration sources together with the controlled output produced by `prepare`:
 
 ```powershell
 node tools/dev-assistant.mjs prepare
 ```
 
-`prepare` validates the configuration and generates `site/wrt/data/project.json` for the page and `Shell/build-defaults.conf` for build scripts. Generated projections are not configuration sources and must not be edited directly. The field responsibilities are fixed:
+`prepare` validates both configuration sources and updates `Shell/build-defaults.conf` for build scripts. Generated files are not configuration sources and must not be edited directly; `config/build.json` is never deployed as static site content. The field responsibilities are fixed:
 
-- `project.displayName` and `project.shortName` are presentation-only values for the page title, short brand, and notices; they do not participate in gateway identity, the `[build]` request marker, or the Run/Artifact title protocol.
-- `project.repository` and `project.blogUrl` provide validated link targets only.
-- `catalog.repository`, `catalog.releaseTag`, and `catalog.selection` control Catalog location and preferences only; `catalog.loading` preserves the existing runtime scheduling contract and is not a new clone-specific option. Catalog data remains authoritative for Source, Branch, Target/Profile, packages, Kconfig, and compatibility facts.
-- `ui`, `firmware`, `build`, and `admission` provide web, firmware, build-default, and admission-limit settings respectively; they do not expand the request protocol or fact authority.
+- In `site/wrt/config/site.json`, `project.displayName` and `project.shortName` are presentation-only values for the page title, short brand, and notices; `project.repository` and `project.blogUrl` provide validated link targets only. None participates in gateway identity, the `[build]` request marker, or the Run/Artifact title protocol.
+- In `site/wrt/config/site.json`, `catalog.repository`, `catalog.releaseTag`, `catalog.selection`, and the existing `catalog.loading` contract control Catalog location, preferences, and loading scheduling only. Catalog data remains authoritative for Source, Branch, Target/Profile, packages, Kconfig, and compatibility facts; no inventory or advanced Catalog facts may be maintained here.
+- In `site/wrt/config/site.json`, `ui`, `firmware`, and `build.defaultTag` provide web appearance, public firmware defaults, and the web's default build tag respectively; they do not expand the request protocol or fact authority.
+- `config/build.json` contains only `password.mode`, `jobs.compile`, `jobs.download`, and `admission.publicActiveBuilds`. These values are read by the build side only; the browser must not read them.
 
-With password `mode` set to `prompt`, the submitter supplies the password; `empty` explicitly requests an empty password; `secret` requires the repository Secret `DEFAULT_ROOT_PASSWORD`. Never write the actual password to `config/project.json`, any generated projection, a build request, an Issue, or logs.
+With password `mode` set to `prompt`, the submitter supplies the password; `empty` explicitly requests an empty password; `secret` requires the repository Secret `DEFAULT_ROOT_PASSWORD`. Never write the actual password to `config/build.json`, site files, a build request, an Issue, or logs.
+
+`site/wrt` is a complete static web site that can be hosted independently. Deployment must preserve the entire directory, including `config/`, `data/`, HTML, scripts, and styles. The actual deployment must run from a clean checkout of the 40-character SHA that contains the committed configuration and controlled output above:
+
+```powershell
+node tools/prepare-web-deployment.mjs --commit <40-character SHA> --branch <dev or main>
+```
+
+This command creates the ignored `site/wrt/data/build-meta.json`. Deployment must include metadata consistent with `site-version.json`; missing, invalid, or stale metadata must keep the submission gate disabled. The Pages workflow's site-preparation stage only runs `node tools/stamp-site-version.mjs --check` and `prepare-web-deployment`; it does not modify configuration at deployment time. Independent hosting changes only the page location, not build identity: the request must still correspond to the same commit in the target AutoBuild repository.
 
 Edit only `tools/i18n-source.json` and `tools/i18n-translations.json` for web translations; `site/wrt/data/i18n/` contains generated bundles and must not be edited directly.
 
@@ -30,16 +38,18 @@ Edit only `tools/i18n-source.json` and `tools/i18n-translations.json` for web tr
 
 ## 2. Data loading
 
-`config/project.json` is the editable source for the configurable order; `site/wrt/data/project.json` is its projection generated by `prepare`:
+`site/wrt/config/site.json` is the public web configuration source; its `catalog.loading` object is the existing loading-scheduling contract. `config/build.json` is the build-side configuration source and must not be read by the browser:
 
 ```json
 {
-  "catalogLoadPolicy": {
-    "startup": ["menu", "menu:language", "package-mirrors"],
-    "idle": ["applications", "hidden", "help", "compatibility"],
-    "startupConcurrency": 3,
-    "idleConcurrency": 1,
-    "idleDelayMs": 15000
+  "catalog": {
+    "loading": {
+      "startup": ["menu", "menu:language", "package-mirrors"],
+      "idle": ["applications", "hidden", "help", "compatibility"],
+      "startupConcurrency": 3,
+      "idleConcurrency": 1,
+      "idleDelayMs": 15000
+    }
   }
 }
 ```
@@ -54,7 +64,7 @@ The default package mirror follows the selected firmware timezone, never the bro
 
 The top build overview reserves flexible desktop width for the Source/Branch/Target Profile locator; its compact contract header contains only the title and chevron, while the full Catalog commit remains in the expanded body and accessible hint. The 641–960 px layout places the locator on its own first row, contract and controls on the second, and expanded content on the third. Mobile stacks those four regions. This layout must not change the separate Advanced menuconfig search contract or reduce expanded-body typography.
 
-Public `site/wrt/data/` contains deployment identity, UI i18n, timezones, project parameters, and the package-mirror projection only. Device registries, seed configs, public base configs, plugin metadata, local size snapshots, and the generated package page are retired.
+Public `site/wrt/data/` contains deployment identity, UI i18n, timezones, and runtime package-mirror assets only; public project, brand, firmware defaults, and Catalog selection/loading policy live in `site/wrt/config/site.json`. `config/build.json` must not enter the static site. Device registries, seed configs, public base configs, plugin metadata, local size snapshots, and the generated package page are retired.
 
 ## 3. Catalog applications and sizes
 
@@ -137,7 +147,7 @@ For every channel, publish Catalog first, wait for its data branch and root-asse
 
 ## 10. Catalog selection and final configuration
 
-`site/wrt/data/project.json` carries only a small selection policy: Source priority, development-branch priority, and preferred Target selector values. Catalog remains the sole inventory of real Sources, Branches, Targets, and Profiles. A missing preferred Target must fall back to the first complete valid Catalog path. Defaults apply only to first selection or a new Source/Branch; they must never overwrite the current control, valid state, or an explicit request.
+`site/wrt/config/site.json` carries only a small `catalog.selection` policy: Source priority, development-branch priority, and preferred Target selector values; `catalog.loading` retains the existing loading-scheduling contract. Catalog remains the sole inventory of real Sources, Branches, Targets, and Profiles. A missing preferred Target must fall back to the first complete valid Catalog path. Defaults apply only to first selection or a new Source/Branch; they must never overwrite the current control, valid state, or an explicit request.
 
 Menu and applications shards converge through one Catalog-ready reconciliation regardless of arrival order. It refreshes curated applications, Advanced, the build contract, statistics, and submit gate. Before menu completion, curated entries are disabled with a loading state; they are not permanently classified as unavailable.
 

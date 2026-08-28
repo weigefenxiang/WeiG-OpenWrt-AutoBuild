@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/config/project.schema.json",
-  "title": "WeiG OpenWrt AutoBuild project configuration",
+  "$id": "https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/site/wrt/config/site.schema.json",
+  "title": "WeiG OpenWrt AutoBuild site configuration",
   "type": "object",
   "additionalProperties": false,
-  "required": ["project", "catalog", "ui", "firmware", "build", "admission"],
+  "required": ["project", "catalog", "ui", "firmware", "build"],
   "properties": {
     "project": {
       "$ref": "#/$defs/project"
@@ -20,9 +20,6 @@
     },
     "build": {
       "$ref": "#/$defs/build"
-    },
-    "admission": {
-      "$ref": "#/$defs/admission"
     }
   },
   "$defs": {
@@ -175,7 +172,7 @@
     "firmware": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["lanIp", "timezone", "theme", "ntp", "packageMirror", "password"],
+      "required": ["lanIp", "timezone", "theme", "ntp", "packageMirror"],
       "properties": {
         "lanIp": {
           "type": "string",
@@ -194,7 +191,8 @@
               "type": "string",
               "pattern": "^[A-Za-z0-9._+<>,:/-]{1,128}$"
             }
-          }
+          },
+          "$comment": "The pair must match one exact row in site/wrt/data/timezones.json."
         },
         "theme": {
           "type": "string",
@@ -222,45 +220,17 @@
         "packageMirror": {
           "$ref": "#/$defs/identifier",
           "$comment": "Must match a canonical preset id in config/policies/package-mirrors.json; aliases are not accepted."
-        },
-        "password": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["mode"],
-          "properties": {
-            "mode": {
-              "enum": ["prompt", "empty", "secret"]
-            }
-          }
         }
       }
     },
     "build": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["defaultTag", "compileJobs", "downloadJobs"],
+      "required": ["defaultTag"],
       "properties": {
         "defaultTag": {
           "type": "string",
           "maxLength": 160
-        },
-        "compileJobs": {
-          "$ref": "#/$defs/jobCount"
-        },
-        "downloadJobs": {
-          "$ref": "#/$defs/jobCount"
-        }
-      }
-    },
-    "admission": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["publicActiveBuilds"],
-      "properties": {
-        "publicActiveBuilds": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 20
         }
       }
     },
@@ -287,18 +257,6 @@
     "hostname": {
       "type": "string",
       "pattern": "^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
-    },
-    "jobCount": {
-      "oneOf": [
-        {
-          "const": "auto"
-        },
-        {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 32
-        }
-      ]
     }
   }
 }

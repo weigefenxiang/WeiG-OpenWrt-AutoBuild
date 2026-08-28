@@ -25,6 +25,18 @@ async function fetchData(path) {
   }
   throw new Error('数据加载失败: ' + path);
 }
+
+async function loadSiteConfig() {
+  const response = await fetch(releaseAssetUrl('config/site.json'), { cache: 'no-store' });
+  if (!response.ok) throw new Error('站点配置加载失败: HTTP ' + response.status);
+  let source;
+  try { source = await response.json(); }
+  catch (error) { throw new Error('站点配置 JSON 无效'); }
+  const module = await import(releaseAssetUrl('./lib/site-config.js'));
+  const normalized = module.normalizeSiteConfig(source);
+  return module.siteRuntimeConfig(normalized);
+}
+
 async function loadJson(path) {
   const key = `wrt_cache:${SITE_RELEASE_SHA}:${path}`;
   const cached = localStorage.getItem(key);

@@ -32,11 +32,14 @@ Catalog is the data layer. AutoBuild is a generic consumer and build orchestrato
 WeiG-OpenWrt-AutoBuild/
 ├─ .github/workflows/          build routing, worker, cancellation, CI and Pages
 ├─ Shell/                      generic upstream/build adapters
-├─ config/project.json         canonical clone/project configuration
-├─ config/project.schema.json  project configuration schema
+├─ config/build.json           build-side password/jobs/admission configuration
+├─ config/build.schema.json    build-side configuration schema
 ├─ config/policies/            one small package-mirror policy
 ├─ docs/                       bilingual developer documentation
 ├─ site/wrt/
+│  ├─ config/
+│  │  ├─ site.json             public web/firmware/default configuration
+│  │  └─ site.schema.json      public site configuration schema
 │  ├─ index.html               static UI shell
 │  ├─ app.css                  shared responsive presentation
 │  ├─ app.js                   generic Catalog consumer
@@ -44,8 +47,9 @@ WeiG-OpenWrt-AutoBuild/
 │  │  ├─ catalog-loader.js     immutable index/asset contract loader
 │  │  ├─ catalog-engine.js     Kconfig + compatibility executor
 │  │  ├─ catalog-schema6.js    split Catalog asset reader
+│  │  ├─ site-config.js        shared site configuration validator/adapter
 │  │  └─ build-identity.js     shared Issue/Run/Artifact naming
-│  └─ data/                    deployment identity, i18n, timezone, project and mirror projection only
+│  └─ data/                    deployment identity, i18n, timezone and mirror runtime assets
 ├─ tools/                      preparation, validation, request and deployment tools
 └─ VERSION                     Asia/Shanghai project version
 ```
@@ -54,17 +58,37 @@ There is intentionally no local device tree, public base config, generated packa
 
 ### 项目配置 / Project configuration
 
-`config/project.json` 是克隆者唯一需要编辑的项目级配置源。运行 `node tools/dev-assistant.mjs prepare` 会校验它，并生成 `site/wrt/data/project.json` 与 `Shell/build-defaults.conf`；生成投影不能反向作为配置源直接编辑。`project.displayName` 和 `project.shortName` 只负责页面标题、短品牌和通知展示，前端在配置加载后通过文本节点呈现；它们不会改变网关身份、`[build]` 请求协议或 Run/Artifact 标题格式。
+克隆者要维护两个职责隔离的配置源：`site/wrt/config/site.json` 是公开网页的唯一配置源，负责品牌、Catalog 地址与选择/加载策略、网页外观、固件默认值和默认构建标识；`config/build.json` 是构建端的唯一配置源，只负责 `password.mode`、`jobs.compile`、`jobs.download` 与 `admission.publicActiveBuilds`。浏览器只读取 `site/wrt/config/site.json`，绝不能读取或部署 `config/build.json`。
 
-`catalog.repository`、`catalog.releaseTag` 与 `catalog.selection` 只描述 Catalog 地址与首选项；`catalog.loading` 仅保留现有运行时调度 contract，不作为本期新增可选参数。Source、Branch、Target/Profile、Kconfig、插件、依赖和兼容性事实仍由 Catalog runtime data 负责，不能在项目配置中复制一份清单。`ui`、`firmware`、`build` 与 `admission` 只提供对应的默认值和准入上限。
+在工作树按需编辑对应配置后运行 `node tools/dev-assistant.mjs prepare`；它会校验两份配置并更新构建脚本使用的 `Shell/build-defaults.conf`。配置与 `prepare` 产生的受控输出必须一起提交，生成文件不能反向作为配置源直接编辑。
 
-密码模式 `prompt` 由提交者输入，`empty` 明确使用空密码；`secret` 模式必须配置仓库 Secret `DEFAULT_ROOT_PASSWORD`。实际密码不得写入配置源、任何生成投影、构建请求、Issue 或日志。
+`site/wrt/config/site.json` 中，`project.displayName` 和 `project.shortName` 只负责页面标题、短品牌和通知展示；`project.repository` 与 `project.blogUrl` 只提供经校验的链接目标，不会改变网关身份、`[build]` 请求协议或 Run/Artifact 标题格式。`catalog.repository`、`catalog.releaseTag`、`catalog.selection` 与既有 `catalog.loading` 调度 contract 只描述 Catalog 地址、首选项和加载顺序；Source、Branch、Target/Profile、Kconfig、插件、依赖和兼容性事实仍由 Catalog runtime data 负责，不能在项目配置中复制清单或声明高级 Catalog 事实。`ui`、`firmware` 与 `build.defaultTag` 分别提供网页外观、公开固件默认值和网页默认构建标识。
 
-网页翻译的权威源是 `tools/i18n-source.json` 与 `tools/i18n-translations.json`；`site/wrt/data/i18n/` 只保存生成包。公开文案保持中性，不把工具、模型或厂商名称写进公共界面。
+密码模式 `prompt` 由提交者输入，`empty` 明确使用空密码；`secret` 模式必须配置仓库 Secret `DEFAULT_ROOT_PASSWORD`。实际密码不得写入 `config/build.json`、站点文件、构建请求、Issue 或日志。网页翻译的权威源是 `tools/i18n-source.json` 与 `tools/i18n-translations.json`；`site/wrt/data/i18n/` 只保存生成包。公开文案保持中性，不把工具、模型或厂商名称写进公共界面。
 
-The clone-specific source of truth is `config/project.json`. `node tools/dev-assistant.mjs prepare` validates it and generates the site and build-script projections. Project names are presentation-only and are rendered as text after the projection loads; they do not alter gateway identity, the `[build]` request protocol, or Run/Artifact title formats. `catalog.loading` preserves the existing runtime scheduling contract and is not a new clone-specific option. Catalog inventory and package facts remain Catalog-owned, and password mode `secret` requires the repository Secret `DEFAULT_ROOT_PASSWORD`; the password itself must never be stored in configuration, projections, requests, Issues, or logs.
+`site/wrt` 是完整的静态网页业务源，可独立托管。部署必须保留整个目录及其 `config/`、`data/`、HTML、脚本和样式。配置与受控输出提交后，实际部署要从该 40 位 SHA 的干净 checkout 执行：
 
-The translation authorities are `tools/i18n-source.json` and `tools/i18n-translations.json`; `site/wrt/data/i18n/` contains generated bundles only. Keep public wording neutral and do not add tool, model, or vendor names to the public interface.
+```powershell
+node tools/prepare-web-deployment.mjs --commit <40位SHA> --branch <dev或main>
+```
+
+该命令生成被忽略的 `site/wrt/data/build-meta.json`。部署必须携带与 `site-version.json` 一致的元数据；缺失、非法或陈旧元数据时提交门禁保持禁用。Pages workflow 的站点准备阶段只执行 `node tools/stamp-site-version.mjs --check` 和 `prepare-web-deployment`，不在部署现场修改配置。独立托管只改变网页发布位置，不改变构建身份：每个构建请求仍必须对应目标 AutoBuild 仓库的同一提交。Catalog 的 Source、Branch、Target/Profile、插件、Kconfig、依赖和兼容性事实仍全部由 Catalog 提供，AutoBuild 配置不能声明或修改高级 Catalog 事实。
+
+The clone-specific configuration has two isolated authorities. `site/wrt/config/site.json` is the sole public-site source for branding, Catalog location and selection/loading policy, web appearance, firmware defaults, and the default build tag. `config/build.json` is the sole build-side source and contains only `password.mode`, `jobs.compile`, `jobs.download`, and `admission.publicActiveBuilds`. The browser reads `site/wrt/config/site.json` only; it must never read or deploy `config/build.json`.
+
+After editing the relevant source in the working tree, run `node tools/dev-assistant.mjs prepare`. It validates both sources and updates `Shell/build-defaults.conf` for build scripts. Commit both configuration sources together with the controlled output produced by `prepare`; generated files are not configuration sources and must not be edited as such.
+
+In `site/wrt/config/site.json`, `project.displayName` and `project.shortName` are presentation-only page-title, short-brand, and notice values; `project.repository` and `project.blogUrl` provide validated link targets only. They do not alter gateway identity, the `[build]` request protocol, or Run/Artifact title formats. `catalog.repository`, `catalog.releaseTag`, `catalog.selection`, and the existing `catalog.loading` scheduling contract describe Catalog location, preferences, and loading order only. Catalog runtime data remains authoritative for Source, Branch, Target/Profile, Kconfig, packages, dependencies, and compatibility facts; project configuration may not copy an inventory or declare advanced Catalog facts. `ui`, `firmware`, and `build.defaultTag` provide web appearance, public firmware defaults, and the web's default build tag.
+
+With password mode `prompt`, the submitter supplies the password; `empty` explicitly requests an empty password; `secret` requires the repository Secret `DEFAULT_ROOT_PASSWORD`. Never write the actual password to `config/build.json`, site files, build requests, Issues, or logs. The translation authorities are `tools/i18n-source.json` and `tools/i18n-translations.json`; `site/wrt/data/i18n/` contains generated bundles only. Keep public wording neutral and do not add tool, model, or vendor names to the public interface.
+
+`site/wrt` is the complete static web-site business source and can be hosted independently. Deploy the entire directory, including `config/`, `data/`, HTML, scripts, and styles. The actual deployment must run from a clean checkout of the committed 40-character SHA after the configuration and controlled output have been committed:
+
+```powershell
+node tools/prepare-web-deployment.mjs --commit <40-character SHA> --branch <dev or main>
+```
+
+This command creates the ignored `site/wrt/data/build-meta.json`. Deployment must include metadata matching `site-version.json`; missing, invalid, or stale metadata keeps the submission gate disabled. The Pages workflow's site-preparation stage only runs `node tools/stamp-site-version.mjs --check` and `prepare-web-deployment`; it does not modify configuration at deployment time. Independent hosting changes only where the page is published, not build identity: every build request must still correspond to the same commit in the target AutoBuild repository. Catalog remains the sole source for Source, Branch, Target/Profile, packages, Kconfig, dependencies, and compatibility facts; AutoBuild configuration cannot declare or modify advanced Catalog facts.
 
 ## 3. Catalog channels and loading / Catalog 通道与加载
 
@@ -79,7 +103,9 @@ AutoBuild code channels bind to data branches:
 
 These are **runtime consumption channels**, not Catalog build destinations. Catalog code and production data have independent lifecycles: Catalog `main` builds only `catalog-candidate`; only the Catalog Production Gate may promote that verified snapshot to `catalog-data`. AutoBuild therefore keeps `main → catalog-data` and never reads `catalog-candidate` at runtime. This separation lets Catalog code reach `main` without implicitly changing production users, while `dev` and `staging` continue to consume their matching data branches.
 
-The browser loads the current menu, language shard, and package-mirror projection together with bounded startup concurrency. The generated `site/wrt/data/project.json` projection then controls a low-priority queue for applications, hidden options, help, and compatibility. Every asset is checked against its index byte length and SHA-256 contract. A matching immutable cache entry is reused; submit and self-check still await the assets they actually validate.
+The browser loads `site/wrt/config/site.json`, then loads the current menu, language shard, and package-mirror projection with bounded startup concurrency. Its `catalog.loading` object controls the low-priority queue for applications, hidden options, help, and compatibility. `config/build.json` is build-side only and is never loaded by the browser. Every asset is checked against its index byte length and SHA-256 contract. A matching immutable cache entry is reused; submit and self-check still await the assets they actually validate.
+
+浏览器先读取 `site/wrt/config/site.json`，再以受限启动并发加载当前菜单、语言分片和软件包镜像投影；其中 `catalog.loading` 控制精选应用、隐藏项、帮助和兼容性规则的低优先级队列。`config/build.json` 只供构建端使用，浏览器永不加载。每项资产都按 index 的字节长度与 SHA-256 contract 校验；匹配的不可变缓存可复用，提交与自检仍必须等待实际需要验证的资产。
 
 Catalog 自动发现由 Catalog 配置决定。当前策略覆盖：
 

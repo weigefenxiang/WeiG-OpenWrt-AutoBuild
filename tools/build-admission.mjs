@@ -1,11 +1,17 @@
-import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadProjectConfiguration } from './project-config.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const PROJECT = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
-const configuredLimit = Number(PROJECT?.customization?.admission?.publicActiveBuilds);
-if (!Number.isSafeInteger(configuredLimit) || configuredLimit < 1 || configuredLimit > 20) {
+const SITE_CONFIG_PATH = join(ROOT, 'site', 'wrt', 'config', 'site.json');
+const BUILD_CONFIG_PATH = join(ROOT, 'config', 'build.json');
+const loadedProjectConfiguration = loadProjectConfiguration({
+  root: ROOT, sitePath: SITE_CONFIG_PATH, buildPath: BUILD_CONFIG_PATH,
+});
+const PROJECT_BUILD = loadedProjectConfiguration.build;
+const configuredLimit = PROJECT_BUILD.admission.publicActiveBuilds;
+if (!Number.isInteger(configuredLimit) || !Number.isSafeInteger(configuredLimit) ||
+    configuredLimit < 1 || configuredLimit > 20) {
   throw new Error('project admission.publicActiveBuilds is invalid');
 }
 export const PUBLIC_BUILD_LIMIT = configuredLimit;

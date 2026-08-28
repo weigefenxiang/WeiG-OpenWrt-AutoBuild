@@ -1,0 +1,12 @@
+{
+  "password": {
+    "mode": "prompt"
+  },
+  "jobs": {
+    "compile": "auto",
+    "download": "auto"
+  },
+  "admission": {
+    "publicActiveBuilds": 3
+  }
+}

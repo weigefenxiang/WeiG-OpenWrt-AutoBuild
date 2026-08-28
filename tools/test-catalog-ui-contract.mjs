@@ -19,7 +19,8 @@ const uiComponents = readFileSync(join(root, 'site', 'wrt', 'lib', 'ui-component
 const pageShell = readFileSync(join(root, 'site', 'wrt', 'lib', 'page-shell-ui.js'), 'utf8');
 const packageProbeV3 = readFileSync(join(root, 'site', 'wrt', 'lib', 'package-probe-v3-ui.js'), 'utf8');
 const uiComponentsCss = readFileSync(join(root, 'site', 'wrt', 'ui-components.css'), 'utf8');
-const project = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
+const siteConfig = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'config', 'site.json'), 'utf8'));
+const catalogLoading = siteConfig.catalog?.loading || {};
 const i18nSource = readFileSync(join(root, 'tools', 'i18n-source.json'), 'utf8');
 const expect = (condition, message) => { if (!condition) throw new Error(message); };
 
@@ -716,11 +717,11 @@ expect(!/\.build-contract-(?:key|chip)[^{]*\{[^}]*font(?:-size)?:\s*(?:12|13)px/
   'build contract retains internal 12/13px typography');
 expect(/\.build-contract-body \.profile-package-manage\{[^}]*font-size:var\(--font-description\)/.test(css),
   'expanded build-contract controls can render below the body token');
-const startup = project.catalogLoadPolicy?.startup || [];
-const idle = project.catalogLoadPolicy?.idle || [];
+const startup = catalogLoading.startup || [];
+const idle = catalogLoading.idle || [];
 expect(startup.join(',') === 'menu,menu:language,package-mirrors' &&
   idle.join(',') === 'applications,hidden,help,compatibility' &&
-  project.catalogLoadPolicy?.startupConcurrency === 3,
+  catalogLoading.startupConcurrency === 3,
   'first-paint/idle task policy or concurrency drifted');
 expect((app.match(/'package-mirrors': ensurePackageMirrors/g) || []).length === 1,
   'package mirrors have duplicate startup/idle task registrations');

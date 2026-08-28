@@ -18,6 +18,20 @@ function projectCustomization() {
     ? PROJECT.customization : {};
 }
 
+function applyProjectLinks() {
+  const links = PROJECT?.links;
+  if (!links || typeof links !== 'object') throw new Error('站点配置缺少公开链接');
+  const assign = (id, key) => { const link = $(id); if (link) link.href = links[key]; };
+  assign('repoLink', 'repository');
+  assign('footRepo', 'repository');
+  assign('actionsLink', 'actions');
+  document.querySelectorAll('[data-project-catalog-link]').forEach((link) => { link.href = links.catalog; });
+  document.querySelectorAll('.blog-link').forEach((link) => {
+    if (links.blog) { link.href = links.blog; link.hidden = false; }
+    else { link.hidden = true; link.removeAttribute('href'); }
+  });
+}
+
 async function applyProjectCustomization() {
   const customization = projectCustomization();
   const ui = customization.ui && typeof customization.ui === 'object' ? customization.ui : {};
@@ -144,41 +158,21 @@ async function init() {
       }
     });
     await initializeI18n();
-    try {
-      PROJECT = await loadJson('project.json');
-      if (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(PROJECT.repository || '')) {
-        OFFICIAL_REPO = PROJECT.repository;
-        REPO_NAME = OFFICIAL_REPO.split('/')[1];
-      }
-      if (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(PROJECT.catalogRepository || '')) {
-        MENU_CATALOG_REPO = PROJECT.catalogRepository;
-      }
-      const repoUrl = `https://github.com/${OFFICIAL_REPO}`;
-      $('repoLink').href = repoUrl;
-      $('footRepo').href = repoUrl;
-      $('actionsLink').href = `${repoUrl}/actions`;
-      const blogUrl = String(PROJECT.blogUrl || '');
-      document.querySelectorAll('.blog-link').forEach((link) => {
-        if (/^https:\/\//.test(blogUrl)) {
-          link.href = blogUrl;
-          link.hidden = false;
-        } else if (!blogUrl) {
-          link.hidden = true;
-          link.removeAttribute('href');
-        }
-      });
-    } catch (e) { /* old deployments keep the built-in project defaults */ }
+    PROJECT = await loadSiteConfig();
+    OFFICIAL_REPO = PROJECT.repository;
+    REPO_NAME = OFFICIAL_REPO.split('/')[1];
+    MENU_CATALOG_REPO = PROJECT.catalogRepository;
+    applyProjectLinks();
+    state.siteConfigReady = true;
     const deploymentIdentity = await loadDeploymentIdentity();
     state.siteVersion = deploymentIdentity.siteVersion;
     state.buildMeta = deploymentIdentity.buildMeta;
-    MENU_CATALOG_DATA_REF = BUILD_IDENTITY_MODULE.catalogDataBranch(
-      state.buildMeta?.branch, PROJECT?.catalogDataBranches,
-    );
+    MENU_CATALOG_DATA_REF = BUILD_IDENTITY_MODULE.catalogDataBranch(state.buildMeta?.branch);
     CATALOG_LOADER = CATALOG_LOADER_MODULE.createCatalogLoader({
       repository: MENU_CATALOG_REPO,
       releaseTag: PROJECT?.catalogReleaseTag || 'menuconfig-catalog-complete',
       dataRef: MENU_CATALOG_DATA_REF,
-      allowReleaseFallback: MENU_CATALOG_DATA_REF === 'catalog-data',
+      allowReleaseFallback: MENU_CATALOG_DATA_REF === 'catalog-main',
       engine: CATALOG_ENGINE,
     });
     TIMEZONES = await loadJson('timezones.json');
@@ -207,6 +201,10 @@ async function init() {
     if (localStorage.getItem('wrt_risk') !== 'ok') $('riskBar').hidden = false;
     startCatalogAfterFirstPaint();
   } catch (err) {
+    PROJECT = null;
+    state.siteConfigReady = false;
+    state.buildMeta = null;
+    updateSubmitGate?.();
     $('loading').textContent = (I18N ? t('loading.fail', { msg: err.message }) : '加载失败: ' + err.message);
   }
 }

@@ -2,20 +2,28 @@
 
 ## 0. 克隆与项目配置
 
-克隆者的项目级配置唯一源是 `config/project.json`。克隆仓库后只编辑这个文件，再执行：
+克隆者要维护两个职责隔离的配置源。克隆仓库后，公开网页与固件默认编辑 `site/wrt/config/site.json`，构建端策略编辑 `config/build.json`，在工作树运行 `prepare`，并将配置与 `prepare` 产生的受控输出一起提交：
 
 ```powershell
 node tools/dev-assistant.mjs prepare
 ```
 
-`prepare` 会验证配置，并生成网页使用的 `site/wrt/data/project.json` 与构建脚本使用的 `Shell/build-defaults.conf`。生成文件不能作为配置源直接修改。字段职责固定如下：
+`prepare` 会验证两份配置，并更新构建脚本使用的 `Shell/build-defaults.conf`。生成文件不能作为配置源直接修改；`config/build.json` 永远不随静态网页部署。字段职责固定如下：
 
-- `project.displayName` 与 `project.shortName` 只用于页面标题、短品牌和通知等展示文案；不会参与网关身份、`[build]` 请求标记或 Run/Artifact 标题协议。
-- `project.repository` 与 `project.blogUrl` 只提供经校验的链接目标。
-- `catalog.repository`、`catalog.releaseTag` 和 `catalog.selection` 只控制 Catalog 地址与首选项；`catalog.loading` 仅保留现有运行时调度 contract，不是克隆者新增可调项。Source、Branch、Target/Profile、插件、Kconfig 和兼容性事实必须继续从 Catalog 数据读取。
-- `ui`、`firmware`、`build`、`admission` 分别提供网页、固件、构建默认值和准入上限；它们不扩大请求协议或事实权威边界。
+- `site/wrt/config/site.json` 的 `project.displayName` 与 `project.shortName` 只用于页面标题、短品牌和通知等展示文案；`project.repository` 与 `project.blogUrl` 只提供经校验的链接目标，不会参与网关身份、`[build]` 请求标记或 Run/Artifact 标题协议。
+- `site/wrt/config/site.json` 的 `catalog.repository`、`catalog.releaseTag`、`catalog.selection` 和现有 `catalog.loading` contract 只控制 Catalog 地址、首选项与加载调度。Source、Branch、Target/Profile、插件、Kconfig 和兼容性事实必须继续从 Catalog 数据读取；这里不能维护清单或高级 Catalog 事实。
+- `site/wrt/config/site.json` 的 `ui`、`firmware`、`build.defaultTag` 分别提供网页外观、公开固件默认值和网页默认构建标识；它们不扩大请求协议或事实权威边界。
+- `config/build.json` 只提供 `password.mode`、`jobs.compile`、`jobs.download` 与 `admission.publicActiveBuilds`。这些值仅供构建端读取，浏览器不能读取。
 
-密码 `mode` 为 `prompt` 时由提交者输入，`empty` 明确使用空密码，`secret` 必须使用仓库 Secret `DEFAULT_ROOT_PASSWORD`。实际密码绝不写入 `config/project.json`、任何生成投影、构建请求、Issue 或日志。
+密码 `mode` 为 `prompt` 时由提交者输入，`empty` 明确使用空密码，`secret` 必须使用仓库 Secret `DEFAULT_ROOT_PASSWORD`。实际密码绝不写入 `config/build.json`、站点文件、构建请求、Issue 或日志。
+
+`site/wrt` 是可独立托管的完整静态网页，部署时必须保留整个目录及其 `config/`、`data/`、HTML、脚本和样式。实际部署必须从包含上述已提交配置与受控输出的 40 位 SHA 的干净 checkout 执行：
+
+```powershell
+node tools/prepare-web-deployment.mjs --commit <40位SHA> --branch <dev或main>
+```
+
+该命令生成被忽略的 `site/wrt/data/build-meta.json`。部署必须携带与 `site-version.json` 一致的元数据；元数据缺失、非法或陈旧时提交门禁必须保持禁用。Pages workflow 的站点准备阶段只执行 `node tools/stamp-site-version.mjs --check` 和 `prepare-web-deployment`，不在部署现场修改配置。独立部署只改变网页托管位置，不改变构建身份：请求仍必须对应目标 AutoBuild 仓库的同一提交。
 
 网页翻译只编辑 `tools/i18n-source.json` 与 `tools/i18n-translations.json`；`site/wrt/data/i18n/` 是生成包，不能直接修改。
 
@@ -30,16 +38,18 @@ node tools/dev-assistant.mjs prepare
 
 ## 2. 数据加载
 
-`config/project.json` 是加载顺序的编辑源；`site/wrt/data/project.json` 是由 `prepare` 生成的公开投影：
+`site/wrt/config/site.json` 是公开网页配置源；其中 `catalog.loading` 是既有加载调度 contract。`config/build.json` 是构建端配置源，浏览器不得读取：
 
 ```json
 {
-  "catalogLoadPolicy": {
-    "startup": ["menu", "menu:language", "package-mirrors"],
-    "idle": ["applications", "hidden", "help", "compatibility"],
-    "startupConcurrency": 3,
-    "idleConcurrency": 1,
-    "idleDelayMs": 15000
+  "catalog": {
+    "loading": {
+      "startup": ["menu", "menu:language", "package-mirrors"],
+      "idle": ["applications", "hidden", "help", "compatibility"],
+      "startupConcurrency": 3,
+      "idleConcurrency": 1,
+      "idleDelayMs": 15000
+    }
   }
 }
 ```
@@ -54,7 +64,7 @@ node tools/dev-assistant.mjs prepare
 
 顶部构建概览在桌面把弹性宽度留给 Source/Branch/Target Profile 搜索；折叠契约头只显示标题和箭头，完整 Catalog commit 保留在展开内容和无障碍提示。641–960 px 时搜索独占第一行、契约与控件位于第二行、展开内容位于第三行；手机依次全宽堆叠。此布局不得改变独立的 Advanced menuconfig 搜索契约，也不得缩小展开区字号。
 
-公开 `site/wrt/data/` 仅允许部署身份、UI i18n、时区、项目参数和软件包镜像投影。AutoBuild 已删除机型注册表、种子配置、公共 base config、插件元数据、体积快照和静态软件包说明页。
+公开 `site/wrt/data/` 仅允许部署身份、UI i18n、时区和软件包镜像等运行时资产；公开项目、品牌、固件默认值和 Catalog 选择/加载策略位于 `site/wrt/config/site.json`。`config/build.json` 不得进入静态站点。AutoBuild 已删除机型注册表、种子配置、公共 base config、插件元数据、体积快照和静态软件包说明页。
 
 ## 3. Catalog 应用与体积
 
@@ -137,7 +147,7 @@ node tools/serve.mjs
 
 ## 10. Catalog 选择与最终配置
 
-`site/wrt/data/project.json` 只保存很小的选择策略：Source 优先级、开发分支优先级，以及首选 Target selector 值。Source/Branch/Target/Profile 的真实清单仍完全来自 Catalog；首选 Target 不存在时必须退回 Catalog 中首个完整有效路径。默认策略只用于首次选择或新 Source/Branch，绝不能覆盖当前控件、有效状态或显式请求。
+`site/wrt/config/site.json` 的 `catalog.selection` 只保存很小的选择策略：Source 优先级、开发分支优先级，以及首选 Target selector 值；`catalog.loading` 只保存现有加载调度 contract。Source/Branch/Target/Profile 的真实清单仍完全来自 Catalog；首选 Target 不存在时必须退回 Catalog 中首个完整有效路径。默认策略只用于首次选择或新 Source/Branch，绝不能覆盖当前控件、有效状态或显式请求。
 
 menu 与 applications shard 无论先后到达，都必须进入同一个 Catalog-ready reconciliation，统一刷新精选应用、Advanced、构建契约、统计和提交门禁。menu 未完成时精选项只能显示为 loading 并禁用，不能永久判为 unavailable。
 

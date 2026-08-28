@@ -1,96 +1,51 @@
 #!/usr/bin/env node
-// Canonical project configuration validation and projections.
-// config/project.json is the only editable source for project-wide defaults.
+// Node loaders for the canonical site/build configuration documents.
+// Public site syntax is shared with site/wrt/lib/site-config.js; this module
+// adds only filesystem and cross-authority checks.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  normalizeSiteConfig as normalizePublicSiteConfig,
+  siteConfigErrors as publicSiteConfigErrors,
+} from '../site/wrt/lib/site-config.js';
 
 const MODULE_PATH = fileURLToPath(import.meta.url);
 export const ROOT = resolve(dirname(MODULE_PATH), '..');
-export const DEFAULT_PROJECT_CONFIG_PATH = join(ROOT, 'config', 'project.json');
-export const DEFAULT_PROJECT_SCHEMA_PATH = join(ROOT, 'config', 'project.schema.json');
+
+export const DEFAULT_SITE_CONFIG_PATH = join(ROOT, 'site', 'wrt', 'config', 'site.json');
+export const DEFAULT_SITE_SCHEMA_PATH = join(ROOT, 'site', 'wrt', 'config', 'site.schema.json');
+export const DEFAULT_BUILD_CONFIG_PATH = join(ROOT, 'config', 'build.json');
+export const DEFAULT_BUILD_SCHEMA_PATH = join(ROOT, 'config', 'build.schema.json');
 export const DEFAULT_TIMEZONE_DATA_PATH = join(ROOT, 'site', 'wrt', 'data', 'timezones.json');
 export const DEFAULT_PACKAGE_MIRROR_POLICY_PATH = join(ROOT, 'config', 'policies', 'package-mirrors.json');
 export const DEFAULT_TIMEZONE_AUTHORITY_PATH = DEFAULT_TIMEZONE_DATA_PATH;
 export const DEFAULT_PACKAGE_MIRROR_AUTHORITY_PATH = DEFAULT_PACKAGE_MIRROR_POLICY_PATH;
 
-// This is intentionally internal to the generated public contract. It is not
-// project customization and therefore does not belong in the canonical schema.
-export const CATALOG_DATA_BRANCHES = Object.freeze({
-  fixDefault: 'catalog-dev',
-  fixOverrides: Object.freeze({}),
-  dev: 'catalog-dev',
-  staging: 'catalog-staging',
-  main: 'catalog-main',
-});
-
-const TOP_LEVEL_KEYS = ['project', 'catalog', 'ui', 'firmware', 'build', 'admission'];
-const PROJECT_KEYS = ['displayName', 'shortName', 'repository', 'blogUrl'];
-const CATALOG_KEYS = ['repository', 'releaseTag', 'selection', 'loading'];
-const SELECTION_KEYS = ['sourcePriority', 'defaultSource', 'developmentBranches', 'preferredTarget'];
-const TARGET_KEYS = ['selectors'];
-const SELECTOR_KEYS = ['system', 'subtarget', 'profile'];
-const LOADING_KEYS = ['startup', 'idle', 'startupConcurrency', 'idleConcurrency', 'idleDelayMs'];
-const UI_KEYS = ['defaultLanguage', 'colorMode'];
-const FIRMWARE_KEYS = ['lanIp', 'timezone', 'theme', 'ntp', 'packageMirror', 'password'];
-const TIMEZONE_KEYS = ['zonename', 'timezone'];
-const NTP_KEYS = ['preset', 'servers'];
+const BUILD_TOP_LEVEL_KEYS = ['password', 'jobs', 'admission'];
 const PASSWORD_KEYS = ['mode'];
-const BUILD_KEYS = ['defaultTag', 'compileJobs', 'downloadJobs'];
-const ADMISSION_KEYS = ['publicActiveBuilds'];
-
-const REPOSITORY_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+const JOBS_KEYS = ['compile', 'download'];
+const BUILD_ADMISSION_KEYS = ['publicActiveBuilds'];
 const IDENTIFIER_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/;
-const BRANCH_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,159}$/;
-const SYMBOL_RE = /^[A-Za-z0-9_+@./-]{1,160}$/;
-const TASK_RE = /^[a-z][A-Za-z0-9:-]{0,63}$/;
-const SHORT_NAME_RE = /^[\p{L}\p{N}\p{M}][\p{L}\p{N}\p{M} ._+@()\-]*$/u;
-const ZONENAME_RE = /^[A-Za-z0-9._+-]+(?:\/[A-Za-z0-9._+-]+)+$/;
-const TIMEZONE_RE = /^[A-Za-z0-9._+<>,:/-]{1,128}$/;
-const THEME_RE = /^luci-theme-[A-Za-z0-9._+-]{1,48}$/;
-const HOSTNAME_RE = /^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
-
-const LANGUAGES = new Set(['auto', 'zh-CN', 'en']);
-const COLOR_MODES = new Set(['auto', 'light', 'dark']);
-const NTP_PRESETS = new Set(['cn', 'global', 'cloudflare']);
 const PASSWORD_MODES = new Set(['prompt', 'empty', 'secret']);
 const JOB_MODES = new Set(['auto']);
-const CONTROL_CHARACTER_RE = /[\p{Cc}\p{Cf}\p{Cs}]/u;
+const ZONENAME_RE = /^[A-Za-z0-9._+-]+(?:\/[A-Za-z0-9._+-]+)+$/;
+const TIMEZONE_RE = /^[A-Za-z0-9._+<>,:/-]{1,128}$/;
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function pathName(path, key = '') {
-  return key ? `${path}.${key}` : path;
 }
 
 function addUnknownAndMissing(value, path, keys, errors) {
   if (!isRecord(value)) return;
   const allowed = new Set(keys);
   for (const key of Object.keys(value)) {
-    if (!allowed.has(key)) errors.push(`${pathName(path, key)}: unknown key`);
+    if (!allowed.has(key)) errors.push(`${path}.${key}: unknown key`);
   }
   for (const key of keys) {
-    if (!Object.hasOwn(value, key)) errors.push(`${pathName(path, key)}: required`);
+    if (!Object.hasOwn(value, key)) errors.push(`${path}.${key}: required`);
   }
-}
-
-function stringError(value, path, errors, { min = 1, max = Infinity, pattern, trim = true } = {}) {
-  if (typeof value !== 'string') {
-    errors.push(`${path}: must be a string`);
-    return false;
-  }
-  const length = Array.from(value).length;
-  if (length < min) errors.push(`${path}: must contain at least ${min} character${min === 1 ? '' : 's'}`);
-  if (length > max) errors.push(`${path}: must contain at most ${max} characters`);
-  if (trim && value !== value.trim()) errors.push(`${path}: must not have leading or trailing whitespace`);
-  if (pattern && !pattern.test(value)) errors.push(`${path}: has an invalid format`);
-  // JSON can carry all Unicode characters, but generated shell and public data
-  // must never contain control bytes.
-  if (CONTROL_CHARACTER_RE.test(value)) errors.push(`${path}: control characters are not allowed`);
-  return true;
 }
 
 function numberError(value, path, errors, min, max) {
@@ -107,46 +62,55 @@ function enumError(value, path, errors, values) {
   }
 }
 
-function arrayError(value, path, errors, { min = 1, max = Infinity, item } = {}) {
-  if (!Array.isArray(value)) {
-    errors.push(`${path}: must be an array`);
+function stringError(value, path, errors, { min = 1, max = Infinity, pattern, trim = true } = {}) {
+  if (typeof value !== 'string') {
+    errors.push(`${path}: must be a string`);
+    return false;
+  }
+  const length = Array.from(value).length;
+  if (length < min) errors.push(`${path}: must contain at least ${min} character${min === 1 ? '' : 's'}`);
+  if (length > max) errors.push(`${path}: must contain at most ${max} characters`);
+  if (trim && value !== value.trim()) errors.push(`${path}: must not have leading or trailing whitespace`);
+  if (pattern && !pattern.test(value)) errors.push(`${path}: has an invalid format`);
+  return true;
+}
+
+function validatePassword(value, errors) {
+  const path = 'build.password';
+  if (!isRecord(value)) { errors.push(`${path}: must be an object`); return; }
+  addUnknownAndMissing(value, path, PASSWORD_KEYS, errors);
+  enumError(value.mode, `${path}.mode`, errors, PASSWORD_MODES);
+}
+
+function validateJobCount(value, path, errors) {
+  if (typeof value === 'string') {
+    if (!JOB_MODES.has(value)) errors.push(`${path}: must be auto or an integer from 1 to 32`);
     return;
   }
-  if (value.length < min) errors.push(`${path}: must contain at least ${min} item${min === 1 ? '' : 's'}`);
-  if (value.length > max) errors.push(`${path}: must contain at most ${max} items`);
-  if (new Set(value).size !== value.length) errors.push(`${path}: duplicate items are not allowed`);
-  if (item) value.forEach((entry, index) => item(entry, `${path}[${index}]`, errors));
+  numberError(value, path, errors, 1, 32);
 }
 
-function validateRepository(value, path, errors) {
-  if (!stringError(value, path, errors, { pattern: REPOSITORY_RE }) ||
-      typeof value !== 'string' || !REPOSITORY_RE.test(value)) return;
-  const [owner, repository] = value.split('/');
-  if (owner.length > 100 || repository.length > 100) errors.push(`${path}: owner and repository names are too long`);
+function validateJobs(value, errors) {
+  const path = 'build.jobs';
+  if (!isRecord(value)) { errors.push(`${path}: must be an object`); return; }
+  addUnknownAndMissing(value, path, JOBS_KEYS, errors);
+  validateJobCount(value.compile, `${path}.compile`, errors);
+  validateJobCount(value.download, `${path}.download`, errors);
 }
 
-function validateHttpsUrl(value, path, errors) {
-  if (typeof value === 'string' && value === '') return;
-  if (!stringError(value, path, errors, { min: 1 })) return;
-  let parsed;
-  try { parsed = new URL(value); } catch { errors.push(`${path}: must be a valid URL`); return; }
-  if (parsed.protocol !== 'https:') errors.push(`${path}: must use https`);
-  if (!parsed.hostname || parsed.username || parsed.password) errors.push(`${path}: must have a public host and no credentials`);
-  if (/[\u0000-\u001f\u007f\s]/u.test(value)) errors.push(`${path}: whitespace is not allowed`);
+function validateBuildAdmission(value, errors) {
+  const path = 'build.admission';
+  if (!isRecord(value)) { errors.push(`${path}: must be an object`); return; }
+  addUnknownAndMissing(value, path, BUILD_ADMISSION_KEYS, errors);
+  numberError(value.publicActiveBuilds, `${path}.publicActiveBuilds`, errors, 1, 20);
 }
 
-function validatePrivateIpv4(value, path, errors) {
-  if (!stringError(value, path, errors, { pattern: /^\d+(?:\.\d+){3}$/ })) return;
-  const parts = value.split('.');
-  const octets = parts.map(Number);
-  if (octets.some((octet, index) => !/^(?:0|[1-9]\d{0,2})$/.test(parts[index]) || octet > 255)) {
-    errors.push(`${path}: must contain four octets between 0 and 255`);
-    return;
-  }
-  const privateNetwork = octets[0] === 10 ||
-    (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
-    (octets[0] === 192 && octets[1] === 168);
-  if (!privateNetwork) errors.push(`${path}: must be an RFC1918 private IPv4 address`);
+function validateBuild(value, errors) {
+  if (!isRecord(value)) { errors.push('build config: must be an object'); return; }
+  addUnknownAndMissing(value, 'build config', BUILD_TOP_LEVEL_KEYS, errors);
+  validatePassword(value.password, errors);
+  validateJobs(value.jobs, errors);
+  validateBuildAdmission(value.admission, errors);
 }
 
 function readAuthorityJson(path, label, errors) {
@@ -163,6 +127,8 @@ function readAuthorityJson(path, label, errors) {
   }
 }
 
+// Only the fields required to validate site references are checked. The
+// authority documents remain the sole owners of their unrelated runtime data.
 function validateTimezoneAuthority(path = DEFAULT_TIMEZONE_DATA_PATH) {
   const errors = [];
   const label = 'timezone authority';
@@ -229,7 +195,7 @@ function validatePackageMirrorAuthority(path = DEFAULT_PACKAGE_MIRROR_POLICY_PAT
   return { errors, presetIds: errors.length ? null : presetIds };
 }
 
-/** Load and strictly validate the runtime authority documents used by defaults. */
+/** Load and validate only the dynamic authorities referenced by site config. */
 export function loadProjectAuthorities({
   timezonePath = DEFAULT_TIMEZONE_DATA_PATH,
   packageMirrorPath = DEFAULT_PACKAGE_MIRROR_POLICY_PATH,
@@ -243,222 +209,139 @@ export function loadProjectAuthorities({
   };
 }
 
-function validateProject(value, errors) {
-  const path = 'project';
-  if (!isRecord(value)) { errors.push(`${path}: must be an object`); return; }
-  addUnknownAndMissing(value, path, PROJECT_KEYS, errors);
-  stringError(value.displayName, `${path}.displayName`, errors, { min: 1, max: 96 });
-  const shortName = typeof value.shortName === 'string' ? value.shortName.trim() : value.shortName;
-  stringError(shortName, `${path}.shortName`, errors, { max: 64, pattern: SHORT_NAME_RE, trim: false });
-  validateRepository(value.repository, `${path}.repository`, errors);
-  validateHttpsUrl(value.blogUrl, `${path}.blogUrl`, errors);
-}
-
-function validateCatalog(value, errors) {
-  const path = 'catalog';
-  if (!isRecord(value)) { errors.push(`${path}: must be an object`); return; }
-  addUnknownAndMissing(value, path, CATALOG_KEYS, errors);
-  validateRepository(value.repository, `${path}.repository`, errors);
-  stringError(value.releaseTag, `${path}.releaseTag`, errors, { pattern: /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/ });
-
-  const selection = value.selection;
-  if (!isRecord(selection)) errors.push(`${path}.selection: must be an object`);
-  else {
-    addUnknownAndMissing(selection, `${path}.selection`, SELECTION_KEYS, errors);
-    arrayError(selection.sourcePriority, `${path}.selection.sourcePriority`, errors,
-      { item: (entry, entryPath, list) => stringError(entry, entryPath, list, { pattern: IDENTIFIER_RE }) });
-    stringError(selection.defaultSource, `${path}.selection.defaultSource`, errors, { pattern: IDENTIFIER_RE });
-    if (Array.isArray(selection.sourcePriority) && typeof selection.defaultSource === 'string' &&
-        !selection.sourcePriority.includes(selection.defaultSource)) {
-      errors.push(`${path}.selection.defaultSource: must be included in sourcePriority`);
-    }
-    arrayError(selection.developmentBranches, `${path}.selection.developmentBranches`, errors,
-      { item: (entry, entryPath, list) => stringError(entry, entryPath, list, { pattern: BRANCH_RE }) });
-
-    const preferredTarget = selection.preferredTarget;
-    if (!isRecord(preferredTarget)) errors.push(`${path}.selection.preferredTarget: must be an object`);
-    else {
-      addUnknownAndMissing(preferredTarget, `${path}.selection.preferredTarget`, TARGET_KEYS, errors);
-      const selectors = preferredTarget.selectors;
-      if (!isRecord(selectors)) errors.push(`${path}.selection.preferredTarget.selectors: must be an object`);
-      else {
-        addUnknownAndMissing(selectors, `${path}.selection.preferredTarget.selectors`, SELECTOR_KEYS, errors);
-        for (const key of SELECTOR_KEYS) stringError(selectors[key], `${path}.selection.preferredTarget.selectors.${key}`, errors, { pattern: SYMBOL_RE });
-      }
-    }
-  }
-
-  const loading = value.loading;
-  if (!isRecord(loading)) errors.push(`${path}.loading: must be an object`);
-  else {
-    addUnknownAndMissing(loading, `${path}.loading`, LOADING_KEYS, errors);
-    for (const key of ['startup', 'idle']) {
-      arrayError(loading[key], `${path}.loading.${key}`, errors,
-        { item: (entry, entryPath, list) => stringError(entry, entryPath, list, { pattern: TASK_RE }) });
-    }
-    numberError(loading.startupConcurrency, `${path}.loading.startupConcurrency`, errors, 1, 16);
-    numberError(loading.idleConcurrency, `${path}.loading.idleConcurrency`, errors, 1, 16);
-    numberError(loading.idleDelayMs, `${path}.loading.idleDelayMs`, errors, 0, 60000);
-  }
-}
-
-function validateUi(value, errors) {
-  const path = 'ui';
-  if (!isRecord(value)) { errors.push(`${path}: must be an object`); return; }
-  addUnknownAndMissing(value, path, UI_KEYS, errors);
-  enumError(value.defaultLanguage, `${path}.defaultLanguage`, errors, LANGUAGES);
-  enumError(value.colorMode, `${path}.colorMode`, errors, COLOR_MODES);
-}
-
-function validateFirmware(value, errors, authorities) {
-  const path = 'firmware';
-  if (!isRecord(value)) { errors.push(`${path}: must be an object`); return; }
-  addUnknownAndMissing(value, path, FIRMWARE_KEYS, errors);
-  validatePrivateIpv4(value.lanIp, `${path}.lanIp`, errors);
-
-  const timezone = value.timezone;
-  if (!isRecord(timezone)) errors.push(`${path}.timezone: must be an object`);
-  else {
-    addUnknownAndMissing(timezone, `${path}.timezone`, TIMEZONE_KEYS, errors);
-    const zonenameOk = stringError(timezone.zonename, `${path}.timezone.zonename`, errors, { pattern: ZONENAME_RE });
-    const timezoneOk = stringError(timezone.timezone, `${path}.timezone.timezone`, errors, { pattern: TIMEZONE_RE });
-    if (authorities?.timezoneRows && zonenameOk && timezoneOk && typeof timezone.zonename === 'string' &&
-        typeof timezone.timezone === 'string' && ZONENAME_RE.test(timezone.zonename) && TIMEZONE_RE.test(timezone.timezone) &&
-        !authorities.timezoneRows.some((row) => row.zonename === timezone.zonename && row.timezone === timezone.timezone)) {
-      errors.push(`${path}.timezone: must match an exact zonename/timezone pair in timezone authority`);
-    }
-  }
-
-  stringError(value.theme, `${path}.theme`, errors, { pattern: THEME_RE });
-  const ntp = value.ntp;
-  if (!isRecord(ntp)) errors.push(`${path}.ntp: must be an object`);
-  else {
-    addUnknownAndMissing(ntp, `${path}.ntp`, NTP_KEYS, errors);
-    enumError(ntp.preset, `${path}.ntp.preset`, errors, NTP_PRESETS);
-    arrayError(ntp.servers, `${path}.ntp.servers`, errors, {
-      min: 4, max: 4,
-      item: (entry, entryPath, list) => stringError(entry, entryPath, list, { pattern: HOSTNAME_RE }),
-    });
-  }
-
-  const packageMirrorOk = stringError(value.packageMirror, `${path}.packageMirror`, errors, { pattern: IDENTIFIER_RE });
-  if (authorities?.packagePresetIds && packageMirrorOk && typeof value.packageMirror === 'string' &&
-      IDENTIFIER_RE.test(value.packageMirror) && !authorities.packagePresetIds.has(value.packageMirror)) {
-    errors.push(`${path}.packageMirror: must be a canonical package mirror preset id`);
-  }
-  const password = value.password;
-  if (!isRecord(password)) errors.push(`${path}.password: must be an object`);
-  else {
-    addUnknownAndMissing(password, `${path}.password`, PASSWORD_KEYS, errors);
-    enumError(password.mode, `${path}.password.mode`, errors, PASSWORD_MODES);
-  }
-}
-
-function validateJobCount(value, path, errors) {
-  if (typeof value === 'string') {
-    if (!JOB_MODES.has(value)) errors.push(`${path}: must be auto or an integer from 1 to 32`);
-    return;
-  }
-  numberError(value, path, errors, 1, 32);
-}
-
-function validateBuild(value, errors) {
-  const path = 'build';
-  if (!isRecord(value)) { errors.push(`${path}: must be an object`); return; }
-  addUnknownAndMissing(value, path, BUILD_KEYS, errors);
-  stringError(value.defaultTag, `${path}.defaultTag`, errors, { min: 0, max: 160 });
-  validateJobCount(value.compileJobs, `${path}.compileJobs`, errors);
-  validateJobCount(value.downloadJobs, `${path}.downloadJobs`, errors);
-}
-
-function validateAdmission(value, errors) {
-  const path = 'admission';
-  if (!isRecord(value)) { errors.push(`${path}: must be an object`); return; }
-  addUnknownAndMissing(value, path, ADMISSION_KEYS, errors);
-  numberError(value.publicActiveBuilds, `${path}.publicActiveBuilds`, errors, 1, 20);
-}
-
-/** Return every validation issue without mutating the supplied value. */
-export function projectConfigErrors(value, options = {}) {
-  const errors = [];
-  if (!isRecord(value)) {
-    errors.push('project config: must be an object');
-    return errors;
-  }
-  const authorities = options.authorities || loadProjectAuthorities(options);
+function siteErrorsWithAuthorities(value, authorities) {
+  const errors = publicSiteConfigErrors(value);
   errors.push(...(authorities.errors || []));
-  addUnknownAndMissing(value, 'project config', TOP_LEVEL_KEYS, errors);
-  validateProject(value.project, errors);
-  validateCatalog(value.catalog, errors);
-  validateUi(value.ui, errors);
-  validateFirmware(value.firmware, errors, authorities);
-  validateBuild(value.build, errors);
-  validateAdmission(value.admission, errors);
+  const timezone = value?.firmware?.timezone;
+  if (Array.isArray(authorities.timezoneRows) && isRecord(timezone) &&
+      typeof timezone.zonename === 'string' && typeof timezone.timezone === 'string' &&
+      ZONENAME_RE.test(timezone.zonename) && TIMEZONE_RE.test(timezone.timezone) &&
+      !authorities.timezoneRows.some((row) => row.zonename === timezone.zonename && row.timezone === timezone.timezone)) {
+    errors.push('site.firmware.timezone: must match an exact zonename/timezone pair in timezone authority');
+  }
+  const packageMirror = value?.firmware?.packageMirror;
+  if (authorities.packagePresetIds instanceof Set && typeof packageMirror === 'string' &&
+      IDENTIFIER_RE.test(packageMirror) && !authorities.packagePresetIds.has(packageMirror)) {
+    errors.push('site.firmware.packageMirror: must be a canonical package mirror preset id');
+  }
   return [...new Set(errors)];
 }
 
-/** Validate and return a detached normalized copy of the canonical config. */
-export function validateProjectConfig(value, options = {}) {
-  const errors = projectConfigErrors(value, options);
-  if (errors.length) throw new Error(`Project configuration is invalid:\n- ${errors.join('\n- ')}`);
-  const normalized = JSON.parse(JSON.stringify(value));
-  normalized.project.shortName = normalized.project.shortName.trim();
-  return normalized;
+/** Return public site issues plus Node-only authority reference failures. */
+export function siteConfigErrors(value, options = {}) {
+  return siteErrorsWithAuthorities(value, options.authorities || loadProjectAuthorities(options));
 }
 
-export function isValidProjectConfig(value, options = {}) {
-  return projectConfigErrors(value, options).length === 0;
+/** Return all build configuration issues. */
+export function buildConfigErrors(value) {
+  const errors = [];
+  validateBuild(value, errors);
+  return [...new Set(errors)];
 }
 
-export function parseProjectConfig(text, source = DEFAULT_PROJECT_CONFIG_PATH, options = {}) {
-  let value;
-  try { value = JSON.parse(text); }
-  catch (error) { throw new Error(`${source}: invalid JSON: ${error.message}`); }
-  try { return validateProjectConfig(value, options); }
-  catch (error) { throw new Error(`${source}: ${error.message}`); }
+/** Return all issues across the site/build configuration pair. */
+export function projectConfigurationErrors(value, options = {}) {
+  const errors = [];
+  if (!isRecord(value)) {
+    errors.push('project configuration: must be an object');
+    return errors;
+  }
+  const authorities = options.authorities || loadProjectAuthorities(options);
+  errors.push(...siteErrorsWithAuthorities(value.site, authorities));
+  errors.push(...(buildConfigErrors(value.build)));
+  const known = new Set(['site', 'build']);
+  for (const key of Object.keys(value)) if (!known.has(key)) errors.push(`project configuration.${key}: unknown key`);
+  for (const key of known) if (!Object.hasOwn(value, key)) errors.push(`project configuration.${key}: required`);
+  return [...new Set(errors)];
 }
 
-export function loadProjectConfig(source = DEFAULT_PROJECT_CONFIG_PATH, options = {}) {
-  let text;
-  try { text = readFileSync(source, 'utf8'); }
-  catch (error) { throw new Error(`${source}: ${error.message}`); }
-  return parseProjectConfig(text, source, options);
+/** Validate and return a detached normalized site configuration. */
+export function validateSiteConfig(value, options = {}) {
+  const errors = siteConfigErrors(value, options);
+  if (errors.length) throw new Error(`Site configuration is invalid:\n- ${errors.join('\n- ')}`);
+  return normalizePublicSiteConfig(value);
 }
 
-function clone(value) {
+/** Validate and return a detached normalized build configuration. */
+export function validateBuildConfig(value) {
+  const errors = buildConfigErrors(value);
+  if (errors.length) throw new Error(`Build configuration is invalid:\n- ${errors.join('\n- ')}`);
   return JSON.parse(JSON.stringify(value));
 }
 
-/**
- * Build the browser-facing projection while preserving its established flat
- * fields. Customization remains grouped so the public file is self-describing
- * without changing the existing Catalog loader contract.
- */
-export function projectToSiteData(config) {
-  const value = validateProjectConfig(config);
+/** Validate and return a detached normalized `{ site, build }` pair. */
+export function validateProjectConfiguration(value, options = {}) {
+  const errors = projectConfigurationErrors(value, options);
+  if (errors.length) throw new Error(`Project configuration is invalid:\n- ${errors.join('\n- ')}`);
   return {
-    schema: 1,
-    name: value.project.displayName,
-    shortName: value.project.shortName,
-    repository: value.project.repository,
-    catalogRepository: value.catalog.repository,
-    blogUrl: value.project.blogUrl,
-    catalogReleaseTag: value.catalog.releaseTag,
-    catalogSelectionPolicy: clone(value.catalog.selection),
-    catalogLoadPolicy: clone(value.catalog.loading),
-    catalogDataBranches: clone(CATALOG_DATA_BRANCHES),
-    customization: {
-      ui: clone(value.ui),
-      firmware: clone(value.firmware),
-      build: clone(value.build),
-      admission: clone(value.admission),
-    },
+    site: normalizePublicSiteConfig(value.site),
+    build: JSON.parse(JSON.stringify(value.build)),
   };
 }
 
-// Named aliases make the projection API convenient to use from small tools.
-export const createSiteProject = projectToSiteData;
-export const publicProjectData = projectToSiteData;
+export function isValidSiteConfig(value, options = {}) {
+  return siteConfigErrors(value, options).length === 0;
+}
+
+export function isValidBuildConfig(value) {
+  return buildConfigErrors(value).length === 0;
+}
+
+export function isValidProjectConfiguration(value, options = {}) {
+  return projectConfigurationErrors(value, options).length === 0;
+}
+
+function parseJsonDocument(text, source) {
+  try { return JSON.parse(text); }
+  catch (error) { throw new Error(`${source}: invalid JSON: ${error.message}`); }
+}
+
+export function parseSiteConfig(text, source = DEFAULT_SITE_CONFIG_PATH, options = {}) {
+  return validateSiteConfig(parseJsonDocument(text, source), options);
+}
+
+export function parseBuildConfig(text, source = DEFAULT_BUILD_CONFIG_PATH) {
+  return validateBuildConfig(parseJsonDocument(text, source));
+}
+
+export function loadSiteConfig(source = DEFAULT_SITE_CONFIG_PATH, options = {}) {
+  let text;
+  try { text = readFileSync(source, 'utf8'); }
+  catch (error) { throw new Error(`${source}: ${error.message}`); }
+  return parseSiteConfig(text, source, options);
+}
+
+export function loadBuildConfig(source = DEFAULT_BUILD_CONFIG_PATH) {
+  let text;
+  try { text = readFileSync(source, 'utf8'); }
+  catch (error) { throw new Error(`${source}: ${error.message}`); }
+  return parseBuildConfig(text, source);
+}
+
+/** Load and validate both canonical documents as one configuration boundary. */
+export function loadProjectConfiguration(options = {}) {
+  if (typeof options === 'string') options = { siteSource: options };
+  const siteSource = options.siteSource || options.sitePath || DEFAULT_SITE_CONFIG_PATH;
+  const buildSource = options.buildSource || options.buildPath || DEFAULT_BUILD_CONFIG_PATH;
+  let siteText;
+  let buildText;
+  try { siteText = readFileSync(siteSource, 'utf8'); }
+  catch (error) { throw new Error(`${siteSource}: ${error.message}`); }
+  try { buildText = readFileSync(buildSource, 'utf8'); }
+  catch (error) { throw new Error(`${buildSource}: ${error.message}`); }
+  const raw = {
+    site: parseJsonDocument(siteText, siteSource),
+    build: parseJsonDocument(buildText, buildSource),
+  };
+  try { return validateProjectConfiguration(raw, options); }
+  catch (error) { throw new Error(`${siteSource} + ${buildSource}: ${error.message}`); }
+}
+
+// Compatibility aliases are API names only; they still validate the split
+// `{ site, build }` structure and never restore a second canonical document.
+export const projectConfigErrors = projectConfigurationErrors;
+export const validateProjectConfig = validateProjectConfiguration;
+export const isValidProjectConfig = isValidProjectConfiguration;
 
 function shellValue(value) {
   return String(value)
@@ -473,14 +356,16 @@ function shellDefault(name, value) {
   return ': "${' + name + ':=' + shellValue(value) + '}"';
 }
 
-/** Generate the source-safe Bash defaults consumed by DIY scripts. */
-export function projectToBuildDefaults(config) {
-  const value = validateProjectConfig(config);
-  const firmware = value.firmware;
+/** Generate source-safe Bash defaults from the site/build configuration pair. */
+export function projectToBuildDefaults(configuration) {
+  const value = validateProjectConfiguration(configuration);
+  const firmware = value.site.firmware;
+  const siteBuild = value.site.build;
+  const build = value.build;
   const lines = [
     '# shellcheck shell=bash',
     '#',
-    '# Generated from config/project.json; edit the canonical JSON source instead.',
+    '# Generated from site/wrt/config/site.json and config/build.json.',
     '# Generated by tools/gen-project-config.mjs.',
     '#',
     '# 构建默认值统一配置 / Unified build defaults.',
@@ -493,11 +378,11 @@ export function projectToBuildDefaults(config) {
     shellDefault('WRT_NTP_ID', firmware.ntp.preset),
     ...firmware.ntp.servers.map((server, index) => shellDefault(`WRT_NTP_${index + 1}`, server)),
     shellDefault('WRT_PACKAGE_MIRROR_ID', firmware.packageMirror),
-    shellDefault('WRT_PASSWORD_MODE', firmware.password.mode),
-    shellDefault('WRT_DEFAULT_TAG', value.build.defaultTag),
-    shellDefault('WRT_COMPILE_JOBS', value.build.compileJobs),
-    shellDefault('WRT_DOWNLOAD_JOBS', value.build.downloadJobs),
-    shellDefault('WRT_PUBLIC_ACTIVE_BUILDS', value.admission.publicActiveBuilds),
+    shellDefault('WRT_PASSWORD_MODE', build.password.mode),
+    shellDefault('WRT_DEFAULT_TAG', siteBuild.defaultTag),
+    shellDefault('WRT_COMPILE_JOBS', build.jobs.compile),
+    shellDefault('WRT_DOWNLOAD_JOBS', build.jobs.download),
+    shellDefault('WRT_PUBLIC_ACTIVE_BUILDS', build.admission.publicActiveBuilds),
     '',
   ];
   return lines.join('\n');

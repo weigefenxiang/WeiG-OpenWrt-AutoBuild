@@ -65,17 +65,9 @@
         "cn.pool.ntp.org"
       ]
     },
-    "packageMirror": "source-default",
-    "password": {
-      "mode": "prompt"
-    }
+    "packageMirror": "source-default"
   },
   "build": {
-    "defaultTag": "anonymous",
-    "compileJobs": "auto",
-    "downloadJobs": "auto"
-  },
-  "admission": {
-    "publicActiveBuilds": 3
+    "defaultTag": "anonymous"
   }
 }

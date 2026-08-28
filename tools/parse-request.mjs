@@ -17,15 +17,22 @@ import {
   applyProfileOverrides, createProfileBaselineStore, serializeConfigMap,
 } from '../site/wrt/lib/profile-baseline.js';
 import { normalizeRequestAudit } from './request-audit.mjs';
+import { loadProjectConfiguration } from './project-config.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const PROJECT = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'data', 'project.json'), 'utf8'));
-const CUSTOMIZATION = PROJECT?.customization && typeof PROJECT.customization === 'object'
-  ? PROJECT.customization : {};
-const PROJECT_FIRMWARE = CUSTOMIZATION.firmware && typeof CUSTOMIZATION.firmware === 'object'
-  ? CUSTOMIZATION.firmware : {};
-const PROJECT_BUILD = CUSTOMIZATION.build && typeof CUSTOMIZATION.build === 'object'
-  ? CUSTOMIZATION.build : {};
+const SITE_CONFIG_PATH = join(ROOT, 'site', 'wrt', 'config', 'site.json');
+const BUILD_CONFIG_PATH = join(ROOT, 'config', 'build.json');
+const loadedProjectConfiguration = loadProjectConfiguration({
+  root: ROOT, sitePath: SITE_CONFIG_PATH, buildPath: BUILD_CONFIG_PATH,
+});
+const PROJECT_SITE = loadedProjectConfiguration.site;
+const PROJECT_BUILD = loadedProjectConfiguration.build;
+const PROJECT_CATALOG = PROJECT_SITE.catalog || {};
+const PROJECT_CATALOG_REPOSITORY = String(PROJECT_SITE.catalogRepository || PROJECT_CATALOG.repository || '');
+const PROJECT_FIRMWARE = PROJECT_SITE.firmware;
+const PROJECT_DEFAULT_TAG = PROJECT_SITE.build.defaultTag;
+const PROJECT_BUILD_JOBS = PROJECT_BUILD.jobs;
+const PROJECT_BUILD_PASSWORD = PROJECT_BUILD.password;
 const PACKAGE_MIRROR_RULES = JSON.parse(
   readFileSync(join(ROOT, 'config', 'policies', 'package-mirrors.json'), 'utf8'));
 const SHA256_RE = /^[a-f0-9]{64}$/;
@@ -54,11 +61,11 @@ function projectJobCount(value) {
   throw new Error('project build job policy must be auto or an integer from 1 to 32');
 }
 
-const PROJECT_COMPILE_JOBS = projectJobCount(PROJECT_BUILD.compileJobs);
-const PROJECT_DOWNLOAD_JOBS = projectJobCount(PROJECT_BUILD.downloadJobs);
+const PROJECT_COMPILE_JOBS = projectJobCount(PROJECT_BUILD_JOBS.compile);
+const PROJECT_DOWNLOAD_JOBS = projectJobCount(PROJECT_BUILD_JOBS.download);
 
 async function fetchCatalogResource(revision, path, { binary = false } = {}) {
-  const repo = PROJECT.catalogRepository;
+  const repo = PROJECT_CATALOG_REPOSITORY;
   const ref = String(revision || '').trim().toLowerCase();
   if (!GIT_COMMIT_RE.test(ref)) throw new Error(`Catalog revision 非法:${ref}`);
   const safePath = String(path || '').replace(/^\/+/, '');
@@ -119,7 +126,7 @@ function normalizeCatalogContract(raw) {
     sourceRepository: String(raw.sourceRepository || ''),
     sourceCommit: String(raw.sourceCommit || '').toLowerCase(),
   };
-  const expectedRepo = String(PROJECT.catalogRepository || '');
+  const expectedRepo = PROJECT_CATALOG_REPOSITORY;
   if (contract.repository !== expectedRepo) fail(`Catalog 仓库不在白名单:${contract.repository}`);
   if (!GIT_COMMIT_RE.test(contract.revision)) fail('Catalog revision 必须是完整 40 位 Git commit');
   if (contract.asset && !/^[A-Za-z0-9._-]+\.json\.gz$/.test(contract.asset)) fail(`Catalog asset 非法:${contract.asset}`);
@@ -410,10 +417,10 @@ for (const rawPlugin of rawPlugins) {
 }
 
 const hasExplicitTag = own(req, 'tag');
-const requestedTag = String(hasExplicitTag ? (req.tag ?? '') : (PROJECT_BUILD.defaultTag || ''));
+const requestedTag = String(hasExplicitTag ? (req.tag ?? '') : (PROJECT_DEFAULT_TAG || ''));
 if (requestedTag && !isValidBuildTag(requestedTag)) fail('构建标识必须为 1-160 个可见 Unicode 字符且不能包含控制字符');
 const tag = normalizeBuildTag(requestedTag,
-  hasExplicitTag ? 'anonymous' : String(PROJECT_BUILD.defaultTag || 'anonymous'));
+  hasExplicitTag ? 'anonymous' : String(PROJECT_DEFAULT_TAG || 'anonymous'));
 const artifactTag = artifactBuildTag(tag, 'anonymous');
 const cleanIdentity = (value) => String(value || '').replace(/[^\w一-龥-]/g, '').slice(0, 24);
 const titleIdentity = parseBuildIssueTitleIdentity(process.env.ISSUE_TITLE || '');
@@ -452,7 +459,7 @@ const requestedLanip = own(req, 'lanip') ? req.lanip : projectLanip;
 if (!privateIpv4.test(String(requestedLanip))) fail('LAN IP 地址非法');
 const lanip = String(requestedLanip);
 
-const projectPasswordMode = String(PROJECT_FIRMWARE.password?.mode || 'prompt');
+const projectPasswordMode = String(PROJECT_BUILD_PASSWORD.mode || 'prompt');
 const passwordModes = new Set(['prompt', 'empty', 'secret']);
 if (!passwordModes.has(projectPasswordMode)) fail(`项目密码策略非法:${projectPasswordMode}`);
 let rootpw = '';
