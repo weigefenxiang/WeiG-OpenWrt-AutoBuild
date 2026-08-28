@@ -215,6 +215,8 @@
   "import.jsonNoConfig": "В JSON нет полного поля config",
   "import.ok": "Конфиг загружен: {id}",
   "import.fail": "Не удалось загрузить конфиг: {msg}",
+  "import.catalogApplicationsUnavailable": "Не удалось загрузить список плагинов текущего Catalog; миграция плагинов не выполнена. Подробности: {msg}",
+  "import.catalogMigrationSummary": "Catalog изменён; результат для текущего Catalog — выбрано: {selected}, исключено: {excluded}, отсутствуют: {missing}, не применены: {failed}, конфликты: {conflicts}, пропущенные старые значения: {skippedCount} ({skippedList}).",
   "import.errorTitle": "Не удалось загрузить конфиг",
   "import.downloadLog": "Скачать журнал загрузки",
   "import.logPrivacy": "Диагностический журнал не содержит полный конфиг и пароли. Скачайте его для диагностики.",

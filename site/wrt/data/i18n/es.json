@@ -215,6 +215,8 @@
   "import.jsonNoConfig": "El JSON no contiene un campo config completo",
   "import.ok": "Configuración cargada: {id}",
   "import.fail": "No se pudo cargar la configuración: {msg}",
+  "import.catalogApplicationsUnavailable": "No se pudo cargar la lista de complementos del Catalog actual; no se realizó la migración. Detalles: {msg}",
+  "import.catalogMigrationSummary": "Catalog cambiado; resultado con el Catalog actual: seleccionados {selected}, excluidos {excluded}, no disponibles {missing}, no aplicados {failed}, conflictos {conflicts}, valores antiguos omitidos {skippedCount} ({skippedList}).",
   "import.errorTitle": "No se pudo cargar la configuración",
   "import.downloadLog": "Descargar registro de carga",
   "import.logPrivacy": "El registro de diagnóstico no incluye la configuración completa ni contraseñas. Descárgalo para investigar.",

@@ -215,6 +215,8 @@
   "import.jsonNoConfig": "JSON に完全な config フィールドがありません",
   "import.ok": "設定を読み込みました: {id}",
   "import.fail": "設定を読み込めません: {msg}",
+  "import.catalogApplicationsUnavailable": "現在のCatalogのプラグイン一覧を読み込めませんでした。プラグイン移行は実行されていません。詳細: {msg}",
+  "import.catalogMigrationSummary": "Catalogが変更されました。現在のCatalogでの結果: 選択 {selected}、除外 {excluded}、利用不可 {missing}、未適用 {failed}、競合 {conflicts}、未移行の旧設定 {skippedCount} ({skippedList})。",
   "import.errorTitle": "設定を読み込めません",
   "import.downloadLog": "読み込みログをダウンロード",
   "import.logPrivacy": "診断ログに完全な設定内容やパスワードは含まれません。調査用にダウンロードできます。",

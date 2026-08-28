@@ -215,6 +215,8 @@
   "import.jsonNoConfig": "JSON 不含完整 config 字段",
   "import.ok": "配置已加载:{id}",
   "import.fail": "加载配置失败:{msg}",
+  "import.catalogApplicationsUnavailable": "当前 Catalog 的插件清单加载失败；未执行插件迁移，请刷新页面后重试。详情：{msg}",
+  "import.catalogMigrationSummary": "Catalog 已变化；当前 Catalog 结果——已选择 {selected}，已排除 {excluded}，不存在 {missing}，未应用 {failed}，冲突 {conflicts}，跳过旧配置 {skippedCount}（{skippedList}）。",
   "import.errorTitle": "加载配置失败",
   "import.downloadLog": "下载加载日志",
   "import.logPrivacy": "诊断日志不包含完整配置内容和密码,可下载后用于排查。",

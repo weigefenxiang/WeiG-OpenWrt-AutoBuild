@@ -215,6 +215,8 @@
   "import.jsonNoConfig": "JSON does not contain a complete config field",
   "import.ok": "Config loaded: {id}",
   "import.fail": "Could not load config: {msg}",
+  "import.catalogApplicationsUnavailable": "The current Catalog plugin list could not be loaded; no plugin migration was performed. Details: {msg}",
+  "import.catalogMigrationSummary": "Catalog changed; current Catalog result — selected {selected}, excluded {excluded}, unavailable {missing}, not applied {failed}, conflicts {conflicts}, old values skipped {skippedCount} ({skippedList}).",
   "import.errorTitle": "Could not load config",
   "import.downloadLog": "Download import log",
   "import.logPrivacy": "The diagnostic log excludes the full config and passwords. Download it for troubleshooting.",

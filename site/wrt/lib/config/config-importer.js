@@ -337,7 +337,273 @@ function customDeviceFromConfig(text) {
     sources: [],
   };
 }
+
+/*
+ * Schema 6 stores a delta against the Native Profile baseline.  The delta is
+ * intentionally not replayed when the Catalog snapshot has changed: package
+ * rows also contain Kconfig-selected dependencies, and replaying those rows
+ * would make an old dependency look like a user's explicit choice.  Keep the
+ * migration helpers here so the normal Catalog loader and the normal Kconfig
+ * intent path remain the single source of truth.
+ */
+const IMPORT_KCONFIG_SYMBOL_RE = /^[A-Za-z0-9_+@./-]+$/;
+const IMPORT_KCONFIG_VALUE_RE = /^(?:[ymn]|-?\d+|0[xX][0-9a-fA-F]+|"(?:[^"\\]|\\.)*")$/;
+const IMPORT_PLUGIN_TOKEN_RE = /^[+-]?[A-Za-z0-9_.@_+-]{1,96}$/;
+
+function validateSchema6OverrideRows(overrides) {
+  if (!Array.isArray(overrides)) throw new Error('Kconfig overrides must be an array');
+  const seen = new Set();
+  for (const pair of overrides) {
+    if (!Array.isArray(pair) || pair.length !== 2 || typeof pair[0] !== 'string' ||
+        typeof pair[1] !== 'string') {
+      throw new Error('invalid Kconfig override row');
+    }
+    const symbol = pair[0];
+    const value = pair[1];
+    if (!IMPORT_KCONFIG_SYMBOL_RE.test(symbol) || seen.has(symbol) || !value ||
+        !IMPORT_KCONFIG_VALUE_RE.test(value) ||
+        /[\r\n\0]/.test(value)) {
+      throw new Error(`invalid Kconfig override: ${symbol || '(missing)'}`);
+    }
+    seen.add(symbol);
+  }
+  return overrides.map(([symbol, value]) => [symbol, value]);
+}
+
+function schema6PluginActionRows(payload) {
+  const rawPlugins = payload?.plugins;
+  if (rawPlugins == null) return { rows: [], invalid: [], conflicts: [] };
+  if (!Array.isArray(rawPlugins)) throw new Error('Build request plugins must be an array');
+  const rows = [];
+  const byId = new Map();
+  const invalid = [];
+  const conflicts = [];
+  for (const raw of rawPlugins) {
+    if (typeof raw !== 'string' || !IMPORT_PLUGIN_TOKEN_RE.test(raw)) {
+      invalid.push(String(raw));
+      continue;
+    }
+    const id = raw.replace(/^[+-]/, '');
+    const mode = raw.startsWith('-') ? 'exclude' : 'select';
+    const previous = byId.get(id);
+    if (previous) {
+      if (previous.mode !== mode) conflicts.push({ id, tokens: [previous.raw, raw] });
+      continue;
+    }
+    const row = { raw, id, mode };
+    byId.set(id, row);
+    rows.push(row);
+  }
+  if (invalid.length) throw new Error(`Build request contains invalid plugin entries: ${invalid.join(', ')}`);
+  return { rows, invalid, conflicts };
+}
+
+function schema6PluginPackageCandidates(plugin, sourceId) {
+  return [...new Set([
+    plugin?.pkgs?.[sourceId], plugin?.pkg, ...(plugin?.catalogCandidates || []),
+  ].filter((value) => typeof value === 'string' && /^[A-Za-z0-9_.+@-]+$/.test(value)))];
+}
+
+function schema6LegacyPluginPackages(payload) {
+  return new Set((payload?.overrides || [])
+    .filter((pair) => Array.isArray(pair) && typeof pair[0] === 'string' && pair[0].startsWith('PACKAGE_'))
+    .map(([symbol]) => String(symbol).slice('PACKAGE_'.length))
+    .filter((name) => /^luci-app-[A-Za-z0-9_.+@-]+$/.test(name)));
+}
+
+function resolveSchema6PluginMigration(payload) {
+  const rows = schema6PluginActionRows(payload);
+  const plugins = Array.isArray(PLUGINS?.plugins) ? PLUGINS.plugins : [];
+  const legacyPackages = schema6LegacyPluginPackages(payload);
+  const byId = new Map(plugins.map((plugin) => [plugin.id, plugin]));
+  const byPackage = new Map();
+  for (const plugin of plugins) {
+    for (const packageName of schema6PluginPackageCandidates(plugin, state.source?.id)) {
+      const matches = byPackage.get(packageName) || [];
+      matches.push(plugin);
+      byPackage.set(packageName, matches);
+    }
+  }
+  const actions = [];
+  const missing = [];
+  const ambiguous = [];
+  const actionByPlugin = new Map();
+  for (const row of rows.rows) {
+    const packageNames = new Set();
+    /* Older exports commonly used the short curated id (for example
+     * `adblock`) while their override carried PACKAGE_luci-app-adblock.
+     * Accept that legacy alias only when the exact old package symbol is in
+     * this request; never infer a plugin from an arbitrary dependency row. */
+    const legacyPackage = row.id.startsWith('PACKAGE_') ? row.id.slice(8)
+      : (row.id.startsWith('luci-app-') ? row.id : `luci-app-${row.id}`);
+    if (legacyPackages.has(legacyPackage)) packageNames.add(legacyPackage);
+    const packageMatches = [...packageNames].flatMap((name) => byPackage.get(name) || []);
+    const uniquePackageMatches = [...new Map(packageMatches.map((plugin) => [plugin.id, plugin])).values()];
+    const matches = byId.has(row.id) ? [byId.get(row.id)] : uniquePackageMatches;
+    if (!matches.length) {
+      missing.push({ token: row.raw, id: row.id });
+      continue;
+    }
+    if (matches.length !== 1) {
+      ambiguous.push({ token: row.raw, id: row.id,
+        plugins: matches.map((plugin) => plugin.id) });
+      continue;
+    }
+    const plugin = matches[0];
+    const previous = actionByPlugin.get(plugin.id);
+    if (previous && previous.mode !== row.mode) {
+      ambiguous.push({ token: row.raw, id: row.id, plugins: [plugin.id] });
+      continue;
+    }
+    if (previous) continue;
+    const packageCandidates = schema6PluginPackageCandidates(plugin, state.source?.id);
+    const action = {
+      pluginId: plugin.id,
+      mode: row.mode,
+      sourceToken: row.raw,
+      packageName: packageCandidates[0] || '',
+    };
+    actionByPlugin.set(plugin.id, action);
+    actions.push(action);
+  }
+  return {
+    rows: rows.rows,
+    actions,
+    missing,
+    ambiguous: [...rows.conflicts.map((item) => ({
+      token: item.tokens.join(' / '), id: item.id, plugins: [],
+    })), ...ambiguous],
+  };
+}
+
+function prepareSchema6SafeOverrides(overrides) {
+  const safe = [];
+  const skipped = [];
+  for (const [symbol, rawValue] of validateSchema6OverrideRows(overrides)) {
+    if (symbol.startsWith('PACKAGE_')) {
+      skipped.push({ symbol, reason: 'package/dependency is recalculated from plugin intent' });
+      continue;
+    }
+    const option = menuOptionBySymbol.get(symbol);
+    if (!option) {
+      skipped.push({ symbol, reason: 'symbol is not present in the current Catalog' });
+      continue;
+    }
+    if (ACTIVE_PROFILE_BASELINE?.protectedSymbols?.has(symbol) || isCatalogTargetSymbol(symbol)) {
+      skipped.push({ symbol, reason: 'Target/Profile identity is controlled by the selected target' });
+      continue;
+    }
+    /* Kconfig bool/tristate rows can be either direct intent or an old select/
+     * imply closure.  The schema-6 payload does not preserve that distinction,
+     * so only scalar rows, which cannot be Kconfig-selected, are safe to carry.
+     */
+    if (!['string', 'int', 'hex'].includes(option.type) || option.hidden || option.userSettable === false) {
+      skipped.push({ symbol, reason: 'bool/tristate or non-user-settable value may be an old dependency' });
+      continue;
+    }
+    let value;
+    try {
+      value = normalizeKconfigValueByType(rawValue, option.type, symbol);
+    } catch (error) {
+      throw new Error(`Invalid value for ${symbol}: ${error.message}`);
+    }
+    safe.push([symbol, value]);
+  }
+  return { safe, skipped };
+}
+
+function applySchema6MigrationPlan(plan, { log = true } = {}) {
+  const appliedPlugins = [];
+  const failedPlugins = [];
+  const migratedOverrides = [];
+  const skippedOverrides = [...(plan.skippedOverrides || [])];
+  const pluginById = new Map((PLUGINS?.plugins || []).map((plugin) => [plugin.id, plugin]));
+  for (const action of plan.actions || []) {
+    const plugin = pluginById.get(action.pluginId);
+    const option = plugin ? curatedMenuOption(plugin) : null;
+    const status = plugin && typeof pluginState === 'function' ? pluginState(plugin) : '';
+    if (!option || ['unavailable', 'loading'].includes(status)) {
+      failedPlugins.push({ ...action, reason: !option
+        ? 'plugin package is not present in the current Catalog'
+        : `plugin is ${status} under the current Target` });
+      continue;
+    }
+    try {
+      const value = action.mode === 'exclude' ? 'n' : 'y';
+      applyMenuValue(option, value, false, 'user');
+      appliedPlugins.push(action);
+      if (log) importLogStep('plugin-migrated', { plugin: action.pluginId, mode: action.mode });
+    } catch (error) {
+      failedPlugins.push({ ...action, reason: String(error?.message || error) });
+      if (log) importLogStep('plugin-migration-skipped', {
+        plugin: action.pluginId, mode: action.mode, reason: String(error?.message || error),
+      });
+    }
+  }
+  for (const [symbol, value] of plan.safeOverrides || []) {
+    const option = menuOptionBySymbol.get(symbol);
+    if (!option) {
+      skippedOverrides.push({ symbol, reason: 'symbol is not present in the current Catalog' });
+      continue;
+    }
+    try {
+      applyMenuValue(option, value, false, 'imported');
+      migratedOverrides.push([symbol, value]);
+    } catch (error) {
+      skippedOverrides.push({ symbol, reason: String(error?.message || error) });
+    }
+  }
+  reconcileImportedConditionalDefaults();
+  return {
+    ...plan,
+    appliedPlugins,
+    failedPlugins,
+    migratedOverrides,
+    skippedOverrides,
+  };
+}
+
+function schema6MigrationSummary(migration) {
+  const selected = migration.appliedPlugins?.filter((item) => item.mode === 'select').length || 0;
+  const excluded = migration.appliedPlugins?.filter((item) => item.mode === 'exclude').length || 0;
+  const missing = (migration.missing || []).map((item) => item.token);
+  const failed = (migration.failedPlugins || []).map((item) => item.pluginId);
+  const ambiguous = (migration.ambiguous || []).map((item) => item.token);
+  const skipped = (migration.skippedOverrides || []).map((item) => item.symbol);
+  const list = (values) => values.length ? formatList(values) : '—';
+  return t('import.catalogMigrationSummary', {
+    selected,
+    excluded,
+    missing: list(missing),
+    failed: list(failed),
+    conflicts: list(ambiguous),
+    skippedCount: skipped.length,
+    skippedList: list(skipped.slice(0, 12)) + (skipped.length > 12 ? '…' : ''),
+  });
+}
+
+function registerSchema6PluginIntents(payload) {
+  const migration = resolveSchema6PluginMigration(payload);
+  for (const action of migration.actions) {
+    const plugin = PLUGINS.plugins.find((item) => item.id === action.pluginId);
+    const option = plugin ? curatedMenuOption(plugin) : null;
+    if (!option) continue;
+    const value = action.mode === 'exclude' ? 'n' : (menuValues.get(option.symbol) ?? 'y');
+    catalogUserOverrides.set(option.symbol, value);
+    if (action.mode === 'exclude') {
+      state.sel.delete(plugin.id);
+      state.removed.add(plugin.id);
+      catalogImportedSymbols.delete(option.symbol);
+    } else {
+      state.sel.add(plugin.id);
+      state.removed.delete(plugin.id);
+    }
+  }
+  return migration;
+}
 function restoreSelections(config, payload) {
+  const schema6Migration = payload?.__catalogMigration?.mode === 'cross-snapshot'
+    ? payload.__catalogMigration : null;
   state.sel.clear();
   state.removed.clear();
   catalogUserOverrides.clear();
@@ -351,7 +617,8 @@ function restoreSelections(config, payload) {
   menuImportedNonDefault.clear();
   menuTouched.clear();
   markCatalogStateChanged();
-  const importedConfigEntries = parseConfigEntries(config);
+  if (schema6Migration) initializeCatalogBaseline();
+  let importedConfigEntries = parseConfigEntries(config);
   for (const [symbol, entry] of importedConfigEntries) importedConfigValues.set(symbol, entry.value);
   const explicit = payload && payload.schema !== 6 && Array.isArray(payload.plugins) ? payload.plugins : null;
   let skipped = 0;
@@ -369,7 +636,7 @@ function restoreSelections(config, payload) {
       else state.sel.add(p.id);
     }
   }
-  if (menuSearchOptions.length) {
+  if (menuSearchOptions.length && !schema6Migration) {
     for (const option of menuSearchOptions) {
       if (importedConfigValues.has(option.symbol)) {
         const entry = importedConfigEntries.get(option.symbol);
@@ -397,6 +664,29 @@ function restoreSelections(config, payload) {
       if (raw.startsWith('-')) catalogImportedSymbols.delete(option.symbol);
     }
   }
+  let appliedMigration = schema6Migration;
+  if (schema6Migration) {
+    appliedMigration = applySchema6MigrationPlan(schema6Migration, { log: false });
+    state.importedConfig = catalogTargetConfig();
+    importedConfigEntries = parseConfigEntries(state.importedConfig);
+    importedConfigValues.clear();
+    importedUnknownOriginal.clear();
+    for (const [symbol, entry] of importedConfigEntries) importedConfigValues.set(symbol, entry.value);
+    for (const [symbol, value] of appliedMigration.migratedOverrides || []) {
+      menuImportedOriginal.set(symbol, value);
+      const defaultValue = catalogBaselineValues.get(symbol) ?? 'n';
+      if (String(value) !== String(defaultValue)) menuImportedNonDefault.add(symbol);
+    }
+    appliedMigration.summary = schema6MigrationSummary(appliedMigration);
+    payload.__catalogMigration = appliedMigration;
+  } else if (payload?.schema === 6) {
+    const migration = registerSchema6PluginIntents(payload);
+    if (migration.missing.length || migration.ambiguous.length) {
+      importLogStep('plugin-intents-unresolved', {
+        missing: migration.missing, ambiguous: migration.ambiguous,
+      });
+    }
+  }
   for (const [symbol, value] of importedConfigValues) {
     if (!menuOptionBySymbol.has(symbol) && !isCatalogTargetSymbol(symbol) && !symbol.startsWith('TARGET_')) {
       importedUnknownOriginal.set(symbol, value);
@@ -409,6 +699,13 @@ function restoreSelections(config, payload) {
     selectedPlugins: state.sel.size,
     removedPlugins: state.removed.size,
     skippedPlugins: skipped,
+    ...(appliedMigration ? {
+      migratedPlugins: appliedMigration.appliedPlugins?.length || 0,
+      migrationWarnings: (appliedMigration.missing?.length || 0) +
+        (appliedMigration.ambiguous?.length || 0) +
+        (appliedMigration.failedPlugins?.length || 0) +
+        (appliedMigration.skippedOverrides?.length || 0),
+    } : {}),
   });
   if (payload) {
     if (payload.tag) $('tagBox').value = BUILD_IDENTITY_MODULE.normalizeBuildTag(payload.tag);
@@ -509,15 +806,17 @@ function parseImportedJson(text) {
 async function reconstructSchema6Import(payload) {
   if (!payload || payload.schema !== 6 || !Array.isArray(payload.overrides) || !payload.customTarget) return null;
   const revision = String(payload.catalog?.revision || '').trim().toLowerCase();
-  if (!/^[a-f0-9]{40}$/.test(revision) || revision !== String(MENU_INDEX?.assetRef || '').trim().toLowerCase()) {
-    throw new Error('This build request uses a different immutable Catalog snapshot; load the matching page release before importing it');
-  }
+  const currentRevision = String(MENU_INDEX?.assetRef || '').trim().toLowerCase();
+  const sameSnapshot = /^[a-f0-9]{40}$/.test(revision) && revision === currentRevision;
   const source = MENU_INDEX?.sources?.find((item) => item.id === payload.source);
   const branch = source?.branches?.find((item) =>
     item.id === payload.version && (!payload.branch || item.branch === payload.branch));
   if (!source || !branch || branch.state === 'unavailable') throw new Error('Build request Source/Branch is unavailable');
   if (payload.catalog?.sourceCommit && String(branch.commit || '').toLowerCase() !== String(payload.catalog.sourceCommit).toLowerCase()) {
-    throw new Error('Build request upstream commit does not match the immutable Catalog snapshot');
+    if (sameSnapshot) throw new Error('Build request upstream commit does not match the immutable Catalog snapshot');
+    importLogStep('source-commit-changed', {
+      request: String(payload.catalog.sourceCommit).toLowerCase(), current: String(branch.commit || '').toLowerCase(),
+    });
   }
   const target = payload.customTarget;
   const request = {
@@ -531,6 +830,33 @@ async function reconstructSchema6Import(payload) {
   renderCatalogPicker(false, request);
   await applyCatalogTarget();
   if (!ACTIVE_PROFILE_BASELINE) throw new Error('Native Profile baseline could not be resolved for this build request');
+  await ensureCatalogMenuLoaded(true);
+  try {
+    await ensureCatalogApplications(!sameSnapshot);
+  } catch (error) {
+    const detail = String(error?.message || error);
+    importLogStep('applications-unavailable', { reason: detail });
+    throw new Error(t('import.catalogApplicationsUnavailable', { msg: detail }));
+  }
+  if (!sameSnapshot) {
+    const pluginMigration = resolveSchema6PluginMigration(payload);
+    const safeOverrides = prepareSchema6SafeOverrides(payload.overrides);
+    const migration = {
+      mode: 'cross-snapshot',
+      sourceRevision: revision,
+      currentRevision,
+      actions: pluginMigration.actions,
+      missing: pluginMigration.missing,
+      ambiguous: pluginMigration.ambiguous,
+      safeOverrides: safeOverrides.safe,
+      skippedOverrides: safeOverrides.skipped,
+    };
+    return {
+      config: PROFILE_BASELINE_MODULE.serializeConfigMap(ACTIVE_PROFILE_BASELINE.values),
+      configId: ['catalog-target', source.id, branch.id, state.variant.id].join('/'),
+      migration,
+    };
+  }
   const allowedSymbols = CATALOG_MODEL?.bySymbol instanceof Map
     ? new Set(CATALOG_MODEL.bySymbol.keys()) : new Set();
   const values = PROFILE_BASELINE_MODULE.applyProfileOverrides(
@@ -569,6 +895,7 @@ async function importConfigFile(file) {
         if (!restored) throw new Error(t('import.jsonInvalid', { msg: 'invalid schema 6 request' }));
         text = restored.config;
         payload.__restoredConfigId = restored.configId;
+        if (restored.migration) payload.__catalogMigration = restored.migration;
       } else {
         if (typeof payload.config !== 'string') throw new Error(t('import.jsonNoConfig'));
         text = payload.config;
@@ -594,6 +921,9 @@ async function importConfigFile(file) {
     showToast(legacyJsonRecovered
       ? t('runtime.8527b3686481')
       : t('import.ok', { id: configId }));
+    if (payload?.__catalogMigration?.summary) {
+      setTimeout(() => showToast(payload.__catalogMigration.summary, 'warning'), 0);
+    }
     updateSubmitGate();
   } finally {
     if (seq === configImportSeq) importingConfig = false;

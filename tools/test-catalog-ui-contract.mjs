@@ -121,6 +121,36 @@ expect(app.includes('function schema6TargetIdentity(target = state.device?.targe
   app.includes('const allowedSymbols = CATALOG_MODEL?.bySymbol instanceof Map'),
   'schema6 request Target identity is not minimal or schema6 import lost the active Catalog symbol allowlist');
 
+const schema6ImportContract = app.match(/async function reconstructSchema6Import\(payload\) \{([\s\S]*?)\n\}\n\s*async function importConfigFile/)?.[1] || '';
+const schema6ApplicationsLoad = schema6ImportContract.indexOf('await ensureCatalogApplications(!sameSnapshot);');
+const schema6CrossBranch = schema6ImportContract.indexOf('if (!sameSnapshot) {');
+expect(app.includes('const sameSnapshot = /^[a-f0-9]{40}$/.test(revision) && revision === currentRevision;') &&
+  !app.includes('load the matching page release before importing it') &&
+  app.includes('await ensureCatalogMenuLoaded(true);') &&
+  schema6ApplicationsLoad >= 0 && schema6ApplicationsLoad < schema6CrossBranch &&
+  app.includes("throw new Error(t('import.catalogApplicationsUnavailable', { msg: detail }));") &&
+  app.includes('config: PROFILE_BASELINE_MODULE.serializeConfigMap(ACTIVE_PROFILE_BASELINE.values),') &&
+  !app.includes('const applied = applySchema6MigrationPlan(migration);') &&
+  app.includes('function resolveSchema6PluginMigration(payload)') &&
+  app.includes('function schema6LegacyPluginPackages(payload)') &&
+  app.includes("row.id.startsWith('luci-app-') ? row.id : `luci-app-${row.id}`") &&
+  app.includes("legacyPackages.has(legacyPackage)") &&
+  app.includes('const IMPORT_PLUGIN_TOKEN_RE = /^[+-]?[A-Za-z0-9_.@_+-]{1,96}$/;') &&
+  app.includes("applyMenuValue(option, value, false, 'user');") &&
+  app.includes("if (symbol.startsWith('PACKAGE_'))") &&
+  app.includes("!['string', 'int', 'hex'].includes(option.type)") &&
+  app.includes('function schema6MigrationSummary(migration)') &&
+  !app.includes("const zh = String(state.lang || '')") &&
+  i18nSource.includes('"import.catalogApplicationsUnavailable"') &&
+  i18nSource.includes('"import.catalogMigrationSummary"') &&
+  i18nEnglish.strings['import.catalogApplicationsUnavailable'] &&
+  i18nEnglish.strings['import.catalogMigrationSummary'] &&
+  i18nZhCn.strings['import.catalogApplicationsUnavailable'] &&
+  i18nZhCn.strings['import.catalogMigrationSummary'] &&
+  app.includes("showToast(payload.__catalogMigration.summary, 'warning')") &&
+  app.includes('payload.__catalogMigration = restored.migration'),
+  'schema6 import must migrate explicit plugins on the current Catalog, recalculate dependencies, and expose skipped/conflicting values');
+
 expect(app.includes('const recommendationSteps = plans.recommended?.steps?.length') &&
   app.includes('plans.recommended?.automaticChanges || []') &&
   app.includes("t('runtime.3a95242a9e37', { value1: recommendationStepNames.join(' → ') })") &&

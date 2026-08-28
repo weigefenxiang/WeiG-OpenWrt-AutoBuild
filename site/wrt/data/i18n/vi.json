@@ -215,6 +215,8 @@
   "import.jsonNoConfig": "JSON không có trường config đầy đủ",
   "import.ok": "Đã nạp cấu hình: {id}",
   "import.fail": "Không thể nạp cấu hình: {msg}",
+  "import.catalogApplicationsUnavailable": "Không thể tải danh sách plugin của Catalog hiện tại; chưa thực hiện di chuyển plugin. Chi tiết: {msg}",
+  "import.catalogMigrationSummary": "Catalog đã thay đổi; kết quả theo Catalog hiện tại: đã chọn {selected}, đã loại trừ {excluded}, không có {missing}, chưa áp dụng {failed}, xung đột {conflicts}, giá trị cũ bỏ qua {skippedCount} ({skippedList}).",
   "import.errorTitle": "Không thể nạp cấu hình",
   "import.downloadLog": "Tải nhật ký nạp cấu hình",
   "import.logPrivacy": "Nhật ký chẩn đoán không chứa toàn bộ cấu hình hoặc mật khẩu. Có thể tải xuống để khắc phục sự cố.",

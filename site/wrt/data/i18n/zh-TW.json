@@ -215,6 +215,8 @@
   "import.jsonNoConfig": "JSON 不含完整 config 欄位",
   "import.ok": "設定已載入:{id}",
   "import.fail": "載入設定失敗:{msg}",
+  "import.catalogApplicationsUnavailable": "目前 Catalog 的套件清單載入失敗；未執行套件遷移，請重新整理頁面後重試。詳情：{msg}",
+  "import.catalogMigrationSummary": "Catalog 已變更；目前 Catalog 結果——已選取 {selected}、已排除 {excluded}、不存在 {missing}、未套用 {failed}、衝突 {conflicts}、略過舊設定 {skippedCount}（{skippedList}）。",
   "import.errorTitle": "載入設定失敗",
   "import.downloadLog": "下載載入日誌",
   "import.logPrivacy": "診斷日誌不包含完整設定內容和密碼,可下載後用於排查。",
