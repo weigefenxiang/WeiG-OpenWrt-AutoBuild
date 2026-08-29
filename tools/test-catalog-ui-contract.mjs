@@ -214,10 +214,14 @@ expect(app.includes('const sameSnapshot = /^[a-f0-9]{40}$/.test(revision) && rev
   'schema6 import must migrate explicit plugins on the current Catalog, recalculate dependencies, and expose skipped/conflicting values');
 
 expect(app.includes('const recommendationSteps = plans.recommended?.steps?.length') &&
+  app.includes('const recommendationTargets = plans.recommended?.requiredTargets?.length') &&
+  app.includes('const recommendationActions = [...recommendationSteps]') &&
   app.includes('plans.recommended?.automaticChanges || []') &&
-  app.includes("t('runtime.3a95242a9e37', { value1: recommendationStepNames.join(' → ') })") &&
+  app.includes("t('runtime.3a95242a9e37', { value1: recommendationTargetNames.join(' → ') })") &&
   app.includes("t('menu.automaticLinkage', {") &&
-  app.includes('for (const step of recommendationSteps) {') &&
+  app.includes('for (const step of recommendationActions) {') &&
+  app.includes('requiredTargets: recommendationTargets') &&
+  app.includes('compatibilityTargetsResolved(requiredTargets)') &&
   app.includes('applyCatalogIntent(menuOptionBySymbol.get(step.symbol) || { symbol: step.symbol },') &&
   !app.includes('warning.records.find((item) => item.configSymbol === plans.recommended.symbol)'),
   'compatibility recommendation UI stopped consuming the shared ordered Kconfig plan');

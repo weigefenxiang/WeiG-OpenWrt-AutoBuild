@@ -354,6 +354,11 @@ function compatibilityRuleStillActive(loaded, ruleId) {
   return evaluateLoadedCompatibility(loaded).warnings.some((warning) => warning.rule.id === ruleId);
 }
 
+function compatibilityTargetsResolved(targets = []) {
+  return targets.every((target) =>
+    (menuValues.get(target.symbol) ?? 'n') === (target.value || 'n'));
+}
+
 async function ensureCompatibilityRules() {
   let evaluation = await loadCompatibilityEvaluation();
   if (!evaluation.warnings.length) return null;
@@ -424,10 +429,13 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       settled = true;
       resolve(recommendationApplied ? 'applied' : 'cancel');
     };
-    const applyAndVerify = (applyPlan, { keepOpen = false } = {}) => {
+    const applyAndVerify = (applyPlan, { keepOpen = false, requiredTargets = [] } = {}) => {
       const snapshot = snapshotCatalogUiState();
       try {
         applyPlan();
+        if (!compatibilityTargetsResolved(requiredTargets)) {
+          throw new Error(t('runtime.3e85d2e445d7'));
+        }
         if (compatibilityRuleStillActive(evaluation.loaded, warning.rule.id)) {
           throw new Error(t('runtime.3e85d2e445d7'));
         }
@@ -645,14 +653,24 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       const recommendationSteps = plans.recommended?.steps?.length
         ? plans.recommended.steps
         : plans.recommended ? [{ symbol: plans.recommended.symbol, package: plans.recommended.package, value: 'n' }] : [];
-      const recommendationStepNames = recommendationSteps.map((step) =>
-        step.package || String(step.symbol || '').replace(/^PACKAGE_/, '')).filter(Boolean);
+      const recommendationTargets = plans.recommended?.requiredTargets?.length
+        ? plans.recommended.requiredTargets
+        : recommendationSteps;
+      const recommendationActions = [...recommendationSteps];
+      const recommendationActionSymbols = new Set(recommendationActions.map((step) => step.symbol));
+      for (const target of recommendationTargets) {
+        if (recommendationActionSymbols.has(target.symbol)) continue;
+        recommendationActionSymbols.add(target.symbol);
+        recommendationActions.push(target);
+      }
+      const recommendationTargetNames = recommendationTargets.map((target) =>
+        target.package || String(target.symbol || '').replace(/^PACKAGE_/, '')).filter(Boolean);
       const automaticChangeNames = (plans.recommended?.automaticChanges || [])
         .filter((change) => change.to === 'n')
         .map((change) => String(change.symbol || '').replace(/^PACKAGE_/, '')).filter(Boolean);
       const recommendationAction = document.createElement('span');
       recommendationAction.className = 'compatibility-recommendation-action';
-      recommendationAction.textContent = plans.recommended ? (recommendationStepNames.length > 1 ? t('runtime.3a95242a9e37', { value1: recommendationStepNames.join(' → ') }) : t('runtime.0dd63352cbe4', { value1: recommendationStepNames[0] || plans.recommended.package })) : t('runtime.f5967ef961bf');
+      recommendationAction.textContent = plans.recommended ? (recommendationTargetNames.length > 1 ? t('runtime.3a95242a9e37', { value1: recommendationTargetNames.join(' → ') }) : t('runtime.0dd63352cbe4', { value1: recommendationTargetNames[0] || plans.recommended.package })) : t('runtime.f5967ef961bf');
       const recommendationDetail = document.createElement('small');
       recommendationDetail.className = 'compatibility-recommendation-detail';
       const automaticDetail = automaticChangeNames.length ? t('menu.automaticLinkage', {
@@ -673,13 +691,13 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
         : t('runtime.5c2c197f7d61');
       recommendedButton.disabled = !plans.recommended || recommendationApplied;
       recommendedButton.onclick = () => applyAndVerify(() => {
-        for (const step of recommendationSteps) {
+        for (const step of recommendationActions) {
           const value = step.value || 'n';
           if ((menuValues.get(step.symbol) ?? 'n') === value) continue;
           applyCatalogIntent(menuOptionBySymbol.get(step.symbol) || { symbol: step.symbol },
             value, false, 'user');
         }
-      }, { keepOpen: true });
+      }, { keepOpen: true, requiredTargets: recommendationTargets });
       customButton = document.createElement('button');
       customButton.type = 'button';
       customButton.className = 'btn compatibility-custom';

@@ -2040,7 +2040,7 @@ function compatibilityValuesKey(values) {
     .map(([symbol, value]) => `${symbol}=${normalizeValue(value)}`).join('\\0');
 }
 
-function compatibilityPlanCandidate(startingValues, steps, values, changes, fallbackPackage = '') {
+function compatibilityPlanCandidate(startingValues, steps, values, changes, fallbackPackage = '', requiredTargets = []) {
   const uniqueSteps = [];
   const seenSymbols = new Set();
   for (const step of steps || []) {
@@ -2049,18 +2049,34 @@ function compatibilityPlanCandidate(startingValues, steps, values, changes, fall
     seenSymbols.add(symbol);
     uniqueSteps.push({ ...step, symbol });
   }
+  const uniqueTargets = [];
+  const seenTargetSymbols = new Set();
+  for (const target of requiredTargets || []) {
+    const symbol = String(target?.symbol || target?.configSymbol || '');
+    if (!symbol || seenTargetSymbols.has(symbol)) continue;
+    seenTargetSymbols.add(symbol);
+    uniqueTargets.push({
+      symbol,
+      package: target?.package || packageNameFromSymbol(symbol),
+      value: target?.value || 'n',
+    });
+  }
   const normalizedChanges = compatibilityPlanChanges(startingValues, values, changes);
   const stepSymbols = new Set(uniqueSteps.map((step) => step.symbol));
+  const targetSymbols = new Set(uniqueTargets.map((target) => target.symbol));
+  const actionSymbols = new Set([...stepSymbols, ...targetSymbols]);
   const lastStep = uniqueSteps.at(-1);
   const packageName = fallbackPackage || lastStep?.package || packageNameFromSymbol(lastStep?.symbol);
   return {
     package: packageName,
     symbol: lastStep?.symbol || (packageName ? `PACKAGE_${packageName}` : ''),
     steps: uniqueSteps,
+    requiredTargets: uniqueTargets,
     changes: normalizedChanges,
-    automaticChanges: normalizedChanges.filter((change) => !stepSymbols.has(change.symbol)),
+    automaticChanges: normalizedChanges.filter((change) =>
+      !stepSymbols.has(change.symbol) && !targetSymbols.has(change.symbol)),
     values,
-    cost: uniqueSteps.length,
+    cost: actionSymbols.size,
   };
 }
 
@@ -2073,6 +2089,13 @@ function deriveBuildDependencyPlans(model, inputValues, warning, intent = {}) {
     model.byPackage.get(packageName)).filter(Boolean);
   const participants = [...new Map([...directRecords, ...triggerRecords]
     .map((record) => [record.configSymbol, record])).values()];
+  const requiredTargetRecords = participants.filter((record) =>
+    compatibilityRecordMatches(rule, record, startingValues));
+  const requiredTargets = requiredTargetRecords.map((record) => ({
+    symbol: record.configSymbol,
+    package: record.package || packageNameFromSymbol(record.configSymbol),
+    value: 'n',
+  }));
   const fallbackPackage = rule.buildDependency?.package || '';
   const queue = [{ values: startingValues, steps: [], changes: [], key: compatibilityValuesKey(startingValues) }];
   const visited = new Set([`${queue[0].key}\\0`]);
@@ -2083,15 +2106,15 @@ function deriveBuildDependencyPlans(model, inputValues, warning, intent = {}) {
     queue.sort((left, right) => left.steps.length - right.steps.length || left.key.localeCompare(right.key));
     const state = queue.shift();
     examined++;
-    const validationOptions = intent.validationOptions || {};
-    if (!compatibilityWarningTriggered(warning, state.values, validationOptions)) {
+    const unresolvedTargets = requiredTargetRecords.filter((record) =>
+      compatibilityRecordMatches(rule, record, state.values));
+    if (!unresolvedTargets.length) {
       if (state.steps.length) candidates.push(compatibilityPlanCandidate(startingValues, state.steps,
-        state.values, state.changes, fallbackPackage));
+        state.values, state.changes, fallbackPackage, requiredTargets));
       continue;
     }
-    const activeRecords = participants.filter((record) => compatibilityRecordMatches(rule, record, state.values));
     const stateStepSymbols = new Set(state.steps.map((step) => step.symbol));
-    for (const record of activeRecords) {
+    for (const record of unresolvedTargets) {
       let plan;
       try {
         plan = compatibilityDisablePlan(model, record, state.values, intent);

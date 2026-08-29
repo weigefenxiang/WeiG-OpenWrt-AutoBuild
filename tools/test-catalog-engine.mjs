@@ -1132,8 +1132,13 @@ const buildDependencyCatalog = {
       { kind: 'package', package: 'trigger-dependent', configSymbol: 'PACKAGE_trigger-dependent',
         kconfigSymbol: 'PACKAGE_trigger-dependent', states: ['n', 'y'], hidden: true, visible: false,
         userSettable: false, kconfig: { dependsExpressions: [['PACKAGE_trigger-b']] } },
+      { kind: 'package', package: 'ordinary-dependent', configSymbol: 'PACKAGE_ordinary-dependent',
+        kconfigSymbol: 'PACKAGE_ordinary-dependent', states: ['n', 'y'], hidden: true, visible: false,
+        userSettable: false, kconfig: { dependsExpressions: [['PACKAGE_trigger-b']] } },
     ],
-    indexes: { providers: {}, reverseDependencies: { 'trigger-b': ['trigger-dependent'] }, reverseKconfig: {}, choices: {} },
+    indexes: { providers: {}, reverseDependencies: {
+      'trigger-b': ['trigger-dependent', 'ordinary-dependent'],
+    }, reverseKconfig: {}, choices: {} },
   },
 };
 const buildDependencyModel = createCatalogModel(buildDependencyCatalog);
@@ -1144,7 +1149,9 @@ const buildDependencyRule = {
     scope: { Demo: ['stable'] }, sourceCommits: ['a'.repeat(40)],
     packages: ['build-target'], refs: ['run:build-dependency'],
     failure: { phase: 'package-compile', cause: 'package-caused', code: 'fixture-build-dependency' },
-    buildDependency: { package: 'build-target', triggerPackages: ['trigger-a', 'trigger-b'] },
+    buildDependency: {
+      package: 'build-target', triggerPackages: ['trigger-a', 'trigger-b', 'trigger-dependent'],
+    },
   }],
 };
 const singleBuildDependencyValues = parseConfigDocument([
@@ -1158,13 +1165,15 @@ const singleBuildDependencyContext = {
 const singleBuildDependencyWarning = evaluateCompatibilityRules(
   buildDependencyModel, buildDependencyRule, singleBuildDependencyValues, singleBuildDependencyContext,
 ).warnings[0];
-assert(singleBuildDependencyWarning?.records.map((record) => record.package).join(',') === 'build-target,trigger-a,trigger-b',
+assert(singleBuildDependencyWarning?.records.map((record) => record.package).join(',') ===
+  'build-target,trigger-a,trigger-b,trigger-dependent',
   'schema-4 build dependency did not expose direct and trigger package records');
 const singleBuildDependencyPlans = deriveCompatibilityPlans(
   buildDependencyModel, singleBuildDependencyValues, singleBuildDependencyWarning,
 );
 assert(singleBuildDependencyPlans.recommended?.cost === 1 &&
   singleBuildDependencyPlans.recommended.steps.map((step) => step.package).join('>') === 'trigger-a' &&
+  singleBuildDependencyPlans.recommended.requiredTargets.map((target) => target.package).join('>') === 'trigger-a' &&
   evaluateCompatibilityRules(buildDependencyModel, buildDependencyRule,
     singleBuildDependencyPlans.recommended.values, singleBuildDependencyContext).warnings.length === 0,
   'schema-4 single trigger did not derive one legal disable step');
@@ -1174,6 +1183,7 @@ const multiBuildDependencyValues = parseConfigDocument([
   'CONFIG_PACKAGE_trigger-a=y',
   'CONFIG_PACKAGE_trigger-b=y',
   'CONFIG_PACKAGE_trigger-dependent=y',
+  'CONFIG_PACKAGE_ordinary-dependent=y',
 ].join('\n'));
 const multiBuildDependencyWarning = evaluateCompatibilityRules(
   buildDependencyModel, buildDependencyRule, multiBuildDependencyValues, singleBuildDependencyContext,
@@ -1181,14 +1191,62 @@ const multiBuildDependencyWarning = evaluateCompatibilityRules(
 const multiBuildDependencyPlans = deriveCompatibilityPlans(
   buildDependencyModel, multiBuildDependencyValues, multiBuildDependencyWarning,
 );
-assert(multiBuildDependencyPlans.recommended?.cost === 2 &&
+assert(multiBuildDependencyPlans.recommended?.cost === 3 &&
   new Set(multiBuildDependencyPlans.recommended.steps.map((step) => step.package)).size === 2 &&
   multiBuildDependencyPlans.recommended.steps.every((step) => ['trigger-a', 'trigger-b'].includes(step.package)) &&
+  new Set(multiBuildDependencyPlans.recommended.requiredTargets.map((target) => target.package)).size === 3 &&
+  multiBuildDependencyPlans.recommended.requiredTargets.some((target) =>
+    target.package === 'trigger-dependent') &&
+  !multiBuildDependencyPlans.recommended.automaticChanges.some((change) =>
+    change.symbol === 'PACKAGE_trigger-dependent') &&
   multiBuildDependencyPlans.recommended.automaticChanges.some((change) =>
-    change.symbol === 'PACKAGE_trigger-dependent' && change.to === 'n') &&
+    change.symbol === 'PACKAGE_ordinary-dependent' && change.to === 'n') &&
   evaluateCompatibilityRules(buildDependencyModel, buildDependencyRule,
     multiBuildDependencyPlans.recommended.values, singleBuildDependencyContext).warnings.length === 0,
-  'schema-4 multiple independent triggers were not all removed with automatic cleanup separated');
+  'schema-4 participants were not retained as explicit targets while outside cleanup stayed automatic');
+
+const fourTriggerNames = ['trigger-one', 'trigger-two', 'trigger-three', 'trigger-four'];
+const fourTriggerModel = createCatalogModel({
+  schema: 5,
+  targets: [],
+  relations: {
+    schema: 2,
+    records: ['failed-target', ...fourTriggerNames].map((packageName) => ({
+      kind: 'package', package: packageName, configSymbol: `PACKAGE_${packageName}`,
+      kconfigSymbol: `PACKAGE_${packageName}`, states: ['n', 'y'],
+    })),
+    indexes: { providers: {}, reverseDependencies: {}, reverseKconfig: {}, choices: {} },
+  },
+});
+const fourTriggerRule = {
+  schema: 4,
+  rules: [{
+    id: 'BLD-FOUR-TRIGGERS', issue: 'build-failure', match: 'all-selected',
+    scope: { Demo: ['stable'] }, sourceCommits: ['a'.repeat(40)],
+    packages: ['failed-target'], refs: ['run:four-triggers'],
+    failure: { phase: 'package-compile', cause: 'package-caused', code: 'fixture-four-triggers' },
+    buildDependency: { package: 'failed-target', triggerPackages: fourTriggerNames },
+  }],
+};
+const fourTriggerValues = parseConfigDocument([
+  '# CONFIG_PACKAGE_failed-target is not set',
+  ...fourTriggerNames.map((packageName) => `CONFIG_PACKAGE_${packageName}=y`),
+].join('\n'));
+const fourTriggerWarning = evaluateCompatibilityRules(
+  fourTriggerModel, fourTriggerRule, fourTriggerValues, singleBuildDependencyContext,
+).warnings[0];
+const fourTriggerPlans = deriveCompatibilityPlans(
+  fourTriggerModel, fourTriggerValues, fourTriggerWarning,
+  { protectedSymbols: new Set(fourTriggerNames.map((packageName) => `PACKAGE_${packageName}`)) },
+);
+assert(fourTriggerPlans.recommended?.cost === 4 &&
+  new Set(fourTriggerPlans.recommended.requiredTargets.map((target) => target.package)).size === 4 &&
+  new Set(fourTriggerPlans.recommended.steps.map((step) => step.package)).size === 4 &&
+  fourTriggerPlans.recommended.automaticChanges.every((change) =>
+    !fourTriggerNames.includes(String(change.symbol || '').replace(/^PACKAGE_/, ''))) &&
+  evaluateCompatibilityRules(fourTriggerModel, fourTriggerRule,
+    fourTriggerPlans.recommended.values, singleBuildDependencyContext).warnings.length === 0,
+'schema-4 imported trigger participants were not all retained as explicit cancellation targets');
 
 const selectorBuildDependencyValues = parseConfigDocument([
   '# CONFIG_PACKAGE_build-target is not set',
