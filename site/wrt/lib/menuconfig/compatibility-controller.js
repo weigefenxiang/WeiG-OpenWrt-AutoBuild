@@ -230,17 +230,42 @@ function openCatalogConflictModal(option, value, violations, openChildren = fals
   return true;
 }
 
+function compatibilityIdentityError(detail) {
+  const error = new Error(`Catalog compatibility identity is invalid: ${detail}`);
+  error.name = 'CompatibilityIdentityError';
+  return error;
+}
+
+function resolveCompatibilityIdentity(source, branch, loadedSource) {
+  const sourceId = String(source?.id || '').trim();
+  const branchName = String(branch?.branch || '').trim();
+  const sourceCommit = String(branch?.commit || '').trim().toLowerCase();
+  const loadedSourceId = String(loadedSource?.id || '').trim();
+  const loadedBranchName = String(loadedSource?.branch || '').trim();
+  const loadedCommit = String(loadedSource?.commit || '').trim().toLowerCase();
+  if (!sourceId || !branchName || !/^[0-9a-f]{40}$/.test(sourceCommit)) {
+    throw compatibilityIdentityError('the active Catalog index source, branch, or commit is missing');
+  }
+  if (sourceId !== loadedSourceId || branchName !== loadedBranchName ||
+      !/^[0-9a-f]{40}$/.test(loadedCommit) || sourceCommit !== loadedCommit) {
+    throw compatibilityIdentityError('the active Catalog index does not match the loaded Catalog asset');
+  }
+  return { sourceId, branchName, sourceCommit };
+}
+
 function compatibilityContext() {
   const catalog = catalogValidationContext(menuValues, 'interactive');
-  const branch = state.version || selectedCatalogBranch() || {};
+  const source = selectedCatalogSource();
+  const branch = selectedCatalogBranch(source);
+  const identity = resolveCompatibilityIdentity(source, branch, MENU_CATALOG?.source);
   const target = state.device?.target || {};
   const targetSystem = String(target.system || '');
   const targetSubtarget = String(target.subtarget || '');
   const targetProfile = String(target.profileSymbol || target.profile || '');
   return {
-    sourceId: state.source?.id || selectedCatalogSource()?.id || '',
-    branchName: branch.branch || '',
-    sourceCommit: String(branch.commit || '').toLowerCase(),
+    sourceId: identity.sourceId,
+    branchName: identity.branchName,
+    sourceCommit: identity.sourceCommit,
     targetSystem,
     targetSubtarget,
     targetProfile,

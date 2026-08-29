@@ -140,6 +140,49 @@ expect(app.includes('const previewPlugins = previewSelection.normal.map') &&
   app.includes('schema: compatibilitySchema, rules: [warning.rule]'),
   'compatibility checks must be on-demand and final schema6 JSON must use selections after the check');
 
+const compatibilityIdentitySource = app.match(/function compatibilityIdentityError\([\s\S]*?(?=\n\nfunction compatibilityContext)/)?.[0] || '';
+const compatibilityIdentityResolver = compatibilityIdentitySource
+  ? Function(`"use strict"; ${compatibilityIdentitySource}\nreturn resolveCompatibilityIdentity;`)()
+  : null;
+const identityCommit = 'a'.repeat(40);
+const resolvedIdentity = compatibilityIdentityResolver?.(
+  { id: 'source-a' },
+  { branch: 'branch-a', commit: identityCommit },
+  { id: 'source-a', branch: 'branch-a', commit: identityCommit },
+);
+expect(compatibilityIdentityResolver &&
+  resolvedIdentity?.sourceId === 'source-a' &&
+  resolvedIdentity?.branchName === 'branch-a' &&
+  resolvedIdentity?.sourceCommit === identityCommit &&
+  !compatibilityIdentitySource.includes('state.version') &&
+  compatibilityIdentitySource.includes('active Catalog index') &&
+  compatibilityIdentitySource.includes('sourceCommit !== loadedCommit') &&
+  (() => {
+    try {
+      compatibilityIdentityResolver(
+        { id: 'source-a' },
+        { branch: 'branch-a' },
+        { id: 'source-a', branch: 'branch-a', commit: identityCommit },
+      );
+      return false;
+    } catch (error) {
+      return error?.name === 'CompatibilityIdentityError';
+    }
+  })() &&
+  (() => {
+    try {
+      compatibilityIdentityResolver(
+        { id: 'source-a' },
+        { branch: 'branch-a', commit: identityCommit },
+        { id: 'source-a', branch: 'branch-a', commit: 'b'.repeat(40) },
+      );
+      return false;
+    } catch (error) {
+      return error?.name === 'CompatibilityIdentityError';
+    }
+  })(),
+  'compatibility evaluation must use the active Catalog branch commit and fail closed on missing or mismatched identity');
+
 const schema6ImportContract = app.match(/async function reconstructSchema6Import\(payload\) \{([\s\S]*?)\n\}\n\s*async function importConfigFile/)?.[1] || '';
 const schema6ApplicationsLoad = schema6ImportContract.indexOf('await ensureCatalogApplications(!sameSnapshot);');
 const schema6CrossBranch = schema6ImportContract.indexOf('if (!sameSnapshot) {');
