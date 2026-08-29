@@ -1114,6 +1114,158 @@ assert(compatibilityReverseSelectPlans.recommended?.steps
   .map((step) => step.package).join('>') === 'selector-ui>selected-core',
   'compatibility planning did not reuse the shared reverse-select graph for ordered disables');
 
+const buildDependencyCatalog = {
+  schema: 5,
+  targets: [],
+  relations: {
+    schema: 2,
+    records: [
+      { kind: 'package', package: 'build-target', configSymbol: 'PACKAGE_build-target',
+        kconfigSymbol: 'PACKAGE_build-target', states: ['n', 'y'] },
+      { kind: 'package', package: 'trigger-a', configSymbol: 'PACKAGE_trigger-a',
+        kconfigSymbol: 'PACKAGE_trigger-a', states: ['n', 'y'] },
+      { kind: 'package', package: 'trigger-b', configSymbol: 'PACKAGE_trigger-b',
+        kconfigSymbol: 'PACKAGE_trigger-b', states: ['n', 'y'] },
+      { kind: 'package', package: 'trigger-selector', configSymbol: 'PACKAGE_trigger-selector',
+        kconfigSymbol: 'PACKAGE_trigger-selector', states: ['n', 'y'],
+        kconfig: { selectsExpressions: [['PACKAGE_trigger-a']] } },
+      { kind: 'package', package: 'trigger-dependent', configSymbol: 'PACKAGE_trigger-dependent',
+        kconfigSymbol: 'PACKAGE_trigger-dependent', states: ['n', 'y'], hidden: true, visible: false,
+        userSettable: false, kconfig: { dependsExpressions: [['PACKAGE_trigger-b']] } },
+    ],
+    indexes: { providers: {}, reverseDependencies: { 'trigger-b': ['trigger-dependent'] }, reverseKconfig: {}, choices: {} },
+  },
+};
+const buildDependencyModel = createCatalogModel(buildDependencyCatalog);
+const buildDependencyRule = {
+  schema: 4,
+  rules: [{
+    id: 'BLD-DEPENDENCY', issue: 'build-failure', match: 'all-selected',
+    scope: { Demo: ['stable'] }, sourceCommits: ['a'.repeat(40)],
+    packages: ['build-target'], refs: ['run:build-dependency'],
+    failure: { phase: 'package-compile', cause: 'package-caused', code: 'fixture-build-dependency' },
+    buildDependency: { package: 'build-target', triggerPackages: ['trigger-a', 'trigger-b'] },
+  }],
+};
+const singleBuildDependencyValues = parseConfigDocument([
+  '# CONFIG_PACKAGE_build-target is not set',
+  'CONFIG_PACKAGE_trigger-a=y',
+  '# CONFIG_PACKAGE_trigger-b is not set',
+].join('\n'));
+const singleBuildDependencyContext = {
+  sourceId: 'Demo', branchName: 'stable', sourceCommit: 'a'.repeat(40),
+};
+const singleBuildDependencyWarning = evaluateCompatibilityRules(
+  buildDependencyModel, buildDependencyRule, singleBuildDependencyValues, singleBuildDependencyContext,
+).warnings[0];
+assert(singleBuildDependencyWarning?.records.map((record) => record.package).join(',') === 'build-target,trigger-a,trigger-b',
+  'schema-4 build dependency did not expose direct and trigger package records');
+const singleBuildDependencyPlans = deriveCompatibilityPlans(
+  buildDependencyModel, singleBuildDependencyValues, singleBuildDependencyWarning,
+);
+assert(singleBuildDependencyPlans.recommended?.cost === 1 &&
+  singleBuildDependencyPlans.recommended.steps.map((step) => step.package).join('>') === 'trigger-a' &&
+  evaluateCompatibilityRules(buildDependencyModel, buildDependencyRule,
+    singleBuildDependencyPlans.recommended.values, singleBuildDependencyContext).warnings.length === 0,
+  'schema-4 single trigger did not derive one legal disable step');
+
+const multiBuildDependencyValues = parseConfigDocument([
+  '# CONFIG_PACKAGE_build-target is not set',
+  'CONFIG_PACKAGE_trigger-a=y',
+  'CONFIG_PACKAGE_trigger-b=y',
+  'CONFIG_PACKAGE_trigger-dependent=y',
+].join('\n'));
+const multiBuildDependencyWarning = evaluateCompatibilityRules(
+  buildDependencyModel, buildDependencyRule, multiBuildDependencyValues, singleBuildDependencyContext,
+).warnings[0];
+const multiBuildDependencyPlans = deriveCompatibilityPlans(
+  buildDependencyModel, multiBuildDependencyValues, multiBuildDependencyWarning,
+);
+assert(multiBuildDependencyPlans.recommended?.cost === 2 &&
+  new Set(multiBuildDependencyPlans.recommended.steps.map((step) => step.package)).size === 2 &&
+  multiBuildDependencyPlans.recommended.steps.every((step) => ['trigger-a', 'trigger-b'].includes(step.package)) &&
+  multiBuildDependencyPlans.recommended.automaticChanges.some((change) =>
+    change.symbol === 'PACKAGE_trigger-dependent' && change.to === 'n') &&
+  evaluateCompatibilityRules(buildDependencyModel, buildDependencyRule,
+    multiBuildDependencyPlans.recommended.values, singleBuildDependencyContext).warnings.length === 0,
+  'schema-4 multiple independent triggers were not all removed with automatic cleanup separated');
+
+const selectorBuildDependencyValues = parseConfigDocument([
+  '# CONFIG_PACKAGE_build-target is not set',
+  'CONFIG_PACKAGE_trigger-selector=y',
+  'CONFIG_PACKAGE_trigger-a=y',
+].join('\n'));
+const selectorBuildDependencyWarning = evaluateCompatibilityRules(
+  buildDependencyModel, buildDependencyRule, selectorBuildDependencyValues, singleBuildDependencyContext,
+).warnings[0];
+const selectorBuildDependencyPlans = deriveCompatibilityPlans(
+  buildDependencyModel, selectorBuildDependencyValues, selectorBuildDependencyWarning,
+);
+assert(selectorBuildDependencyPlans.recommended?.cost === 2 &&
+  new Set(selectorBuildDependencyPlans.recommended.steps.map((step) => step.package)).size === 2 &&
+  selectorBuildDependencyPlans.recommended.steps.some((step) => step.package === 'trigger-selector') &&
+  selectorBuildDependencyPlans.recommended.steps.some((step) => step.package === 'trigger-a') &&
+  evaluateCompatibilityRules(buildDependencyModel, buildDependencyRule,
+    selectorBuildDependencyPlans.recommended.values, singleBuildDependencyContext).warnings.length === 0,
+  'schema-4 selector linkage was not represented as one user step plus automatic cleanup');
+
+const selectorAndTargetValues = parseConfigDocument([
+  'CONFIG_PACKAGE_build-target=y',
+  'CONFIG_PACKAGE_trigger-selector=y',
+  'CONFIG_PACKAGE_trigger-a=y',
+].join('\n'));
+const selectorAndTargetWarning = evaluateCompatibilityRules(
+  buildDependencyModel, buildDependencyRule, selectorAndTargetValues, singleBuildDependencyContext,
+).warnings[0];
+const selectorAndTargetPlans = deriveCompatibilityPlans(
+  buildDependencyModel, selectorAndTargetValues, selectorAndTargetWarning,
+  { explicitSymbols: new Set(['PACKAGE_build-target', 'PACKAGE_trigger-selector', 'PACKAGE_trigger-a']) },
+);
+assert(selectorAndTargetPlans.recommended?.cost === 3 &&
+  new Set(selectorAndTargetPlans.recommended.steps.map((step) => step.package)).size === 3 &&
+  selectorAndTargetPlans.recommended.steps.some((step) => step.package === 'build-target') &&
+  selectorAndTargetPlans.recommended.steps.some((step) => step.package === 'trigger-selector') &&
+  selectorAndTargetPlans.recommended.steps.some((step) => step.package === 'trigger-a') &&
+  evaluateCompatibilityRules(buildDependencyModel, buildDependencyRule,
+    selectorAndTargetPlans.recommended.values, singleBuildDependencyContext).warnings.length === 0,
+  'schema-4 explicit selector and direct target did not converge through shared Kconfig intent');
+const schema4CommitMismatch = evaluateCompatibilityRules(
+  buildDependencyModel, buildDependencyRule, singleBuildDependencyValues,
+  { ...singleBuildDependencyContext, sourceCommit: 'b'.repeat(40) },
+);
+assert(schema4CommitMismatch.warnings.length === 0,
+  'schema-4 build dependency rule ignored source commit mismatch');
+const schema4UnknownField = structuredClone(buildDependencyRule);
+schema4UnknownField.rules[0].unsupported = true;
+expectThrow(() => normalizeCompatibilityDocument(schema4UnknownField), /unsupported field|BLD-DEPENDENCY/i,
+  'schema-4 compatibility accepted an unknown rule field');
+const schema4UnknownBuildDependencyField = structuredClone(buildDependencyRule);
+schema4UnknownBuildDependencyField.rules[0].buildDependency.extra = true;
+expectThrow(() => normalizeCompatibilityDocument(schema4UnknownBuildDependencyField), /unsupported field|buildDependency/i,
+  'schema-4 buildDependency accepted an unknown field');
+const schema4MissingBuildDependencyCommit = structuredClone(buildDependencyRule);
+delete schema4MissingBuildDependencyCommit.rules[0].sourceCommits;
+expectThrow(() => normalizeCompatibilityDocument(schema4MissingBuildDependencyCommit), /sourceCommits|buildDependency/i,
+  'schema-4 buildDependency accepted a rule without exact source commits');
+const schema4BuildPackageNotListed = structuredClone(buildDependencyRule);
+schema4BuildPackageNotListed.rules[0].packages = ['trigger-a'];
+expectThrow(() => normalizeCompatibilityDocument(schema4BuildPackageNotListed), /must be listed|buildDependency/i,
+  'schema-4 buildDependency accepted a build package absent from packages');
+const schema4DuplicateTrigger = structuredClone(buildDependencyRule);
+schema4DuplicateTrigger.rules[0].buildDependency.triggerPackages = ['trigger-a', 'trigger-a'];
+expectThrow(() => normalizeCompatibilityDocument(schema4DuplicateTrigger), /duplicate|triggerPackages/i,
+  'schema-4 buildDependency accepted duplicate trigger packages');
+const schema4PackageTrigger = structuredClone(buildDependencyRule);
+schema4PackageTrigger.rules[0].buildDependency.triggerPackages = ['build-target'];
+expectThrow(() => normalizeCompatibilityDocument(schema4PackageTrigger), /must not contain|triggerPackages/i,
+  'schema-4 buildDependency accepted its build package as a trigger');
+expectThrow(() => normalizeCompatibilityDocument({ ...buildDependencyRule, schema: 3 }), /requires compatibility schema 4|unsupported field/i,
+  'schema-3 compatibility accepted buildDependency');
+expectThrow(() => normalizeCompatibilityDocument({ ...buildDependencyRule, schema: 2 }), /requires compatibility schema 4|unsupported field/i,
+  'schema-2 compatibility accepted buildDependency');
+expectThrow(() => normalizeCompatibilityDocument({ ...buildDependencyRule, schema: 5 }), /schema 2, 3, or 4/i,
+  'unknown compatibility schema was accepted');
+
 const wildcardCompatibility = structuredClone(buildFailure);
 wildcardCompatibility.rules[0].scope = { '*': ['openwrt-*'] };
 assert(evaluateCompatibilityRules(model, wildcardCompatibility,

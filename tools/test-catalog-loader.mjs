@@ -533,6 +533,37 @@ assert(compatibilitySchema3.compatibility.schema === 3 && compatibilitySchema3.c
   compatibilitySchema3.compatibility.rules[0].failure.cause === 'package-caused',
   'schema-3 compatibility asset was not verified and decoded');
 
+const compatibilitySchema4Document = {
+  schema: 4,
+  rules: [{
+    id: 'BLD-DEPENDENCY', issue: 'build-failure', match: 'all-selected',
+    scope: { ImmortalWrt: ['openwrt-25.12'] }, packages: ['dockerd'], refs: ['run:3'],
+    failure: { phase: 'package-compile', cause: 'package-caused', code: 'compile-failure' },
+    buildDependency: { package: 'dockerd', triggerPackages: ['docker', 'containerd', 'runc', 'tini'] },
+  }],
+};
+const compatibilitySchema4Payload = compressedDocument(compatibilitySchema4Document);
+const compatibilitySchema4Index = indexFor(asset, valid, commit, '9'.repeat(40));
+compatibilitySchema4Index.assets = {
+  compatibility: {
+    asset: 'compatibility.json.gz', hash: compatibilitySchema4Payload.hash,
+    bytes: compatibilitySchema4Payload.bytes.length,
+    jsonBytes: new TextEncoder().encode(JSON.stringify(compatibilitySchema4Document)).byteLength,
+    schema: 4, rules: 1,
+  },
+};
+const compatibilitySchema4Loader = createCatalogLoader({
+  repository: 'owner/catalog', engine: { createCatalogModel },
+  fetchImpl: async (url) => url.includes('index.json')
+    ? new Response(JSON.stringify(compatibilitySchema4Index), { status: 200 })
+    : new Response(compatibilitySchema4Payload.bytes, { status: 200 }),
+  cacheStorage: fakeCaches(), subtle: null,
+});
+const compatibilitySchema4 = await compatibilitySchema4Loader.fetchCompatibility();
+assert(compatibilitySchema4.compatibility.schema === 4 && compatibilitySchema4.contract.schema === 4 &&
+  compatibilitySchema4.compatibility.rules[0].buildDependency.triggerPackages.length === 4,
+  'schema-4 compatibility asset was not verified and decoded');
+
 const applicationsDocument = {
   schema: 1,
   groups: ['Network'],
@@ -633,7 +664,7 @@ assert(!previewCalls.some((url) => url.includes('/releases/')),
 for (const mutate of [
   (value) => { value.assets.compatibility.schema = 1; },
   (value) => { value.assets.compatibility.schema = 0; },
-  (value) => { value.assets.compatibility.schema = 4; },
+  (value) => { value.assets.compatibility.schema = 5; },
   (value) => { delete value.assets.compatibility.jsonBytes; },
   (value) => { value.assets.compatibility.jsonBytes = 512 * 1024 + 1; },
   (value) => { value.assets.compatibility.bytes = 512 * 1024 + 1025; },
@@ -652,7 +683,7 @@ for (const mutate of [
 for (const mutate of [
   (value) => { value.schema = 1; },
   (value) => { value.schema = 0; },
-  (value) => { value.schema = 3; },
+  (value) => { value.schema = 5; },
   (value) => { value.rules.push(structuredClone(value.rules[0])); },
 ]) {
   const invalidDocument = structuredClone(compatibilityDocument);

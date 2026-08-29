@@ -88,9 +88,9 @@ Compatibility recommendations also call `applyUserIntent` and share the same Cat
 
 Generic mutation coverage includes bool, tristate, empty/non-empty string, literal `n`, escaping, int, hex, unknown symbols, conditional defaults, parentheses, `&&`/`||`, deferred state, and closed-world boundaries.
 
-## 5. Compatibility schema 2/3
+## 5. Compatibility schema 2/3/4
 
-Schemas 2 and 3 are accepted. Schema 2 retains the legacy rule shape; schema 3 may add `sourceCommits`, `targetScope`, and structured `failure` evidence. Source can be a named ID or a standalone `*`; Branch can be exact or a glob. Wildcard Source cannot mix with named Sources. One-package rules are valid, so a known single-package build failure never needs a fake pair. The browser preserves the loaded document's actual schema and validates the index contract's schema, SHA-256, compressed bytes, JSON bytes, and rule count.
+Schemas 2, 3, and 4 are accepted. Schema 2 retains the legacy rule shape; schema 3 may add `sourceCommits`, `targetScope`, and structured `failure` evidence. Schema 4 may additionally add a rule-level `buildDependency` object with one `package` listed in `packages` and a non-empty `triggerPackages` list; it requires exact `sourceCommits` and is valid only for `build-failure` rules. A build-dependency rule is active when its direct `packages` condition or any trigger package satisfies the rule's match mode. The shared Kconfig executor derives the minimum ordered user steps to clear every active trigger; dependent changes remain automatic changes. Source can be a named ID or a standalone `*`; Branch can be exact or a glob. Wildcard Source cannot mix with named Sources. One-package rules are valid, so a known single-package build failure never needs a fake pair. The browser preserves the loaded document's actual schema and validates the index contract's schema, SHA-256, compressed bytes, JSON bytes, and rule count.
 
 The executor stays:
 

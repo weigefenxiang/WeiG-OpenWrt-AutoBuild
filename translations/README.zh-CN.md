@@ -75,7 +75,7 @@ staging-260810_0857-匿名#161-BUILD-LOGS
 
 - 页面启动后优先下载当前 Source/Branch 的菜单和语言；精选应用、隐藏项、帮助、兼容性规则和镜像策略按 `site/wrt/config/site.json` 中 `catalog.loading` 的空闲队列顺序后台加载。
 - 精选应用名单、中文/英文介绍与跨源软件包体积都属于 Catalog。应用 ID 相同即视为同一项；体积显示三位有效数字，缺少可靠官方观测时明确显示未知。
-- `compatibility.json` 接受 schema 2 和 schema 3。Source 可用 `*`，Branch 可用 glob；规则只描述证据和冲突，网页仍通过同一 Catalog 执行器生成最小修改方案，也允许用户二次确认后强制继续。
+- `compatibility.json` 接受 schema 2、schema 3 和 schema 4。schema 4 可通过 `buildDependency` 将已验证的构建故障绑定到一个构建包及其直接构建触发入口；Source 可用 `*`，Branch 可用 glob；规则只描述证据和冲突，网页仍通过同一 Catalog 执行器生成最小修改方案，也允许用户二次确认后强制继续。
 - AutoBuild 不做每周数据同步；未来 Source/Branch 和 Catalog 数据分支发布后，网页自动读取，无需更新 AutoBuild 源码。
 
 ## 快速测试

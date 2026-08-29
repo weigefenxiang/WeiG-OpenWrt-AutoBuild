@@ -75,7 +75,7 @@ The user build tag is preserved and `#161` is the original Build Issue. All down
 
 - The current Source/Branch menu and language load first. Applications, hidden options, help, compatibility, and mirror rules follow the idle queue in `catalog.loading` from `site/wrt/config/site.json`.
 - Curated IDs, localized descriptions, and cross-source size observations live in Catalog. Equal IDs are one application. Sizes use three significant digits; missing reliable observations remain explicitly unknown.
-- `compatibility.json` accepts schema 2 and schema 3. Source supports `*` and Branch supports globs. Rules provide evidence; the browser uses the same Catalog executor for the minimum plan and preserves the confirmed force-continue path.
+- `compatibility.json` accepts schema 2, schema 3, and schema 4. Schema 4 may bind a verified build failure to one build package and its direct build-trigger alternatives through `buildDependency`; Source supports `*` and Branch supports globs. Rules provide evidence; the browser uses the same Catalog executor for the minimum plan and preserves the confirmed force-continue path.
 - AutoBuild performs no weekly data sync. Newly published Source/Branch data becomes available through Catalog without an AutoBuild source update.
 
 ## Tests

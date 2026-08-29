@@ -1695,6 +1695,9 @@ export function resolveEffectiveTheme(model, target, inputValues = new Map(), op
 const COMPATIBILITY_DOCUMENT_KEYS = new Set(['schema', 'rules']);
 const COMPATIBILITY_RULE_KEYS_V2 = new Set(['id', 'issue', 'match', 'scope', 'if', 'packages', 'paths', 'refs']);
 const COMPATIBILITY_RULE_KEYS_V3 = new Set([...COMPATIBILITY_RULE_KEYS_V2, 'sourceCommits', 'targetScope', 'failure']);
+const COMPATIBILITY_RULE_KEYS_V4 = new Set([...COMPATIBILITY_RULE_KEYS_V3, 'buildDependency']);
+const COMPATIBILITY_BUILD_DEPENDENCY_KEYS = new Set(['package', 'triggerPackages']);
+const COMPATIBILITY_SCHEMAS = new Set([2, 3, 4]);
 const COMPATIBILITY_TARGET_SCOPE_KEYS = new Set(['system', 'subtarget', 'profile']);
 const COMPATIBILITY_FAILURE_KEYS = new Set(['phase', 'cause', 'code', 'observed']);
 const COMPATIBILITY_ID_RE = /^[A-Z][A-Z0-9-]{2,31}$/;
@@ -1765,17 +1768,32 @@ function normalizeCompatibilityFailure(value, label) {
     ...(value.observed === undefined ? {} : { observed: normalizeCompatibilityObserved(value.observed, `${label}.observed`) }) };
 }
 
+function normalizeCompatibilityBuildDependency(value, label) {
+  if (!compatibilityObject(value)) throw compatibilityError(`${label} must be an object`);
+  compatibilityKeys(value, COMPATIBILITY_BUILD_DEPENDENCY_KEYS, label);
+  const packageName = String(value.package || '').trim();
+  if (!COMPATIBILITY_PACKAGE_RE.test(packageName)) throw compatibilityError(`${label}.package is invalid`);
+  const triggerPackages = compatibilityStrings(value.triggerPackages,
+    `${label}.triggerPackages`, COMPATIBILITY_PACKAGE_RE, 1, 16);
+  if (triggerPackages.includes(packageName)) {
+    throw compatibilityError(`${label}.triggerPackages must not contain the build package`);
+  }
+  return { package: packageName, triggerPackages };
+}
+
 export function normalizeCompatibilityDocument(raw) {
   if (!compatibilityObject(raw)) throw compatibilityError('compatibility document must be an object');
   compatibilityKeys(raw, COMPATIBILITY_DOCUMENT_KEYS, 'compatibility document');
   const schema = Number(raw.schema);
-  if (![2, 3].includes(schema) || !Array.isArray(raw.rules)) throw compatibilityError('compatibility document requires schema 2 or 3 and a rules array');
+  if (!COMPATIBILITY_SCHEMAS.has(schema) || !Array.isArray(raw.rules)) throw compatibilityError('compatibility document requires schema 2, 3, or 4 and a rules array');
   if (new TextEncoder().encode(JSON.stringify(raw)).byteLength > 512 * 1024) throw compatibilityError('compatibility document is too large');
   const ids = new Set();
   const rules = raw.rules.map((rule, index) => {
     const label = `compatibility.rules[${index}]`;
     if (!compatibilityObject(rule)) throw compatibilityError(`${label} must be an object`);
-    compatibilityKeys(rule, schema === 2 ? COMPATIBILITY_RULE_KEYS_V2 : COMPATIBILITY_RULE_KEYS_V3, label);
+    const allowedRuleKeys = schema === 2 ? COMPATIBILITY_RULE_KEYS_V2 :
+      schema === 3 ? COMPATIBILITY_RULE_KEYS_V3 : COMPATIBILITY_RULE_KEYS_V4;
+    compatibilityKeys(rule, allowedRuleKeys, label);
     const id = String(rule.id || '').trim();
     if (!COMPATIBILITY_ID_RE.test(id) || ids.has(id)) throw compatibilityError(`${label}.id is invalid or duplicate`);
     ids.add(id);
@@ -1794,20 +1812,36 @@ export function normalizeCompatibilityDocument(raw) {
     const normalized = { id, issue, match, scope, ...(condition ? { if: condition } : {}),
       packages: compatibilityStrings(rule.packages, `${id}.packages`, COMPATIBILITY_PACKAGE_RE, 1, 16),
       refs: compatibilityStrings(rule.refs, `${id}.refs`, /^[A-Za-z0-9][A-Za-z0-9+_.:/@#-]{0,255}$/, 1, 8) };
-    if (schema === 3 && rule.sourceCommits !== undefined) {
+    if ((schema === 3 || schema === 4) && rule.sourceCommits !== undefined) {
       normalized.sourceCommits = compatibilityStrings(rule.sourceCommits, `${id}.sourceCommits`, COMPATIBILITY_COMMIT_RE, 1, 32);
     }
-    if (schema === 3 && rule.targetScope !== undefined) {
+    if ((schema === 3 || schema === 4) && rule.targetScope !== undefined) {
       normalized.targetScope = normalizeCompatibilityTargetScope(rule.targetScope, `${id}.targetScope`);
     }
     if (issue === 'file-ownership') normalized.paths = compatibilityStrings(rule.paths, `${id}.paths`,
       /^\/(?!.*(?:^|\/)\.\.(?:\/|$))[^\0\r\n]{1,255}$/, 1, 16);
     else if (rule.paths !== undefined) throw compatibilityError(`${id}.paths is only valid for file-ownership`);
-    if (issue === 'file-ownership' && schema === 3 && rule.failure !== undefined) {
+    if (issue === 'file-ownership' && rule.failure !== undefined) {
       throw compatibilityError(`${id}.failure is only valid for build-failure`);
     }
-    if (issue === 'build-failure' && schema === 3) {
+    if (schema < 4 && rule.buildDependency !== undefined) {
+      throw compatibilityError(`${id}.buildDependency requires compatibility schema 4`);
+    }
+    if (issue === 'file-ownership' && rule.buildDependency !== undefined) {
+      throw compatibilityError(`${id}.buildDependency is only valid for build-failure`);
+    }
+    if (issue === 'build-failure' && (schema === 3 || schema === 4)) {
       normalized.failure = normalizeCompatibilityFailure(rule.failure, `${id}.failure`);
+    }
+    if (schema === 4 && rule.buildDependency !== undefined) {
+      if (!normalized.sourceCommits?.length) {
+        throw compatibilityError(`${id}.buildDependency requires a non-empty sourceCommits list`);
+      }
+      const buildDependency = normalizeCompatibilityBuildDependency(rule.buildDependency, `${id}.buildDependency`);
+      if (!normalized.packages.includes(buildDependency.package)) {
+        throw compatibilityError(`${id}.buildDependency.package must be listed in packages`);
+      }
+      normalized.buildDependency = buildDependency;
     }
     return normalized;
   });
@@ -1829,14 +1863,22 @@ function materializeCompatibilityDefaults(model, inputValues, options) {
   return values;
 }
 
-function compatibilityRuleTriggered(rule, records, values, options) {
+function compatibilityRecordMatches(rule, record, values) {
+  return rule.match === 'all-installed'
+    ? recordInstalled(record, values)
+    : recordEnabled(record, values);
+}
+
+function compatibilityRuleTriggered(rule, records, values, options, triggerRecords = []) {
   if (rule.if) {
     const condition = evaluateExpressionState(rule.if, values, options);
     if (condition.status === 'deferred') throw compatibilityError(`${rule.id}.if cannot be resolved from the active Catalog`);
     if (condition.status !== 'satisfied') return false;
   }
-  if (rule.match === 'all-installed') return records.every((record) => recordInstalled(record, values));
-  return records.every((record) => ['m', 'y'].includes(normalizeValue(values.get(record.configSymbol) ?? 'n')));
+  const direct = records.every((record) => compatibilityRecordMatches(rule, record, values));
+  if (direct) return true;
+  return Boolean(rule.buildDependency) && triggerRecords.some((record) =>
+    compatibilityRecordMatches(rule, record, values));
 }
 
 export function evaluateCompatibilityRules(model, document, inputValues, context = {}) {
@@ -1862,7 +1904,27 @@ export function evaluateCompatibilityRules(model, document, inputValues, context
       if (!record?.configSymbol) throw compatibilityError(`${rule.id} references a package missing from the active Catalog: ${packageName}`);
       return record;
     });
-    if (compatibilityRuleTriggered(rule, records, values, options)) warnings.push({ rule, records, values });
+    let triggerRecords = [];
+    let buildDependencyRecord = null;
+    if (rule.buildDependency) {
+      buildDependencyRecord = model.byPackage.get(rule.buildDependency.package);
+      if (!buildDependencyRecord?.configSymbol) {
+        throw compatibilityError(`${rule.id} references a build dependency package missing from the active Catalog: ${rule.buildDependency.package}`);
+      }
+      triggerRecords = rule.buildDependency.triggerPackages.map((packageName) => {
+        const record = model.byPackage.get(packageName);
+        if (!record?.configSymbol) {
+          throw compatibilityError(`${rule.id} references a build trigger package missing from the active Catalog: ${packageName}`);
+        }
+        return record;
+      });
+    }
+    const allRecords = [...new Map([...records, ...triggerRecords]
+      .map((record) => [record.configSymbol, record])).values()];
+    if (compatibilityRuleTriggered(rule, records, values, options, triggerRecords)) {
+      warnings.push({ rule, records: allRecords, directRecords: records, triggerRecords,
+        buildDependencyRecord, values });
+    }
   }
   return { document: normalized, values, warnings };
 }
@@ -1968,18 +2030,117 @@ function compatibilityDisablePlan(model, record, inputValues, intent = {}) {
   };
 }
 
+function compatibilityWarningTriggered(warning, values, options = {}) {
+  return compatibilityRuleTriggered(warning.rule, warning.directRecords || warning.records, values, options,
+    warning.triggerRecords || []);
+}
+
+function compatibilityValuesKey(values) {
+  return [...valuesMap(values)].sort(([left], [right]) => left.localeCompare(right))
+    .map(([symbol, value]) => `${symbol}=${normalizeValue(value)}`).join('\\0');
+}
+
+function compatibilityPlanCandidate(startingValues, steps, values, changes, fallbackPackage = '') {
+  const uniqueSteps = [];
+  const seenSymbols = new Set();
+  for (const step of steps || []) {
+    const symbol = String(step?.symbol || '');
+    if (!symbol || seenSymbols.has(symbol)) continue;
+    seenSymbols.add(symbol);
+    uniqueSteps.push({ ...step, symbol });
+  }
+  const normalizedChanges = compatibilityPlanChanges(startingValues, values, changes);
+  const stepSymbols = new Set(uniqueSteps.map((step) => step.symbol));
+  const lastStep = uniqueSteps.at(-1);
+  const packageName = fallbackPackage || lastStep?.package || packageNameFromSymbol(lastStep?.symbol);
+  return {
+    package: packageName,
+    symbol: lastStep?.symbol || (packageName ? `PACKAGE_${packageName}` : ''),
+    steps: uniqueSteps,
+    changes: normalizedChanges,
+    automaticChanges: normalizedChanges.filter((change) => !stepSymbols.has(change.symbol)),
+    values,
+    cost: uniqueSteps.length,
+  };
+}
+
+function deriveBuildDependencyPlans(model, inputValues, warning, intent = {}) {
+  const rule = warning.rule;
+  const startingValues = new Map(valuesMap(warning.values || inputValues));
+  const directRecords = warning.directRecords || (rule.packages || []).map((packageName) =>
+    model.byPackage.get(packageName)).filter(Boolean);
+  const triggerRecords = warning.triggerRecords || (rule.buildDependency?.triggerPackages || []).map((packageName) =>
+    model.byPackage.get(packageName)).filter(Boolean);
+  const participants = [...new Map([...directRecords, ...triggerRecords]
+    .map((record) => [record.configSymbol, record])).values()];
+  const fallbackPackage = rule.buildDependency?.package || '';
+  const queue = [{ values: startingValues, steps: [], changes: [], key: compatibilityValuesKey(startingValues) }];
+  const visited = new Set([`${queue[0].key}\\0`]);
+  const candidates = [];
+  let examined = 0;
+  const maxNodes = 4096;
+  while (queue.length && examined < maxNodes) {
+    queue.sort((left, right) => left.steps.length - right.steps.length || left.key.localeCompare(right.key));
+    const state = queue.shift();
+    examined++;
+    const validationOptions = intent.validationOptions || {};
+    if (!compatibilityWarningTriggered(warning, state.values, validationOptions)) {
+      if (state.steps.length) candidates.push(compatibilityPlanCandidate(startingValues, state.steps,
+        state.values, state.changes, fallbackPackage));
+      continue;
+    }
+    const activeRecords = participants.filter((record) => compatibilityRecordMatches(rule, record, state.values));
+    const stateStepSymbols = new Set(state.steps.map((step) => step.symbol));
+    for (const record of activeRecords) {
+      let plan;
+      try {
+        plan = compatibilityDisablePlan(model, record, state.values, intent);
+      } catch {
+        plan = null;
+      }
+      if (!plan?.steps?.length || plan.steps.some((step) => stateStepSymbols.has(step.symbol))) continue;
+      const values = new Map(plan.values);
+      const steps = [...state.steps, ...plan.steps];
+      const changes = compatibilityPlanChanges(startingValues, values, [...state.changes, ...plan.changes]);
+      const valuesKey = compatibilityValuesKey(values);
+      const operationKey = steps.map((step) => `${step.symbol}=${step.value || 'n'}`).sort().join('\\0');
+      const key = `${valuesKey}\\0${operationKey}`;
+      if (valuesKey === state.key || visited.has(key)) continue;
+      visited.add(key);
+      queue.push({ values, steps, changes, key: valuesKey });
+    }
+  }
+  const uniqueCandidates = new Map();
+  for (const candidate of candidates) {
+    const operationKey = candidate.steps.map((step) => `${step.symbol}=${step.value || 'n'}`)
+      .sort().join('\\0');
+    const existing = uniqueCandidates.get(operationKey);
+    const candidateKey = candidate.steps.map((step) => `${step.symbol}=${step.value || 'n'}`).join('\\0');
+    if (!existing || candidateKey.localeCompare(existing.key) < 0) {
+      uniqueCandidates.set(operationKey, { ...candidate, key: candidateKey });
+    }
+  }
+  const normalizedCandidates = [...uniqueCandidates.values()]
+    .sort((left, right) => left.cost - right.cost || left.key.localeCompare(right.key));
+  const minimum = normalizedCandidates[0]?.cost;
+  const cheapest = normalizedCandidates.filter((candidate) => candidate.cost === minimum);
+  return { candidates: normalizedCandidates, recommended: cheapest.length === 1 ? cheapest[0] : null };
+}
+
 export function deriveCompatibilityPlans(model, inputValues, warning, intent = {}) {
   const rule = warning?.rule;
   const records = warning?.records || [];
   const startingValues = warning?.values || inputValues;
   if (!rule || records.length < 1) throw compatibilityError('compatibility warning is incomplete');
+  if (rule.buildDependency) return deriveBuildDependencyPlans(model, inputValues, warning, intent);
   const candidates = [];
   for (const record of records) {
     if (!record.canDisable) continue;
     try {
       const plan = compatibilityDisablePlan(model, record, startingValues, intent);
       if (!plan?.steps.length) continue;
-      const resolved = !compatibilityRuleTriggered(rule, records, plan.values, intent.validationOptions || {});
+      const resolved = !compatibilityWarningTriggered({ ...warning, values: plan.values }, plan.values,
+        intent.validationOptions || {});
       if (!resolved) continue;
       const stepSymbols = new Set(plan.steps.map((step) => step.symbol));
       candidates.push({
