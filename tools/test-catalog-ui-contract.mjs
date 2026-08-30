@@ -490,6 +490,20 @@ expect(selfTestContract.indexOf("openModal(t('st.title'))") >= 0 &&
   selfTestContract.includes('savedResults.appendChild') &&
   selfTestContract.includes("error?.name === 'CompatibilityCancelledError'"),
   'self-test does not paint five ordinary checks before background compatibility loading and gated evaluation');
+const compatibilityNearMatchTextContract = selfTestContract.match(/function compatibilityNearMatchText\(diagnostics = \[\]\) \{([\s\S]*?)\n  \}/)?.[1] || '';
+const compatibilityDiagnosticRow = "d6(evaluation.diagnostics?.length ? 'warn' : 'ok'";
+expect(compatibilityNearMatchTextContract.includes("t('st.compatibility.inconclusive'") &&
+  compatibilityNearMatchTextContract.includes("t('st.compatibility.inconclusive.commit'") &&
+  compatibilityNearMatchTextContract.includes("t('st.compatibility.inconclusive.target'") &&
+  i18nSource.includes('"st.compatibility.inconclusive"') &&
+  i18nEnglish.strings['st.compatibility.inconclusive'] &&
+  i18nZhCn.strings['st.compatibility.inconclusive'] &&
+  selfTestContract.includes(compatibilityDiagnosticRow) &&
+  selfTestContract.includes("current.diagnostics?.length ? 'warn' : 'ok'") &&
+  selfTestContract.indexOf(compatibilityDiagnosticRow) < selfTestContract.indexOf('await ensureCompatibilityRules()') &&
+  !selfTestContract.slice(selfTestContract.indexOf(compatibilityDiagnosticRow), selfTestContract.indexOf('await ensureCompatibilityRules()')).includes('deriveCompatibilityPlans') &&
+  !selfTestContract.slice(selfTestContract.indexOf(compatibilityDiagnosticRow), selfTestContract.indexOf('await ensureCompatibilityRules()')).includes('recommendation'),
+  'self-test does not show a yellow inconclusive near-match result without opening a compatibility recommendation');
 const probeContract = app.match(/async function openPackageProbeModal\(\) \{([\s\S]*?)\n\}\n\$\('modalProbe'/)?.[1] || '';
 expect(probeContract.includes('selfTestViewToken += 1') &&
   !probeContract.includes('ensureCatalogApplications()') && probeContract.includes('await ensureCatalogMenuLoaded(true)') &&

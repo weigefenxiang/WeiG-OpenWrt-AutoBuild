@@ -1881,6 +1881,41 @@ function compatibilityRuleTriggered(rule, records, values, options, triggerRecor
     compatibilityRecordMatches(rule, record, values));
 }
 
+function compatibilityRuleScopeMismatch(rule, sourceCommit, target) {
+  const mismatches = [];
+  if (rule.sourceCommits && (!COMPATIBILITY_COMMIT_RE.test(sourceCommit) ||
+      !rule.sourceCommits.includes(sourceCommit))) mismatches.push('sourceCommit');
+  if (rule.targetScope && Object.entries(rule.targetScope).some(([key, values]) =>
+    !values.includes(target[key]))) mismatches.push('targetScope');
+  return mismatches;
+}
+
+function compatibilityNearMatch(rule, sourceId, branchName, sourceCommit, target, records, values, mismatches) {
+  const matchedPackages = records
+    .filter((record) => compatibilityRecordMatches(rule, record, values))
+    .map((record) => record.package || packageNameFromSymbol(record.configSymbol))
+    .filter(Boolean);
+  return {
+    type: 'compatibility-near-match',
+    ruleId: rule.id,
+    issue: rule.issue,
+    sourceId,
+    branchName,
+    mismatches: [...mismatches],
+    matchedPackages: [...new Set(matchedPackages)],
+    verified: {
+      sourceCommits: rule.sourceCommits ? [...rule.sourceCommits] : [],
+      targetScope: rule.targetScope
+        ? Object.fromEntries(Object.entries(rule.targetScope).map(([key, values]) => [key, [...values]]))
+        : null,
+    },
+    current: {
+      sourceCommit,
+      targetScope: { ...target },
+    },
+  };
+}
+
 export function evaluateCompatibilityRules(model, document, inputValues, context = {}) {
   if (!model?.byPackage) throw compatibilityError('Catalog model is unavailable');
   const normalized = normalizeCompatibilityDocument(document);
@@ -1894,39 +1929,58 @@ export function evaluateCompatibilityRules(model, document, inputValues, context
   const options = context.validationOptions || {};
   const values = materializeCompatibilityDefaults(model, inputValues, options);
   const warnings = [];
+  const diagnostics = [];
   for (const rule of normalized.rules) {
     const branchPatterns = rule.scope[sourceId] || rule.scope['*'] || [];
     if (!branchPatterns.some((pattern) => compatibilityPatternMatches(branchName, pattern))) continue;
-    if (rule.sourceCommits && (!COMPATIBILITY_COMMIT_RE.test(sourceCommit) || !rule.sourceCommits.includes(sourceCommit))) continue;
-    if (rule.targetScope && Object.entries(rule.targetScope).some(([key, values]) => !values.includes(target[key]))) continue;
+    const mismatches = compatibilityRuleScopeMismatch(rule, sourceCommit, target);
+    const missingPackages = [];
     const records = rule.packages.map((packageName) => {
       const record = model.byPackage.get(packageName);
-      if (!record?.configSymbol) throw compatibilityError(`${rule.id} references a package missing from the active Catalog: ${packageName}`);
+      if (!record?.configSymbol) missingPackages.push(packageName);
       return record;
-    });
+    }).filter((record) => record?.configSymbol);
+    if (missingPackages.length) {
+      if (mismatches.length) continue;
+      throw compatibilityError(`${rule.id} references a package missing from the active Catalog: ${missingPackages[0]}`);
+    }
     let triggerRecords = [];
     let buildDependencyRecord = null;
     if (rule.buildDependency) {
       buildDependencyRecord = model.byPackage.get(rule.buildDependency.package);
       if (!buildDependencyRecord?.configSymbol) {
+        if (mismatches.length) continue;
         throw compatibilityError(`${rule.id} references a build dependency package missing from the active Catalog: ${rule.buildDependency.package}`);
       }
+      const missingTriggerPackages = [];
       triggerRecords = rule.buildDependency.triggerPackages.map((packageName) => {
         const record = model.byPackage.get(packageName);
-        if (!record?.configSymbol) {
-          throw compatibilityError(`${rule.id} references a build trigger package missing from the active Catalog: ${packageName}`);
-        }
+        if (!record?.configSymbol) missingTriggerPackages.push(packageName);
         return record;
-      });
+      }).filter((record) => record?.configSymbol);
+      if (missingTriggerPackages.length) {
+        if (mismatches.length) continue;
+        throw compatibilityError(`${rule.id} references a build trigger package missing from the active Catalog: ${missingTriggerPackages[0]}`);
+      }
     }
     const allRecords = [...new Map([...records, ...triggerRecords]
       .map((record) => [record.configSymbol, record])).values()];
-    if (compatibilityRuleTriggered(rule, records, values, options, triggerRecords)) {
+    let packageMatch;
+    try {
+      packageMatch = compatibilityRuleTriggered(rule, records, values, options, triggerRecords);
+    } catch (error) {
+      if (mismatches.length) continue;
+      throw error;
+    }
+    if (packageMatch && mismatches.length) {
+      diagnostics.push(compatibilityNearMatch(rule, sourceId, branchName, sourceCommit,
+        target, allRecords, values, mismatches));
+    } else if (packageMatch) {
       warnings.push({ rule, records: allRecords, directRecords: records, triggerRecords,
         buildDependencyRecord, values });
     }
   }
-  return { document: normalized, values, warnings };
+  return { document: normalized, values, warnings, diagnostics };
 }
 
 function compatibilityPlanChanges(startingValues, resultValues, rawChanges) {

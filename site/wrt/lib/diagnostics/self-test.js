@@ -42,6 +42,35 @@ async function runSelfTest() {
     };
   }
 
+  function compatibilityNearMatchText(diagnostics = []) {
+    const formatTarget = (target) => {
+      const row = target && typeof target === 'object' ? target : {};
+      return [row.system, row.subtarget, row.profile].map((value) => {
+        if (Array.isArray(value)) return value.join(', ');
+        return String(value || '?');
+      }).join('/');
+    };
+    const formatCommits = (commits) => Array.isArray(commits) && commits.length
+      ? commits.join(', ') : t('catalog.unknown');
+    const details = diagnostics.flatMap((diagnostic) => {
+      const rows = [];
+      if (diagnostic.mismatches?.includes('sourceCommit')) rows.push(t('st.compatibility.inconclusive.commit', {
+        rule: diagnostic.ruleId,
+        verified: formatCommits(diagnostic.verified?.sourceCommits),
+        current: diagnostic.current?.sourceCommit || t('catalog.unknown'),
+      }));
+      if (diagnostic.mismatches?.includes('targetScope')) rows.push(t('st.compatibility.inconclusive.target', {
+        rule: diagnostic.ruleId,
+        verified: formatTarget(diagnostic.verified?.targetScope),
+        current: formatTarget(diagnostic.current?.targetScope),
+      }));
+      return rows;
+    });
+    return t('st.compatibility.inconclusive', {
+      details: details.join(t('format.semicolonSeparator')),
+    });
+  }
+
   const src = state.source;
   const d1 = addRow(t('st.browser'));
   const d2 = addRow(t('st.data'));
@@ -166,7 +195,9 @@ async function runSelfTest() {
     return;
   }
   if (!evaluation.warnings.length) {
-    d6('ok', t('st.compatibility.ok'));
+    d6(evaluation.diagnostics?.length ? 'warn' : 'ok', evaluation.diagnostics?.length
+      ? compatibilityNearMatchText(evaluation.diagnostics)
+      : t('st.compatibility.ok'));
     return;
   }
 
@@ -177,7 +208,9 @@ async function runSelfTest() {
   try {
     const forced = await ensureCompatibilityRules();
     const current = evaluateLoadedCompatibility(loadedCompatibility);
-    if (!current.warnings.length) d6('ok', t('st.compatibility.ok'));
+    if (!current.warnings.length) d6(current.diagnostics?.length ? 'warn' : 'ok', current.diagnostics?.length
+      ? compatibilityNearMatchText(current.diagnostics)
+      : t('st.compatibility.ok'));
     else if (forced) d6('warn', t('st.compatibility.forced', {
       rules: current.warnings.map((warning) => warning.rule.id).join(' · '),
     }));

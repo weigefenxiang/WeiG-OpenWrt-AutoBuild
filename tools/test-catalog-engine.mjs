@@ -1019,22 +1019,57 @@ const scopedBuildFailure = {
 const scopedValues = new Map(ownershipValues).set('PACKAGE_core-service', 'y');
 const scopedContext = { sourceId: 'Demo', branchName: 'stable', sourceCommit: 'a'.repeat(40),
   targetSystem: 'x86', targetSubtarget: '64', targetProfile: 'DEVICE_generic' };
-const scopedWarning = evaluateCompatibilityRules(model, scopedBuildFailure, scopedValues, scopedContext).warnings[0];
+const scopedExact = evaluateCompatibilityRules(model, scopedBuildFailure, scopedValues, scopedContext);
+const scopedWarning = scopedExact.warnings[0];
+assert(scopedExact.warnings.length === 1 && scopedExact.diagnostics.length === 0,
+  'exact compatibility scope did not produce one warning without a near-match diagnostic');
 assert(scopedWarning?.rule.failure.code === 'fixture-package-failure',
   'schema-3 compatibility evidence did not survive normalization');
-for (const changed of [
-  { sourceCommit: 'b'.repeat(40) }, { sourceCommit: '' }, { targetSystem: 'armvirt' },
-  { targetSubtarget: 'generic' }, { targetProfile: 'DEVICE_other' },
+for (const [changed, expectedMismatch] of [
+  [{ sourceCommit: 'b'.repeat(40) }, 'sourceCommit'],
+  [{ sourceCommit: '' }, 'sourceCommit'],
+  [{ targetSystem: 'armvirt' }, 'targetScope'],
+  [{ targetSubtarget: 'generic' }, 'targetScope'],
+  [{ targetProfile: 'DEVICE_other' }, 'targetScope'],
 ]) {
-  assert(evaluateCompatibilityRules(model, scopedBuildFailure, scopedValues,
-    { ...scopedContext, ...changed }).warnings.length === 0,
-  'schema-3 compatibility scope survived a source commit or Target mismatch');
+  const nearMatch = evaluateCompatibilityRules(model, scopedBuildFailure, scopedValues,
+    { ...scopedContext, ...changed });
+  assert(nearMatch.warnings.length === 0 && nearMatch.diagnostics.length === 1 &&
+    nearMatch.diagnostics[0].type === 'compatibility-near-match' &&
+    nearMatch.diagnostics[0].ruleId === 'BLD-SCOPED' &&
+    nearMatch.diagnostics[0].mismatches.length === 1 &&
+    nearMatch.diagnostics[0].mismatches[0] === expectedMismatch &&
+    nearMatch.diagnostics[0].matchedPackages.includes('core-service'),
+  `schema-3 ${expectedMismatch} mismatch did not produce one near-match diagnostic without a warning`);
 }
+const noScopedPackage = evaluateCompatibilityRules(model, scopedBuildFailure,
+  new Map(ownershipValues).set('PACKAGE_core-service', 'n'),
+  { ...scopedContext, sourceCommit: 'b'.repeat(40) });
+assert(noScopedPackage.warnings.length === 0 && noScopedPackage.diagnostics.length === 0,
+  'a source-commit near match was reported when no compatibility package was selected');
+assert(evaluateCompatibilityRules(model, scopedBuildFailure, scopedValues,
+  { ...scopedContext, sourceId: 'Other' }).warnings.length === 0 &&
+  evaluateCompatibilityRules(model, scopedBuildFailure, scopedValues,
+    { ...scopedContext, sourceId: 'Other' }).diagnostics.length === 0 &&
+  evaluateCompatibilityRules(model, scopedBuildFailure, scopedValues,
+    { ...scopedContext, branchName: 'next' }).warnings.length === 0 &&
+  evaluateCompatibilityRules(model, scopedBuildFailure, scopedValues,
+    { ...scopedContext, branchName: 'next' }).diagnostics.length === 0,
+  'compatibility near-match diagnostics leaked to another source or branch');
 const branchWideBuildFailure = structuredClone(scopedBuildFailure);
 delete branchWideBuildFailure.rules[0].targetScope;
 assert(evaluateCompatibilityRules(model, branchWideBuildFailure, scopedValues,
   { ...scopedContext, targetSystem: 'armsr', targetSubtarget: 'armv8', targetProfile: 'DEVICE_generic' }).warnings.length === 1,
 'a target-independent schema-3 rule was incorrectly restricted to the sampled Target');
+const scopedMissingPackage = structuredClone(scopedBuildFailure);
+scopedMissingPackage.rules[0].packages = ['missing-package'];
+const scopedMissingNearMatch = evaluateCompatibilityRules(model, scopedMissingPackage, scopedValues,
+  { ...scopedContext, sourceCommit: 'b'.repeat(40) });
+assert(scopedMissingNearMatch.warnings.length === 0 && scopedMissingNearMatch.diagnostics.length === 0,
+  'a scope-mismatched rule with a missing package was not safely ignored');
+expectThrow(() => evaluateCompatibilityRules(model, scopedMissingPackage, scopedValues, scopedContext),
+  /missing from the active Catalog/,
+  'an exact-scope rule with a missing package did not preserve the validation error');
 expectThrow(() => normalizeCompatibilityDocument({ ...scopedBuildFailure, schema: 2 }), /unsupported field|compatibility/i,
   'schema-2 compatibility accepted schema-3 fields');
 for (const [value, expected] of [['n', 0], ['m', 1], ['y', 1]]) {
@@ -1168,6 +1203,27 @@ const singleBuildDependencyWarning = evaluateCompatibilityRules(
 assert(singleBuildDependencyWarning?.records.map((record) => record.package).join(',') ===
   'build-target,trigger-a,trigger-b,trigger-dependent',
   'schema-4 build dependency did not expose direct and trigger package records');
+const buildDependencyNearMatch = evaluateCompatibilityRules(
+  buildDependencyModel, buildDependencyRule, singleBuildDependencyValues,
+  { ...singleBuildDependencyContext, sourceCommit: 'b'.repeat(40) },
+);
+assert(buildDependencyNearMatch.warnings.length === 0 && buildDependencyNearMatch.diagnostics.length === 1 &&
+  buildDependencyNearMatch.diagnostics[0].mismatches.length === 1 &&
+  buildDependencyNearMatch.diagnostics[0].mismatches[0] === 'sourceCommit' &&
+  buildDependencyNearMatch.diagnostics[0].matchedPackages.includes('trigger-a'),
+  'schema-4 trigger package near match did not produce one source-commit diagnostic');
+const noBuildDependencyTriggerValues = parseConfigDocument([
+  '# CONFIG_PACKAGE_build-target is not set',
+  '# CONFIG_PACKAGE_trigger-a is not set',
+  '# CONFIG_PACKAGE_trigger-b is not set',
+  '# CONFIG_PACKAGE_trigger-dependent is not set',
+].join('\n'));
+const noBuildDependencyTrigger = evaluateCompatibilityRules(
+  buildDependencyModel, buildDependencyRule, noBuildDependencyTriggerValues,
+  { ...singleBuildDependencyContext, sourceCommit: 'b'.repeat(40) },
+);
+assert(noBuildDependencyTrigger.warnings.length === 0 && noBuildDependencyTrigger.diagnostics.length === 0,
+  'schema-4 source-commit mismatch was reported without a selected direct or trigger package');
 const singleBuildDependencyPlans = deriveCompatibilityPlans(
   buildDependencyModel, singleBuildDependencyValues, singleBuildDependencyWarning,
 );
