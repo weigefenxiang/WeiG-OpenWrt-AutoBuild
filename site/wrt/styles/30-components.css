@@ -6,7 +6,7 @@
 .profile-package-actions button{padding:6px 8px;border:0;border-right:1px solid var(--border);background:transparent;color:var(--text2);font:inherit;cursor:pointer;white-space:nowrap}
 .profile-package-actions button:last-child{border-right:0}
 .profile-package-actions button.active{background:var(--accent);color:#fff}
-.import-workspace{margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:9px;background:var(--card2)}
+.import-workspace{margin-top:10px;padding:10px;border:1px solid var(--surface-frame-border);border-radius:9px;background:linear-gradient(180deg,var(--surface-frame-top) 0%,var(--surface-frame-bottom) 100%);box-shadow:inset 0 1px 0 var(--surface-frame-highlight),var(--elevation-1)}
 .import-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;min-height:42px;overflow:hidden;padding:0 10px;border:1px solid var(--border);border-radius:9px;background:var(--card2)}
 .import-summary strong{flex:1 1 auto;min-width:0;overflow:hidden;color:var(--text);line-height:1.55;text-overflow:ellipsis;white-space:nowrap}
 .import-summary .text-btn{flex:none;padding:4px 10px}
@@ -61,7 +61,9 @@
 .legend {
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   padding: 8px 12px; margin-bottom: 10px;
-  background: var(--card2); border: 1px solid var(--border); border-radius: var(--radius);
+  background: linear-gradient(180deg, var(--surface-frame-top) 0%, var(--surface-frame-bottom) 100%);
+  border: 1px solid var(--surface-frame-border); border-radius: var(--radius);
+  box-shadow: inset 0 1px 0 var(--surface-frame-highlight), var(--elevation-1);
   font-size: var(--font-meta); color: var(--text2);
 }
 .lg-item { display: inline-flex; align-items: center; gap: 6px; }
@@ -80,24 +82,39 @@
 .hot-only { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text2); white-space: nowrap; min-height: 44px; }
 .hot-only input { width: 16px; height: 16px; accent-color: var(--accent); }
 
-/* 分组(手风琴) */
-.group { margin-bottom: 12px; background: var(--plugin-panel); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--elevation-1), inset 0 1px 0 var(--control-highlight); }
+/* 分组(手风琴): every category shares one raised graphite surface */
+.group {
+  margin-bottom: 12px;
+  background: linear-gradient(180deg, var(--surface-frame-top) 0%, var(--surface-frame-bottom) 100%);
+  border: 1px solid var(--surface-frame-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--surface-frame-shadow), inset 0 1px 0 var(--surface-frame-highlight);
+}
 .catalog-applications-state{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:72px;padding:14px;border:1px dashed color-mix(in srgb,var(--accent) 38%,var(--border));border-radius:12px;background:color-mix(in srgb,var(--accent) 5%,var(--plugin-panel));color:var(--text2);font:inherit;font-size:var(--font-description);text-align:center}
 button.catalog-applications-state{cursor:pointer}
 .catalog-applications-state[data-state=error]{border-color:color-mix(in srgb,var(--danger) 55%,var(--border));color:var(--danger)}
 .catalog-applications-state[data-state=error]:hover,.catalog-applications-state[data-state=error]:focus-visible{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 7%,var(--plugin-panel))}
 .catalog-applications-spinner{width:18px;height:18px;flex:none;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:catalog-spin .8s linear infinite}
 .group-head {
+  position: relative;
   display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 13px 14px; font-size: var(--font-item-title); font-weight: 600;
-  background: var(--plugin-head); border: none; border-bottom: 1px solid var(--border);
+  padding: 13px 14px 13px 18px; font-size: var(--font-item-title); font-weight: 600;
+  background: linear-gradient(180deg, var(--surface-category-top) 0%, var(--surface-category-bottom) 100%);
+  border: none; border-bottom: 1px solid var(--surface-category-border);
+  box-shadow: inset 0 1px 0 var(--surface-category-highlight), var(--surface-category-shadow);
   color: var(--text); text-align: left;
 }
-.group-ico { font-size: 15px; }
+.group-head::before {
+  content: ""; position: absolute; inset: 9px auto 9px 0; width: 3px;
+  border-radius: 0 3px 3px 0; background: var(--surface-category-accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--surface-category-accent) 32%, transparent);
+}
+.group-ico { font-size: 15px; color: var(--surface-category-accent); }
 .group-badge { font-weight: 400; font-size: 13.5px; color: var(--accent-text); background: var(--accent-bg); border-radius: 999px; padding: 1px 8px; }
 .group-badge:empty { display: none; }
 .group-count { font-weight: 400; font-size: var(--font-meta); color: var(--text3); margin-left: auto; }
-.chev { color: var(--text3); font-size: 12px; transition: transform .2s ease; }
+.chev { color: var(--text3); font-size: 12px; transition: transform var(--motion-base) var(--ease-standard); }
 .group.collapsed .chev { transform: rotate(-90deg); }
 .group.collapsed .plugin-grid { display: none; }
 .group.collapsed .group-head { border-bottom: none; }
@@ -244,8 +261,9 @@ button.catalog-applications-state{cursor:pointer}
 .timezone-menu {
   position: absolute; z-index: var(--z-dropdown); top: calc(100% + 5px); left: 0;
   width: max(100%, 360px); max-width: min(620px, calc(100vw - 32px)); max-height: 280px;
-  overflow: auto; padding: 5px; border: 1px solid var(--border); border-radius: 10px;
-  background: var(--card); box-shadow: 0 10px 28px rgba(16, 24, 40, .18);
+  overflow: auto; padding: 5px; border: 1px solid var(--surface-overlay-border); border-radius: 10px;
+  background: linear-gradient(180deg,var(--surface-overlay-top) 0%,var(--surface-overlay-bottom) 100%);
+  box-shadow: var(--surface-overlay-shadow), inset 0 1px 0 var(--surface-frame-highlight);
 }
 .timezone-option {
   display: block; width: 100%; border: 0; border-radius: 7px; padding: 7px 9px;

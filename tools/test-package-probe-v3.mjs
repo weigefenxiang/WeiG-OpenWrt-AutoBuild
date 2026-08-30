@@ -227,7 +227,7 @@ assert.match(probeText, /createFloatingLayerController\(summary, panel/,
   'Probe dropdowns must reuse the shared floating-layer controller');
 assert.match(feedbackText, /globalThis\.createFloatingLayerController/,
   'shared UI layer must expose one reusable floating-layer controller');
-assert.match(feedbackText, /const inferredDropdown = anchor\.matches\('summary'\)[\s\S]*?const preset = options\.preset \|\| \(inferredDropdown \? 'dropdown' : 'floating'\)/,
+assert.match(feedbackText, /const inferredDropdown = anchor\.matches\('summary'\)[\s\S]*?const preset = String\(options\.preset \|\| \(inferredDropdown \? 'dropdown' : 'floating'\)\)/,
   'shared floating layers must infer dropdown semantics while preserving an explicit generic override');
 assert.match(feedbackText, /options\.boundary[\s\S]*?anchor\.closest\('\[data-floating-boundary\]'\)[\s\S]*?anchor\.closest\('\.modal'\)/,
   'shared dropdowns must resolve an explicit or nearest-container boundary');

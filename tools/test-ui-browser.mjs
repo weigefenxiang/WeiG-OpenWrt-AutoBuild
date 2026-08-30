@@ -38,6 +38,9 @@ const VIEWPORTS = Object.freeze([
   { name: 'desktop-1366x768', width: 1366, height: 768 },
 ]);
 const THEMES = Object.freeze(['light', 'dark']);
+const DOCK_CONTROL_SELECTORS = Object.freeze([
+  '#dockToggle', '#langSel', '#selfTestBtn', '#densityBtn', '#themeBtn',
+]);
 const CI = /^(1|true|yes)$/i.test(String(process.env.CI || ''));
 const REQUIRED = CI || /^(1|true|yes)$/i.test(String(process.env.WEIG_UI_BROWSER_REQUIRED || ''));
 const LOAD_TIMEOUT_MS = Number(process.env.WEIG_UI_LOAD_TIMEOUT_MS) > 0
@@ -491,7 +494,7 @@ async function getElement(browser, selector) {
       className: typeof element.className === 'string' ? element.className : '',
       debugRuntimeGeometry: element.dataset.geometryDebug || null,
       debugGeometry: selector === '#uiTooltip' ? (() => {
-        const target = document.getElementById('themeBtn');
+        const target = document.getElementById('repoLink');
         const anchor = target?.getBoundingClientRect();
         const actionbar = document.getElementById('actionbar');
         const header = document.querySelector('.site-header');
@@ -633,6 +636,42 @@ async function main() {
     return record;
   }
 
+  async function ensureDockControlsVisible(context) {
+    const dockState = await evaluateFunction(browser, `() => {
+      const dock = document.getElementById('sideDock');
+      return {
+        collapsed: Boolean(dock?.classList.contains('collapsed')),
+        mode: dock?.dataset.dockMode || '',
+      };
+    }`);
+    if (dockState?.mode === 'auto-collapsed') {
+      const gear = await waitVisible('#dockToggle', context);
+      expect(Boolean(gear), context, 'dock auto-collapse gear is not visible', dockState);
+    }
+
+    const readControls = () => Promise.all(
+      DOCK_CONTROL_SELECTORS.map((selector) => getElement(browser, selector)),
+    );
+    let controls = await readControls();
+    if (!controls.every(isVisible)) {
+      await click('#dockToggle');
+      try {
+        controls = await waitFor('dock controls visible', async () => {
+          const records = await readControls();
+          return records.every(isVisible) ? records : null;
+        }, 5_000, 100);
+      } catch (error) {
+        fail(context, 'dock controls did not become visible', {
+          error: error.message,
+          controls: await readControls().catch(() => []),
+          dock: await getElement(browser, '#sideDock').catch(() => null),
+        });
+        return null;
+      }
+    }
+    return controls;
+  }
+
   async function resetFloatingState() {
     await evaluateFunction(browser, `() => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -651,16 +690,27 @@ async function main() {
     await assertInside('#importBtn', context);
     await assertInside('#siteVersion', context);
 
-    // The dock is allowed to start collapsed on narrow screens; the test
-    // opens it and then verifies every control remains inside the viewport.
-    const collapsed = await evaluateFunction(browser, `() => document.getElementById('sideDock')?.classList.contains('collapsed')`);
-    if (collapsed) await click('#dockToggle');
-    const dockOpen = await waitVisible('#langSel', context);
-    expect(Boolean(dockOpen), context, 'dock did not open');
+    // Shared tooltip: verify the accessible focus path before opening other
+    // floating layers, so their intentional Escape/viewport lifecycle cannot
+    // affect this independent contract.
+    await waitFor('shared tooltip focus trigger', () => evaluateFunction(browser, `() => {
+      const target = document.getElementById('repoLink');
+      const tooltip = document.getElementById('uiTooltip');
+      if (!target || !tooltip) return false;
+      if (!tooltip.hidden) return true;
+      if (document.activeElement === target) target.blur();
+      target.tabIndex = 0;
+      target.focus({ preventScroll: true });
+      return !tooltip.hidden;
+    }`), 3_000, 80);
+    await waitVisible('#uiTooltip', context);
+    await assertInside('#uiTooltip', context, { actionbarSafe: true });
+    await resetFloatingState();
+
+    // The dock may start collapsed or return to gear-only after Escape. Open
+    // the shared dock panel whenever a test needs one of its child controls.
+    await ensureDockControlsVisible(context);
     await assertInside('#sideDock', context, { actionbarSafe: true });
-    for (const selector of ['#dockToggle', '#langSel', '#selfTestBtn', '#densityBtn', '#themeBtn']) {
-      await assertInside(selector, context);
-    }
 
     // Font panel: use the public Aa controls and exercise its maximum value.
     await click('#densityBtn');
@@ -681,6 +731,7 @@ async function main() {
 
     // Theme button must be able to enter both explicit modes.  The media
     // preference is set before each page run; here we verify the controls.
+    await ensureDockControlsVisible(context);
     await click('#themeBtn');
     const firstTheme = await evaluateFunction(browser, `() => ({ mode: document.documentElement.dataset.theme || 'auto', colorScheme: document.documentElement.style.colorScheme })`);
     await click('#themeBtn');
@@ -688,12 +739,6 @@ async function main() {
     expect(firstTheme.mode !== secondTheme.mode || firstTheme.colorScheme !== secondTheme.colorScheme,
       context, 'theme control did not change theme state', { firstTheme, secondTheme });
     await assertInside('#themeBtn', context);
-    await resetFloatingState();
-
-    // Shared tooltip: focus is the accessible, deterministic trigger.
-    await evaluateFunction(browser, `() => document.getElementById('themeBtn')?.focus()`);
-    await waitVisible('#uiTooltip', context);
-    await assertInside('#uiTooltip', context, { actionbarSafe: true });
     await resetFloatingState();
 
     // Help modal and Build Information panel.

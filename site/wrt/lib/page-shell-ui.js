@@ -9,18 +9,35 @@ export function installPageShellUi({ get, t, safeSet, openModal, fitPluginNames 
     throw new Error('page shell UI dependencies are incomplete');
   }
   const $ = get;
-  const FONT_DEF = 18, FONT_MIN = 14, FONT_MAX = 24;
+  // The compact desktop scale is the new default.  Keep the user-facing
+  // control range stable so an explicit preference remains reversible.
+  const FONT_DEF = 15, FONT_MIN = 14, FONT_MAX = 24;
+  const FONT_MIGRATION_KEY = 'wrt_font_default_v2';
   const FONT_VARIABLES = Object.freeze([
     '--font-page-title', '--font-section-title', '--font-item-title', '--font-emphasis',
     '--font-body', '--font-description', '--font-meta', '--font-badge',
   ]);
   const root = document.documentElement;
-  let fontPx = parseInt(localStorage.getItem('wrt_font'), 10);
+  let storedFont = localStorage.getItem('wrt_font');
+  /*
+   * Before the compact scale, 18px was written as the implicit default.  A
+   * one-time marker lets us migrate that old default while preserving every
+   * other explicit value.  A value selected after this release is never
+   * silently rewritten because the marker is already present.
+   */
+  if (!localStorage.getItem(FONT_MIGRATION_KEY)) {
+    if (storedFont === '18') {
+      storedFont = String(FONT_DEF);
+      safeSet('wrt_font', storedFont);
+    }
+    safeSet(FONT_MIGRATION_KEY, '1');
+  }
+  let fontPx = parseInt(storedFont, 10);
   if (!fontPx && localStorage.getItem('wrt_density') === '1') { fontPx = 16; safeSet('wrt_font', '16'); }
   try { localStorage.removeItem('wrt_density'); } catch (error) { /* storage may be unavailable */ }
   if (!(fontPx >= FONT_MIN && fontPx <= FONT_MAX)) fontPx = FONT_DEF;
 
-  const isDesktopTypography = () => !matchMedia('(max-width: 560px)').matches;
+  const isDesktopTypography = () => !matchMedia('(max-width: 640px)').matches;
   const setFontVariables = () => {
     root.dataset.wrtFont = String(fontPx);
     // Mobile keeps the media-query typography contract for the default value.
@@ -32,7 +49,7 @@ export function installPageShellUi({ get, t, safeSet, openModal, fitPluginNames 
     }
     const desktop = isDesktopTypography();
     const baseline = desktop
-      ? { page: 32, section: 24, item: 20, emphasis: 18, body: 18, description: 17, meta: 15, badge: 14 }
+      ? { page: 27, section: 20, item: 17, emphasis: 15, body: 15, description: 14, meta: 13, badge: 12 }
       : { page: 21, section: 19, item: 17, emphasis: 16, body: 16, description: 14, meta: 13, badge: 12 };
     const base = desktop ? fontPx : Math.max(16, Math.round(16 * fontPx / FONT_DEF));
     const scale = base / baseline.body;
@@ -75,6 +92,11 @@ export function installPageShellUi({ get, t, safeSet, openModal, fitPluginNames 
   const viewportGeometry = globalThis.__WEIG_VIEWPORT_GEOMETRY__;
   const header = document.querySelector('.site-header');
   const actionbar = $('actionbar');
+  const sideDock = $('sideDock');
+  const dockToggle = $('dockToggle');
+  const dockItems = sideDock?.querySelector('.dock-items');
+  let dockFloatingController = null;
+  let scheduleDockFit = () => {};
   const updateViewportClearance = () => {
     const viewport = viewportGeometry?.readViewportRect?.() || {
       left: 0, top: 0, right: innerWidth, bottom: innerHeight,
@@ -96,6 +118,8 @@ export function installPageShellUi({ get, t, safeSet, openModal, fitPluginNames 
     root.style.setProperty('--wrt-viewport-width', `${Math.round(viewport.width)}px`);
     root.style.setProperty('--wrt-viewport-height', `${Math.round(viewport.height)}px`);
     fontFloatingController?.update?.();
+    dockFloatingController?.update?.();
+    scheduleDockFit();
   };
   const scheduleViewportClearance = () => {
     if (scheduleViewportClearance.pending) return;
@@ -145,7 +169,7 @@ export function installPageShellUi({ get, t, safeSet, openModal, fitPluginNames 
   window.addEventListener('scroll', scheduleViewportClearance, { passive: true, capture: true });
   globalThis.visualViewport?.addEventListener('resize', scheduleViewportClearance, { passive: true });
   globalThis.visualViewport?.addEventListener('scroll', scheduleViewportClearance, { passive: true });
-  const typographyMedia = matchMedia('(max-width: 560px)');
+  const typographyMedia = matchMedia('(max-width: 640px)');
   typographyMedia.addEventListener?.('change', () => { setFontVariables(); scheduleViewportClearance(); });
   updateViewportClearance();
 
@@ -189,15 +213,100 @@ export function installPageShellUi({ get, t, safeSet, openModal, fitPluginNames 
   });
 
   const savedDock = localStorage.getItem('wrt_dock');
-  if (savedDock === '1' || (savedDock === null && matchMedia('(max-width: 560px)').matches)) {
-    $('sideDock').classList.add('collapsed');
+  let dockPreference = savedDock === '1' || savedDock === '0' ? savedDock : null;
+  let dockAutoCollapsed = false;
+  const narrowDockMedia = matchMedia('(max-width: 640px)');
+  const dockHasUserCollapse = () => dockPreference === '1' ||
+    (dockPreference === null && narrowDockMedia.matches);
+  const dockAvailableHeight = (viewport) => {
+    const headerRect = header?.getBoundingClientRect?.();
+    const actionbarRect = actionbar && !actionbar.hidden ? actionbar.getBoundingClientRect() : null;
+    const top = Math.max(viewport.top + 8, Number(headerRect?.bottom) || viewport.top + 8);
+    const bottom = Math.min(viewport.bottom - 8, Number(actionbarRect?.top) || viewport.bottom - 8);
+    return Math.max(0, bottom - top);
+  };
+  const measureDockFit = () => {
+    if (!sideDock || !dockItems || dockFloatingController?.isOpen) return true;
+    const wasCollapsed = sideDock.classList.contains('collapsed');
+    const wasHidden = dockItems.hidden;
+    sideDock.classList.remove('collapsed');
+    dockItems.hidden = false;
+    const viewport = viewportGeometry?.readViewportRect?.() || {
+      left: 0, top: 0, right: innerWidth, bottom: innerHeight,
+      width: innerWidth, height: innerHeight,
+    };
+    const required = Math.max(sideDock.scrollHeight, dockItems.scrollHeight);
+    const visible = sideDock.clientHeight;
+    const fits = required <= dockAvailableHeight(viewport) + 2 &&
+      (!visible || sideDock.scrollHeight <= visible + 1);
+    if (wasCollapsed) sideDock.classList.add('collapsed');
+    dockItems.hidden = wasHidden;
+    return fits;
+  };
+  const updateDockMode = () => {
+    if (!sideDock || !dockItems || dockFloatingController?.isOpen) return;
+    const userCollapsed = dockHasUserCollapse();
+    const needsAutoCollapse = !userCollapsed && !measureDockFit();
+    if (needsAutoCollapse) {
+      dockAutoCollapsed = true;
+      sideDock.classList.add('collapsed');
+      sideDock.dataset.dockMode = 'auto-collapsed';
+    } else if (dockAutoCollapsed) {
+      dockAutoCollapsed = false;
+      sideDock.classList.remove('collapsed');
+      sideDock.dataset.dockMode = 'expanded';
+    } else {
+      sideDock.classList.toggle('collapsed', userCollapsed);
+      sideDock.dataset.dockMode = userCollapsed ? 'collapsed' : 'expanded';
+    }
+    dockToggle?.setAttribute('aria-expanded', String(!sideDock.classList.contains('collapsed')));
+  };
+  scheduleDockFit = () => {
+    if (scheduleDockFit.pending) return;
+    scheduleDockFit.pending = true;
+    requestAnimationFrame(() => {
+      scheduleDockFit.pending = false;
+      updateDockMode();
+    });
+  };
+  if (sideDock && dockItems && typeof globalThis.createFloatingLayerController === 'function') {
+    dockFloatingController = globalThis.createFloatingLayerController(dockToggle, dockItems, {
+      preset: 'dock-panel',
+      initiallyVisible: true,
+      hiddenOnClose: false,
+      avoidElements: () => [header, actionbar],
+      onDismiss: () => {
+        dockToggle?.setAttribute('aria-expanded', 'false');
+        scheduleDockFit();
+      },
+    });
   }
-  $('dockToggle').setAttribute('aria-expanded', String(!$('sideDock').classList.contains('collapsed')));
-  $('dockToggle').addEventListener('click', () => {
-    const collapsed = $('sideDock').classList.toggle('collapsed');
-    $('dockToggle').setAttribute('aria-expanded', String(!collapsed));
-    safeSet('wrt_dock', collapsed ? '1' : '0');
+  updateDockMode();
+  dockToggle?.setAttribute('aria-expanded', String(!sideDock?.classList.contains('collapsed')));
+  dockToggle?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (dockFloatingController?.isOpen) {
+      dockFloatingController.close();
+      dockToggle.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    if (dockFloatingController && (sideDock.dataset.dockMode === 'auto-collapsed' ||
+        (sideDock.classList.contains('collapsed') && !measureDockFit()))) {
+      sideDock.classList.add('collapsed');
+      sideDock.dataset.dockMode = 'floating';
+      dockToggle.setAttribute('aria-expanded', 'true');
+      dockFloatingController?.open?.();
+      return;
+    }
+    const collapsed = sideDock.classList.toggle('collapsed');
+    dockAutoCollapsed = false;
+    sideDock.dataset.dockMode = collapsed ? 'collapsed' : 'expanded';
+    dockPreference = collapsed ? '1' : '0';
+    dockToggle.setAttribute('aria-expanded', String(!collapsed));
+    safeSet('wrt_dock', dockPreference);
   });
+  resizeObserver?.observe?.(sideDock);
+  narrowDockMedia.addEventListener?.('change', scheduleDockFit);
 
   $('riskOk').addEventListener('click', () => { $('riskBar').hidden = true; safeSet('wrt_risk', 'ok'); });
 

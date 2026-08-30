@@ -315,18 +315,18 @@ expect(html.includes('id="menuconfigFilterTrigger"') &&
   'origin/Selected/userSettable filters are not combined in the reusable readable popover');
 
 expect(
-  css.includes('--font-page-title: 32px;') &&
-  css.includes('--font-section-title: 24px;') &&
-  css.includes('--font-item-title: 20px;') &&
-  css.includes('--font-emphasis: 18px;') &&
-  css.includes('--font-body: 18px;') &&
-  css.includes('--font-description: 17px;') &&
-  css.includes('--font-meta: 15px;') &&
-  css.includes('--font-badge: 14px;') &&
+  css.includes('--font-page-title: 27px;') &&
+  css.includes('--font-section-title: 20px;') &&
+  css.includes('--font-item-title: 17px;') &&
+  css.includes('--font-emphasis: 15px;') &&
+  css.includes('--font-body: 15px;') &&
+  css.includes('--font-description: 14px;') &&
+  css.includes('--font-meta: 13px;') &&
+  css.includes('--font-badge: 12px;') &&
   css.includes('font: var(--font-body)/var(--font-line-body) var(--font-family-sans)') &&
   css.includes('.brand h1 { margin: 0; font-size: var(--font-page-title);') &&
   css.includes('.step h2 { font-size: var(--font-section-title);') &&
-  css.includes('padding: 13px 14px; font-size: var(--font-item-title); font-weight: 600;') &&
+  css.includes('padding: 13px 14px 13px 18px; font-size: var(--font-item-title); font-weight: 600;') &&
   css.includes('.plugin-name.fit-s1 { font-size: var(--font-item-title-fit-1); }') &&
   css.includes('.plugin-name.fit-s2 { font-size: var(--font-item-title-fit-2); }') &&
   css.includes('.ui-tooltip-title{display:block;margin:0;color:var(--text);font-size:var(--font-item-title);') &&
@@ -343,8 +343,8 @@ expect(
   css.includes('color:var(--accent);font:var(--font-emphasis) ui-monospace,Consolas,monospace') &&
   css.includes('.menuconfig-scroll{max-height:clamp(280px,55vh,620px);max-height:clamp(280px,55dvh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior-y:auto;') &&
   !css.includes('.menuconfig-scroll{max-height:clamp(280px,55vh,620px);max-height:clamp(280px,55dvh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior:contain;') &&
-  pageShell.includes('const FONT_DEF = 18, FONT_MIN = 14, FONT_MAX = 24;') &&
-  !app.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;'),
+  pageShell.includes('const FONT_DEF = 15, FONT_MIN = 14, FONT_MAX = 24;') &&
+  !app.includes('const FONT_DEF = 15, FONT_MIN = 14, FONT_MAX = 24;'),
   'shared typography scale, build-contract hierarchy, native menuconfig scroll chaining, responsive tokens, or retired density cleanup regressed');
 
 const sharedTooltipContract = app.match(/\/\* ============ 统一悬浮说明[\s\S]*?function makePill/)?.[0] || '';

@@ -2,18 +2,18 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
 :root {
-  /* Shared typography scale. Desktop keeps controls readable at normal zoom. */
-  --font-page-title: 32px;
-  --font-section-title: 24px;
-  --font-item-title: 20px;
-  --font-emphasis: 18px;
+  /* Shared typography scale. Desktop uses the approved compact Aa baseline. */
+  --font-page-title: 27px;
+  --font-section-title: 20px;
+  --font-item-title: 17px;
+  --font-emphasis: 15px;
   --font-item-title-fit-1: calc(var(--font-item-title) - 1px);
   --font-item-title-fit-2: calc(var(--font-item-title) - 2px);
   --font-item-title-fit-3: calc(var(--font-item-title) - 3px);
-  --font-body: 18px;
-  --font-description: 17px;
-  --font-meta: 15px;
-  --font-badge: 14px;
+  --font-body: 15px;
+  --font-description: 14px;
+  --font-meta: 13px;
+  --font-badge: 12px;
   --font-family-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-family-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
   --font-line-body: 1.65;
@@ -100,6 +100,32 @@
   --elevation-3: 0 10px 24px rgba(15, 23, 42, .16), 0 24px 64px rgba(55, 75, 104, .14);
   --focus-ring: var(--control-focus-ring);
 
+  /* Shared dimensional surfaces. Components choose a surface role; they do
+     not invent per-section gradients or shadows. */
+  --surface-frame-top: color-mix(in srgb, var(--card) 90%, #fff 10%);
+  --surface-frame-bottom: color-mix(in srgb, var(--card2) 64%, var(--card) 36%);
+  --surface-frame-border: color-mix(in srgb, var(--border) 78%, var(--accent) 22%);
+  --surface-frame-shadow: 0 4px 14px rgba(15, 23, 42, .14), 0 18px 42px rgba(55, 75, 104, .10);
+  --surface-frame-highlight: color-mix(in srgb, #fff 48%, transparent);
+  --surface-category-top: color-mix(in srgb, var(--card2) 84%, var(--card) 16%);
+  --surface-category-bottom: color-mix(in srgb, var(--card2) 92%, var(--bg) 8%);
+  --surface-category-border: color-mix(in srgb, var(--border) 82%, var(--accent) 18%);
+  --surface-category-shadow: 0 2px 5px rgba(15, 23, 42, .13), 0 8px 18px rgba(55, 75, 104, .08);
+  --surface-category-highlight: color-mix(in srgb, #fff 34%, transparent);
+  --surface-category-accent: var(--accent);
+  --surface-overlay-top: color-mix(in srgb, var(--card) 94%, #fff 6%);
+  --surface-overlay-bottom: color-mix(in srgb, var(--card2) 70%, var(--card) 30%);
+  --surface-overlay-border: color-mix(in srgb, var(--border) 72%, var(--accent) 28%);
+  --surface-overlay-shadow: 0 12px 30px rgba(15, 23, 42, .20), 0 26px 64px rgba(55, 75, 104, .14);
+  --content-max: 1440px;
+  --motion-fast: 140ms;
+  --motion-base: 180ms;
+  --motion-slow: 240ms;
+  --ease-standard: cubic-bezier(.2, .75, .25, 1);
+  --star-field-a: color-mix(in srgb, var(--accent) 48%, transparent);
+  --star-field-b: color-mix(in srgb, var(--text) 34%, transparent);
+  --star-field-glow: color-mix(in srgb, var(--accent) 8%, transparent);
+
   /* Layer contract: content < sticky bars < menus < dock < floating cards
      < feedback < modal < tooltip. */
   --z-content: 0;
@@ -163,6 +189,14 @@ html[data-theme="dark"] {
   --control-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
   --control-lift: -1px;
   --shadow: none;
+  --surface-frame-shadow: 0 4px 14px rgba(0, 0, 0, .28), 0 18px 42px rgba(0, 0, 0, .22);
+  --surface-frame-highlight: rgba(255, 255, 255, .08);
+  --surface-category-shadow: 0 2px 5px rgba(0, 0, 0, .28), 0 8px 18px rgba(0, 0, 0, .18);
+  --surface-category-highlight: rgba(255, 255, 255, .07);
+  --surface-overlay-shadow: 0 12px 30px rgba(0, 0, 0, .38), 0 26px 64px rgba(0, 0, 0, .28);
+  --star-field-a: color-mix(in srgb, var(--accent) 36%, transparent);
+  --star-field-b: color-mix(in srgb, var(--text) 24%, transparent);
+  --star-field-glow: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) {
@@ -214,5 +248,13 @@ html[data-theme="dark"] {
     --control-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
     --control-lift: -1px;
     --shadow: none;
+    --surface-frame-shadow: 0 4px 14px rgba(0, 0, 0, .28), 0 18px 42px rgba(0, 0, 0, .22);
+    --surface-frame-highlight: rgba(255, 255, 255, .08);
+    --surface-category-shadow: 0 2px 5px rgba(0, 0, 0, .28), 0 8px 18px rgba(0, 0, 0, .18);
+    --surface-category-highlight: rgba(255, 255, 255, .07);
+    --surface-overlay-shadow: 0 12px 30px rgba(0, 0, 0, .38), 0 26px 64px rgba(0, 0, 0, .28);
+    --star-field-a: color-mix(in srgb, var(--accent) 36%, transparent);
+    --star-field-b: color-mix(in srgb, var(--text) 24%, transparent);
+    --star-field-glow: color-mix(in srgb, var(--accent) 10%, transparent);
   }
 }

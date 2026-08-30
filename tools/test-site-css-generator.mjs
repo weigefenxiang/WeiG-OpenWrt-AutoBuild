@@ -32,8 +32,9 @@ if (!header.startsWith('/* GENERATED FILE — DO NOT EDIT DIRECTLY.')) fail('gen
 for (const name of modules) if (!header.includes(`site/wrt/styles/${name}`)) fail(`generated header omits ${name}`);
 
 const tokens = readFileSync(join(ROOT, 'site', 'wrt', 'styles', modules[0]), 'utf8');
-for (const token of ['--font-page-title: 32px', '--font-section-title: 24px', '--font-item-title: 20px',
-  '--font-body: 18px', '--font-description: 17px', '--font-meta: 15px', '--font-badge: 14px',
+for (const token of ['--font-page-title: 27px', '--font-section-title: 20px', '--font-item-title: 17px',
+  '--font-emphasis: 15px', '--font-body: 15px', '--font-description: 14px', '--font-meta: 13px', '--font-badge: 12px',
+  '--content-max: 1440px', '--surface-frame-top:', '--surface-category-top:', '--surface-overlay-top:', '--star-field-a:',
   '--z-sticky:', '--z-dropdown:', '--z-dock:', '--z-floating:', '--z-toast:', '--z-modal:', '--z-tooltip:']) {
   if (!tokens.includes(token)) fail(`token contract missing ${token}`);
 }

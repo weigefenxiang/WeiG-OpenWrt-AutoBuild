@@ -14,6 +14,8 @@ and dimensional without becoming decorative or difficult to scan.
   colors for success, warning, and failure.
 - Build depth with surface contrast, a one-pixel edge highlight, and several
   soft elevation levels.
+- A sparse CSS star field may live on the outer page canvas. It is a static,
+  low-contrast atmosphere layer only; work surfaces remain calm and readable.
 - Keep motion short and purposeful: a raised control may lift by one pixel;
   no large rotations, flashing effects, or continuous ambient animation.
 - Light and dark themes use the same semantic roles and preserve readable
@@ -37,15 +39,21 @@ modules use them. New rules should prefer the semantic roles below.
 | Accent surface | `--accent-surface` | Selected and informative surfaces |
 | Status | `--ok`, `--warn`, `--danger` | Semantic feedback only |
 
+Raised page regions use `--surface-frame-*`, plugin category headers use
+`--surface-category-*`, and menus/dialogs use `--surface-overlay-*`. These are
+shared roles: a category must not receive a one-off color or shadow.
+
 Do not introduce a second primary accent or use status colors for decoration.
 
 ## 3. Typography rules
 
-Typography is intentionally larger on desktop so that a normal browser zoom
-is comfortable for long configuration sessions.
+Typography uses a compact desktop baseline so the wider work surface can show
+more configuration context without making the controls feel dense.
 
-- Desktop (at least 1024px): page title 32px, section title 24px, item title
-  20px, body 18px, description 17px, metadata 15px, badge 14px.
+- Desktop (at least 1024px): page title 27px, section title 20px, item title
+  17px, emphasis/body 15px, description 14px, metadata 13px, badge 12px.
+- The Aa control defaults to the compact 15px body baseline. A saved user
+  value remains an explicit user preference.
 - Narrow screens keep body text at 16px or above. Compact metadata may use the
   badge role when space is genuinely constrained.
 - Use `--font-family-sans` for prose and `--font-family-mono` for commits,
@@ -71,7 +79,8 @@ Components are organized in layers: primitives, composites, then overlays.
 
 ## 5. Layout principles
 
-- The page is a centered, fluid work surface with safe-area-aware gutters.
+- The page is a centered, fluid work surface up to `--content-max` (1440px)
+  with safe-area-aware gutters.
 - Each major step is a raised panel. Nested workspaces use an inset surface so
   hierarchy is visible without excessive borders.
 - Grids use `minmax(0, 1fr)` and may wrap. Long Source, Branch, Target, Profile,
@@ -84,14 +93,17 @@ Components are organized in layers: primitives, composites, then overlays.
 
 ## 6. Depth and elevation
 
-`--elevation-1`, `--elevation-2`, and `--elevation-3` define the project’s
-three-dimensional hierarchy:
+`--elevation-1`, `--elevation-2`, and `--elevation-3` plus the shared surface
+families define the project’s three-dimensional hierarchy:
 
 1. Elevation 1: step panels, plugin groups, and ordinary cards.
 2. Elevation 2: raised controls, menus, the floating dock, and tooltips.
 3. Elevation 3: Build Information and modal surfaces.
 
 Use a highlight plus shadow, not a heavy border or a perspective transform.
+Top/bottom bars, step panels, plugin groups, category headers, menus, and
+dialogs must choose one of the shared surface families so same-type controls
+remain visually consistent.
 The unified layer order is `--z-content`, `--z-sticky`, `--z-dropdown`,
 `--z-dock`, `--z-floating`, `--z-toast`, `--z-modal`, and `--z-tooltip`.
 
@@ -122,7 +134,10 @@ browser zoom.
 - Respect `env(safe-area-inset-*)` on every fixed or sticky edge.
 - A modal, tooltip, Build Information card, font panel, catalog menu, and
   floating dock must have a bounded height and an internal scroll path when
-  content exceeds the dynamic viewport.
+  content exceeds the dynamic viewport. The dock itself remains overflow-safe;
+  only its expanded item list may scroll on a short viewport.
+- The wide filter preset may use up to 760px and 78dvh on desktop, then falls
+  back to a single-column, viewport-width panel on narrow screens.
 - Use `:focus-visible`, keyboard Escape handling supplied by the runtime,
   focus restoration, readable labels, and reduced-motion behavior.
 - Maintain readable contrast in both themes and under increased contrast mode.
