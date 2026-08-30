@@ -169,6 +169,8 @@
 
   globalThis.createFloatingLayerController = (anchor, layer, options = {}) => {
     if (!(anchor instanceof Element) || !(layer instanceof HTMLElement)) return null;
+    const geometry = globalThis.__WEIG_VIEWPORT_GEOMETRY__;
+    if (!geometry?.readViewportRect || !geometry?.calculateFloatingGeometry) return null;
     const originParent = layer.parentNode;
     const originNext = layer.nextSibling;
     const inferredDropdown = anchor.matches('summary') || anchor.getAttribute('role') === 'combobox' ||
@@ -185,6 +187,7 @@
     let open = false;
     let raf = 0;
     let ownerObserver = null;
+    let resizeObserver = null;
 
     const resolveBoundary = () => {
       let boundary = options.boundary;
@@ -199,9 +202,11 @@
       originParent.insertBefore(layer, before);
       for (const property of [
         'position', 'z-index', 'box-sizing', 'left', 'right', 'top', 'bottom',
-        'width', 'min-width', 'max-width', 'max-height',
+        'width', 'min-width', 'max-width', 'max-height', 'height', 'min-height',
+        'overflow-y',
       ]) layer.style.removeProperty(property);
       layer.classList.remove('ui-floating-layer', 'ui-floating-dropdown');
+      delete layer.dataset.placement;
     };
     const naturalLayerWidth = () => {
       if (!fitContent) return 0;
@@ -213,46 +218,46 @@
     const position = () => {
       raf = 0;
       if (!open || !anchor.isConnected || !layer.isConnected) return;
-      const viewportWidth = document.documentElement.clientWidth;
-      const viewportHeight = document.documentElement.clientHeight;
       const rect = anchor.getBoundingClientRect();
-      const viewportLeft = margin;
-      const viewportRight = Math.max(viewportLeft, viewportWidth - margin);
-      let boundaryLeft = viewportLeft;
-      let boundaryRight = viewportRight;
       const boundary = resolveBoundary();
-      if (boundary) {
-        const boundaryRect = boundary.getBoundingClientRect();
-        const candidateLeft = Math.max(viewportLeft, boundaryRect.left + margin);
-        const candidateRight = Math.min(viewportRight, boundaryRect.right - margin);
-        if (candidateRight > candidateLeft) {
-          boundaryLeft = candidateLeft;
-          boundaryRight = candidateRight;
-        }
-      }
-      const availableWidth = Math.max(0, boundaryRight - boundaryLeft);
+      const header = document.querySelector('.site-header');
+      const actionbar = document.getElementById('actionbar');
+      let avoidElements = options.avoidElements;
+      if (typeof avoidElements === 'function') avoidElements = avoidElements(anchor, layer);
+      if (!Array.isArray(avoidElements)) avoidElements = [header, actionbar];
+      const avoidRects = avoidElements.filter((element) => element instanceof Element && !element.hidden)
+        .map((element) => element.getBoundingClientRect());
       layer.style.position = 'fixed';
       layer.style.boxSizing = 'border-box';
       layer.style.zIndex = String(Number(options.zIndex) || 70);
       const naturalWidth = naturalLayerWidth();
-      const allowedWidth = maxWidth > 0 ? Math.min(availableWidth, maxWidth) : availableWidth;
-      const width = Math.min(Math.max(rect.width, minWidth, naturalWidth), allowedWidth);
-      const below = Math.max(0, viewportHeight - rect.bottom - gap - margin);
-      const above = Math.max(0, rect.top - gap - margin);
-      const useBelow = below >= Math.min(preferredHeight, above) || below >= above;
-      const available = Math.max(0, useBelow ? below : above);
-      const left = Math.min(
-        Math.max(boundaryLeft, rect.left),
-        Math.max(boundaryLeft, boundaryRight - width),
-      );
-      layer.style.left = `${left}px`;
+      const viewport = geometry.readViewportRect();
+      const layerRect = layer.getBoundingClientRect();
+      const result = geometry.calculateFloatingGeometry({
+        anchorRect: rect,
+        layerRect: { width: Math.max(naturalWidth, layerRect.width), height: layerRect.height },
+        viewportRect: viewport,
+        boundaryRect: boundary?.getBoundingClientRect?.() || null,
+        avoidRects,
+        margin,
+        gap,
+        minWidth: Math.max(minWidth, naturalWidth),
+        maxWidth,
+        preferredHeight,
+        minHeight: 1,
+        placements: options.placements || ['below', 'above'],
+        align: options.align || 'start',
+      });
+      layer.style.left = `${Math.round(result.left)}px`;
       layer.style.right = 'auto';
-      layer.style.width = `${width}px`;
+      layer.style.width = `${Math.max(1, Math.round(result.width))}px`;
       layer.style.minWidth = '0';
-      layer.style.maxWidth = `${allowedWidth}px`;
-      layer.style.maxHeight = `${available}px`;
-      layer.style.top = useBelow ? `${rect.bottom + gap}px` : 'auto';
-      layer.style.bottom = useBelow ? 'auto' : `${viewportHeight - rect.top + gap}px`;
+      layer.style.maxWidth = `${Math.max(1, Math.round(result.maxWidth))}px`;
+      layer.style.maxHeight = `${Math.max(1, Math.round(result.maxHeight))}px`;
+      layer.style.overflowY = 'auto';
+      layer.style.top = `${Math.round(result.top)}px`;
+      layer.style.bottom = 'auto';
+      layer.dataset.placement = result.placement;
     };
     const schedulePosition = () => {
       if (!open || raf) return;
@@ -277,9 +282,18 @@
         document.addEventListener('pointerdown', outsidePointerDown, true);
         document.addEventListener('scroll', schedulePosition, true);
         window.addEventListener('resize', schedulePosition);
+        globalThis.visualViewport?.addEventListener('resize', schedulePosition, { passive: true });
+        globalThis.visualViewport?.addEventListener('scroll', schedulePosition, { passive: true });
         if (ownerModal) {
           ownerObserver = new MutationObserver(() => { if (ownerModal.hidden) dismiss(); });
           ownerObserver.observe(ownerModal, { attributes: true, attributeFilter: ['hidden'] });
+        }
+        if (typeof ResizeObserver === 'function') {
+          resizeObserver = new ResizeObserver(schedulePosition);
+          resizeObserver.observe(anchor);
+          resizeObserver.observe(layer);
+          const boundary = resolveBoundary();
+          if (boundary) resizeObserver.observe(boundary);
         }
         position();
       },
@@ -291,8 +305,12 @@
         document.removeEventListener('pointerdown', outsidePointerDown, true);
         document.removeEventListener('scroll', schedulePosition, true);
         window.removeEventListener('resize', schedulePosition);
+        globalThis.visualViewport?.removeEventListener('resize', schedulePosition);
+        globalThis.visualViewport?.removeEventListener('scroll', schedulePosition);
         ownerObserver?.disconnect();
         ownerObserver = null;
+        resizeObserver?.disconnect();
+        resizeObserver = null;
         layer.hidden = true;
         restore();
       },

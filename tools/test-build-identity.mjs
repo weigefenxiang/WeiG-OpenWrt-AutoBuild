@@ -373,7 +373,7 @@ assert(feedbackSource.includes("new URL('../ui-feedback.css', moduleUrl)") &&
 assert(feedbackSource.includes("t('import.ok', { id: marker })") &&
   feedbackSource.includes("[source, branch, system, profile]") &&
   feedbackCss.includes('.toast[data-kind=error]') && feedbackCss.includes('.modal.confirm-dialog') &&
-  feedbackCss.includes('128px + env(safe-area-inset-bottom)'),
+  feedbackCss.includes('var(--wrt-actionbar-clearance, 128px) + 12px + env(safe-area-inset-bottom)'),
   'UI feedback does not preserve human-readable import details or mobile action-bar avoidance');
 assert((appSource.match(/\bconfirm\(/g) || []).length === 4 && (appSource.match(/\balert\(/g) || []).length === 1,
   'native popup callsite count changed; route new feedback through the shared adapter instead');

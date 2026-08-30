@@ -38,7 +38,8 @@ assert.match(shell, /return Object\.freeze\(\{ refreshThemeControl: applyThemeIc
 assert.doesNotMatch(app, /let compatibilityRememberDefault/);
 assert.doesNotMatch(app, /let compatibilityPrefetchTimer = null, compatibilityAcknowledgement/);
 assert.doesNotMatch(app, /const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24/);
-assert.match(shell, /const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24/);
+assert.match(shell, /const FONT_DEF = 18, FONT_MIN = 14, FONT_MAX = 24/);
+assert.doesNotMatch(shell, /style\.zoom/);
 assert.match(components, /export function createUiActionRow/);
 assert.match(components, /export function createUiButton/);
 assert.match(components, /export function createUiCheckboxControl/);

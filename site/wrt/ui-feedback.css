@@ -1,13 +1,22 @@
 /* SPDX-FileCopyrightText: 2026 weigefenxiang <weigefenxiang@gmail.com> */
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
+/* Runtime geometry supplies the measured clearances; these fallbacks keep the
+   first paint safe before the page shell has observed the sticky bars. */
+:root {
+  --wrt-header-clearance: 0px;
+  --wrt-actionbar-clearance: 74px;
+  --wrt-floating-safe-margin: 8px;
+}
+
 .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }
 .btn-danger:hover { filter: brightness(1.06); }
 
 /* One global lightweight feedback card. */
 .toast {
   --notice-color: var(--accent);
-  position: fixed; left: auto; right: 20px; bottom: calc(74px + env(safe-area-inset-bottom)); z-index: 60;
+  position: fixed; left: auto; right: max(12px, env(safe-area-inset-right));
+  bottom: calc(var(--wrt-actionbar-clearance, 74px) + 12px + env(safe-area-inset-bottom)); z-index: 60;
   display: grid; grid-template-columns: 24px minmax(0,1fr); align-items: start; gap: 10px;
   width: min(390px, calc(100vw - 40px)); max-width: none; min-height: 58px;
   padding: 11px 13px 11px 11px; overflow: hidden;
@@ -29,15 +38,40 @@
   color: var(--notice-color); font: 800 14px/1 ui-sans-serif,system-ui,sans-serif;
 }
 .notice-content { display: grid; min-width: 0; gap: 3px; }
-.notice-title { color: var(--text); font-size: 14px; line-height: 1.35; }
-.notice-detail { color: var(--text2); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.notice-title { color: var(--text); font-size: var(--font-description, 17px); line-height: 1.35; }
+.notice-detail { color: var(--text2); font-size: var(--font-meta, 15px); line-height: 1.45; overflow-wrap: anywhere; }
 .modal.confirm-dialog { width: min(460px, calc(100vw - 28px)); overflow: hidden; }
 .modal.confirm-dialog .modal-head { background: color-mix(in srgb,var(--accent) 6%,var(--card)); }
 .confirm-dialog-message { margin: 2px 0 4px !important; color: var(--text) !important; white-space: pre-line; }
 .confirm-dialog-actions { justify-content: flex-end; margin-top: 18px; }
 
+/* All controller-owned layers share the same viewport-safe scroll contract. */
+.ui-floating-layer {
+  max-width: calc(100vw - 2 * var(--wrt-floating-safe-margin, 8px));
+  min-height: 1px;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+/* Build Information is portaled out of the filtered sticky actionbar while
+   open, so its fixed coordinates remain relative to the visual viewport. */
+.build-info-card-portal {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+}
+.build-info-card[data-placement="below"]::after {
+  top: -7px; right: auto; bottom: auto;
+  transform: rotate(225deg);
+}
+
 @media (max-width: 860px) {
-  .toast { right: 12px; bottom: calc(128px + env(safe-area-inset-bottom)); width: calc(100vw - 24px); }
+  .toast {
+    right: max(12px, env(safe-area-inset-right));
+    bottom: calc(var(--wrt-actionbar-clearance, 128px) + 12px + env(safe-area-inset-bottom));
+    width: calc(100vw - 24px);
+  }
 }
 
 /* Shared dropdown preset: content expands until its declared boundary, then wraps. */

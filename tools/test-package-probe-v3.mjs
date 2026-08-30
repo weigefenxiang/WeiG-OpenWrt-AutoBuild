@@ -233,8 +233,8 @@ assert.match(feedbackText, /options\.boundary[\s\S]*?anchor\.closest\('\[data-fl
   'shared dropdowns must resolve an explicit or nearest-container boundary');
 assert.match(feedbackText, /naturalLayerWidth[\s\S]*?max-content[\s\S]*?scrollWidth/,
   'shared dropdowns must measure their content before choosing a width');
-assert.match(feedbackText, /boundaryRight - width/,
-  'shared dropdowns must shift left when their content would cross the right boundary');
+assert.match(feedbackText, /calculateFloatingGeometry\(\{[\s\S]*?boundaryRect:/,
+  'shared dropdowns must use the viewport geometry contract for horizontal clamping');
 assert.match(feedbackText, /ui-floating-dropdown/,
   'shared dropdowns must expose one presentation hook for dropdown-specific CSS');
 assert.match(indexText, /id="catalogLocator"[\s\S]*?aria-controls="catalogLocatorResults"[\s\S]*?data-floating-dropdown/,

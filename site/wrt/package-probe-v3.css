@@ -30,7 +30,7 @@
 .probe-guide summary::-webkit-details-marker { display: none; }
 .probe-guide summary:hover, .probe-guide summary:focus-visible, .probe-guide[open] summary { background: var(--accent-bg); outline: none; }
 .probe-guide-copy {
-  position: absolute; top: calc(100% + 7px); right: 0; z-index: 20; display: grid;
+  position: absolute; top: calc(100% + 7px); right: 0; z-index: var(--z-dropdown); display: grid;
   width: min(650px, calc(100vw - 52px)); gap: 7px; padding: 11px 13px;
   border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border)); border-radius: 9px;
   background: var(--card2); box-shadow: var(--shadow); color: var(--text); font-size: var(--font-description); line-height: 1.55;
@@ -102,7 +102,7 @@
 .probe-multiselect > summary > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .probe-multiselect[open] > summary { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent); }
 .probe-multiselect-panel {
-  position: absolute; z-index: 24; top: calc(100% + 5px); left: 0; right: 0; display: grid; grid-template-rows: auto minmax(0, 1fr);
+  position: absolute; z-index: var(--z-dropdown); top: calc(100% + 5px); left: 0; right: 0; display: grid; grid-template-rows: auto minmax(0, 1fr);
   min-width: min(360px, calc(100vw - 36px)); max-height: min(380px, 50vh); overflow: hidden;
   padding: 8px; border: 1px solid var(--border); border-radius: 9px; background: var(--card2); box-shadow: var(--shadow);
 }
@@ -170,10 +170,78 @@
 .probe-package-info { display: none; width: 24px; height: 24px; place-items: center; border-radius: 50%; background: var(--card2); color: var(--accent); font-weight: 800; line-height: 1; }
 .probe-empty { padding: 24px 8px; color: var(--text2); text-align: center; }
 
+/* Legacy adapter compatibility. The V3 launcher replaces the legacy
+   controller at startup, but this stylesheet remains complete for a
+   deferred load, an older cached runtime, or a direct fallback launch. */
+.probe-selected {
+  display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; min-height: 34px; max-height: 34px;
+  padding: 4px 0; overflow: hidden; color: var(--text2); font-size: var(--font-description); white-space: nowrap;
+}
+.probe-selected[hidden] { display: none; }
+.probe-selected > strong { flex: none; margin-right: 3px; }
+.probe-selected-chips { display: flex; min-width: 0; flex: 1; gap: 6px; overflow: hidden; }
+.probe-chip {
+  min-width: 0; max-width: min(180px, 28vw); flex: 0 1 auto; padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); border-radius: 999px;
+  background: var(--accent-bg); color: var(--accent-text); font: inherit; font-size: var(--font-description);
+  cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.probe-selected-more { flex: none; padding: 4px 6px; border: 0; background: transparent; color: var(--text2); font: inherit; cursor: pointer; }
+.probe-selected-more:hover, .probe-selected-more:focus-visible { color: var(--accent-text); outline: none; }
+.probe-field {
+  min-width: 0; margin: 0; padding: 7px 9px; border: 1px solid var(--border); border-radius: 9px; background: var(--card2);
+}
+.probe-field legend { padding: 0 5px; color: var(--text); font-size: var(--font-item-title); font-weight: 700; }
+.probe-field.probe-depth {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;
+}
+.probe-field.probe-depth > legend { grid-column: 1 / -1; }
+.probe-field.probe-depth .probe-depth-option {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px;
+  min-width: 0; padding: 6px 8px; border-radius: 8px; background: var(--card); color: var(--text);
+}
+.probe-depth-choice { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 6px; min-width: 0; cursor: pointer; }
+.probe-depth-choice input { margin: 0; accent-color: var(--accent); }
+.probe-depth-choice strong { min-width: 0; font-size: var(--font-item-title); line-height: 1.3; overflow-wrap: anywhere; }
+.probe-level { padding: 2px 5px; border-radius: 5px; background: var(--card2); color: var(--accent); font: 800 12px/1.25 var(--font-family-mono); }
+.probe-info { position: relative; display: inline-grid; place-items: center; }
+.probe-info-button {
+  display: grid; width: 27px; height: 27px; place-items: center; padding: 0; border: 0; border-radius: 50%;
+  background: transparent; color: var(--accent); font: 700 17px/1 sans-serif; cursor: help;
+}
+.probe-info-button:hover, .probe-info-button:focus-visible { background: var(--accent-bg); outline: none; }
+.probe-filter-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.probe-select-field { display: grid; min-width: 0; gap: 6px; }
+.probe-select-field > strong { font-size: var(--font-item-title); line-height: 1.35; }
+.probe-select {
+  width: 100%; min-width: 0; min-height: 40px; padding: 7px 34px 7px 10px; border: 1px solid var(--border);
+  border-radius: 9px; background: var(--card); color: var(--text); font: inherit; font-size: var(--font-description);
+}
+.probe-select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.probe-custom-scope { padding: 0; border: 1px dashed var(--border); border-radius: 9px; background: var(--card); }
+.probe-custom-scope[hidden] { display: none; }
+.probe-custom-scope-summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; color: var(--text); cursor: pointer; list-style: none; }
+.probe-custom-scope-summary::-webkit-details-marker { display: none; }
+.probe-custom-scope-toggle { color: var(--accent-text); font-size: var(--font-description); font-weight: 600; }
+.probe-custom-scope-body { display: grid; gap: 7px; padding: 0 9px 9px; }
+.probe-custom-scope:not([open]) .probe-custom-scope-body { display: none; }
+.probe-branch-search {
+  width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card2); color: var(--text); font: inherit; font-size: var(--font-description);
+}
+.probe-branch-search:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.probe-branches { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; max-height: 180px; overflow: auto; }
+.probe-branches label { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 5px; font-size: var(--font-description); overflow-wrap: anywhere; }
+.probe-branches label[hidden] { display: none; }
+.probe-branches input { accent-color: var(--accent); }
+.probe-preview[hidden] { display: none; }
+.probe-layout:has(.probe-selected) { grid-template-rows: auto minmax(150px, 1fr) auto auto; }
+.probe-picker:has(.probe-selected) { grid-template-rows: auto auto minmax(0, 1fr); }
+
 .probe-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 0; }
 .probe-actions-spacer { flex: 1; }
 .probe-help-button { margin-right: auto; }
-.probe-overlay { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .38); }
+.probe-overlay { position: absolute; inset: 0; z-index: var(--z-floating); display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .38); }
 .probe-overlay[hidden] { display: none; }
 .probe-overlay-card { display: flex; width: min(760px, 94%); max-height: 82%; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--card2); box-shadow: var(--shadow); }
 .probe-overlay-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
@@ -236,6 +304,23 @@
   .probe-help-button { flex-basis: 100% !important; }
   .probe-actions-spacer { display: none; }
 }
+/* Legacy controller breakpoints stay scoped to its fieldset/select markup. */
+@media (max-width: 1000px) {
+  .probe-field.probe-depth { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .probe-layout:has(.probe-selected) { grid-template-rows: auto minmax(150px, 1fr) auto auto; }
+  .probe-filter-row { grid-template-columns: 1fr; }
+  .probe-branches { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .probe-field.probe-depth { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+  .probe-field.probe-depth .probe-depth-option { gap: 2px; padding: 6px 3px; }
+  .probe-depth-choice { grid-template-columns: auto minmax(0, 1fr); gap: 3px; }
+  .probe-depth-choice strong { font-size: var(--font-meta); white-space: normal; }
+  .probe-select-field > strong, .probe-select { font-size: var(--font-meta); }
+  .probe-branches { grid-template-columns: 1fr; }
+}
 @media (max-height: 650px) {
   .modal.package-probe { height: 95vh; max-height: 95vh; }
   .modal.package-probe .modal-body { overflow: auto; }
@@ -243,4 +328,12 @@
   .probe-results { max-height: 34vh; }
 }
 
-/* 轻提示 */
+/* Dynamic viewport guards belong to this lazy module so app.css does not
+   carry a second Probe presentation contract. */
+@supports (height: 100dvh) {
+  .modal.package-probe { height: min(90dvh, 920px) !important; max-height: calc(100dvh - 20px) !important; }
+  .modal.package-probe .modal-body { max-height: calc(100dvh - 88px); }
+  .probe-overlay-card { max-height: min(82dvh, 560px) !important; }
+  .probe-multiselect-panel { max-height: min(380px, 50dvh) !important; }
+  .probe-guide-copy { max-height: min(60dvh, 520px); overflow: auto; overscroll-behavior: contain; }
+}

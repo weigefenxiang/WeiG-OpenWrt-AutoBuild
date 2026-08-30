@@ -1,0 +1,218 @@
+/* SPDX-FileCopyrightText: 2026 weigefenxiang <weigefenxiang@gmail.com> */
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+
+:root {
+  /* Shared typography scale. Desktop keeps controls readable at normal zoom. */
+  --font-page-title: 32px;
+  --font-section-title: 24px;
+  --font-item-title: 20px;
+  --font-emphasis: 18px;
+  --font-item-title-fit-1: calc(var(--font-item-title) - 1px);
+  --font-item-title-fit-2: calc(var(--font-item-title) - 2px);
+  --font-item-title-fit-3: calc(var(--font-item-title) - 3px);
+  --font-body: 18px;
+  --font-description: 17px;
+  --font-meta: 15px;
+  --font-badge: 14px;
+  --font-family-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-line-body: 1.65;
+  --font-line-tight: 1.35;
+  --bg: #f5f6f8;
+  --card: #ffffff;
+  --card2: #f2f4f7;
+  --text: #1c2430;
+  --text2: #5b6572;
+  --text3: #667180;
+  --border: #dde2e9;
+  --accent: #2563eb;
+  --accent-bg: #e8f0fe;
+  --accent-text: #1d4ed8;
+  --danger: #dc2626;
+  --warn: #b45309;
+  --ok: #15803d;
+  --gold: #b45309;
+  --gold-bg: #fef3c7;
+  --plugin-panel: #f4f8ff;
+  --plugin-head: #e5efff;
+  --plugin-item: #f0f6ff;
+  --plugin-hover: #e1edff;
+  --plugin-selected: #d2e4ff;
+  --plugin-muted: #f3f5f8;
+  /* 可勾选卡片立体模板 / shared selectable-card elevation template */
+  --select-card-highlight: rgba(255, 255, 255, .98);
+  --select-card-border: color-mix(in srgb, var(--border) 46%, #8ea0b7 54%);
+  --select-card-surface-top: color-mix(in srgb, var(--plugin-item) 76%, #fff 24%);
+  --select-card-surface-bottom: color-mix(in srgb, var(--plugin-item) 90%, #cfd9e6 10%);
+  --select-card-hover-top: color-mix(in srgb, var(--plugin-hover) 72%, #fff 28%);
+  --select-card-hover-bottom: color-mix(in srgb, var(--plugin-hover) 88%, #c8d5e6 12%);
+  --select-card-selected-top: color-mix(in srgb, var(--plugin-selected) 78%, #fff 22%);
+  --select-card-selected-bottom: color-mix(in srgb, var(--plugin-selected) 90%, #b8cdf0 10%);
+  --select-card-shadow: 0 1px 1px rgba(15, 23, 42, .10), 0 4px 9px rgba(55, 75, 104, .15), 0 10px 22px rgba(55, 75, 104, .08);
+  --select-card-shadow-hover: 0 2px 2px rgba(15, 23, 42, .11), 0 7px 14px rgba(55, 75, 104, .18), 0 14px 26px rgba(55, 75, 104, .10);
+  --select-card-shadow-selected: 0 5px 12px rgba(37, 99, 235, .20), 0 12px 24px rgba(37, 99, 235, .12);
+  --select-card-lift: -1px;
+  /* 统一交互控件立体模板 / shared elevated interactive-control template */
+  --control-highlight: rgba(255, 255, 255, .96);
+  --control-border: color-mix(in srgb, var(--border) 52%, #91a0b4 48%);
+  --control-surface-top: color-mix(in srgb, var(--card) 82%, #fff 18%);
+  --control-surface-bottom: color-mix(in srgb, var(--card) 90%, #d8e0ea 10%);
+  --control-hover-top: color-mix(in srgb, var(--accent-bg) 34%, #fff 66%);
+  --control-hover-bottom: color-mix(in srgb, var(--accent-bg) 48%, var(--card) 52%);
+  --control-selected-top: color-mix(in srgb, var(--accent-bg) 76%, #fff 24%);
+  --control-selected-bottom: color-mix(in srgb, var(--accent-bg) 88%, #c8d8f3 12%);
+  --control-shadow: 0 1px 1px rgba(15, 23, 42, .08), 0 3px 7px rgba(55, 75, 104, .13), 0 8px 18px rgba(55, 75, 104, .06);
+  --control-shadow-hover: 0 2px 2px rgba(15, 23, 42, .09), 0 6px 12px rgba(55, 75, 104, .16), 0 12px 22px rgba(55, 75, 104, .08);
+  --control-shadow-active: 0 1px 2px rgba(15, 23, 42, .12), 0 2px 4px rgba(55, 75, 104, .12);
+  --control-shadow-selected: 0 3px 8px rgba(37, 99, 235, .18), 0 8px 18px rgba(37, 99, 235, .09);
+  --control-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent);
+  --control-lift: -1px;
+  --radius: 10px;
+  --shadow: 0 1px 3px rgba(16, 24, 40, .08);
+
+  /* Semantic surface and interaction aliases. Legacy names below remain the
+     compatibility bridge for existing page controllers and lazy modules. */
+  --surface-page: var(--bg);
+  --surface-raised: var(--card);
+  --surface-inset: var(--card2);
+  --content-strong: var(--text);
+  --content-muted: var(--text2);
+  --content-subtle: var(--text3);
+  --accent-surface: var(--accent-bg);
+  --accent-strong: var(--accent-text);
+  --muted: var(--text3);
+
+  /* Layout rhythm. Components should use these tokens instead of one-off
+     values whenever a new rule is introduced. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+  --elevation-1: 0 1px 2px rgba(15, 23, 42, .10), 0 4px 12px rgba(55, 75, 104, .08);
+  --elevation-2: 0 3px 8px rgba(15, 23, 42, .12), 0 12px 26px rgba(55, 75, 104, .12);
+  --elevation-3: 0 10px 24px rgba(15, 23, 42, .16), 0 24px 64px rgba(55, 75, 104, .14);
+  --focus-ring: var(--control-focus-ring);
+
+  /* Layer contract: content < sticky bars < menus < dock < floating cards
+     < feedback < modal < tooltip. */
+  --z-content: 0;
+  --z-sticky: 20;
+  --z-dropdown: 40;
+  --z-dock: 50;
+  --z-floating: 60;
+  --z-toast: 70;
+  --z-modal: 80;
+  --z-tooltip: 90;
+  --viewport-gutter: clamp(10px, 2vw, 24px);
+  --actionbar-height: 74px;
+  --overlay-clearance: calc(var(--actionbar-height) + env(safe-area-inset-bottom) + var(--space-3));
+}
+html[data-theme="dark"] {
+  --bg: #11151c;
+  --card: #1a202b;
+  --card2: #222a37;
+  --text: #e6eaf0;
+  --text2: #9aa4b2;
+  --text3: #93a0b0;
+  --border: #2c3543;
+  --accent: #4f83f1;
+  --accent-bg: #1d2c4f;
+  --accent-text: #9db9f7;
+  --danger: #f87171;
+  --warn: #fbbf24;
+  --ok: #4ade80;
+  --gold: #fbbf24;
+  --gold-bg: #3a2f14;
+  --plugin-panel: #172238;
+  --plugin-head: #1b2c49;
+  --plugin-item: #1b2942;
+  --plugin-hover: #22375b;
+  --plugin-selected: #294b7a;
+  --plugin-muted: #1d2430;
+  --select-card-highlight: rgba(255, 255, 255, .075);
+  --select-card-border: color-mix(in srgb, var(--border) 72%, var(--text3));
+  --select-card-surface-top: color-mix(in srgb, var(--plugin-item) 92%, #fff 8%);
+  --select-card-surface-bottom: color-mix(in srgb, var(--plugin-item) 96%, var(--bg) 4%);
+  --select-card-hover-top: color-mix(in srgb, var(--plugin-hover) 90%, #fff 10%);
+  --select-card-hover-bottom: color-mix(in srgb, var(--plugin-hover) 96%, var(--bg) 4%);
+  --select-card-selected-top: color-mix(in srgb, var(--plugin-selected) 90%, #fff 10%);
+  --select-card-selected-bottom: color-mix(in srgb, var(--plugin-selected) 96%, var(--bg) 4%);
+  --select-card-shadow: 0 1px 2px rgba(0, 0, 0, .28), 0 6px 14px rgba(0, 0, 0, .22);
+  --select-card-shadow-hover: 0 2px 3px rgba(0, 0, 0, .32), 0 10px 20px rgba(0, 0, 0, .28);
+  --select-card-shadow-selected: 0 8px 18px rgba(0, 0, 0, .28), 0 0 14px color-mix(in srgb, var(--accent) 18%, transparent);
+  --select-card-lift: -1px;
+  --control-highlight: rgba(255, 255, 255, .065);
+  --control-border: color-mix(in srgb, var(--border) 70%, var(--text3) 30%);
+  --control-surface-top: color-mix(in srgb, var(--card) 92%, #fff 8%);
+  --control-surface-bottom: color-mix(in srgb, var(--card) 96%, var(--bg) 4%);
+  --control-hover-top: color-mix(in srgb, var(--accent-bg) 78%, #fff 7%);
+  --control-hover-bottom: color-mix(in srgb, var(--accent-bg) 90%, var(--bg) 10%);
+  --control-selected-top: color-mix(in srgb, var(--accent-bg) 88%, #fff 8%);
+  --control-selected-bottom: color-mix(in srgb, var(--accent-bg) 96%, var(--bg) 4%);
+  --control-shadow: 0 1px 2px rgba(0, 0, 0, .24), 0 5px 12px rgba(0, 0, 0, .18);
+  --control-shadow-hover: 0 2px 3px rgba(0, 0, 0, .28), 0 8px 17px rgba(0, 0, 0, .23);
+  --control-shadow-active: 0 1px 2px rgba(0, 0, 0, .30), 0 2px 5px rgba(0, 0, 0, .18);
+  --control-shadow-selected: 0 5px 13px rgba(0, 0, 0, .24), 0 0 12px color-mix(in srgb, var(--accent) 16%, transparent);
+  --control-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+  --control-lift: -1px;
+  --shadow: none;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    --bg: #11151c;
+    --card: #1a202b;
+    --card2: #222a37;
+    --text: #e6eaf0;
+    --text2: #9aa4b2;
+    --text3: #93a0b0;
+    --border: #2c3543;
+    --accent: #4f83f1;
+    --accent-bg: #1d2c4f;
+    --accent-text: #9db9f7;
+    --danger: #f87171;
+    --warn: #fbbf24;
+    --ok: #4ade80;
+    --gold: #fbbf24;
+    --gold-bg: #3a2f14;
+    --plugin-panel: #172238;
+    --plugin-head: #1b2c49;
+    --plugin-item: #1b2942;
+    --plugin-hover: #22375b;
+    --plugin-selected: #294b7a;
+    --plugin-muted: #1d2430;
+    --select-card-highlight: rgba(255, 255, 255, .075);
+    --select-card-border: color-mix(in srgb, var(--border) 72%, var(--text3));
+    --select-card-surface-top: color-mix(in srgb, var(--plugin-item) 92%, #fff 8%);
+    --select-card-surface-bottom: color-mix(in srgb, var(--plugin-item) 96%, var(--bg) 4%);
+    --select-card-hover-top: color-mix(in srgb, var(--plugin-hover) 90%, #fff 10%);
+    --select-card-hover-bottom: color-mix(in srgb, var(--plugin-hover) 96%, var(--bg) 4%);
+    --select-card-selected-top: color-mix(in srgb, var(--plugin-selected) 90%, #fff 10%);
+    --select-card-selected-bottom: color-mix(in srgb, var(--plugin-selected) 96%, var(--bg) 4%);
+    --select-card-shadow: 0 1px 2px rgba(0, 0, 0, .28), 0 6px 14px rgba(0, 0, 0, .22);
+    --select-card-shadow-hover: 0 2px 3px rgba(0, 0, 0, .32), 0 10px 20px rgba(0, 0, 0, .28);
+    --select-card-shadow-selected: 0 8px 18px rgba(0, 0, 0, .28), 0 0 14px color-mix(in srgb, var(--accent) 18%, transparent);
+    --select-card-lift: -1px;
+    --control-highlight: rgba(255, 255, 255, .065);
+    --control-border: color-mix(in srgb, var(--border) 70%, var(--text3) 30%);
+    --control-surface-top: color-mix(in srgb, var(--card) 92%, #fff 8%);
+    --control-surface-bottom: color-mix(in srgb, var(--card) 96%, var(--bg) 4%);
+    --control-hover-top: color-mix(in srgb, var(--accent-bg) 78%, #fff 7%);
+    --control-hover-bottom: color-mix(in srgb, var(--accent-bg) 90%, var(--bg) 10%);
+    --control-selected-top: color-mix(in srgb, var(--accent-bg) 88%, #fff 8%);
+    --control-selected-bottom: color-mix(in srgb, var(--accent-bg) 96%, var(--bg) 4%);
+    --control-shadow: 0 1px 2px rgba(0, 0, 0, .24), 0 5px 12px rgba(0, 0, 0, .18);
+    --control-shadow-hover: 0 2px 3px rgba(0, 0, 0, .28), 0 8px 17px rgba(0, 0, 0, .23);
+    --control-shadow-active: 0 1px 2px rgba(0, 0, 0, .30), 0 2px 5px rgba(0, 0, 0, .18);
+    --control-shadow-selected: 0 5px 13px rgba(0, 0, 0, .24), 0 0 12px color-mix(in srgb, var(--accent) 16%, transparent);
+    --control-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+    --control-lift: -1px;
+    --shadow: none;
+  }
+}

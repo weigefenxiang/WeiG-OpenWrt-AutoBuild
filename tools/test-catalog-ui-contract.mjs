@@ -14,6 +14,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const app = readFrontendRuntimeSource(root);
 const html = readFileSync(join(root, 'site', 'wrt', 'index.html'), 'utf8');
 const css = readFileSync(join(root, 'site', 'wrt', 'app.css'), 'utf8');
+const feedbackCss = readFileSync(join(root, 'site', 'wrt', 'ui-feedback.css'), 'utf8');
+const probeCss = readFileSync(join(root, 'site', 'wrt', 'package-probe-v3.css'), 'utf8');
 const uiSession = readFileSync(join(root, 'site', 'wrt', 'lib', 'ui-session-state.js'), 'utf8');
 const uiComponents = readFileSync(join(root, 'site', 'wrt', 'lib', 'ui-components.js'), 'utf8');
 const pageShell = readFileSync(join(root, 'site', 'wrt', 'lib', 'page-shell-ui.js'), 'utf8');
@@ -48,7 +50,7 @@ const buildInfoUiContract = app.match(/function renderBuildInfo\(\) \{([\s\S]*?)
 expect(app.includes('button.textContent = sha;') && !app.includes('sha.slice(0, 12)') &&
   app.includes('function positionBuildInfoPanel(trigger, card)') &&
   buildInfoUiContract.includes("document.addEventListener('click'") &&
-  buildInfoUiContract.includes("if (!panel.classList.contains('is-open') || panel.contains(event.target)) return;") &&
+  buildInfoUiContract.includes("if (!panel.classList.contains('is-open') || panel.contains(event.target) || card.contains(event.target)) return;") &&
   buildInfoUiContract.includes('if (buildInfoInteractiveTarget(event.target)) setOpen(false);') &&
   buildInfoUiContract.includes("document.addEventListener('dblclick'") &&
   app.includes('const BUILD_INFO_INTERACTIVE_SELECTOR = [') &&
@@ -59,9 +61,12 @@ expect(app.includes('button.textContent = sha;') && !app.includes('sha.slice(0, 
   buildInfoUiContract.includes("const closeButton = $('buildInfoClose')") &&
   buildInfoUiContract.includes("closeButton.addEventListener('click', (event) => {") &&
   buildInfoUiContract.includes("event.stopPropagation();\n    setOpen(false);") &&
+  buildInfoUiContract.includes('portalBuildInfoCard();') &&
+  buildInfoUiContract.includes('restoreBuildInfoCard();') &&
+  feedbackCss.includes('.build-info-card-portal') &&
   css.includes('.build-info-head') && css.includes('.build-info-close') &&
   css.includes('.build-info.is-open .build-info-card') && !css.includes('.build-info:hover .build-info-card') &&
-  css.includes('width: min(480px, calc(100vw - 16px))') && css.includes('text-overflow: ellipsis') &&
+  css.includes('width: min(480px, calc(100vw - 32px))') && css.includes('text-overflow: ellipsis') &&
   html.indexOf('id="siteVersion"') < html.indexOf('id="importBtn"') && html.indexOf('id="importBtn"') < html.indexOf('id="submitBtn"'),
   'Build Information anchoring, interactive auto-close, full-width SHA display, or footer order regressed');
 const refreshMenuIndexContract = app.match(/async function refreshMenuIndex\(\) \{[\s\S]*?\n\}\nfunction selectedCatalogSource/)?.[0] || '';
@@ -310,15 +315,15 @@ expect(html.includes('id="menuconfigFilterTrigger"') &&
   'origin/Selected/userSettable filters are not combined in the reusable readable popover');
 
 expect(
-  css.includes('--font-page-title: 24px;') &&
-  css.includes('--font-section-title: 20px;') &&
-  css.includes('--font-item-title: 19px;') &&
+  css.includes('--font-page-title: 32px;') &&
+  css.includes('--font-section-title: 24px;') &&
+  css.includes('--font-item-title: 20px;') &&
   css.includes('--font-emphasis: 18px;') &&
-  css.includes('--font-body: 17px;') &&
-  css.includes('--font-description: 16px;') &&
-  css.includes('--font-meta: 14px;') &&
-  css.includes('--font-badge: 13px;') &&
-  css.includes('font: var(--font-body)/1.75') &&
+  css.includes('--font-body: 18px;') &&
+  css.includes('--font-description: 17px;') &&
+  css.includes('--font-meta: 15px;') &&
+  css.includes('--font-badge: 14px;') &&
+  css.includes('font: var(--font-body)/var(--font-line-body) var(--font-family-sans)') &&
   css.includes('.brand h1 { margin: 0; font-size: var(--font-page-title);') &&
   css.includes('.step h2 { font-size: var(--font-section-title);') &&
   css.includes('padding: 13px 14px; font-size: var(--font-item-title); font-weight: 600;') &&
@@ -336,9 +341,9 @@ expect(
   css.includes('.build-contract-list>strong{display:block;margin-bottom:6px;color:var(--text);font-size:var(--font-emphasis)}') &&
   css.includes('.build-contract-list-head>strong{color:var(--text);font-size:var(--font-emphasis)}') &&
   css.includes('color:var(--accent);font:var(--font-emphasis) ui-monospace,Consolas,monospace') &&
-  css.includes('.menuconfig-scroll{max-height:clamp(280px,55vh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior-y:auto;') &&
-  !css.includes('.menuconfig-scroll{max-height:clamp(280px,55vh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior:contain;') &&
-  pageShell.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;') &&
+  css.includes('.menuconfig-scroll{max-height:clamp(280px,55vh,620px);max-height:clamp(280px,55dvh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior-y:auto;') &&
+  !css.includes('.menuconfig-scroll{max-height:clamp(280px,55vh,620px);max-height:clamp(280px,55dvh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior:contain;') &&
+  pageShell.includes('const FONT_DEF = 18, FONT_MIN = 14, FONT_MAX = 24;') &&
   !app.includes('const FONT_DEF = 17, FONT_MIN = 14, FONT_MAX = 24;'),
   'shared typography scale, build-contract hierarchy, native menuconfig scroll chaining, responsive tokens, or retired density cleanup regressed');
 
@@ -348,22 +353,22 @@ expect(html.includes('class="ui-tooltip" id="uiTooltip"') &&
   html.includes('id="uiTooltipTitle"') && html.includes('id="uiTooltipEmphasis"') &&
   html.includes('id="uiTooltipBody"') &&
   !html.includes('id="menuTooltip"') && !html.includes('id="popover"') &&
-  css.includes('.ui-tooltip{position:fixed;z-index:999;width:max-content;max-width:min(400px,calc(100vw - 24px))') &&
+  css.includes('.ui-tooltip{position:fixed;z-index:var(--z-tooltip);width:max-content;max-width:min(400px,calc(100vw - 24px))') &&
   css.includes('.ui-tooltip-emphasis{') && css.includes('color:var(--danger)') &&
   !css.includes('.menu-tooltip{') && !css.includes('.popover {') &&
   sharedTooltipContract.includes("const UI_TOOLTIP_SELECTOR = '[data-ui-tooltip-title],[data-ui-tooltip-emphasis],[data-ui-tooltip-body]'") &&
-  sharedTooltipContract.includes("const wrap = target?.closest?.('.wrap') || $('app')") &&
-  sharedTooltipContract.includes("const gap = 9;") &&
-  sharedTooltipContract.includes("const actionbar = $('actionbar');") &&
-  sharedTooltipContract.includes('actionbarRect.top - margin') &&
-  sharedTooltipContract.includes('const safeBoundary = { ...boundary, bottom: safeBottom };') &&
-  sharedTooltipContract.includes('function uiTooltipAvoidanceTarget(target)') &&
-  sharedTooltipContract.includes('verticalSpace >= 72 ? verticalSpace : availableHeight') &&
-  sharedTooltipContract.includes('const candidates = [') &&
-  sharedTooltipContract.includes('top: anchor.bottom + gap') &&
-  sharedTooltipContract.includes('top: anchor.top - rect.height - gap') &&
-  sharedTooltipContract.includes('const overlapArea = (candidate) => {') &&
-  sharedTooltipContract.includes('overlapArea(left) - overlapArea(right)') &&
+   sharedTooltipContract.includes("target?.closest?.('[data-floating-boundary]') || target?.closest?.('.modal')") &&
+   sharedTooltipContract.includes('if (!owner) return viewport;') &&
+   sharedTooltipContract.includes("const gap = 9;") &&
+   sharedTooltipContract.includes("const actionbar = $('actionbar');") &&
+   sharedTooltipContract.includes('const avoidRects = [header, actionbar]') &&
+   sharedTooltipContract.includes('calculateFloatingGeometry({') &&
+   sharedTooltipContract.includes("placements: ['below', 'above', 'right', 'left']") &&
+   sharedTooltipContract.includes('function uiTooltipAvoidanceTarget(target)') &&
+   sharedTooltipContract.includes('uiTooltip.style.width =') &&
+   sharedTooltipContract.includes('const measureLayer = () =>') &&
+   sharedTooltipContract.includes('if (rendered.width > geometry.width + 1 || rendered.height > geometry.height + 1 || overlapsAvoid(rendered))') &&
+   sharedTooltipContract.includes('uiTooltip.dataset.placement = geometry.placement') &&
   sharedTooltipContract.includes("uiTooltip.style.removeProperty('max-height');") &&
   sharedTooltipContract.includes("uiTooltip.classList.toggle('is-pinned', uiTooltipPinned)") &&
   sharedTooltipContract.includes("uiTooltip.classList.remove('is-pinned')") &&
@@ -722,28 +727,31 @@ expect(probeContract.includes("guide.className = 'probe-guide'") &&
   !probeContract.includes('showMenuPopup(row, rowDetails)') &&
   !probeContract.includes('probe-info-popup'),
   'compact probe guide or shared full-text tooltip contract regressed');
-expect(css.includes('.probe-depth { grid-template-columns: repeat(4, minmax(0, 1fr))') &&
-  css.includes('.probe-filter-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))') &&
-  css.includes('height: min(86vh, 820px)') &&
-  css.includes('.modal.package-probe .modal-body { display: flex; min-height: 0;') &&
-  css.includes('.probe-picker { display: grid; grid-template-rows: auto auto minmax(0, 1fr)') &&
-  css.includes('.probe-package { display: grid; grid-template-columns: 30px minmax(190px, .9fr)') &&
-  css.includes('.probe-package-id { min-width: 0;') && css.includes('overflow-wrap: anywhere; white-space: normal') &&
-  css.includes('.probe-package-title, .probe-package-usage { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap') &&
-  css.includes('.probe-package-info { display: none;') && css.includes('.probe-package-info { display: grid;') &&
-  css.includes('.probe-depth { grid-template-columns: repeat(2, minmax(0, 1fr));') &&
-  css.includes('.probe-depth-title::after { content: attr(data-short);') &&
-  css.includes('.probe-selected { display: flex; flex-wrap: nowrap;') &&
-  css.includes('max-height: 34px; padding: 4px 0; overflow: hidden;') &&
-  css.includes('.probe-selected-chips { display: flex; min-width: 0; flex: 1;') &&
-  css.includes('.probe-overlay { position: absolute; inset: 0;') &&
-  css.includes('.probe-actions-spacer { flex: 1; }') &&
-  !css.includes('.probe-selected { min-height: 48px; max-height: 92px;') &&
-  css.includes('.probe-package-title, .probe-package-usage { display: none; }') &&
-  css.includes('.probe-preview[hidden] { display: none; }') &&
-  css.includes('.probe-custom-scope-summary { display: flex;') && css.includes('.probe-custom-scope-body { display: grid;') &&
-  css.includes('.probe-package.is-reference { cursor: default;'),
-  'probe single-scroll height, horizontal rows, full IDs, truncated translations, or collapsed preview styling regressed');
+expect(probeCss.includes('height: min(90vh, 920px)') &&
+  probeCss.includes('max-height: calc(100vh - 20px)') &&
+  /\.modal\.package-probe \.modal-body\s*\{\s*display:\s*flex;\s*min-height:\s*0;/.test(probeCss) &&
+  probeCss.includes('.probe-layout {') && probeCss.includes('grid-template-rows: auto minmax(150px, 1fr) auto') &&
+  probeCss.includes('.probe-picker { display: grid; grid-template-rows: auto minmax(0, 1fr)') &&
+  probeCss.includes('.probe-picker:has(.probe-selected) { grid-template-rows: auto auto minmax(0, 1fr); }') &&
+  probeCss.includes('.probe-package {') && probeCss.includes('grid-template-columns: 30px minmax(190px, .9fr)') &&
+  probeCss.includes('.probe-package-id { min-width: 0;') && probeCss.includes('overflow-wrap: anywhere; white-space: normal') &&
+  probeCss.includes('.probe-package-title, .probe-package-usage { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap') &&
+  probeCss.includes('.probe-package-info { display: none;') && probeCss.includes('.probe-package-info { display: grid;') &&
+  probeCss.includes('.probe-depth {') && probeCss.includes('overflow-x: auto; overflow-y: hidden') &&
+  probeCss.includes('.probe-field.probe-depth { grid-template-columns: repeat(2, minmax(0, 1fr)); }') &&
+  !probeCss.includes('.probe-depth-title::after') &&
+  probeCss.includes('.probe-selected {') && probeCss.includes('max-height: 34px;') &&
+  probeCss.includes('.probe-selected-chips { display: flex; min-width: 0; flex: 1;') &&
+  probeCss.includes('.probe-overlay { position: absolute; inset: 0;') &&
+  probeCss.includes('.probe-actions-spacer { flex: 1; }') &&
+  probeCss.includes('.probe-package-title, .probe-package-usage { display: none; }') &&
+  probeCss.includes('.probe-preview[hidden] { display: none; }') &&
+  probeCss.includes('.probe-custom-scope-summary { display: flex;') && probeCss.includes('.probe-custom-scope-body { display: grid;') &&
+  probeCss.includes('.probe-package.is-reference { cursor: default;') &&
+  probeCss.includes('@supports (height: 100dvh)') &&
+  probeCss.includes('height: min(90dvh, 920px) !important') &&
+  !css.includes('.modal.package-probe') && !/\.probe-[A-Za-z]/.test(css),
+  'Probe authority must keep the current V3 layout, legacy fallback controls, bounded overlays, and no duplicate app.css presentation');
 expect(app.includes("label: 'Root Kconfig options', uiKey: 'rootOptions', usageUiKey: 'rootOptionsHelp'") &&
   !app.includes("label: 'General settings', usage: 'Root configuration options'"),
   'root Catalog options are mislabeled as an upstream General settings menu');
