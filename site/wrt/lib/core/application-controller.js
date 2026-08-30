@@ -39,13 +39,6 @@ async function applyProjectCustomization() {
     ? customization.firmware : {};
   const build = customization.build && typeof customization.build === 'object' ? customization.build : {};
 
-  const savedLanguage = storedPreference('wrt_lang');
-  const languageSaved = I18N?.languages?.some((entry) => entry.id === savedLanguage);
-  if (!languageSaved && (ui.defaultLanguage === 'zh-CN' || ui.defaultLanguage === 'en')) {
-    state.lang = ui.defaultLanguage;
-    await ensureI18nLanguage(state.lang).catch(() => {});
-  }
-
   const savedColorMode = storedPreference('wrt_theme');
   if (!['auto', 'light', 'dark'].includes(savedColorMode) &&
       ['auto', 'light', 'dark'].includes(ui.colorMode)) {
@@ -55,15 +48,6 @@ async function applyProjectCustomization() {
 
   if (!storedPreference('wrt_lanip') && LANIP_RE.test(String(firmware.lanIp || ''))) {
     state.lanip = String(firmware.lanIp);
-  }
-  if (!storedPreference('wrt_timezone') && Array.isArray(TIMEZONES?.zones)) {
-    const configuredTimezone = firmware.timezone && typeof firmware.timezone === 'object'
-      ? firmware.timezone : {};
-    const candidates = [configuredTimezone.zonename, configuredTimezone.timezone]
-      .filter((value) => typeof value === 'string' && value);
-    const zone = candidates.map((candidate) => TIMEZONES.zones.find((item) =>
-      item.zonename === candidate || item.timezone === candidate)).find(Boolean);
-    if (zone) state.timezone = zone.zonename;
   }
   if (Object.hasOwn(NTP_PRESETS, firmware.ntp?.preset)) state.ntp = firmware.ntp.preset;
   if (typeof firmware.theme === 'string' && /^luci-theme-[A-Za-z0-9._+-]{1,48}$/.test(firmware.theme)) {
@@ -167,11 +151,14 @@ async function init() {
     const deploymentIdentity = await loadDeploymentIdentity();
     state.siteVersion = deploymentIdentity.siteVersion;
     state.buildMeta = deploymentIdentity.buildMeta;
+    state.catalogBindings = deploymentIdentity.catalogBindings;
     MENU_CATALOG_DATA_REF = BUILD_IDENTITY_MODULE.catalogDataBranch(state.buildMeta?.branch);
+    MENU_CATALOG_BINDING = state.catalogBindings?.[MENU_CATALOG_DATA_REF] || null;
     CATALOG_LOADER = CATALOG_LOADER_MODULE.createCatalogLoader({
       repository: MENU_CATALOG_REPO,
       releaseTag: PROJECT?.catalogReleaseTag || 'menuconfig-catalog-complete',
       dataRef: MENU_CATALOG_DATA_REF,
+      expectedBinding: MENU_CATALOG_BINDING,
       allowReleaseFallback: MENU_CATALOG_DATA_REF === 'catalog-main',
       engine: CATALOG_ENGINE,
     });

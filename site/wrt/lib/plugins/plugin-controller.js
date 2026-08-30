@@ -388,6 +388,47 @@ function rootfsPartitionInfo() {
   const path = (option.path || []).map(menuPathLabel).filter(Boolean);
   return { option, value, project: option.promptEn || option.prompt || 'Root filesystem partition size (in MiB)', path };
 }
+function packageSizeEstimate() {
+  if (state.device?.id !== 'catalog-target' || !MENU_CATALOG || !catalogPackageSizesDocument) return null;
+  const sizes = catalogPackageSizeMap(catalogPackageSizesDocument);
+  const direct = new Set();
+  for (const [symbol, value] of catalogUserOverrides) {
+    if (symbol.startsWith('PACKAGE_') && value !== 'n') direct.add(symbol.slice('PACKAGE_'.length));
+  }
+  const total = new Set();
+  for (const [symbol, value] of catalogEngineValues()) {
+    if (symbol.startsWith('PACKAGE_') && value !== 'n') total.add(symbol.slice('PACKAGE_'.length));
+  }
+  const summarize = (names) => {
+    let knownBytes = 0;
+    let unknown = 0;
+    for (const name of names) {
+      const row = sizes.get(name);
+      const value = row?.installedBytes ?? row?.archiveBytes;
+      if (Number.isSafeInteger(value) && value >= 0) knownBytes += value;
+      else unknown++;
+    }
+    return { packages: names.size, knownBytes, unknown };
+  };
+  return { direct: summarize(direct), total: summarize(total) };
+}
+function packageSizeEstimateText(summary) {
+  if (!summary) return '';
+  return t('size.summary.short', {
+    direct: fmtSize(summary.direct.knownBytes),
+    total: fmtSize(summary.total.knownBytes),
+  });
+}
+function packageSizeEstimateTooltip(summary) {
+  if (!summary) return '';
+  const architecture = String(catalogPackageSizesDocument?.observation?.architecture || '').trim() ||
+    t('catalog.unknown');
+  return [
+    t('size.summary.direct', { size: fmtSize(summary.direct.knownBytes), unknown: summary.direct.unknown }),
+    t('size.summary.total', { size: fmtSize(summary.total.knownBytes), unknown: summary.total.unknown }),
+    t('size.summary.metric', { architecture }),
+  ].join('\n');
+}
 function focusMenuconfigSymbol(symbol) {
   return (async () => {
     if (!await setMenuconfigExpanded(true)) throw new Error('Catalog menu could not be expanded');
@@ -469,13 +510,25 @@ function updateStats() {
   const n = sel.all.length;
   $('selCount').textContent = t('bar.selected', { n });
   const rootfs = rootfsPartitionInfo();
+  const packageSizes = packageSizeEstimate();
   const capText = $('capText');
   if (rootfs) {
     $('capBox').hidden = true;
     capText.disabled = false;
     capText.classList.add('rootfs-capacity');
-    capText.textContent = `${rootfs.value} MiB`;
-    bindUiTooltipContent(capText, { body: t('runtime.2b2a5917809a') });
+    capText.textContent = packageSizes
+      ? `${rootfs.value} MiB · ${packageSizeEstimateText(packageSizes)}`
+      : `${rootfs.value} MiB`;
+    bindUiTooltipContent(capText, { body: [
+      t('runtime.2b2a5917809a'),
+      packageSizeEstimateTooltip(packageSizes),
+    ].filter(Boolean).join('\n') });
+  } else if (packageSizes) {
+    $('capBox').hidden = true;
+    capText.disabled = false;
+    capText.classList.remove('rootfs-capacity');
+    capText.textContent = packageSizeEstimateText(packageSizes);
+    bindUiTooltipContent(capText, { body: packageSizeEstimateTooltip(packageSizes) });
   } else {
     $('capBox').hidden = false;
     capText.disabled = true;

@@ -75,6 +75,7 @@ const CATALOG_DATA_BRANCHES = Object.freeze({
 });
 const CANONICAL_FIX_RE = /^fix-([A-Za-z0-9][A-Za-z0-9._-]{0,95})$/;
 const CATALOG_DATA_REF_RE = /^catalog-(?:fix-[A-Za-z0-9][A-Za-z0-9._-]{0,95}|dev|staging|main)$/;
+const FULL_SHA_RE = /^[a-f0-9]{40}$/;
 
 function configuredCatalogChannel(configured, key) {
   const mapping = configured && typeof configured === 'object' ? configured : {};
@@ -121,19 +122,35 @@ export function catalogDataBranch(value, configured = CATALOG_DATA_BRANCHES) {
   return configuredCatalogChannel(configured, channel);
 }
 
+export function normalizeCatalogBindings(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return Object.freeze({});
+  const bindings = {};
+  for (const [channel, row] of Object.entries(value)) {
+    if (!CATALOG_DATA_REF_RE.test(channel) || !row || typeof row !== 'object' || Array.isArray(row)) continue;
+    const repository = String(row.repository || '').trim();
+    const codeSha = String(row.codeSha || '').trim().toLowerCase();
+    const assetRef = String(row.assetRef || '').trim().toLowerCase();
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) ||
+        !FULL_SHA_RE.test(codeSha) || !FULL_SHA_RE.test(assetRef)) continue;
+    bindings[channel] = Object.freeze({ channel, repository, codeSha, assetRef });
+  }
+  return Object.freeze(bindings);
+}
+
 export function normalizeDeploymentIdentity(siteStamp, buildMeta) {
   const siteVersion = /^v\d{10}$/.test(String(siteStamp?.version || '')) &&
     siteStamp?.timezone === 'Asia/Shanghai' ? siteStamp.version : '';
   const siteSha256 = siteVersion && SITE_SHA256_RE.test(String(siteStamp?.siteSha256 || '')) &&
     siteStamp?.hashAlgorithm === 'sha256' ? siteStamp.siteSha256 : '';
-  const empty = { siteVersion: siteVersion || 'v----------', siteSha256: siteSha256 || '', buildMeta: null };
+  const catalogBindings = normalizeCatalogBindings(siteStamp?.catalogBindings);
+  const empty = { siteVersion: siteVersion || 'v----------', siteSha256: siteSha256 || '', buildMeta: null, catalogBindings };
   if (!siteVersion || !siteSha256 || !buildMeta || buildMeta.version !== siteVersion ||
       buildMeta.siteSha256 !== siteSha256 || buildMeta.timezone !== siteStamp.timezone ||
       !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/.test(String(buildMeta.builtAt || ''))) return empty;
   const branch = normalizeBuildEnvironment(buildMeta.branch);
   const commit = normalizeBuildCommit(buildMeta.commit);
   if (!branch || !commit) return empty;
-  return { siteVersion, siteSha256, buildMeta: { ...buildMeta, branch, commit } };
+  return { siteVersion, siteSha256, buildMeta: { ...buildMeta, branch, commit }, catalogBindings };
 }
 
 export function buildEnvironmentIdentity(value) {

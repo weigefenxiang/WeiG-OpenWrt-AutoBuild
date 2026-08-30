@@ -33,7 +33,9 @@ const TIMEZONE_RE = /^[A-Za-z0-9._+<>,:/-]{1,128}$/;
 const THEME_RE = /^luci-theme-[A-Za-z0-9._+-]{1,48}$/;
 const HOSTNAME_RE = /^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
 
-const LANGUAGES = new Set(['auto', 'zh-CN', 'en']);
+// Kept as a required compatibility field; the browser owns language selection
+// from navigator.languages and falls back to English when no translation matches.
+const LANGUAGES = new Set(['auto']);
 const COLOR_MODES = new Set(['auto', 'light', 'dark']);
 const NTP_PRESETS = new Set(['cn', 'global', 'cloudflare']);
 const CONTROL_CHARACTER_RE = /[\p{Cc}\p{Cf}\p{Cs}]/u;

@@ -48,6 +48,14 @@ function compressedDocument(document) {
   };
 }
 
+function gitBlobSha1(text) {
+  const body = Buffer.from(String(text));
+  return createHash('sha1')
+    .update(Buffer.from(`blob ${body.byteLength}\0`))
+    .update(body)
+    .digest('hex');
+}
+
 function indexFor(asset, payload, commit, ref = '1'.repeat(40)) {
   return {
     schema: 2,
@@ -177,6 +185,155 @@ assert(cached.provider === 'cache', 'validated Catalog cache was not reused');
 assert(calls.length === beforeCache, 'cache reuse performed an unexpected network request');
 assert(catalogDecodeCount === 2,
   `cached Catalog decoded ${catalogDecodeCount - 1} times; expected exactly once on cache hit`);
+
+const bindingIndexText = JSON.stringify(index);
+const binding = {
+  channel: 'catalog-main', repository: 'owner/catalog',
+  codeSha: provenanceSha, assetRef: index.assetRef,
+};
+const bindingHeadSha = gitBlobSha1(bindingIndexText);
+
+const freshnessMatchCalls = [];
+const freshnessMatchLoader = createCatalogLoader({
+  repository: 'owner/catalog', dataRef: 'catalog-main', expectedBinding: binding,
+  allowReleaseFallback: false, engine: { createCatalogModel }, cacheStorage: fakeCaches(),
+  subtle: globalThis.crypto?.subtle,
+  fetchImpl: async (url, options = {}) => {
+    freshnessMatchCalls.push({ url, options });
+    if (url.includes('cdn.jsdelivr.net') && url.includes('index.json')) {
+      return new Response(bindingIndexText, { status: 200 });
+    }
+    if (url.includes('api.github.com') && options.method === 'HEAD') {
+      return new Response('', { status: 200, headers: { etag: `"${bindingHeadSha}"` } });
+    }
+    return new Response('unexpected', { status: 404 });
+  },
+});
+const freshnessMatch = await freshnessMatchLoader.fetchIndex();
+assert(freshnessMatch.provider === 'jsdelivr' && freshnessMatch.freshnessVerified !== false,
+  'matching page Catalog binding and Git blob HEAD did not accept jsDelivr');
+assert(freshnessMatchCalls.some((call) => call.options.method === 'HEAD' &&
+  call.url.includes('/contents/index.json?ref=catalog-main')),
+  'matching jsDelivr candidate did not verify the GitHub index blob identity');
+assert(freshnessMatch.diagnostics.some((row) => row.stage === 'index-freshness' && row.ok &&
+  row.provider === 'github-api'),
+  'successful Git blob HEAD verification was not recorded');
+
+const staleBindingIndex = structuredClone(index);
+staleBindingIndex.assetRef = '3'.repeat(40);
+staleBindingIndex.provenance = { ...staleBindingIndex.provenance, codeSha: 'e'.repeat(40) };
+const staleBindingText = JSON.stringify(staleBindingIndex);
+const staleBindingCalls = [];
+const staleBindingLoader = createCatalogLoader({
+  repository: 'owner/catalog', dataRef: 'catalog-main', expectedBinding: binding,
+  allowReleaseFallback: false, engine: { createCatalogModel }, cacheStorage: fakeCaches(),
+  subtle: globalThis.crypto?.subtle,
+  fetchImpl: async (url, options = {}) => {
+    staleBindingCalls.push({ url, options });
+    if (url.includes('cdn.jsdelivr.net') && url.includes('index.json')) {
+      return new Response(staleBindingText, { status: 200 });
+    }
+    if (url.includes('raw.githubusercontent.com') && url.includes('index.json')) {
+      return new Response(bindingIndexText, { status: 200 });
+    }
+    return new Response('unexpected', { status: 404 });
+  },
+});
+const staleBinding = await staleBindingLoader.fetchIndex();
+assert(staleBinding.provider === 'github-raw',
+  'jsDelivr index with an old page binding was not rejected in favor of GitHub Raw');
+assert(staleBinding.diagnostics.some((row) => row.stage === 'index-freshness' &&
+  row.provider === 'jsdelivr' && !row.ok && /differs from page binding/.test(row.detail)),
+  'expectedBinding mismatch was not diagnosed as stale jsDelivr data');
+assert(staleBindingCalls.filter((call) => call.url.includes('index.json')).map((call) => new URL(call.url).hostname).join(',') ===
+  'cdn.jsdelivr.net,raw.githubusercontent.com',
+  'page-binding mismatch did not proceed from jsDelivr to GitHub Raw');
+
+const staleHeadCalls = [];
+const staleHeadLoader = createCatalogLoader({
+  repository: 'owner/catalog', dataRef: 'catalog-main', expectedBinding: binding,
+  allowReleaseFallback: false, engine: { createCatalogModel }, cacheStorage: fakeCaches(),
+  subtle: globalThis.crypto?.subtle,
+  fetchImpl: async (url, options = {}) => {
+    staleHeadCalls.push({ url, options });
+    if (url.includes('cdn.jsdelivr.net') && url.includes('index.json')) {
+      return new Response(bindingIndexText, { status: 200 });
+    }
+    if (url.includes('api.github.com') && options.method === 'HEAD') {
+      return new Response('', { status: 200, headers: { etag: `"${'d'.repeat(40)}"` } });
+    }
+    if (url.includes('raw.githubusercontent.com') && url.includes('index.json')) {
+      return new Response(bindingIndexText, { status: 200 });
+    }
+    return new Response('unexpected', { status: 404 });
+  },
+});
+const staleHead = await staleHeadLoader.fetchIndex();
+assert(staleHead.provider === 'github-raw',
+  'jsDelivr index with a stale Git blob HEAD was not rejected in favor of GitHub Raw');
+assert(staleHead.diagnostics.some((row) => row.stage === 'index-freshness' &&
+  row.provider === 'jsdelivr' && !row.ok && /stale branch cache/.test(row.detail)),
+  'stale Git blob HEAD did not produce a freshness diagnostic');
+assert(staleHeadCalls.some((call) => call.options.method === 'HEAD') &&
+  staleHeadCalls.some((call) => call.url.includes('raw.githubusercontent.com') && call.url.includes('index.json')),
+  'stale Git blob HEAD did not reach the GitHub Raw index candidate');
+
+const headUnavailableRawCalls = [];
+const headUnavailableRawLoader = createCatalogLoader({
+  repository: 'owner/catalog', dataRef: 'catalog-main', expectedBinding: binding,
+  allowReleaseFallback: false, engine: { createCatalogModel }, cacheStorage: fakeCaches(),
+  subtle: globalThis.crypto?.subtle,
+  fetchImpl: async (url, options = {}) => {
+    headUnavailableRawCalls.push({ url, options });
+    if (url.includes('cdn.jsdelivr.net') && url.includes('index.json')) {
+      return new Response(bindingIndexText, { status: 200 });
+    }
+    if (url.includes('api.github.com') && options.method === 'HEAD') {
+      return new Response('rate limited', { status: 503 });
+    }
+    if (url.includes('raw.githubusercontent.com') && url.includes('index.json')) {
+      return new Response(bindingIndexText, { status: 200 });
+    }
+    return new Response('unexpected', { status: 404 });
+  },
+});
+const headUnavailableRaw = await headUnavailableRawLoader.fetchIndex();
+assert(headUnavailableRaw.provider === 'github-raw',
+  'HEAD-unavailable jsDelivr candidate did not yield to a successful GitHub Raw index');
+assert(headUnavailableRaw.diagnostics.some((row) => row.stage === 'index-freshness' &&
+  row.provider === 'github-api' && !row.ok && /HTTP 503/.test(row.detail)),
+  'HEAD-unavailable freshness failure was not diagnosed');
+assert(headUnavailableRawCalls.some((call) => call.url.includes('raw.githubusercontent.com') &&
+  call.url.includes('index.json')),
+  'HEAD-unavailable candidate did not attempt GitHub Raw');
+
+const headUnavailableAllCalls = [];
+const headUnavailableAllLoader = createCatalogLoader({
+  repository: 'owner/catalog', dataRef: 'catalog-main', expectedBinding: binding,
+  allowReleaseFallback: false, engine: { createCatalogModel }, cacheStorage: fakeCaches(),
+  subtle: globalThis.crypto?.subtle,
+  fetchImpl: async (url, options = {}) => {
+    headUnavailableAllCalls.push({ url, options });
+    if (url.includes('cdn.jsdelivr.net') && url.includes('index.json')) {
+      return new Response(bindingIndexText, { status: 200 });
+    }
+    if (url.includes('api.github.com')) return new Response('unavailable', { status: 503 });
+    if (url.includes('raw.githubusercontent.com') && url.includes('index.json')) {
+      return new Response('unavailable', { status: 503 });
+    }
+    return new Response('unexpected', { status: 404 });
+  },
+});
+const headUnavailableAll = await headUnavailableAllLoader.fetchIndex();
+assert(headUnavailableAll.provider === 'jsdelivr' && headUnavailableAll.freshnessVerified === false,
+  'when HEAD and all fallback indexes fail, the unverified jsDelivr candidate was not retained');
+assert(headUnavailableAll.diagnostics.some((row) => row.stage === 'index-freshness' &&
+  row.provider === 'github-api' && !row.ok) &&
+  headUnavailableAll.diagnostics.some((row) => row.stage === 'index' &&
+    row.provider === 'github-raw' && !row.ok),
+  'all-failure boundary did not retain freshness and Raw diagnostics');
+assert(headUnavailableAllCalls.filter((call) => call.url.includes('index.json') && call.options.method !== 'HEAD').length === 3,
+  'all-failure boundary did not exhaust Raw and GitHub API index candidates');
 
 await loader.clearCache();
 const fallbackCalls = [];

@@ -20,6 +20,7 @@ import {
   normalizeBuildEnvironment,
   normalizeBuildCommit,
   normalizeBuildTag,
+  normalizeCatalogBindings,
   normalizeDeploymentIdentity,
   parseBuildIssueTitleIdentity,
 } from '../site/wrt/lib/build-identity.js';
@@ -99,45 +100,92 @@ assert.deepEqual(normalizeDeploymentIdentity(deploymentStamp, deploymentMeta), {
   siteVersion: 'v2608090613',
   siteSha256: deploymentSiteSha,
   buildMeta: { ...deploymentMeta, branch: 'dev', commit: '63aafb274720345df1d5d659dbdebb2307865dd7' },
+  catalogBindings: {},
 });
-assert.deepEqual(normalizeDeploymentIdentity(deploymentStamp, null), { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null });
+assert.deepEqual(normalizeDeploymentIdentity(deploymentStamp, null), {
+  siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null, catalogBindings: {},
+});
 assert.deepEqual(
   normalizeDeploymentIdentity(deploymentStamp, { ...deploymentMeta, version: 'v2608090612' }),
-  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null },
+  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null, catalogBindings: {} },
 );
 assert.deepEqual(
   normalizeDeploymentIdentity(deploymentStamp, { ...deploymentMeta, commit: '63aafb2' }),
-  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null },
+  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null, catalogBindings: {} },
 );
 assert.deepEqual(
   normalizeDeploymentIdentity(deploymentStamp, { ...deploymentMeta, branch: '../dev' }),
-  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null },
+  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null, catalogBindings: {} },
 );
 assert.deepEqual(
   normalizeDeploymentIdentity(deploymentStamp, { ...deploymentMeta, timezone: 'UTC' }),
-  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null },
+  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null, catalogBindings: {} },
 );
 assert.deepEqual(
   normalizeDeploymentIdentity(deploymentStamp, { ...deploymentMeta, builtAt: '2026-08-08T22:13:00Z' }),
-  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null },
+  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null, catalogBindings: {} },
 );
 assert.deepEqual(
   normalizeDeploymentIdentity(deploymentStamp, { ...deploymentMeta, siteSha256: 'b'.repeat(64) }),
-  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null },
+  { siteVersion: 'v2608090613', siteSha256: deploymentSiteSha, buildMeta: null, catalogBindings: {} },
 );
 assert.deepEqual(
   normalizeDeploymentIdentity({ ...deploymentStamp, siteSha256: 'bad' }, deploymentMeta),
-  { siteVersion: 'v2608090613', siteSha256: '', buildMeta: null },
+  { siteVersion: 'v2608090613', siteSha256: '', buildMeta: null, catalogBindings: {} },
 );
 assert.deepEqual(
   normalizeDeploymentIdentity({ ...deploymentStamp, hashAlgorithm: 'sha1' }, deploymentMeta),
-  { siteVersion: 'v2608090613', siteSha256: '', buildMeta: null },
+  { siteVersion: 'v2608090613', siteSha256: '', buildMeta: null, catalogBindings: {} },
 );
 assert.deepEqual(
   normalizeDeploymentIdentity({ ...deploymentStamp, timezone: 'UTC' }, deploymentMeta),
-  { siteVersion: 'v----------', siteSha256: '', buildMeta: null },
+  { siteVersion: 'v----------', siteSha256: '', buildMeta: null, catalogBindings: {} },
 );
-assert.deepEqual(normalizeDeploymentIdentity(null, deploymentMeta), { siteVersion: 'v----------', siteSha256: '', buildMeta: null });
+assert.deepEqual(normalizeDeploymentIdentity(null, deploymentMeta), {
+  siteVersion: 'v----------', siteSha256: '', buildMeta: null, catalogBindings: {},
+});
+
+const catalogBindingCodeSha = 'B'.repeat(40);
+const catalogBindingAssetRef = 'C'.repeat(40);
+const catalogBindingInput = {
+  'catalog-dev': {
+    channel: 'catalog-dev', repository: 'owner/catalog',
+    codeSha: catalogBindingCodeSha, assetRef: catalogBindingAssetRef,
+  },
+  'catalog-main': {
+    channel: 'catalog-main', repository: 'owner/catalog',
+    codeSha: catalogBindingCodeSha, assetRef: catalogBindingAssetRef,
+  },
+  'catalog-staging': {
+    channel: 'catalog-staging', repository: 'owner/catalog',
+    codeSha: 'short', assetRef: catalogBindingAssetRef,
+  },
+  'catalog-unsafe': {
+    channel: 'catalog-unsafe', repository: 'owner/catalog',
+    codeSha: catalogBindingCodeSha, assetRef: catalogBindingAssetRef,
+  },
+};
+const normalizedCatalogBinding = {
+  'catalog-dev': {
+    channel: 'catalog-dev', repository: 'owner/catalog',
+    codeSha: catalogBindingCodeSha.toLowerCase(), assetRef: catalogBindingAssetRef.toLowerCase(),
+  },
+  'catalog-main': {
+    channel: 'catalog-main', repository: 'owner/catalog',
+    codeSha: catalogBindingCodeSha.toLowerCase(), assetRef: catalogBindingAssetRef.toLowerCase(),
+  },
+};
+assert.deepEqual(normalizeCatalogBindings(catalogBindingInput), normalizedCatalogBinding,
+  'Catalog bindings did not retain only valid channel/repository/SHA identities');
+assert.deepEqual(
+  normalizeDeploymentIdentity({ ...deploymentStamp, catalogBindings: catalogBindingInput }, deploymentMeta),
+  {
+    siteVersion: 'v2608090613', siteSha256: deploymentSiteSha,
+    buildMeta: { ...deploymentMeta, branch: 'dev', commit: '63aafb274720345df1d5d659dbdebb2307865dd7' },
+    catalogBindings: normalizedCatalogBinding,
+  },
+  'deployment identity did not expose normalized Catalog bindings',
+);
 
 
 assert.equal(buildEnvironmentIdentity('dev'), 'dev');

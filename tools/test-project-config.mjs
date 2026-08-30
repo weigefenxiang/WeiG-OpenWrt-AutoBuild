@@ -58,6 +58,8 @@ assert.equal(isValidProjectConfiguration(sourceConfiguration), true,
 assert.deepEqual(sourceConfiguration, { site: sourceSite, build: sourceBuild });
 assert.deepEqual(Object.keys(sourceSite).sort(), ['build', 'catalog', 'firmware', 'project', 'ui']);
 assert.deepEqual(Object.keys(sourceBuild).sort(), ['admission', 'jobs', 'password']);
+assert.equal(sourceSite.ui.defaultLanguage, 'auto',
+  'the public site config must retain browser-auto language selection');
 assert.equal(Object.hasOwn(sourceSite.firmware, 'password'), false,
   'site config must not carry build secrets/password policy');
 assert.deepEqual(validateSiteConfig(sourceSite), sourceSite, 'site validation returns a detached copy');
@@ -93,6 +95,7 @@ const invalidSiteCases = [
   ['repository syntax', ['project', 'repository'], 'not a repository', 'invalid format'],
   ['blog URL protocol', ['project', 'blogUrl'], 'http://example.test/', 'must use https'],
   ['short name control character', ['project', 'shortName'], 'Wei.\nG', 'control characters'],
+  ['legacy fixed language default', ['ui', 'defaultLanguage'], 'en', 'must be one of auto'],
   ['unknown NTP preset', ['firmware', 'ntp', 'preset'], 'custom', 'must be one of cn, global, cloudflare'],
   ['unknown timezone zonename', ['firmware', 'timezone', 'zonename'], 'Mars/Nowhere', 'exact zonename/timezone pair'],
   ['unknown timezone value', ['firmware', 'timezone', 'timezone'], 'NotAZone', 'exact zonename/timezone pair'],

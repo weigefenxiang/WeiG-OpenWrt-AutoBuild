@@ -17,6 +17,44 @@ const CHECK_ONLY = process.argv.includes('--check');
 const KEEP_VERSION = process.argv.includes('--keep-version');
 const SELF_TEST = process.argv.includes('--self-test');
 const VERSION_RE = /^v\d{10}$/;
+const CATALOG_CHANNELS = ['catalog-dev', 'catalog-staging', 'catalog-main'];
+const FULL_SHA_RE = /^[a-f0-9]{40}$/;
+
+function validCatalogBinding(value, channel, repository) {
+  return value && value.channel === channel && value.repository === repository &&
+    FULL_SHA_RE.test(String(value.codeSha || '')) && FULL_SHA_RE.test(String(value.assetRef || ''));
+}
+
+async function catalogBindings(previous = {}) {
+  const site = JSON.parse(readFileSync(join(SITE, 'config', 'site.json'), 'utf8'));
+  const repository = String(site?.catalog?.repository || '');
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new Error('Invalid Catalog repository in site config');
+  const bindings = {};
+  for (const channel of CATALOG_CHANNELS) {
+    try {
+      const response = await fetch(`https://raw.githubusercontent.com/${repository}/${channel}/index.json?wrt_binding=${Date.now()}`,
+        { cache: 'no-store', headers: { 'User-Agent': 'WeiG-OpenWrt-AutoBuild' } });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const index = await response.json();
+      const candidate = {
+        channel,
+        repository,
+        codeSha: String(index?.provenance?.codeSha || '').toLowerCase(),
+        assetRef: String(index?.assetRef || '').toLowerCase(),
+      };
+      if (!validCatalogBinding(candidate, channel, repository)) throw new Error('invalid Catalog identity');
+      bindings[channel] = candidate;
+    } catch (error) {
+      const fallback = previous?.[channel];
+      if (!validCatalogBinding(fallback, channel, repository)) {
+        throw new Error(`Unable to bind ${channel}: ${error.message}`);
+      }
+      bindings[channel] = fallback;
+      console.warn(`[catalog-binding] Kept previous ${channel}: ${error.message}`);
+    }
+  }
+  return bindings;
+}
 
 function nextVersion() {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
@@ -131,7 +169,9 @@ try {
 
 const versionStateOk = old.fingerprint === fingerprint && old.siteSha256 === siteRelease.siteSha256 &&
   old.hashAlgorithm === 'sha256' && old.timezone === 'Asia/Shanghai' &&
-  VERSION_RE.test(old.version || '') && rootVersion === old.version;
+  VERSION_RE.test(old.version || '') && rootVersion === old.version &&
+  CATALOG_CHANNELS.every((channel) => validCatalogBinding(old.catalogBindings?.[channel], channel,
+    JSON.parse(readFileSync(join(SITE, 'config', 'site.json'), 'utf8'))?.catalog?.repository));
 
 if (CHECK_ONLY) {
   if (versionStateOk) {
@@ -162,12 +202,14 @@ const selected = resolveVersion({
   keepVersion: KEEP_VERSION, candidateVersion: nextVersion(),
 });
 const version = selected.version;
+const resolvedCatalogBindings = await catalogBindings(old.catalogBindings);
 writeFileSync(OUT, JSON.stringify({
   version,
   timezone: 'Asia/Shanghai',
   fingerprint,
   siteSha256: siteRelease.siteSha256,
   hashAlgorithm: 'sha256',
+  catalogBindings: resolvedCatalogBindings,
 }, null, 2) + '\n');
 writeFileSync(ROOT_VERSION, version + '\n');
 if (selected.reason === 'new-code-version') {

@@ -391,11 +391,16 @@ function initializeTimezone() {
   const available = new Set(TIMEZONES.zones.map((zone) => zone.zonename));
   const saved = localStorage.getItem('wrt_timezone') || '';
   const detected = browserTimezone();
-  state.timezone = [saved, detected, 'Asia/Shanghai'].find((name) => available.has(name)) || TIMEZONES.zones[0].zonename;
+  const detectedOffset = detected ? timezoneOffset(detected) : '';
+  const equivalent = detectedOffset
+    ? TIMEZONES.zones.find((zone) => timezoneOffset(zone.zonename) === detectedOffset)?.zonename || ''
+    : '';
+  state.timezone = [saved, detected, equivalent, 'Etc/GMT']
+    .find((name) => available.has(name)) || TIMEZONES.zones[0].zonename;
 }
 function currentTimezone() {
   return TIMEZONES.zones.find((zone) => zone.zonename === state.timezone) ||
-    TIMEZONES.zones.find((zone) => zone.zonename === 'Asia/Shanghai');
+    TIMEZONES.zones.find((zone) => zone.zonename === 'Etc/GMT') || TIMEZONES.zones[0];
 }
 let timezoneActive = -1;
 function timezoneSearchText(zone) {

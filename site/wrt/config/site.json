@@ -46,7 +46,7 @@
     }
   },
   "ui": {
-    "defaultLanguage": "en",
+    "defaultLanguage": "auto",
     "colorMode": "auto"
   },
   "firmware": {

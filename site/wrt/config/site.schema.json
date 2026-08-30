@@ -162,7 +162,8 @@
       "required": ["defaultLanguage", "colorMode"],
       "properties": {
         "defaultLanguage": {
-          "enum": ["auto", "zh-CN", "en"]
+          "enum": ["auto"],
+          "$comment": "Retained for configuration compatibility; the browser chooses the language from navigator.languages and falls back to English when unmatched."
         },
         "colorMode": {
           "enum": ["auto", "light", "dark"]

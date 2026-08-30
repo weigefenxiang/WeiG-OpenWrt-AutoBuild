@@ -92,6 +92,7 @@ const state = {
   siteVersion: 'v----------',
   siteConfigReady: false,
   buildMeta: null,
+  catalogBindings: Object.freeze({}),
   importedConfig: null,
   importedConfigId: '',
 };
@@ -103,6 +104,7 @@ let CATALOG_LOADER_MODULE = null, CATALOG_SCHEMA6_MODULE = null, BUILD_IDENTITY_
 let PROFILE_BASELINE_MODULE = null, PROFILE_BASELINE_STORE = null, ACTIVE_PROFILE_BASELINE = null;
 let profileBaselineKey = '', catalogProfileBaselineLoadingPromise = null;
 let MENU_CATALOG_DATA_REF = 'catalog-data';
+let MENU_CATALOG_BINDING = null;
 let catalogShardLoader = null, catalogMenuLoadingPromise = null;
 let catalogHiddenLoadingPromise = null, catalogHelpLoadingPromise = null, packageMirrorsPromise = null;
 let menuCatalogKey = '', menuLoadingKey = '', menuCatalogSeq = 0, menuCatalogPromise = null;
@@ -148,6 +150,8 @@ let catalogLocatorEntryCache = null;
 let catalogStateRevision = 0, catalogContextCache = new Map(), catalogContextCacheBypass = false;
 let compatibilityPrefetchTimer = null;
 let catalogApplicationsPromise = null, catalogApplicationsDocument = null;
+let catalogPackageSizesPromise = null, catalogPackageSizesPromiseKey = '';
+let catalogPackageSizesKey = '', catalogPackageSizesDocument = null;
 let catalogApplicationsLoadState = 'loading', catalogApplicationsError = '';
 let selfTestViewToken = 0;
 let catalogStartupPromise = null, catalogApplicationsDemanded = false, catalogApplicationsObserver = null;

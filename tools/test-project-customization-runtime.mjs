@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 const ROOT = join(import.meta.dirname, '..');
 const controller = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'core', 'application-controller.js'), 'utf8');
+const workspace = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'plugins', 'workspace-controller.js'), 'utf8');
 const dataLoader = readFileSync(join(ROOT, 'site', 'wrt', 'lib', 'core', 'data-loader.js'), 'utf8');
 const siteConfig = JSON.parse(readFileSync(join(ROOT, 'site', 'wrt', 'config', 'site.json'), 'utf8'));
 const html = readFileSync(join(ROOT, 'site', 'wrt', 'index.html'), 'utf8');
@@ -44,6 +45,14 @@ assert.match(controller, /if \(links\.blog\)/,
   'project blog links must accept HTTPS only');
 assert.match(controller, /PROJECT = await loadSiteConfig\(\)/,
   'the controller must consume the validated site projection');
+const projectCustomizationBody = controller.match(
+  /async function applyProjectCustomization\(\) \{([\s\S]*?)\n\}\n\nfunction applyProjectCatalogDefaults/,
+)?.[1] || '';
+assert.doesNotMatch(projectCustomizationBody, /defaultLanguage|firmware\.timezone|state\.lang\s*=|state\.timezone\s*=/,
+  'project customization must not override browser-selected language or timezone');
+assert.match(controller,
+  /await initializeI18n\(\);[\s\S]*?TIMEZONES = await loadJson\('timezones\.json'\);\s+initializeTimezone\(\);\s+await applyProjectCustomization\(\);/,
+  'browser language and timezone detection must run before project defaults');
 assert.doesNotMatch(controller, /loadJson\(['"]project\.json['"]\)|data[\\/]project\.json/,
   'the browser must not consume the removed generated project projection');
 assert.match(controller, /PROJECT = null;[\s\S]*state\.buildMeta = null;[\s\S]*updateSubmitGate\?\.\(\)/,
@@ -83,7 +92,7 @@ assert.match(parser, /project build job policy must be auto or an integer/,
   'invalid generated job policy must fail closed');
 assert.match(parser, /Number\.isInteger\(value\)/,
   'generated job policy must reject numeric strings');
-assert.match(parser, /固件主题不在当前 Catalog\/Kconfig 范围/,
+assert.match(parser, /Firmware theme is outside the current Catalog\/Kconfig scope/,
   'explicit unavailable themes must fail closed');
 assert.match(admission, /loadProjectConfiguration/,
   'admission must use the foundation project configuration loader');
@@ -93,6 +102,46 @@ assert.doesNotMatch(admission, /site[\\/]wrt[\\/]data[\\/]project\.json/,
   'admission must not consume the generated browser projection');
 assert.doesNotMatch(controller, /config[\\/]build\.json|compileJobs|downloadJobs|publicActiveBuilds/,
   'the browser must not consume root build policy');
+
+const initializeTimezoneSource = workspace.match(/function initializeTimezone\(\) \{[\s\S]*?\n\}/)?.[0] || '';
+assert.match(workspace, /function browserTimezone\(\)/,
+  'timezone initialization must have a browser detection helper');
+assert.match(initializeTimezoneSource, /const saved = localStorage\.getItem\('wrt_timezone'\) \|\| '';/);
+assert.match(initializeTimezoneSource, /const detected = browserTimezone\(\);/);
+assert.match(initializeTimezoneSource, /state\.timezone = \[saved, detected, equivalent, 'Etc\/GMT'\]/,
+  'timezone fallback order must remain saved, exact browser, same offset, then Etc\/GMT');
+
+const initializeTimezone = Function(
+  'TIMEZONES', 'state', 'localStorage', 'browserTimezone', 'timezoneOffset',
+  `return ${initializeTimezoneSource}`,
+);
+const resolveInitialTimezone = ({ saved = '', detected = '', zones, offsets = {} }) => {
+  const state = { timezone: '' };
+  const storage = { getItem: (key) => key === 'wrt_timezone' ? saved : null };
+  const browser = () => detected;
+  const offset = (name) => offsets[name] || '+00:00';
+  initializeTimezone({ zones }, state, storage, browser, offset)();
+  return state.timezone;
+};
+const timezoneRows = (names) => names.map((zonename) => ({ zonename }));
+assert.equal(resolveInitialTimezone({
+  saved: 'Saved/Zone', detected: 'Browser/Zone',
+  zones: timezoneRows(['Saved/Zone', 'Browser/Zone', 'Etc/GMT']),
+}), 'Saved/Zone', 'saved timezone must take precedence over browser detection');
+assert.equal(resolveInitialTimezone({
+  saved: 'Missing/Zone', detected: 'Browser/Zone',
+  zones: timezoneRows(['Browser/Zone', 'Same/Offset', 'Etc/GMT']),
+}), 'Browser/Zone', 'an exact browser timezone must beat same-offset fallback');
+assert.equal(resolveInitialTimezone({
+  saved: 'Missing/Zone', detected: 'Browser/Zone',
+  zones: timezoneRows(['Same/Offset', 'Etc/GMT']),
+  offsets: { 'Browser/Zone': '+08:00', 'Same/Offset': '+08:00' },
+}), 'Same/Offset', 'same-offset timezone must be selected when exact browser zone is unavailable');
+assert.equal(resolveInitialTimezone({
+  saved: 'Missing/Zone', detected: 'Unknown/Zone',
+  zones: timezoneRows(['Asia/Shanghai', 'Etc/GMT']),
+  offsets: { 'Unknown/Zone': '+09:00', 'Asia/Shanghai': '+08:00', 'Etc/GMT': '+00:00' },
+}), 'Etc/GMT', 'Etc/GMT must be the final named timezone fallback');
 assert.match(workflow, /DEFAULT_ROOT_PASSWORD: \$\{\{ secrets\.DEFAULT_ROOT_PASSWORD \}\}/);
 assert.match(workflow, /::add-mask::\$RPW/);
 assert.match(workflow, /printf '%s' "\$RPW" \| openssl passwd -6 -stdin/,

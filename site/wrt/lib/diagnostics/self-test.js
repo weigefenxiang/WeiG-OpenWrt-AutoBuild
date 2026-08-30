@@ -98,7 +98,7 @@ async function runSelfTest() {
     if (viewToken !== selfTestViewToken) return;
     catalogDataStatus = {
       status: applications.items.length ? 'ok' : 'fail',
-      message: `${MENU_CATALOG_DATA_REF} · ${applications.items.length} curated applications`,
+      message: `${MENU_CATALOG_DATA_REF} · ${applications.items.length} application metadata rows`,
     };
     refreshCatalogDataStatus();
   } catch (error) {

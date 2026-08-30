@@ -36,12 +36,14 @@ node tools/dev-assistant.mjs prepare
 | --- | --- | --- |
 | `site/wrt/config/site.json` → `project` | `displayName`、`shortName`、仓库地址、博客地址 | 只用于站点展示和链接；不会改变网关身份、`[build]` 协议或 Run/Artifact 标题格式 |
 | `site/wrt/config/site.json` → `catalog` | Catalog 仓库、发布标签、Source/Branch 首选顺序、首选 Target selector、加载队列 | Source、Branch、Target/Profile、插件、Kconfig 和兼容性事实仍由 Catalog 数据负责，不在这里维护清单 |
-| `site/wrt/config/site.json` → `ui` | 默认语言、颜色模式 | 仅控制网页初始外观 |
-| `site/wrt/config/site.json` → `firmware` | LAN 地址、时区、主题、NTP、软件包镜像 | 只提供公开固件默认值；敏感内容不得写入配置 |
+| `site/wrt/config/site.json` → `ui` | 浏览器自动语言、颜色模式 | `defaultLanguage` 保留为兼容字段并固定为 `auto`；按浏览器语言选择，无匹配时使用英文 |
+| `site/wrt/config/site.json` → `firmware` | LAN 地址、时区、主题、NTP、软件包镜像 | `timezone` 仍是构建请求缺省值，不覆盖网页浏览器时区检测；敏感内容不得写入配置 |
 | `site/wrt/config/site.json` → `build` | 默认构建标识 `defaultTag` | 只提供网页默认值，不能绕过构建请求校验 |
 | `config/build.json` → `password` | `mode`：`prompt`、`empty` 或 `secret` | 仅由构建端读取，不属于网页配置 |
 | `config/build.json` → `jobs` | `compile`、`download` 并发（整数或 `auto`） | 仅控制构建端并发，不能改变请求语义 |
 | `config/build.json` → `admission` | `publicActiveBuilds` | 仅控制公共构建准入上限 |
+
+网页语言由浏览器 `navigator.languages` 自动选择；没有匹配翻译时回退英文。网页时区按“已保存选择 → 浏览器精确匹配 → 相同 UTC 偏移 → `Etc/GMT`”选择；`firmware.timezone` 仍保留为构建请求的默认值，但不会覆盖这次浏览器检测。
 
 密码模式为 `prompt` 时由提交者填写；`empty` 表示明确使用空密码；`secret` 模式必须在该仓库的 Secrets 中配置 `DEFAULT_ROOT_PASSWORD`。实际密码绝不能写入 `config/build.json`、站点文件、构建请求、Issue 或日志。
 

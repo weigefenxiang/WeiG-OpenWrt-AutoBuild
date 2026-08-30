@@ -139,10 +139,95 @@ async function fetchCatalogIndex(signal, forceRefresh = false) {
   index.catalogProvider = remote.provider;
   return { data: index, url: remote.url, provider: remote.provider, diagnostics: remote.diagnostics };
 }
-function catalogApplicationsPluginData(document) {
+function catalogPackageSizeMap(document = catalogPackageSizesDocument) {
+  const map = new Map();
+  for (const row of document?.rows || []) {
+    if (!Array.isArray(row) || !/^[A-Za-z0-9][A-Za-z0-9_.+@-]{0,127}$/.test(String(row[0] || ''))) continue;
+    const archiveBytes = row[1];
+    const installedBytes = row[2] == null ? null : row[2];
+    if (!Number.isSafeInteger(archiveBytes) || archiveBytes < 0 ||
+        (installedBytes != null && (!Number.isSafeInteger(installedBytes) || installedBytes < 0))) continue;
+    map.set(row[0], { archiveBytes, installedBytes });
+  }
+  return map;
+}
+function validateCatalogPackageSizes(document, catalog = MENU_CATALOG) {
+  const expectedSource = catalog?.source || {};
+  if (!document || Number(document.schema) !== 1 || document.kind !== 'package-sizes' ||
+      document.encoding !== 'positional-rows-v1' ||
+      JSON.stringify(document.fields) !== JSON.stringify(['package', 'archiveBytes', 'installedBytes']) ||
+      !Array.isArray(document.rows) || document.source?.id !== expectedSource.id ||
+      document.source?.branch !== expectedSource.branch || document.source?.commit !== expectedSource.commit ||
+      catalogPackageSizeMap(document).size !== document.rows.length) {
+    throw new Error('Catalog package-size shard does not match the active Source / Branch');
+  }
+  return document;
+}
+function validateCatalogBranchApplications(catalog) {
+  const required = Array.isArray(catalog?.capabilities) &&
+    catalog.capabilities.includes('branch-applications-v1');
+  const projection = catalog?.applications;
+  if (!projection) {
+    if (required) throw new Error('Catalog branch application projection is missing');
+    return null;
+  }
+  if (Number(projection.schema) !== 1 || projection.kind !== 'branch-applications' ||
+      projection.encoding !== 'positional-rows-v1' ||
+      JSON.stringify(projection.fields) !== JSON.stringify(['symbol', 'package', 'group', 'hot']) ||
+      !Array.isArray(projection.rows)) {
+    throw new Error('Catalog branch application projection has an invalid contract');
+  }
+  const symbols = new Set();
+  const packages = new Set();
+  for (const row of projection.rows) {
+    const [symbol, packageName, group, hot] = Array.isArray(row) ? row : [];
+    if (row?.length !== 4 || symbol !== `PACKAGE_${packageName}` ||
+        !/^luci-app-[A-Za-z0-9_.+@-]+$/.test(String(packageName || '')) ||
+        !String(group || '').trim() || ![0, 1].includes(hot) ||
+        symbols.has(symbol) || packages.has(packageName)) {
+      throw new Error('Catalog branch application projection contains an invalid row');
+    }
+    symbols.add(symbol);
+    packages.add(packageName);
+  }
+  return projection;
+}
+function catalogApplicationsPluginData(document, catalog = MENU_CATALOG) {
+  const metadata = new Map((document?.items || []).map((item) => [item.package, item]));
+  const sizes = catalogPackageSizeMap();
+  const branchRows = catalog?.applications?.kind === 'branch-applications' &&
+    catalog.applications?.encoding === 'positional-rows-v1' &&
+    JSON.stringify(catalog.applications?.fields) === JSON.stringify(['symbol', 'package', 'group', 'hot'])
+    ? catalog.applications.rows || [] : null;
+  if (branchRows) {
+    const plugins = branchRows.map(([symbol, packageName, group, hot]) => {
+      const item = metadata.get(packageName) || {};
+      const observed = sizes.get(packageName);
+      return {
+        id: packageName.slice('luci-app-'.length),
+        pkg: packageName,
+        catalogOnly: true,
+        catalogCandidates: [packageName],
+        group: String(group || 'Applications'),
+        hot: hot === 1 || item.hot === true,
+        archiveBytes: observed?.archiveBytes ?? null,
+        installedBytes: observed?.installedBytes ?? null,
+        sizeBytes: observed?.installedBytes ?? observed?.archiveBytes ?? null,
+        name: item.titleZh || item.titleEn || packageName,
+        desc: item.usageZh || item.usageEn || '',
+        nameI18n: { en: item.titleEn || packageName, 'zh-CN': item.titleZh || '', ...(item.titleI18n || {}) },
+        descI18n: { en: item.usageEn || '', 'zh-CN': item.usageZh || '', ...(item.usageI18n || {}) },
+        symbol,
+      };
+    });
+    const used = new Set(plugins.map((item) => item.group));
+    const groups = [...(document?.groups || []).filter((group) => used.has(group))];
+    for (const group of [...used].sort((a, b) => a.localeCompare(b))) if (!groups.includes(group)) groups.push(group);
+    return { groups, plugins };
+  }
   return {
-    groups: [...(document.groups || [])],
-    plugins: (document.items || []).map((item) => ({
+    groups: [...(document?.groups || [])],
+    plugins: (document?.items || []).map((item) => ({
       id: item.id,
       pkg: item.package,
       group: item.group,
@@ -155,6 +240,48 @@ function catalogApplicationsPluginData(document) {
     })),
   };
 }
+function refreshCatalogBranchApplications() {
+  if (!MENU_CATALOG?.applications?.rows) return false;
+  resetPluginWorkspace(catalogApplicationsPluginData(catalogApplicationsDocument || { groups: [], items: [] }));
+  renderGroups();
+  updateStats();
+  return true;
+}
+async function ensureCatalogPackageSizes() {
+  const key = menuCatalogKey;
+  if (!MENU_CATALOG?.splitAssets || !catalogShardLoader || !key) return null;
+  if (catalogPackageSizesKey === key && catalogPackageSizesDocument) return catalogPackageSizesDocument;
+  if (catalogPackageSizesPromise && catalogPackageSizesPromiseKey === key) return catalogPackageSizesPromise;
+  const catalog = MENU_CATALOG;
+  const loader = catalogShardLoader;
+  const run = (async () => {
+    try {
+      const document = validateCatalogPackageSizes(await loader('packageSizes'), catalog);
+      if (MENU_CATALOG !== catalog || menuCatalogKey !== key) return null;
+      catalogPackageSizesDocument = document;
+      catalogPackageSizesKey = key;
+      refreshCatalogBranchApplications();
+      return document;
+    } catch (error) {
+      console.warn('[Catalog package sizes]', error);
+      if (MENU_CATALOG === catalog && menuCatalogKey === key) {
+        catalogPackageSizesDocument = null;
+        catalogPackageSizesKey = key;
+        refreshCatalogBranchApplications();
+      }
+      return null;
+    }
+  })();
+  const settled = run.finally(() => {
+    if (catalogPackageSizesPromise === settled) {
+      catalogPackageSizesPromise = null;
+      catalogPackageSizesPromiseKey = '';
+    }
+  });
+  catalogPackageSizesPromise = settled;
+  catalogPackageSizesPromiseKey = key;
+  return settled;
+}
 async function ensureCatalogApplications(forceRefresh = false) {
   if (catalogApplicationsPromise) return catalogApplicationsPromise;
   if (catalogApplicationsDocument && !forceRefresh) return catalogApplicationsDocument;
@@ -166,6 +293,7 @@ async function ensureCatalogApplications(forceRefresh = false) {
       const result = await CATALOG_LOADER.fetchApplications({ forceRefresh });
       catalogApplicationsDocument = result.applications;
       catalogApplicationsLoadState = 'ready';
+      await ensureCatalogPackageSizes();
       resetPluginWorkspace(catalogApplicationsPluginData(result.applications));
       reconcileCatalogReadyState();
       return result.applications;
@@ -1066,6 +1194,7 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
     );
     const catalog = remote.data;
     catalog.loadedFrom = remote.url;
+    validateCatalogBranchApplications(catalog);
     if (seq !== menuCatalogSeq || abortController.signal.aborted) return null;
     MENU_INDEX = remote.index;
     renderCatalogBuildInfo();
@@ -1081,9 +1210,12 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
     if (catalog.splitAssets) catalog.menu = CATALOG_SCHEMA6_MODULE.createRuntimeMenu(CATALOG_MODEL);
     MENU_CATALOG = catalog;
     menuCatalogKey = key;
+    catalogPackageSizesDocument = null;
+    catalogPackageSizesKey = '';
     if (catalog.splitAssets) buildMenuStartupIndexes(catalog);
     else buildMenuIndexes(catalog);
     resetCatalogSelectionLayers();
+    refreshCatalogBranchApplications();
     menuImportedOriginal.clear();
     menuImportedNonDefault.clear();
     resetMenuNavigation();
@@ -1095,6 +1227,7 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
       await applyCatalogTarget();
     }
     ensureCatalogMenuLoaded(false).catch((error) => console.warn('[Catalog menu prefetch]', error));
+    if (catalogApplicationsDocument) ensureCatalogPackageSizes();
     scheduleCatalogIdlePrefetch();
     return catalog;
   })().catch((error) => {
