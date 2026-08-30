@@ -721,6 +721,41 @@ assert(compatibilitySchema4.compatibility.schema === 4 && compatibilitySchema4.c
   compatibilitySchema4.compatibility.rules[0].buildDependency.triggerPackages.length === 4,
   'schema-4 compatibility asset was not verified and decoded');
 
+const compatibilitySchema5Document = {
+  schema: 5,
+  rules: [{
+    id: 'BLD-PREVENTIVE', issue: 'build-failure', match: 'all-selected', policy: 'preventive',
+    environments: [{ source: '*', branch: '*', packageAvailability: 'if-present', targetScope: {} }],
+    evidence: [{
+      source: 'ImmortalWrt', branch: 'openwrt-25.12', sourceCommit: 'a'.repeat(40), refs: ['run:4'],
+    }],
+    packages: ['dockerd'],
+    failure: { phase: 'package-compile', cause: 'package-caused', code: 'compile-failure' },
+    buildDependency: { package: 'dockerd', triggerPackages: ['docker', 'containerd', 'runc', 'tini'] },
+  }],
+};
+const compatibilitySchema5Payload = compressedDocument(compatibilitySchema5Document);
+const compatibilitySchema5Index = indexFor(asset, valid, commit, 'a'.repeat(40));
+compatibilitySchema5Index.assets = {
+  compatibility: {
+    asset: 'compatibility.json.gz', hash: compatibilitySchema5Payload.hash,
+    bytes: compatibilitySchema5Payload.bytes.length,
+    jsonBytes: new TextEncoder().encode(JSON.stringify(compatibilitySchema5Document)).byteLength,
+    schema: 5, rules: 1,
+  },
+};
+const compatibilitySchema5Loader = createCatalogLoader({
+  repository: 'owner/catalog', engine: { createCatalogModel },
+  fetchImpl: async (url) => url.includes('index.json')
+    ? new Response(JSON.stringify(compatibilitySchema5Index), { status: 200 })
+    : new Response(compatibilitySchema5Payload.bytes, { status: 200 }),
+  cacheStorage: fakeCaches(), subtle: null,
+});
+const compatibilitySchema5 = await compatibilitySchema5Loader.fetchCompatibility();
+assert(compatibilitySchema5.compatibility.schema === 5 && compatibilitySchema5.contract.schema === 5 &&
+  compatibilitySchema5.compatibility.rules[0].policy === 'preventive',
+  'schema-5 preventive compatibility asset was not verified and decoded');
+
 const applicationsDocument = {
   schema: 1,
   groups: ['Network'],
@@ -821,7 +856,7 @@ assert(!previewCalls.some((url) => url.includes('/releases/')),
 for (const mutate of [
   (value) => { value.assets.compatibility.schema = 1; },
   (value) => { value.assets.compatibility.schema = 0; },
-  (value) => { value.assets.compatibility.schema = 5; },
+  (value) => { value.assets.compatibility.schema = 6; },
   (value) => { delete value.assets.compatibility.jsonBytes; },
   (value) => { value.assets.compatibility.jsonBytes = 512 * 1024 + 1; },
   (value) => { value.assets.compatibility.bytes = 512 * 1024 + 1025; },

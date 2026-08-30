@@ -476,6 +476,9 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
 
     const appendCompatibilitySummary = (body, { confirmation = false } = {}) => {
       const ownership = warning.rule.issue === 'file-ownership';
+      const preventive = warning.rule.policy === 'preventive';
+      const evidenceRefs = Array.isArray(warning.rule.refs) ? warning.rule.refs :
+        [...new Set((warning.rule.evidence || []).flatMap((row) => row.refs || []))];
       const card = document.createElement('section');
       card.className = `compatibility-summary${confirmation ? ' is-confirmation' : ''}`;
       const heading = document.createElement('h4');
@@ -484,12 +487,15 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       if (!ownership) {
         heading.textContent = confirmation ? t('runtime.45fb79e3ce0e') : t('runtime.d5505e8fb419');
       }
+      if (preventive) heading.textContent = confirmation
+        ? t('compatibility.preventive.confirmTitle') : t('compatibility.preventive.title');
       const copy = document.createElement('p');
       copy.className = 'compatibility-summary-copy';
       copy.textContent = confirmation ? t('runtime.1b3f772b7648') : t('runtime.4152b783f1ae');
       if (!ownership) {
         copy.textContent = confirmation ? t('runtime.ac90cc70b800') : t('runtime.9da7c55fb368');
       }
+      if (preventive) copy.textContent = t('compatibility.preventive.copy');
       const pathLabel = document.createElement('span');
       pathLabel.className = 'compatibility-path-label';
       pathLabel.textContent = t('runtime.ec3f3cc0b661');
@@ -505,7 +511,7 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       }
       if (!ownership) {
         const code = document.createElement('code');
-        code.textContent = t('runtime.6b4cd2636bff');
+        code.textContent = preventive ? t('compatibility.preventive.label') : t('runtime.6b4cd2636bff');
         paths.appendChild(code);
       }
       const metadata = document.createElement('p');
@@ -513,7 +519,7 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       metadata.textContent = [
         `${t('runtime.7d39a1536cbf')} ${warning.rule.id}`,
         ...(warning.rule.failure ? [`${warning.rule.failure.cause} · ${warning.rule.failure.code}`] : []),
-        `${t('runtime.b95bb82a0431')} ${warning.rule.refs.join(' · ')}`,
+        `${t('runtime.b95bb82a0431')} ${evidenceRefs.join(' · ')}`,
       ].join(' · ');
       summaryLine.append(pathLabel, metadata);
       card.append(heading, copy, summaryLine, paths);

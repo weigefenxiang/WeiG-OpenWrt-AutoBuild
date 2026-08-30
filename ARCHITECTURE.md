@@ -14,7 +14,7 @@ Catalog 是数据层：
 
 - 自动发现 Source/Branch；
 - 提取 Target/Profile、Kconfig menu、symbol/type、默认值、依赖和帮助；
-- 发布 schema 2/3/4 兼容性证据、精选应用及跨源体积观测；
+- 发布 schema 2/3/4/5 兼容性证据、精选应用及跨源体积观测；
 - 提供手动包级探测工具。
 
 AutoBuild 是通用工具层：
@@ -134,7 +134,7 @@ Advanced menuconfig preserves parentless Catalog `path: []` records under the sy
 
 ## 5. Compatibility evidence / 兼容性证据
 
-`compatibility.json.gz` accepts schema 2, schema 3, and schema 4. Schema 2 keeps the legacy rule shape; schema 3 may add structured source-commit, target-scope, and failure evidence. Schema 4 may add a verified rule-level `buildDependency` object (`package` plus `triggerPackages`) for a build-failure rule; the build package must also be listed in `packages`, trigger packages are alternatives, and exact source commits are required. Rules use generic fields:
+`compatibility.json.gz` accepts schemas 2–5. Schema 2 keeps the legacy shape; schema 3 adds exact source-commit, target-scope, and failure evidence; schema 4 adds verified `buildDependency` data. Schema 5 can separate an explicitly reviewed global `preventive` applicability policy from exact `evidence`: wildcard environments match only when the failed package exists, while evidence continues to name only observed Source/Branch/commit identities. Rules use generic fields:
 
 - `issue`: `file-ownership` or `build-failure`;
 - `match`: `all-installed` or `all-selected`;

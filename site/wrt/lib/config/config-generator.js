@@ -69,6 +69,17 @@ function catalogTargetConfig() {
   return applyMenuConfig(PROFILE_BASELINE_MODULE.serializeConfigMap(ACTIVE_PROFILE_BASELINE.values));
 }
 
+function importedConfigOnCurrentBaseline(text) {
+  if (state.device.id !== 'catalog-target') return text;
+  if (!ACTIVE_PROFILE_BASELINE || !PROFILE_BASELINE_MODULE || !CATALOG_MODEL?.bySymbol) return text;
+  const merged = PROFILE_BASELINE_MODULE.mergeConfigWithProfileBaseline(
+    ACTIVE_PROFILE_BASELINE,
+    text,
+    { allowedSymbols: new Set(CATALOG_MODEL.bySymbol.keys()) },
+  );
+  return PROFILE_BASELINE_MODULE.serializeConfigMap(merged.values);
+}
+
 function applyProfilePackageOverrides(text) {
   for (const [packageName, mode] of profilePackageOverrides) {
     if (!/^[A-Za-z0-9._+@-]+$/.test(packageName)) {
@@ -148,7 +159,7 @@ async function generateConfigText() {
   let raw;
   if (state.importedConfig &&
       (state.importedConfigId === configId || ['custom-target', 'catalog-target'].includes(state.device.id))) {
-    raw = state.importedConfig;
+    raw = importedConfigOnCurrentBaseline(state.importedConfig);
   } else if (state.device.id === 'catalog-target') {
     raw = catalogTargetConfig();
   } else {

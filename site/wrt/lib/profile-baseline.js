@@ -324,6 +324,24 @@ export function serializeConfigMap(input) {
   return `${lines.join('\n')}\n`;
 }
 
+export function mergeConfigWithProfileBaseline(baseline, configText, { allowedSymbols = null } = {}) {
+  if (!baseline?.values || !(baseline.values instanceof Map)) {
+    throw new Error('Native Profile baseline is required');
+  }
+  const allowed = allowedSymbols instanceof Set ? allowedSymbols : new Set(allowedSymbols || []);
+  const imported = parseConfigMap(configText);
+  const values = new Map(baseline.values);
+  const ignoredSymbols = [];
+  for (const [symbol, value] of imported) {
+    if (allowed.size && !allowed.has(symbol)) {
+      ignoredSymbols.push(symbol);
+      continue;
+    }
+    values.set(symbol, value);
+  }
+  return { values, ignoredSymbols };
+}
+
 export function diffProfileBaseline(baseline, finalValues, { allowedSymbols = null } = {}) {
   const base = baseline?.values instanceof Map ? baseline.values : new Map();
   const finalMap = finalValues instanceof Map ? finalValues : new Map(Object.entries(finalValues || {}));

@@ -4,6 +4,7 @@ import {
   applyProfileOverrides,
   createProfileBaselineStore,
   diffProfileBaseline,
+  mergeConfigWithProfileBaseline,
   parseConfigMap,
   serializeConfigMap,
   validateProfileBaselineDocument,
@@ -87,6 +88,21 @@ const expandedReconstructed = applyProfileOverrides(a, expandedDelta, { allowedS
 assert.deepEqual([...expandedReconstructed], [...expanded]);
 assert.throws(() => diffProfileBaseline(a, expanded), /outside the active Catalog/);
 assert.throws(() => applyProfileOverrides(a, [['UNKNOWN_OPTION', 'y']], { allowedSymbols }), /outside the active Catalog/);
+
+const importedOverlay = mergeConfigWithProfileBaseline(a, [
+  '# CONFIG_FEATURE is not set',
+  'CONFIG_DYNAMIC_OPTION=y',
+  'CONFIG_REMOVED_FROM_CURRENT=y',
+].join('\n'), { allowedSymbols });
+assert.equal(importedOverlay.values.get('FEATURE'), 'n');
+assert.equal(importedOverlay.values.get('ROOTFS_SIZE'), '160',
+  'a current baseline symbol missing from an imported config was treated as a deletion');
+assert.equal(importedOverlay.values.get('DYNAMIC_OPTION'), 'y');
+assert(!importedOverlay.values.has('REMOVED_FROM_CURRENT'));
+assert.deepEqual(importedOverlay.ignoredSymbols, ['REMOVED_FROM_CURRENT']);
+assert.deepEqual(diffProfileBaseline(a, importedOverlay.values, { allowedSymbols }), [
+  ['DYNAMIC_OPTION', 'y'], ['FEATURE', 'n'],
+]);
 
 const text = serializeConfigMap(reconstructed);
 assert.match(text, /^# CONFIG_FEATURE is not set$/m);

@@ -88,9 +88,9 @@ Advanced menuconfig 的 `Root Kconfig options / 根级 Kconfig 选项` 是 `path
 
 通用回归至少覆盖：bool、tristate、string empty/non-empty、literal `n`、escaping、int、hex、unknown symbol，以及默认表达式的条件、括号、`&&`/`||`、deferred 和闭世界边界。
 
-## 5. compatibility schema 2/3/4
+## 5. compatibility schema 2/3/4/5
 
-规则文档接受 schema 2、schema 3 和 schema 4。schema 2 保留旧规则形状；schema 3 可增加 `sourceCommits`、`targetScope` 和结构化 `failure` 证据。schema 4 还可在构建失败规则上增加规则级 `buildDependency`，其中 `package` 必须列在 `packages` 中，`triggerPackages` 必须为非空列表，并且必须绑定精确 `sourceCommits`。构建依赖规则在直接 `packages` 条件或任意触发包满足该规则匹配模式时命中；共享 Kconfig 执行器会生成解除全部当前触发入口的最少有序用户步骤，依赖联动变化仍单独列为自动变化。Source 可为具体 ID 或单独的 `*`；Branch 可为精确名或 glob。`*` Source 不得和具体 Source 混用。规则支持一个软件包，因此已知单包构建失败不需要伪造“两包冲突”。浏览器必须保留已加载文档的实际 schema，并校验 index 合同中的 schema、SHA-256、压缩字节数、JSON 字节数和规则数。
+规则文档接受 schema 2–5。schema 2 保留旧规则形状；schema 3 可增加 `sourceCommits`、`targetScope` 和结构化 `failure`；schema 4 可增加规则级 `buildDependency`，并要求精确 `sourceCommits`。schema 5 还允许 `policy: "preventive"`：`environments` 独立定义通配适用范围，`packageAvailability: "if-present"` 使缺少失败目标的环境直接不适用，`evidence` 则只保存真实观察到故障的精确 Source、Branch、提交和引用。构建依赖规则在当前 Catalog 中实际存在的直接包或触发包满足匹配模式时命中；共享 Kconfig 执行器会生成解除全部当前活动参与者的最少有序步骤，缺失参与者既不报错也不进入方案。普通规则的 Source 可为具体 ID 或单独的 `*`，Branch 可为精确名或 glob。浏览器必须保留实际 schema，并校验 index 合同的 schema、SHA-256、压缩字节数、JSON 字节数和规则数。
 
 执行器固定为：
 

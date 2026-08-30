@@ -135,6 +135,10 @@ expect(app.includes('function schema6TargetIdentity(target = state.device?.targe
   app.includes('const allowedSymbols = CATALOG_MODEL?.bySymbol instanceof Map'),
   'schema6 request Target identity is not minimal or schema6 import lost the active Catalog symbol allowlist');
 
+expect(app.includes("function importedConfigOnCurrentBaseline(text) {\n  if (state.device.id !== 'catalog-target') return text;") &&
+  app.includes('PROFILE_BASELINE_MODULE.mergeConfigWithProfileBaseline('),
+  'Profile baseline overlay must apply only to Catalog targets and must not contaminate custom-target uploads');
+
 const schema6BuildStart = app.indexOf("card('submit.m1.title'");
 const schema6BuildEnd = app.indexOf("card('submit.existing.title'", schema6BuildStart);
 const schema6BuildContract = schema6BuildStart >= 0 && schema6BuildEnd > schema6BuildStart

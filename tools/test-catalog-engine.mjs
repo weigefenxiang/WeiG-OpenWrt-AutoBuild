@@ -1377,8 +1377,83 @@ expectThrow(() => normalizeCompatibilityDocument({ ...buildDependencyRule, schem
   'schema-3 compatibility accepted buildDependency');
 expectThrow(() => normalizeCompatibilityDocument({ ...buildDependencyRule, schema: 2 }), /requires compatibility schema 4|unsupported field/i,
   'schema-2 compatibility accepted buildDependency');
-expectThrow(() => normalizeCompatibilityDocument({ ...buildDependencyRule, schema: 5 }), /schema 2, 3, or 4/i,
+expectThrow(() => normalizeCompatibilityDocument({ ...buildDependencyRule, schema: 6 }), /schema 2, 3, 4, or 5/i,
   'unknown compatibility schema was accepted');
+
+const preventiveBuildDependencyRule = {
+  schema: 5,
+  rules: [{
+    id: 'BLD-PREVENTIVE', issue: 'build-failure', match: 'all-selected', policy: 'preventive',
+    environments: [{ source: '*', branch: '*', packageAvailability: 'if-present', targetScope: {} }],
+    evidence: [{ source: 'Demo', branch: 'stable', sourceCommit: 'a'.repeat(40), refs: ['run:preventive'] }],
+    packages: ['build-target'],
+    failure: { phase: 'package-compile', cause: 'package-caused', code: 'fixture-preventive-build-risk' },
+    buildDependency: {
+      package: 'build-target', triggerPackages: ['trigger-a', 'trigger-b', 'trigger-dependent'],
+    },
+  }],
+};
+const preventiveWarningResult = evaluateCompatibilityRules(
+  buildDependencyModel, preventiveBuildDependencyRule, singleBuildDependencyValues,
+  { sourceId: 'FutureSource', branchName: 'future-branch', sourceCommit: '' },
+);
+assert(preventiveWarningResult.warnings.length === 1 && preventiveWarningResult.diagnostics.length === 0 &&
+  preventiveWarningResult.warnings[0].rule.policy === 'preventive',
+  'schema-5 preventive wildcard policy did not cover a future Source/Branch independently of evidence identity');
+
+const buildDependencyMissingCatalog = structuredClone(buildDependencyCatalog);
+buildDependencyMissingCatalog.relations.records = buildDependencyMissingCatalog.relations.records
+  .filter((record) => record.package !== 'build-target');
+const buildDependencyMissingModel = createCatalogModel(buildDependencyMissingCatalog);
+const missingPreventivePackage = evaluateCompatibilityRules(
+  buildDependencyMissingModel, preventiveBuildDependencyRule, singleBuildDependencyValues,
+  { sourceId: 'SourceWithoutPackage', branchName: 'main' },
+);
+assert(missingPreventivePackage.warnings.length === 0 && missingPreventivePackage.diagnostics.length === 0,
+  'schema-5 if-present policy did not skip a Source without the build package');
+
+const partialTriggerCatalog = structuredClone(buildDependencyCatalog);
+partialTriggerCatalog.relations.records = partialTriggerCatalog.relations.records.filter((record) =>
+  !['trigger-b', 'trigger-dependent', 'ordinary-dependent'].includes(record.package));
+partialTriggerCatalog.relations.indexes.reverseDependencies = {};
+const partialTriggerModel = createCatalogModel(partialTriggerCatalog);
+const partialTriggerResult = evaluateCompatibilityRules(
+  partialTriggerModel, preventiveBuildDependencyRule, singleBuildDependencyValues,
+  { sourceId: 'PartialSource', branchName: 'main' },
+);
+assert(partialTriggerResult.warnings.length === 1 &&
+  partialTriggerResult.warnings[0].records.map((record) => record.package).join(',') === 'build-target,trigger-a',
+  'schema-5 if-present policy did not use only participants available in the active Catalog');
+const partialTriggerPlan = deriveCompatibilityPlans(
+  partialTriggerModel, singleBuildDependencyValues, partialTriggerResult.warnings[0],
+);
+assert(partialTriggerPlan.recommended?.requiredTargets.map((row) => row.package).join(',') === 'trigger-a',
+  'schema-5 preventive recommendation included a participant absent from the active Catalog');
+
+const multiRulePreventive = structuredClone(preventiveBuildDependencyRule);
+multiRulePreventive.rules.unshift({
+  id: 'OWN-MULTI', issue: 'file-ownership', match: 'all-installed',
+  scope: { Demo: ['stable'] }, packages: ['trigger-a', 'trigger-b'],
+  paths: ['/etc/config/multi'], refs: ['run:multi'],
+});
+const multiRuleValues = parseConfigDocument([
+  '# CONFIG_PACKAGE_build-target is not set',
+  'CONFIG_PACKAGE_trigger-a=y',
+  'CONFIG_PACKAGE_trigger-b=y',
+  '# CONFIG_PACKAGE_trigger-dependent is not set',
+].join('\n'));
+const multiRuleResult = evaluateCompatibilityRules(
+  buildDependencyModel, multiRulePreventive, multiRuleValues,
+  { sourceId: 'Demo', branchName: 'stable', sourceCommit: 'a'.repeat(40) },
+);
+assert(multiRuleResult.warnings.map((warning) => warning.rule.id).join(',') ===
+  'OWN-MULTI,BLD-PREVENTIVE',
+  'schema-5 evaluation did not return every simultaneously active compatibility rule');
+
+const invalidPreventive = structuredClone(preventiveBuildDependencyRule);
+delete invalidPreventive.rules[0].evidence;
+expectThrow(() => normalizeCompatibilityDocument(invalidPreventive), /evidence/i,
+  'schema-5 preventive policy accepted missing exact evidence');
 
 const wildcardCompatibility = structuredClone(buildFailure);
 wildcardCompatibility.rules[0].scope = { '*': ['openwrt-*'] };

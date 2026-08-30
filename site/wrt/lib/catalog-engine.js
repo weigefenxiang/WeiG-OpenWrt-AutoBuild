@@ -1696,8 +1696,11 @@ const COMPATIBILITY_DOCUMENT_KEYS = new Set(['schema', 'rules']);
 const COMPATIBILITY_RULE_KEYS_V2 = new Set(['id', 'issue', 'match', 'scope', 'if', 'packages', 'paths', 'refs']);
 const COMPATIBILITY_RULE_KEYS_V3 = new Set([...COMPATIBILITY_RULE_KEYS_V2, 'sourceCommits', 'targetScope', 'failure']);
 const COMPATIBILITY_RULE_KEYS_V4 = new Set([...COMPATIBILITY_RULE_KEYS_V3, 'buildDependency']);
+const COMPATIBILITY_RULE_KEYS_V5 = new Set([...COMPATIBILITY_RULE_KEYS_V4, 'policy', 'environments', 'evidence']);
 const COMPATIBILITY_BUILD_DEPENDENCY_KEYS = new Set(['package', 'triggerPackages']);
-const COMPATIBILITY_SCHEMAS = new Set([2, 3, 4]);
+const COMPATIBILITY_ENVIRONMENT_KEYS = new Set(['source', 'branch', 'packageAvailability', 'targetScope']);
+const COMPATIBILITY_EVIDENCE_KEYS = new Set(['source', 'branch', 'sourceCommit', 'targetScope', 'refs']);
+const COMPATIBILITY_SCHEMAS = new Set([2, 3, 4, 5]);
 const COMPATIBILITY_TARGET_SCOPE_KEYS = new Set(['system', 'subtarget', 'profile']);
 const COMPATIBILITY_FAILURE_KEYS = new Set(['phase', 'cause', 'code', 'observed']);
 const COMPATIBILITY_ID_RE = /^[A-Z][A-Z0-9-]{2,31}$/;
@@ -1740,6 +1743,82 @@ function normalizeCompatibilityTargetScope(value, label) {
   }
   if (!Object.keys(result).length) throw compatibilityError(`${label} must contain at least one target selector`);
   return result;
+}
+
+function normalizeCompatibilityEnvironmentTargetScope(value, label) {
+  if (!compatibilityObject(value)) throw compatibilityError(`${label} must be an object`);
+  if (!Object.keys(value).length) return {};
+  return normalizeCompatibilityTargetScope(value, label);
+}
+
+function normalizeCompatibilityEnvironments(value, label) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 64) {
+    throw compatibilityError(`${label} must contain 1-64 entries`);
+  }
+  const rows = value.map((row, index) => {
+    const rowLabel = `${label}[${index}]`;
+    if (!compatibilityObject(row)) throw compatibilityError(`${rowLabel} must be an object`);
+    compatibilityKeys(row, COMPATIBILITY_ENVIRONMENT_KEYS, rowLabel);
+    const source = String(row.source || '').trim();
+    const branch = String(row.branch || '').trim();
+    const packageAvailability = String(row.packageAvailability || 'required').trim();
+    if (!COMPATIBILITY_SOURCE_RE.test(source)) throw compatibilityError(`${rowLabel}.source is invalid`);
+    if (!COMPATIBILITY_BRANCH_RE.test(branch)) throw compatibilityError(`${rowLabel}.branch is invalid`);
+    if (!['required', 'if-present'].includes(packageAvailability)) {
+      throw compatibilityError(`${rowLabel}.packageAvailability is invalid`);
+    }
+    return {
+      source,
+      branch,
+      packageAvailability,
+      ...(row.targetScope === undefined ? {} : {
+        targetScope: normalizeCompatibilityEnvironmentTargetScope(row.targetScope, `${rowLabel}.targetScope`),
+      }),
+    };
+  });
+  if (new Set(rows.map((row) => JSON.stringify(row))).size !== rows.length) {
+    throw compatibilityError(`${label} contains duplicate entries`);
+  }
+  return rows;
+}
+
+function normalizeCompatibilityEvidence(value, label) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 64) {
+    throw compatibilityError(`${label} must contain 1-64 entries`);
+  }
+  const rows = value.map((row, index) => {
+    const rowLabel = `${label}[${index}]`;
+    if (!compatibilityObject(row)) throw compatibilityError(`${rowLabel} must be an object`);
+    compatibilityKeys(row, COMPATIBILITY_EVIDENCE_KEYS, rowLabel);
+    const source = String(row.source || '').trim();
+    const branch = String(row.branch || '').trim();
+    const sourceCommit = String(row.sourceCommit || '').trim().toLowerCase();
+    if (source === '*' || !COMPATIBILITY_SOURCE_RE.test(source)) {
+      throw compatibilityError(`${rowLabel}.source must be exact`);
+    }
+    if (branch.includes('*') || !COMPATIBILITY_BRANCH_RE.test(branch)) {
+      throw compatibilityError(`${rowLabel}.branch must be exact`);
+    }
+    if (!COMPATIBILITY_COMMIT_RE.test(sourceCommit)) {
+      throw compatibilityError(`${rowLabel}.sourceCommit is invalid`);
+    }
+    return {
+      source,
+      branch,
+      sourceCommit,
+      ...(row.targetScope === undefined ? {} : {
+        targetScope: normalizeCompatibilityEnvironmentTargetScope(row.targetScope, `${rowLabel}.targetScope`),
+      }),
+      refs: compatibilityStrings(row.refs, `${rowLabel}.refs`,
+        /^[A-Za-z0-9][A-Za-z0-9+_.:/@#-]{0,255}$/, 1, 8),
+    };
+  });
+  const identities = rows.map((row) =>
+    `${row.source}\0${row.branch}\0${row.sourceCommit}\0${JSON.stringify(row.targetScope || {})}`);
+  if (new Set(identities).size !== identities.length) {
+    throw compatibilityError(`${label} contains duplicate exact identities`);
+  }
+  return rows;
 }
 
 function normalizeCompatibilityObserved(value, label) {
@@ -1785,14 +1864,15 @@ export function normalizeCompatibilityDocument(raw) {
   if (!compatibilityObject(raw)) throw compatibilityError('compatibility document must be an object');
   compatibilityKeys(raw, COMPATIBILITY_DOCUMENT_KEYS, 'compatibility document');
   const schema = Number(raw.schema);
-  if (!COMPATIBILITY_SCHEMAS.has(schema) || !Array.isArray(raw.rules)) throw compatibilityError('compatibility document requires schema 2, 3, or 4 and a rules array');
+  if (!COMPATIBILITY_SCHEMAS.has(schema) || !Array.isArray(raw.rules)) throw compatibilityError('compatibility document requires schema 2, 3, 4, or 5 and a rules array');
   if (new TextEncoder().encode(JSON.stringify(raw)).byteLength > 512 * 1024) throw compatibilityError('compatibility document is too large');
   const ids = new Set();
   const rules = raw.rules.map((rule, index) => {
     const label = `compatibility.rules[${index}]`;
     if (!compatibilityObject(rule)) throw compatibilityError(`${label} must be an object`);
     const allowedRuleKeys = schema === 2 ? COMPATIBILITY_RULE_KEYS_V2 :
-      schema === 3 ? COMPATIBILITY_RULE_KEYS_V3 : COMPATIBILITY_RULE_KEYS_V4;
+      schema === 3 ? COMPATIBILITY_RULE_KEYS_V3 :
+        schema === 4 ? COMPATIBILITY_RULE_KEYS_V4 : COMPATIBILITY_RULE_KEYS_V5;
     compatibilityKeys(rule, allowedRuleKeys, label);
     const id = String(rule.id || '').trim();
     if (!COMPATIBILITY_ID_RE.test(id) || ids.has(id)) throw compatibilityError(`${label}.id is invalid or duplicate`);
@@ -1800,22 +1880,40 @@ export function normalizeCompatibilityDocument(raw) {
     const issue = rule.issue, match = rule.match;
     if (!['file-ownership', 'build-failure'].includes(issue)) throw compatibilityError(`${id}.issue is invalid`);
     if (!['all-installed', 'all-selected'].includes(match)) throw compatibilityError(`${id}.match is invalid`);
-    if (!compatibilityObject(rule.scope) || !Object.keys(rule.scope).length) throw compatibilityError(`${id}.scope must be a non-empty object`);
-    const scope = {};
-    for (const [source, branches] of Object.entries(rule.scope)) {
-      if (!COMPATIBILITY_SOURCE_RE.test(source)) throw compatibilityError(`${id}.scope source is invalid`);
-      scope[source] = compatibilityStrings(branches, `${id}.scope.${source}`, COMPATIBILITY_BRANCH_RE, 1, 32);
+    const preventive = schema === 5 && rule.policy === 'preventive';
+    if (schema === 5 && rule.policy !== undefined && !preventive) throw compatibilityError(`${id}.policy is invalid`);
+    if (schema === 5 && !preventive && (rule.environments !== undefined || rule.evidence !== undefined)) {
+      throw compatibilityError(`${id}.environments and evidence require policy preventive`);
     }
-    if (Object.hasOwn(scope, '*') && Object.keys(scope).length !== 1) throw compatibilityError(`${id}.scope wildcard source cannot be mixed with named sources`);
+    if (preventive && (rule.scope !== undefined || rule.sourceCommits !== undefined ||
+        rule.targetScope !== undefined || rule.refs !== undefined)) {
+      throw compatibilityError(`${id}.preventive policy uses environments and evidence instead of legacy scope identity`);
+    }
+    let scope = null, environments = null, evidence = null;
+    if (preventive) {
+      environments = normalizeCompatibilityEnvironments(rule.environments, `${id}.environments`);
+      evidence = normalizeCompatibilityEvidence(rule.evidence, `${id}.evidence`);
+    } else {
+      if (!compatibilityObject(rule.scope) || !Object.keys(rule.scope).length) throw compatibilityError(`${id}.scope must be a non-empty object`);
+      scope = {};
+      for (const [source, branches] of Object.entries(rule.scope)) {
+        if (!COMPATIBILITY_SOURCE_RE.test(source)) throw compatibilityError(`${id}.scope source is invalid`);
+        scope[source] = compatibilityStrings(branches, `${id}.scope.${source}`, COMPATIBILITY_BRANCH_RE, 1, 32);
+      }
+      if (Object.hasOwn(scope, '*') && Object.keys(scope).length !== 1) throw compatibilityError(`${id}.scope wildcard source cannot be mixed with named sources`);
+    }
     const condition = String(rule.if || '').trim();
     if (condition.length > 512) throw compatibilityError(`${id}.if is invalid`);
-    const normalized = { id, issue, match, scope, ...(condition ? { if: condition } : {}),
+    const normalized = { id, issue, match,
+      ...(preventive ? { policy: 'preventive', environments, evidence } : { scope }),
+      ...(condition ? { if: condition } : {}),
       packages: compatibilityStrings(rule.packages, `${id}.packages`, COMPATIBILITY_PACKAGE_RE, 1, 16),
-      refs: compatibilityStrings(rule.refs, `${id}.refs`, /^[A-Za-z0-9][A-Za-z0-9+_.:/@#-]{0,255}$/, 1, 8) };
-    if ((schema === 3 || schema === 4) && rule.sourceCommits !== undefined) {
+      ...(!preventive ? { refs: compatibilityStrings(rule.refs, `${id}.refs`,
+        /^[A-Za-z0-9][A-Za-z0-9+_.:/@#-]{0,255}$/, 1, 8) } : {}) };
+    if (schema >= 3 && rule.sourceCommits !== undefined) {
       normalized.sourceCommits = compatibilityStrings(rule.sourceCommits, `${id}.sourceCommits`, COMPATIBILITY_COMMIT_RE, 1, 32);
     }
-    if ((schema === 3 || schema === 4) && rule.targetScope !== undefined) {
+    if (schema >= 3 && rule.targetScope !== undefined) {
       normalized.targetScope = normalizeCompatibilityTargetScope(rule.targetScope, `${id}.targetScope`);
     }
     if (issue === 'file-ownership') normalized.paths = compatibilityStrings(rule.paths, `${id}.paths`,
@@ -1830,11 +1928,11 @@ export function normalizeCompatibilityDocument(raw) {
     if (issue === 'file-ownership' && rule.buildDependency !== undefined) {
       throw compatibilityError(`${id}.buildDependency is only valid for build-failure`);
     }
-    if (issue === 'build-failure' && (schema === 3 || schema === 4)) {
+    if (issue === 'build-failure' && schema >= 3) {
       normalized.failure = normalizeCompatibilityFailure(rule.failure, `${id}.failure`);
     }
-    if (schema === 4 && rule.buildDependency !== undefined) {
-      if (!normalized.sourceCommits?.length) {
+    if (schema >= 4 && rule.buildDependency !== undefined) {
+      if (!normalized.sourceCommits?.length && !normalized.evidence?.length) {
         throw compatibilityError(`${id}.buildDependency requires a non-empty sourceCommits list`);
       }
       const buildDependency = normalizeCompatibilityBuildDependency(rule.buildDependency, `${id}.buildDependency`);
@@ -1890,6 +1988,13 @@ function compatibilityRuleScopeMismatch(rule, sourceCommit, target) {
   return mismatches;
 }
 
+function compatibilityEnvironmentMatches(environment, sourceId, branchName, target) {
+  if (environment.source !== '*' && environment.source !== sourceId) return false;
+  if (!compatibilityPatternMatches(branchName, environment.branch)) return false;
+  return !environment.targetScope || Object.entries(environment.targetScope).every(([key, values]) =>
+    values.includes(target[key]));
+}
+
 function compatibilityNearMatch(rule, sourceId, branchName, sourceCommit, target, records, values, mismatches) {
   const matchedPackages = records
     .filter((record) => compatibilityRecordMatches(rule, record, values))
@@ -1931,9 +2036,17 @@ export function evaluateCompatibilityRules(model, document, inputValues, context
   const warnings = [];
   const diagnostics = [];
   for (const rule of normalized.rules) {
-    const branchPatterns = rule.scope[sourceId] || rule.scope['*'] || [];
-    if (!branchPatterns.some((pattern) => compatibilityPatternMatches(branchName, pattern))) continue;
-    const mismatches = compatibilityRuleScopeMismatch(rule, sourceCommit, target);
+    const environment = rule.policy === 'preventive'
+      ? rule.environments.find((row) => compatibilityEnvironmentMatches(row, sourceId, branchName, target))
+      : null;
+    if (rule.policy === 'preventive' && !environment) continue;
+    if (rule.policy !== 'preventive') {
+      const branchPatterns = rule.scope[sourceId] || rule.scope['*'] || [];
+      if (!branchPatterns.some((pattern) => compatibilityPatternMatches(branchName, pattern))) continue;
+    }
+    const mismatches = rule.policy === 'preventive' ? [] :
+      compatibilityRuleScopeMismatch(rule, sourceCommit, target);
+    const ifPresent = environment?.packageAvailability === 'if-present';
     const missingPackages = [];
     const records = rule.packages.map((packageName) => {
       const record = model.byPackage.get(packageName);
@@ -1941,14 +2054,18 @@ export function evaluateCompatibilityRules(model, document, inputValues, context
       return record;
     }).filter((record) => record?.configSymbol);
     if (missingPackages.length) {
-      if (mismatches.length) continue;
-      throw compatibilityError(`${rule.id} references a package missing from the active Catalog: ${missingPackages[0]}`);
+      if (ifPresent && records.length === 0) continue;
+      if (!ifPresent) {
+        if (mismatches.length) continue;
+        throw compatibilityError(`${rule.id} references a package missing from the active Catalog: ${missingPackages[0]}`);
+      }
     }
     let triggerRecords = [];
     let buildDependencyRecord = null;
     if (rule.buildDependency) {
       buildDependencyRecord = model.byPackage.get(rule.buildDependency.package);
       if (!buildDependencyRecord?.configSymbol) {
+        if (ifPresent) continue;
         if (mismatches.length) continue;
         throw compatibilityError(`${rule.id} references a build dependency package missing from the active Catalog: ${rule.buildDependency.package}`);
       }
@@ -1958,11 +2075,12 @@ export function evaluateCompatibilityRules(model, document, inputValues, context
         if (!record?.configSymbol) missingTriggerPackages.push(packageName);
         return record;
       }).filter((record) => record?.configSymbol);
-      if (missingTriggerPackages.length) {
+      if (missingTriggerPackages.length && !ifPresent) {
         if (mismatches.length) continue;
         throw compatibilityError(`${rule.id} references a build trigger package missing from the active Catalog: ${missingTriggerPackages[0]}`);
       }
     }
+    if (!records.length && !triggerRecords.length) continue;
     const allRecords = [...new Map([...records, ...triggerRecords]
       .map((record) => [record.configSymbol, record])).values()];
     let packageMatch;
