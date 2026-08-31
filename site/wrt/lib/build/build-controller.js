@@ -78,10 +78,11 @@ function buildRequestOverrides(configText) {
   );
 }
 
-function buildAudit(compatibility = null) {
+function buildAudit(preflight = {}) {
   return {
     defconfig: { enabled: state.useDefconfig === true },
-    ...(compatibility?.forced?.length ? { compatibility } : {}),
+    ...(preflight.configuration?.forced?.length ? { configuration: preflight.configuration } : {}),
+    ...(preflight.compatibility?.forced?.length ? { compatibility: preflight.compatibility } : {}),
   };
 }
 
@@ -178,7 +179,7 @@ function openSubmitModal() {
       button.disabled = true;
       try {
         await ensurePackageMirrors();
-        const forcedCompatibility = await ensureCompatibilityRules();
+        const preflight = await ensureBuildPreflight();
         const finalSelection = effectiveSelection();
         const plugins = finalSelection.normal.map((p) => p.id)
           .concat(finalSelection.forced.map((p) => '+' + p.id))
@@ -197,7 +198,7 @@ function openSubmitModal() {
           branch: state.version.branch,
           variant: state.variant.id, plugins, tag, lanip: state.lanip, overrides,
           use_defconfig: state.useDefconfig === true,
-          audit: buildAudit(forcedCompatibility),
+          audit: buildAudit(preflight),
           firmware: configFirmwareSettings(config),
           catalog: currentCatalogContract(),
         };

@@ -315,9 +315,11 @@ if (!existsSync(join(ROOT, 'site', 'wrt', 'packages.html')) && !html.includes('p
   pass('legacy package page and weekly AutoBuild data sync are removed');
 } else fail('legacy public entrypoints still exist');
 
-if (requestAudit.includes("!['defconfig', 'compatibility'].includes(key)") &&
+if (requestAudit.includes("!['defconfig', 'configuration', 'compatibility'].includes(key)") &&
+    requestAudit.includes('row.schema !== 1') &&
+    requestAudit.includes('配置预检强制审计格式非法') &&
     !requestAudit.includes('recommended:') && !parser.includes('recommended_enabled=')) {
-  pass('request audit records only Defconfig and forced compatibility evidence');
+  pass('request audit records only Defconfig, forced configuration preflight, and compatibility evidence');
 } else fail('request audit still exposes a retired recommended preset contract');
 
 console.log('[4/4] GitHub Actions contracts / GitHub Actions 契约');

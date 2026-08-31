@@ -5,6 +5,7 @@ import {
   compatibilityAcknowledgementKey,
   createCatalogModel,
   createCatalogValidationContext,
+  deriveConfigurationRepairPlan,
   deriveCompatibilityPlans,
   deriveKconfigPrerequisitePlans,
   evaluateCompatibilityRules,
@@ -1033,6 +1034,182 @@ try {
 assert(conflictIntentError?.name === 'CatalogIntentError' &&
   conflictIntentError.violations?.some((row) => row.code === 'package-conflict'),
   'interactive conflict did not preserve structured violation details for the browser dialog');
+
+// Configuration preflight repairs only deterministic dependency violations.
+// A package with one provider is replayed through the normal intent cascade,
+// so a direct package dependency is repaired without a second resolver.
+const packageRepair = deriveConfigurationRepairPlan(model, parseConfigDocument([
+  'CONFIG_PACKAGE_ui-service=y',
+  '# CONFIG_PACKAGE_core-service is not set',
+].join('\n')));
+assert(packageRepair.initialViolations.length === 1 &&
+  packageRepair.initialViolations[0].code === 'package-dependency-unsatisfied' &&
+  packageRepair.actions.length === 1 &&
+  packageRepair.actions[0].symbol === 'PACKAGE_ui-service' &&
+  packageRepair.actions[0].steps.length === 0 &&
+  packageRepair.values.get('PACKAGE_core-service') === 'y' &&
+  packageRepair.unresolved.length === 0,
+  'unique package dependency was not repaired through the normal intent cascade');
+assert(packageRepair.changes.some((change) => change.symbol === 'PACKAGE_core-service' &&
+  change.reason === 'package-dependency') &&
+  packageRepair.actions[0].changes.some((change) => change.symbol === 'PACKAGE_core-service'),
+  'package dependency repair did not expose its automatic cascade changes');
+
+// Conditional package dependencies must follow the active Kconfig condition,
+// not a package-name special case.  This mirrors the soft-float codec choice:
+// SOFT_FLOAT=N selects lame-lib, while SOFT_FLOAT=Y selects shine.
+const conditionalCodecRecords = [
+  { kind: 'config', configSymbol: 'SOFT_FLOAT', kconfigSymbol: 'SOFT_FLOAT',
+    type: 'bool', states: ['n', 'y'] },
+  { kind: 'package', package: 'lame-lib', configSymbol: 'PACKAGE_lame-lib',
+    kconfigSymbol: 'PACKAGE_lame-lib', type: 'bool', states: ['n', 'y'] },
+  { kind: 'package', package: 'shine', configSymbol: 'PACKAGE_shine',
+    kconfigSymbol: 'PACKAGE_shine', type: 'bool', states: ['n', 'y'] },
+  { kind: 'package', package: 'conditional-codec', configSymbol: 'PACKAGE_conditional-codec',
+    kconfigSymbol: 'PACKAGE_conditional-codec', type: 'bool', states: ['n', 'y'],
+    packageInfo: { depends: [
+      { raw: '+lame-lib if !SOFT_FLOAT', required: true, condition: '!SOFT_FLOAT', packages: ['lame-lib'] },
+      { raw: '+shine if SOFT_FLOAT', required: true, condition: 'SOFT_FLOAT', packages: ['shine'] },
+    ] } },
+];
+const conditionalCodecModel = createCatalogModel({ schema: 5, targets: [], relations: {
+  schema: 2, records: conditionalCodecRecords, indexes: {},
+} });
+const softFloatOffRepair = deriveConfigurationRepairPlan(conditionalCodecModel, parseConfigDocument([
+  '# CONFIG_SOFT_FLOAT is not set',
+  'CONFIG_PACKAGE_conditional-codec=y',
+  '# CONFIG_PACKAGE_lame-lib is not set',
+  '# CONFIG_PACKAGE_shine is not set',
+].join('\n')));
+assert(softFloatOffRepair.actions.length === 1 && softFloatOffRepair.unresolved.length === 0 &&
+  softFloatOffRepair.values.get('PACKAGE_lame-lib') === 'y' &&
+  softFloatOffRepair.values.get('PACKAGE_shine') === 'n',
+  'SOFT_FLOAT=N did not select lame-lib while leaving shine disabled');
+const softFloatOnRepair = deriveConfigurationRepairPlan(conditionalCodecModel, parseConfigDocument([
+  'CONFIG_SOFT_FLOAT=y',
+  'CONFIG_PACKAGE_conditional-codec=y',
+  '# CONFIG_PACKAGE_lame-lib is not set',
+  '# CONFIG_PACKAGE_shine is not set',
+].join('\n')));
+assert(softFloatOnRepair.actions.length === 1 && softFloatOnRepair.unresolved.length === 0 &&
+  softFloatOnRepair.values.get('PACKAGE_shine') === 'y' &&
+  softFloatOnRepair.values.get('PACKAGE_lame-lib') === 'n',
+  'SOFT_FLOAT=Y did not select shine while leaving lame-lib disabled');
+
+// A multi-level package closure must converge in one deterministic action;
+// the engine should not require the caller to manually replay every provider.
+const repairChainRecords = [
+  { kind: 'package', package: 'repair-base', configSymbol: 'PACKAGE_repair-base',
+    kconfigSymbol: 'PACKAGE_repair-base', states: ['n', 'y'] },
+  { kind: 'package', package: 'repair-middle', configSymbol: 'PACKAGE_repair-middle',
+    kconfigSymbol: 'PACKAGE_repair-middle', states: ['n', 'y'],
+    packageInfo: { depends: [{ raw: '+repair-base', required: true, packages: ['repair-base'] }] } },
+  { kind: 'package', package: 'repair-leaf', configSymbol: 'PACKAGE_repair-leaf',
+    kconfigSymbol: 'PACKAGE_repair-leaf', states: ['n', 'y'],
+    packageInfo: { depends: [{ raw: '+repair-middle', required: true, packages: ['repair-middle'] }] } },
+];
+const repairChainModel = createCatalogModel({ schema: 5, targets: [], relations: {
+  schema: 2, records: repairChainRecords, indexes: {},
+} });
+const repairChain = deriveConfigurationRepairPlan(repairChainModel, parseConfigDocument([
+  'CONFIG_PACKAGE_repair-leaf=y',
+  '# CONFIG_PACKAGE_repair-middle is not set',
+  '# CONFIG_PACKAGE_repair-base is not set',
+].join('\n')));
+assert(repairChain.actions.length === 1 && repairChain.unresolved.length === 0 &&
+  repairChain.values.get('PACKAGE_repair-middle') === 'y' &&
+  repairChain.values.get('PACKAGE_repair-base') === 'y',
+  'configuration repair did not stably converge through a multi-level package closure');
+
+// The same preflight path accepts one unique negative Kconfig prerequisite and
+// replays the target intent so selects/implies remain automatic changes.
+const negativeRepair = deriveConfigurationRepairPlan(prerequisiteModel,
+  new Map([['OPENSSL_ENGINE', 'y'], ['OPENSSL_ENGINE_BUILTIN', 'y'],
+    ['SELECT_TARGET', 'n'], ['PACKAGE_generic-devcrypto', 'y']]));
+assert(negativeRepair.initialViolations.length === 1 &&
+  negativeRepair.initialViolations[0].code === 'kconfig-dependency-unsatisfied' &&
+  negativeRepair.actions.length === 1 &&
+  negativeRepair.actions[0].symbol === 'PACKAGE_generic-devcrypto' &&
+  negativeRepair.actions[0].steps.length === 1 &&
+  negativeRepair.actions[0].steps[0].symbol === 'OPENSSL_ENGINE_BUILTIN' &&
+  negativeRepair.actions[0].steps[0].value === 'n' &&
+  negativeRepair.values.get('OPENSSL_ENGINE_BUILTIN') === 'n' &&
+  negativeRepair.values.get('PACKAGE_generic-devcrypto') === 'y' &&
+  negativeRepair.values.get('SELECT_TARGET') === 'y' &&
+  negativeRepair.unresolved.length === 0,
+  'unique negative Kconfig prerequisite was not repaired and replayed deterministically');
+const lockedNegativeRepair = deriveConfigurationRepairPlan(prerequisiteModel,
+  new Map([['OPENSSL_ENGINE', 'y'], ['OPENSSL_ENGINE_BUILTIN', 'y'],
+    ['SELECT_TARGET', 'n'], ['PACKAGE_generic-devcrypto', 'y']]), {
+    explicitSymbols: new Set(['OPENSSL_ENGINE_BUILTIN']),
+  });
+assert(lockedNegativeRepair.actions.length === 0 &&
+  lockedNegativeRepair.unresolved.some((item) => item.code === 'kconfig-dependency-unsatisfied'),
+  'an explicitly locked Kconfig prerequisite was silently changed by preflight');
+const lockedNegativeIteratorRepair = deriveConfigurationRepairPlan(prerequisiteModel,
+  new Map([['OPENSSL_ENGINE', 'y'], ['OPENSSL_ENGINE_BUILTIN', 'y'],
+    ['SELECT_TARGET', 'n'], ['PACKAGE_generic-devcrypto', 'y']]), {
+    explicitSymbols: new Map([['OPENSSL_ENGINE_BUILTIN', 'n']]).keys(),
+  });
+assert(lockedNegativeIteratorRepair.actions.length === 0 &&
+  lockedNegativeIteratorRepair.unresolved.some((item) => item.code === 'kconfig-dependency-unsatisfied'),
+  'a one-shot explicit-symbol iterator was consumed before prerequisite planning');
+
+// Equal-cost Kconfig alternatives are not a recommendation: preserving the
+// unresolved violation is safer than choosing a symbol by sort order.
+const ambiguousRepair = deriveConfigurationRepairPlan(ambiguousPrerequisiteModel,
+  new Map([['PREREQUISITE_A', 'n'], ['PREREQUISITE_B', 'n'],
+    ['PACKAGE_ambiguous-target', 'y']]));
+assert(ambiguousRepair.initialViolations.length === 1 && ambiguousRepair.actions.length === 0 &&
+  ambiguousRepair.unresolved.length === 1 &&
+  ambiguousRepair.unresolved[0].code === 'kconfig-dependency-unsatisfied',
+  'ambiguous Kconfig prerequisites were not preserved as unresolved');
+
+// A unique provider that would introduce a package conflict is not safe to
+// auto-apply.  Both the original dependency and the conflict remain visible.
+const conflictRepairRecords = [
+  { kind: 'package', package: 'repair-provider', configSymbol: 'PACKAGE_repair-provider',
+    kconfigSymbol: 'PACKAGE_repair-provider', states: ['n', 'y'], provides: ['repair-api'],
+    conflicts: ['repair-conflicting'] },
+  { kind: 'package', package: 'repair-conflicting', configSymbol: 'PACKAGE_repair-conflicting',
+    kconfigSymbol: 'PACKAGE_repair-conflicting', states: ['n', 'y'] },
+  { kind: 'package', package: 'repair-consumer', configSymbol: 'PACKAGE_repair-consumer',
+    kconfigSymbol: 'PACKAGE_repair-consumer', states: ['n', 'y'],
+    packageInfo: { depends: [{ raw: '+repair-api', required: true, packages: ['repair-api'] }] } },
+];
+const conflictRepairModel = createCatalogModel({ schema: 5, targets: [], relations: {
+  schema: 2, records: conflictRepairRecords,
+  indexes: { providers: { 'repair-api': ['repair-provider'] } },
+} });
+const conflictRepair = deriveConfigurationRepairPlan(conflictRepairModel, parseConfigDocument([
+  'CONFIG_PACKAGE_repair-consumer=y',
+  'CONFIG_PACKAGE_repair-conflicting=y',
+  '# CONFIG_PACKAGE_repair-provider is not set',
+].join('\n')));
+assert(conflictRepair.actions.length === 0 &&
+  conflictRepair.unresolved.some((item) => item.code === 'package-dependency-unsatisfied') &&
+  conflictRepair.values.get('PACKAGE_repair-provider') === 'n',
+  'a package repair that introduced a conflict was applied instead of remaining unresolved');
+
+// Multiple providers are likewise intentionally not guessed at.
+const providerAmbiguityRecords = [
+  { kind: 'package', package: 'repair-provider-a', configSymbol: 'PACKAGE_repair-provider-a',
+    kconfigSymbol: 'PACKAGE_repair-provider-a', states: ['n', 'y'], provides: ['repair-virtual'] },
+  { kind: 'package', package: 'repair-provider-b', configSymbol: 'PACKAGE_repair-provider-b',
+    kconfigSymbol: 'PACKAGE_repair-provider-b', states: ['n', 'y'], provides: ['repair-virtual'] },
+  { kind: 'package', package: 'repair-virtual-consumer', configSymbol: 'PACKAGE_repair-virtual-consumer',
+    kconfigSymbol: 'PACKAGE_repair-virtual-consumer', states: ['n', 'y'],
+    packageInfo: { depends: [{ raw: '+repair-virtual', required: true, packages: ['repair-virtual'] }] } },
+];
+const providerAmbiguityModel = createCatalogModel({ schema: 5, targets: [], relations: {
+  schema: 2, records: providerAmbiguityRecords,
+  indexes: { providers: { 'repair-virtual': ['repair-provider-a', 'repair-provider-b'] } },
+} });
+const providerAmbiguityRepair = deriveConfigurationRepairPlan(providerAmbiguityModel,
+  parseConfigDocument(['CONFIG_PACKAGE_repair-virtual-consumer=y'].join('\n')));
+assert(providerAmbiguityRepair.actions.length === 0 &&
+  providerAmbiguityRepair.unresolved.some((item) => item.code === 'package-dependency-unsatisfied'),
+  'multiple package providers were guessed instead of remaining unresolved');
 
 const compatibility = {
   schema: 2,

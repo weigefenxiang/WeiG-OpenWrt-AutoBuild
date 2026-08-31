@@ -180,48 +180,72 @@ async function runSelfTest() {
   if (viewToken !== selfTestViewToken) return;
   d5(gh.ok ? 'ok' : 'warn', gh.ok ? t('st.github.ok', { ms: gh.ms }) : t('st.github.fail', { msg: gh.msg }));
 
-  const d6 = addRow(t('st.compatibility'));
+  const d6 = addRow(t('st.configurationPreflight'));
+  const d7 = addRow(t('st.compatibility'));
+  let configurationEvaluation;
+  try {
+    configurationEvaluation = configurationPreflightEvaluation();
+    d6(configurationEvaluation.initialViolations.length ? 'warn' : 'ok',
+      configurationEvaluation.initialViolations.length
+        ? t('st.configurationPreflight.warn', { count: configurationEvaluation.initialViolations.length })
+        : t('st.configurationPreflight.ok'));
+  } catch (error) {
+    d6('fail', t('st.configurationPreflight.fail', { msg: error.message }));
+    configurationEvaluation = { initialViolations: [] };
+  }
   loadedCompatibility = await compatibilityDownload;
   if (viewToken !== selfTestViewToken) return;
   if (!loadedCompatibility) {
-    d6('fail', t('st.compatibility.fail', { msg: compatibilityError?.message || t('st.data.allFail') }));
+    d7('fail', t('st.compatibility.fail', { msg: compatibilityError?.message || t('st.data.allFail') }));
     return;
   }
   let evaluation;
   try {
     evaluation = evaluateLoadedCompatibility(loadedCompatibility);
   } catch (error) {
-    d6('fail', t('st.compatibility.fail', { msg: error.message }));
+    d7('fail', t('st.compatibility.fail', { msg: error.message }));
     return;
   }
-  if (!evaluation.warnings.length) {
-    d6(evaluation.diagnostics?.length ? 'warn' : 'ok', evaluation.diagnostics?.length
+  if (!evaluation.warnings.length && !configurationEvaluation.initialViolations.length) {
+    d7(evaluation.diagnostics?.length ? 'warn' : 'ok', evaluation.diagnostics?.length
       ? compatibilityNearMatchText(evaluation.diagnostics)
       : t('st.compatibility.ok'));
     return;
   }
 
   const activeRuleIds = evaluation.warnings.map((warning) => warning.rule.id).join(' · ');
-  d6('warn', t('st.compatibility.warn', { rules: activeRuleIds }));
+  d7(evaluation.warnings.length ? 'warn' : (evaluation.diagnostics?.length ? 'warn' : 'ok'),
+    evaluation.warnings.length ? t('st.compatibility.warn', { rules: activeRuleIds })
+      : evaluation.diagnostics?.length ? compatibilityNearMatchText(evaluation.diagnostics)
+        : t('st.compatibility.ok'));
   const savedResults = document.createDocumentFragment();
   while (mb.firstChild) savedResults.appendChild(mb.firstChild);
   try {
-    const forced = await ensureCompatibilityRules();
+    const preflight = await ensureBuildPreflight();
+    const configurationRemaining = configurationBlockingViolations();
+    d6(preflight.configuration ? 'warn' : configurationRemaining.length ? 'fail' : 'ok',
+      preflight.configuration
+        ? t('st.configurationPreflight.forced', { count: preflight.configuration.forced.length })
+        : configurationRemaining.length
+          ? t('st.configurationPreflight.warn', { count: configurationRemaining.length })
+          : t('st.configurationPreflight.ok'));
     const current = evaluateLoadedCompatibility(loadedCompatibility);
-    if (!current.warnings.length) d6(current.diagnostics?.length ? 'warn' : 'ok', current.diagnostics?.length
+    if (!current.warnings.length) d7(current.diagnostics?.length ? 'warn' : 'ok', current.diagnostics?.length
       ? compatibilityNearMatchText(current.diagnostics)
       : t('st.compatibility.ok'));
-    else if (forced) d6('warn', t('st.compatibility.forced', {
+    else if (preflight.compatibility) d7('warn', t('st.compatibility.forced', {
       rules: current.warnings.map((warning) => warning.rule.id).join(' · '),
     }));
-    else d6('warn', t('st.compatibility.warn', {
+    else d7('warn', t('st.compatibility.warn', {
       rules: current.warnings.map((warning) => warning.rule.id).join(' · '),
     }));
   } catch (error) {
-    if (error?.name === 'CompatibilityCancelledError') {
-      d6('warn', t('st.compatibility.cancelled', { rules: activeRuleIds }));
+    if (error?.name === 'ConfigurationPreflightCancelledError') {
+      d6('warn', t('st.configurationPreflight.cancelled'));
+    } else if (error?.name === 'CompatibilityCancelledError') {
+      d7('warn', t('st.compatibility.cancelled', { rules: activeRuleIds }));
     } else {
-      d6('fail', t('st.compatibility.fail', { msg: error.message }));
+      d7('fail', t('st.compatibility.fail', { msg: error.message }));
     }
   }
   selfTestViewToken += 1;

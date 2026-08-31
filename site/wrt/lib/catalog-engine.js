@@ -1639,6 +1639,167 @@ export function applyUserIntent(model, inputValues, intent) {
   return { values, changes, ...derived, violations, diagnostics };
 }
 
+function configurationRepairValidationOptions(values, rawOptions = {}) {
+  const nested = rawOptions.validationOptions && typeof rawOptions.validationOptions === 'object'
+    ? rawOptions.validationOptions : {};
+  const merged = { ...nested };
+  for (const key of ['phase', 'contextComplete', 'trustedSymbols', 'explicitSymbols',
+    'closedSymbols', 'deferred']) {
+    if (Object.hasOwn(rawOptions, key)) merged[key] = rawOptions[key];
+  }
+  return validationOptions(values, merged);
+}
+
+function configurationRepairValue(record, values) {
+  const current = values.get(record.configSymbol) ?? 'n';
+  if (record.type === 'bool' || record.type === 'tristate') {
+    return normalizeKconfigStateValue(record, current, 'n');
+  }
+  return stateLevel(current) > 0 ? 'y' : 'n';
+}
+
+function configurationRepairRecord(model, violation) {
+  if (violation?.symbol) return model?.bySymbol?.get(violation.symbol) || null;
+  if (violation?.package) return model?.byPackage?.get(violation.package) || null;
+  return null;
+}
+
+function configurationRepairIntent(rawOptions, validation, value) {
+  return {
+    dependencySymbols: rawOptions.dependencySymbols,
+    protectedSymbols: rawOptions.protectedSymbols,
+    preferredValues: rawOptions.preferredValues,
+    // validationOptions has already materialized one-shot iterators (the UI
+    // passes catalogUserOverrides.keys()).  Reusing rawOptions.explicitSymbols
+    // here would hand deriveKconfigPrerequisitePlans an exhausted iterator and
+    // accidentally unlock an explicitly protected prerequisite.
+    explicitSymbols: validation.explicitSymbols,
+    validationOptions: validation,
+    value,
+  };
+}
+
+function configurationRepairCandidate(model, values, violation, rawOptions, validation) {
+  if (!['kconfig-dependency-unsatisfied', 'package-dependency-unsatisfied'].includes(violation?.code)) {
+    return null;
+  }
+  const record = configurationRepairRecord(model, violation);
+  if (!record?.configSymbol || stateLevel(values.get(record.configSymbol) ?? 'n') <= 0) return null;
+  const value = configurationRepairValue(record, values);
+  if (value === 'n') return null;
+  const intent = configurationRepairIntent(rawOptions, validation, value);
+  let result = null;
+  let steps = [];
+  if (violation.code === 'kconfig-dependency-unsatisfied') {
+    const plans = deriveKconfigPrerequisitePlans(model, values, record, value, intent);
+    if (!plans.recommended) return null;
+    result = plans.recommended;
+    steps = plans.recommended.steps || [];
+  } else {
+    try {
+      result = applyUserIntent(model, values, {
+        ...intent,
+        symbol: record.configSymbol,
+        value,
+      });
+    } catch (error) {
+      // A package dependency may also be guarded by a Kconfig expression.  In
+      // that case applyUserIntent exposes the same unique prerequisite plan;
+      // use it only when it is unambiguous and replayable.  No force path is
+      // used here: a failed or ambiguous repair stays unresolved.
+      const plans = error?.prerequisitePlans || deriveKconfigPrerequisitePlans(
+        model, values, record, value, intent);
+      if (!plans?.recommended) return null;
+      result = plans.recommended;
+      steps = plans.recommended.steps || [];
+    }
+  }
+  if (!result?.values) return null;
+  const beforeKeys = new Set(validateConfig(model, values, validation)
+    .filter(isBlockingViolation).map(violationKey));
+  const finalViolations = validateConfig(model, result.values, validation)
+    .filter(isBlockingViolation);
+  const finalKeys = new Set(finalViolations.map(violationKey));
+  const currentKey = violationKey(violation);
+  if (finalKeys.has(currentKey) || [...finalKeys].some((key) => !beforeKeys.has(key))) return null;
+  const candidateChanges = (result.changes || []).filter((change) => change?.from !== change?.to);
+  if (!candidateChanges.length) return null;
+  return {
+    symbol: record.configSymbol,
+    package: record.package || packageNameFromSymbol(record.configSymbol),
+    value,
+    steps: steps.map((step) => ({
+      symbol: String(step.symbol || ''),
+      package: step.package || packageNameFromSymbol(step.symbol),
+      value: normalizeValue(step.value ?? 'n'),
+    })).filter((step) => step.symbol),
+    changes: candidateChanges,
+    values: result.values,
+    unresolved: finalViolations,
+  };
+}
+
+/**
+ * Derive a bounded repair plan for an imported or edited configuration.
+ *
+ * Only two deterministic repair classes are eligible: a package dependency
+ * with one selectable provider (resolved by applyUserIntent's normal cascade),
+ * and a Kconfig dependency with one unique minimum prerequisite plan (resolved
+ * by deriveKconfigPrerequisitePlans).  Conflicts, choices, multiple providers,
+ * deferred expressions, and equal-cost alternatives are never guessed at.
+ * Every simulated action must remove its selected violation without adding a
+ * new blocking violation; otherwise it is left in the final unresolved list.
+ */
+export function deriveConfigurationRepairPlan(model, inputValues, rawOptions = {}) {
+  rawOptions = rawOptions && typeof rawOptions === 'object' ? rawOptions : {};
+  const initialValues = new Map(valuesMap(inputValues));
+  const validation = configurationRepairValidationOptions(initialValues, rawOptions);
+  const initialViolations = validateConfig(model, initialValues, validation)
+    .filter(isBlockingViolation);
+  let values = new Map(initialValues);
+  const actions = [];
+  const changes = [];
+  const maxActionsRaw = Number(rawOptions.maxActions);
+  const maxActions = Number.isSafeInteger(maxActionsRaw)
+    ? Math.max(1, Math.min(64, maxActionsRaw)) : 64;
+  const maxPassesRaw = Number(rawOptions.maxPasses);
+  const maxPasses = Number.isSafeInteger(maxPassesRaw)
+    ? Math.max(1, Math.min(128, maxPassesRaw)) : 128;
+
+  for (let pass = 0; pass < maxPasses && actions.length < maxActions; pass++) {
+    const blocking = validateConfig(model, values, validation).filter(isBlockingViolation)
+      .sort((left, right) => violationKey(left).localeCompare(violationKey(right)));
+    if (!blocking.length) break;
+    let progressed = false;
+    for (const violation of blocking) {
+      if (!['kconfig-dependency-unsatisfied', 'package-dependency-unsatisfied'].includes(violation.code)) continue;
+      const candidate = configurationRepairCandidate(model, values, violation, rawOptions, validation);
+      if (!candidate) continue;
+      values = new Map(candidate.values);
+      actions.push({
+        symbol: candidate.symbol,
+        package: candidate.package,
+        value: candidate.value,
+        steps: candidate.steps,
+        changes: candidate.changes,
+      });
+      changes.push(...candidate.changes);
+      progressed = true;
+      break;
+    }
+    if (!progressed) break;
+  }
+  const unresolved = validateConfig(model, values, validation).filter(isBlockingViolation);
+  return {
+    initialViolations,
+    actions,
+    changes,
+    values,
+    finalValues: values,
+    unresolved,
+  };
+}
+
 export function resolveEffectiveTheme(model, target, inputValues = new Map(), options = {}) {
   if (!model) return { package: '', symbol: '', value: 'n', values: new Map() };
   const context = createCatalogValidationContext(model, target, inputValues, { phase: options.phase || 'generation', deferred: 'ignore' });

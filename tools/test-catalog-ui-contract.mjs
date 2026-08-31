@@ -148,20 +148,30 @@ const schema6BuildStart = app.indexOf("card('submit.m1.title'");
 const schema6BuildEnd = app.indexOf("card('submit.existing.title'", schema6BuildStart);
 const schema6BuildContract = schema6BuildStart >= 0 && schema6BuildEnd > schema6BuildStart
   ? app.slice(schema6BuildStart, schema6BuildEnd) : '';
-const ensureCompatibilityAt = schema6BuildContract.indexOf('await ensureCompatibilityRules()');
+const ensureBuildPreflightAt = schema6BuildContract.indexOf('await ensureBuildPreflight()');
 const finalSelectionAt = schema6BuildContract.indexOf('const finalSelection = effectiveSelection();');
 const finalConfigAt = schema6BuildContract.indexOf('const config = await generateResolvedConfigText();');
 const finalOverridesAt = schema6BuildContract.indexOf('const overrides = buildRequestOverrides(config);');
 const finalPayloadAt = schema6BuildContract.indexOf('const payload = {');
 const importConfigContract = app.match(/async function importConfigFile\(file\) \{([\s\S]*?)\n\}\n\$\('importBtn'/)?.[1] || '';
+const buildAuditContract = app.match(/function buildAudit\(preflight = \{\}\) \{([\s\S]*?)\n\}/)?.[1] || '';
 expect(app.includes('const previewPlugins = previewSelection.normal.map') &&
-  ensureCompatibilityAt >= 0 && finalSelectionAt > ensureCompatibilityAt &&
+  ensureBuildPreflightAt >= 0 && finalSelectionAt > ensureBuildPreflightAt &&
   finalConfigAt > finalSelectionAt && finalOverridesAt > finalConfigAt && finalPayloadAt > finalOverridesAt &&
   schema6BuildContract.includes('plugins, tag, lanip: state.lanip, overrides') &&
+  !importConfigContract.includes('ensureBuildPreflight') &&
+  !importConfigContract.includes('ensureConfigurationPreflight') &&
   !importConfigContract.includes('ensureCompatibilityRules') &&
+  !importConfigContract.includes('openConfigurationPreflightModal') &&
+  !importConfigContract.includes('openCompatibilityWarningModal') &&
+  buildAuditContract.includes('configuration?.forced?.length') &&
+  buildAuditContract.includes('configuration: preflight.configuration') &&
+  buildAuditContract.includes('compatibility?.forced?.length') &&
+  buildAuditContract.includes('compatibility: preflight.compatibility') &&
+  schema6BuildContract.includes('audit: buildAudit(preflight)') &&
   app.includes('const compatibilitySchema = Number(evaluation.loaded.compatibility?.schema ??') &&
   app.includes('schema: compatibilitySchema, rules: [warning.rule]'),
-  'compatibility checks must be on-demand and final schema6 JSON must use selections after the check');
+  'build preflight must precede final schema6 selection/config/overrides/payload, import must stay modal-free, and audit must retain configuration plus compatibility');
 
 const compatibilityIdentitySource = app.match(/function compatibilityIdentityError\([\s\S]*?(?=\n\nfunction compatibilityContext)/)?.[0] || '';
 const compatibilityIdentityResolver = compatibilityIdentitySource
@@ -485,7 +495,9 @@ const compatibilityDownload = selfTestContract.indexOf('const compatibilityDownl
 const compatibilityFetch = selfTestContract.indexOf('CATALOG_LOADER.fetchCompatibility()');
 const ordinaryDataDownload = selfTestContract.indexOf('const [applications] = await Promise.all([');
 const githubCheck = selfTestContract.indexOf("timedFetch('https://api.github.com/'");
-const compatibilityRow = selfTestContract.indexOf("const d6 = addRow(t('st.compatibility'))");
+const configurationPreflightRow = selfTestContract.indexOf("const d6 = addRow(t('st.configurationPreflight'))");
+const compatibilityRow = selfTestContract.indexOf("const d7 = addRow(t('st.compatibility'))");
+const selfTestBuildPreflight = selfTestContract.indexOf('await ensureBuildPreflight()');
 expect(selfTestContract.indexOf("openModal(t('st.title'))") >= 0 &&
   selfTestRows.every((row) => selfTestContract.indexOf(row) >= 0 && selfTestContract.indexOf(row) < selfTestPaint) &&
   selfTestPaint >= 0 && selfTestPaint < compatibilityDownload &&
@@ -494,16 +506,18 @@ expect(selfTestContract.indexOf("openModal(t('st.title'))") >= 0 &&
   compatibilityDownload < compatibilityFetch && compatibilityFetch < ordinaryDataDownload &&
   !selfTestContract.slice(ordinaryDataDownload, selfTestContract.indexOf(']);', ordinaryDataDownload)).includes('fetchCompatibility') &&
   selfTestContract.includes('probe.hidden = false') &&
-  githubCheck < compatibilityRow && compatibilityRow < selfTestContract.indexOf('await compatibilityDownload') &&
+  githubCheck < configurationPreflightRow && configurationPreflightRow < compatibilityRow &&
+  compatibilityRow < selfTestContract.indexOf('await compatibilityDownload') &&
   selfTestContract.indexOf('await compatibilityDownload') < selfTestContract.indexOf('evaluateLoadedCompatibility(loadedCompatibility)') &&
-  githubCheck < selfTestContract.indexOf('await ensureCompatibilityRules()') &&
+  selfTestContract.includes('configurationPreflightEvaluation()') &&
+  selfTestBuildPreflight > compatibilityRow &&
   selfTestContract.includes('evaluateLoadedCompatibility(loadedCompatibility)') &&
   selfTestContract.includes('viewToken !== selfTestViewToken') &&
   selfTestContract.includes('savedResults.appendChild') &&
   selfTestContract.includes("error?.name === 'CompatibilityCancelledError'"),
   'self-test does not paint five ordinary checks before background compatibility loading and gated evaluation');
 const compatibilityNearMatchTextContract = selfTestContract.match(/function compatibilityNearMatchText\(diagnostics = \[\]\) \{([\s\S]*?)\n  \}/)?.[1] || '';
-const compatibilityDiagnosticRow = "d6(evaluation.diagnostics?.length ? 'warn' : 'ok'";
+const compatibilityDiagnosticRow = "d7(evaluation.diagnostics?.length ? 'warn' : 'ok'";
 expect(compatibilityNearMatchTextContract.includes("t('st.compatibility.inconclusive'") &&
   compatibilityNearMatchTextContract.includes("t('st.compatibility.inconclusive.commit'") &&
   compatibilityNearMatchTextContract.includes("t('st.compatibility.inconclusive.target'") &&
@@ -512,9 +526,9 @@ expect(compatibilityNearMatchTextContract.includes("t('st.compatibility.inconclu
   i18nZhCn.strings['st.compatibility.inconclusive'] &&
   selfTestContract.includes(compatibilityDiagnosticRow) &&
   selfTestContract.includes("current.diagnostics?.length ? 'warn' : 'ok'") &&
-  selfTestContract.indexOf(compatibilityDiagnosticRow) < selfTestContract.indexOf('await ensureCompatibilityRules()') &&
-  !selfTestContract.slice(selfTestContract.indexOf(compatibilityDiagnosticRow), selfTestContract.indexOf('await ensureCompatibilityRules()')).includes('deriveCompatibilityPlans') &&
-  !selfTestContract.slice(selfTestContract.indexOf(compatibilityDiagnosticRow), selfTestContract.indexOf('await ensureCompatibilityRules()')).includes('recommendation'),
+  selfTestContract.indexOf(compatibilityDiagnosticRow) < selfTestBuildPreflight &&
+  !selfTestContract.slice(selfTestContract.indexOf(compatibilityDiagnosticRow), selfTestBuildPreflight).includes('deriveCompatibilityPlans') &&
+  !selfTestContract.slice(selfTestContract.indexOf(compatibilityDiagnosticRow), selfTestBuildPreflight).includes('recommendation'),
   'self-test does not show a yellow inconclusive near-match result without opening a compatibility recommendation');
 const probeContract = app.match(/async function openPackageProbeModal\(\) \{([\s\S]*?)\n\}\n\$\('modalProbe'/)?.[1] || '';
 expect(probeContract.includes('selfTestViewToken += 1') &&
@@ -805,7 +819,7 @@ expect(restoreContract.includes('catalogStateRevision = snapshot.revision') &&
 expect(app.includes('function restoreMap(target, source)') &&
   app.includes('function restoreSet(target, source)'),
   'atomic rollback collection restorers are missing');
-expect((app.match(/restoreCatalogUiState\(snapshot\);/g) || []).length === 4,
+expect((app.match(/restoreCatalogUiState\(snapshot\);/g) || []).length === 6,
   'not every atomic rollback path shares the clean restore contract');
 expect((app.match(/reconcileCatalogReadyState\(\)/g) || []).length >= 3,
   'menu/applications arrival paths do not share ready reconciliation');
