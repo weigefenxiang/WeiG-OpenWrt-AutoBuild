@@ -579,6 +579,26 @@ async function main() {
     }`, [selector]);
   }
 
+  async function pointerClick(selector) {
+    await evaluateFunction(browser, `(selector) => {
+      const element = document.querySelector(selector);
+      if (!element) throw new Error('missing ' + selector);
+      element.scrollIntoView({ block: 'center', inline: 'nearest' });
+      return true;
+    }`, [selector]);
+    const record = await getElement(browser, selector);
+    if (!isVisible(record)) throw new Error(`${selector} is not visible for pointer activation`);
+    const x = record.rect.left + (record.rect.width / 2);
+    const y = record.rect.top + (record.rect.height / 2);
+    await browser.connection.command('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+    await browser.connection.command('Input.dispatchMouseEvent', {
+      type: 'mousePressed', x, y, button: 'left', clickCount: 1,
+    });
+    await browser.connection.command('Input.dispatchMouseEvent', {
+      type: 'mouseReleased', x, y, button: 'left', clickCount: 1,
+    });
+  }
+
   async function waitVisible(selector, context, timeoutMs = 5_000) {
     try {
       return await waitFor(`${selector} visible`, async () => {
@@ -953,8 +973,42 @@ async function main() {
     // A declared dropdown must be kept within the same viewport by the
     // shared floating-layer controller.  Timezone is deterministic and does
     // not depend on a selected package.
-    await evaluateFunction(browser, `() => document.getElementById('timezoneBox')?.focus()`);
-    await waitVisible('#timezoneMenu', context);
+    // The combobox opens from native focus/pointer ordering, so exercise it
+    // through CDP mouse input instead of HTMLElement.click(). First settle
+    // the combobox's zero-delay blur cleanup so it cannot close a newly opened
+    // menu after Chrome restores field focus across a remote navigation.
+    await evaluateFunction(browser, `async () => {
+      document.getElementById('timezoneBox')?.blur();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return true;
+    }`);
+    await pointerClick('#timezoneBox');
+    try {
+      await waitFor('timezone dropdown viewport geometry', async () => {
+        const [record, rawViewport] = await Promise.all([
+          getElement(browser, '#timezoneMenu'), getViewport(browser),
+        ]);
+        if (!isVisible(record)) return null;
+        const viewport = viewportRect(rawViewport);
+        const epsilon = 2;
+        return record.rect.left >= viewport.left - epsilon && record.rect.top >= viewport.top - epsilon &&
+          record.rect.right <= viewport.right + epsilon && record.rect.bottom <= viewport.bottom + epsilon
+          ? record : null;
+      }, 5_000, 80);
+    } catch (error) {
+      fail(context, '#timezoneMenu did not settle inside visualViewport', await evaluateFunction(browser, `() => {
+        const input = document.getElementById('timezoneBox');
+        const menu = document.getElementById('timezoneMenu');
+        return {
+          active: document.activeElement === input,
+          expanded: input?.getAttribute('aria-expanded'),
+          floatingBound: input?.dataset.floatingDropdownBound || '',
+          menuHidden: Boolean(menu?.hidden),
+          optionCount: menu?.children.length || 0,
+          menuClass: menu?.className || '',
+        };
+      }`).catch(() => ({ error: error.message })));
+    }
     await assertInside('#timezoneMenu', context, { actionbarSafe: true });
     await resetFloatingState();
 
@@ -990,9 +1044,15 @@ async function main() {
             features: [{ name: 'prefers-color-scheme', value: theme }],
           });
           await evaluateFunction(browser, `() => { try { localStorage.clear(); } catch {} return true; }`);
-          await browser.connection.command('Page.navigate', { url });
-          await waitFor('document navigation', async () => evaluateFunction(browser,
-            `() => document.readyState === 'complete' || document.readyState === 'interactive'`), 20_000, 100);
+          const navigationToken = `${theme}-${viewport.name}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          const scenarioUrl = new URL(url);
+          scenarioUrl.searchParams.set('uiTestScenario', navigationToken);
+          await browser.connection.command('Page.navigate', { url: scenarioUrl.href });
+          await waitFor('document navigation', async () => evaluateFunction(browser, `(token) => {
+            const current = new URL(location.href);
+            const ready = document.readyState === 'complete' || document.readyState === 'interactive';
+            return ready && current.searchParams.get('uiTestScenario') === token;
+          }`, [navigationToken]), 20_000, 100);
           if (await waitState(context)) await runInteractions(context);
           if (failures.length && !screenshotDir.path) {
             const shot = await screenshot(context);
