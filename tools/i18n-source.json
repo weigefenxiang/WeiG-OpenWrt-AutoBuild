@@ -515,6 +515,8 @@
   "runtime.9fa9e63322ab": "{value1} selected item(s) have no official size observation",
   "runtime.a6286fdab37d": "Cross-source official package observations from Catalog",
   "size.summary.short": "Selected {direct} · total {total}",
+  "size.summary.unknown": "{unknown} unknown",
+  "size.summary.withUnknown": "{size} + {unknown} unknown",
   "size.summary.direct": "Direct selection: {size} ({unknown} unknown)",
   "size.summary.total": "Estimated total: {size} ({unknown} unknown)",
   "size.summary.metric": "Catalog package-index estimate ({architecture}); not exact SquashFS growth.",

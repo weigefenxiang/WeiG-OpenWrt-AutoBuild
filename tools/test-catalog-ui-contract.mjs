@@ -642,7 +642,7 @@ expect(themeGenerationContract.includes('for (const change of themeResolution.ch
 const probeChoiceContract = app.match(/function probeChoiceFromMenuOption\(option\) \{[\s\S]*?\n\}/)?.[0] || '';
 expect(probeChoiceContract.includes("const symbol = String(option?.symbol || '')") &&
   probeChoiceContract.includes("symbol.startsWith('PACKAGE_') ? symbol.slice('PACKAGE_'.length) : ''") &&
-  probeChoiceContract.includes('displayId: packageName || symbol') &&
+  probeChoiceContract.includes('displayId: displayText(packageName || symbol)') &&
   probeChoiceContract.includes('userSettable: option?.userSettable !== false') &&
   !probeChoiceContract.includes('resolvePackageSelectionOption(option)'),
   'Probe rows must preserve the real Kconfig symbol and let shared setMenuValue resolve user intent');
@@ -694,7 +694,7 @@ expect(hiddenLoadContract.includes('buildMenuIndexes(catalog)') &&
   !lateBaselineContract.includes('new Map(menuValues)'),
   'late hidden PACKAGE values must come only from the immutable Native Profile baseline');
 const probeIssueTitleContract = app.match(/function probeIssueTitle\(request\) \{[\s\S]*?\n\}/)?.[0] || '';
-const probeIssueTitleForTest = Function(`${probeIssueTitleContract}\nreturn probeIssueTitle;`)();
+const probeIssueTitleForTest = Function(`const displayText = (value) => value;\n${probeIssueTitleContract}\nreturn probeIssueTitle;`)();
 const titleRequest = {
   packageConfig: 'CONFIG_PACKAGE_libc=y\nCONFIG_PACKAGE_libgcc=y\nCONFIG_PACKAGE_libopenssl=y\nCONFIG_PACKAGE_zlib=m\n',
   mode: 'package-compile',
@@ -716,7 +716,7 @@ expect(app.includes('function probePackageBaselineState(option)') &&
   probeContract.includes('const changed = changedProbePackageOptions()') &&
   probeContract.includes('selectedBox.hidden = changed.length === 0') &&
   probeContract.includes('const baselineValue = probePackageBaselineState(option)') &&
-  probeContract.includes("chip.textContent = `${packageName}=${String(value).toUpperCase()} ×`") &&
+  probeContract.includes("chip.textContent = `${displayText(packageName)}=${String(value).toUpperCase()} ×`") &&
   !probeContract.includes('activeProbePackageOptions()') && !probeContract.includes('selected.set('),
   'Probe selected summary must hide baseline defaults and show only shared Kconfig changes');
 expect(probeContract.includes("guide.className = 'probe-guide'") &&

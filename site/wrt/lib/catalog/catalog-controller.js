@@ -483,12 +483,12 @@ function menuLabelMeta(name) {
 }
 function menuPathLabel(name) {
   const row = menuLabelMeta(name);
-  return String(row.en || name || '').trim();
+  return displayText(String(row.en || name || '').trim());
 }
 function menuOptionLabel(option) {
   const prompt = String(option.promptEn || option.prompt || '').trim();
-  if (prompt) return prompt;
-  return String(option.symbol || '').replace(/^PACKAGE_/, '').replaceAll('_', ' ').trim();
+  if (prompt) return displayText(prompt);
+  return displayText(String(option.symbol || '').replace(/^PACKAGE_/, '').replaceAll('_', ' ').trim());
 }
 function menuOptionTranslation(option) {
   if (option.symbol?.startsWith('PACKAGE_') && PLUGINS?.plugins && state.source) {
@@ -507,7 +507,7 @@ function menuOptionTranslation(option) {
   };
 }
 function applyMenuTranslation(element, chinese, usageChinese = '', mobileChip = false) {
-  const lines = [String(chinese || '').trim(), String(usageChinese || '').trim()].filter(Boolean);
+  const lines = [displayText(String(chinese || '').trim()), displayText(String(usageChinese || '').trim())].filter(Boolean);
   if (element?.dataset.uiTooltipSource === 'translation') {
     bindUiTooltipContent(element);
     delete element.dataset.uiTooltipSource;
@@ -534,9 +534,9 @@ function menuOptionPopupText(element) {
     element.dataset.english || '',
   ].filter(Boolean))];
   return [
-    `CONFIG_${element.dataset.symbol}`,
-    description.length ? description.join('\n') : '',
-    element.dataset.path || '',
+    displayConfigSymbol(element.dataset.symbol),
+    description.length ? displayText(description.join('\n')) : '',
+    displayText(element.dataset.path || ''),
   ].filter(Boolean).join('\n\n');
 }
 function bindMenuOptionTooltip(element) {
@@ -1461,8 +1461,8 @@ function renderContractList(element, title, items, empty) {
     for (const item of items) {
       const chip = document.createElement('code');
       chip.className = 'build-contract-chip';
-      chip.textContent = item;
-      bindUiTooltipContent(chip, { body: item });
+      chip.textContent = displayText(item);
+      bindUiTooltipContent(chip, { body: displayText(item) });
       content.appendChild(chip);
     }
   }
@@ -1517,8 +1517,8 @@ function renderProfilePackageContract(element, target) {
       chip.className = `build-contract-chip profile-package-chip mode-${mode}`;
       const upstream = row.upstream === 'exclude' ? '−' : '+';
       const explicit = mode === 'follow' ? '' : mode === 'include' ? ' → +' : ' → −';
-      chip.textContent = `${upstream}${row.name}${explicit}`;
-      bindUiTooltipContent(chip, { body: `${row.name}
+      chip.textContent = `${upstream}${displayText(row.name)}${explicit}`;
+      bindUiTooltipContent(chip, { body: `${displayText(row.name)}
 ${contractText('默认跟随上游；可在管理中显式加入或排除', 'Follows upstream by default; Manage can explicitly include or exclude it')}` });
       content.appendChild(chip);
     }
@@ -1578,7 +1578,7 @@ function renderProfilePackageModal() {
     const item = document.createElement('div');
     item.className = 'profile-package-row';
     const name = document.createElement('code');
-    name.textContent = row.name;
+    name.textContent = displayText(row.name);
     const upstream = document.createElement('small');
     upstream.textContent = row.upstream === 'exclude'
       ? contractText('上游排除', 'Upstream excludes')

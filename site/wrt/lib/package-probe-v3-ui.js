@@ -52,10 +52,10 @@ async function openPackageProbeV3Modal() {
     layout.appendChild(overlay);
     const closeProbeOverlay = () => { overlay.hidden = true; overlayBody.textContent = ''; };
     const showProbeOverlay = (title, lines) => {
-      overlayTitle.textContent = title;
+      overlayTitle.textContent = displayText(title);
       overlayBody.textContent = '';
       for (const line of lines) {
-        const paragraph = document.createElement('p'); paragraph.textContent = line; overlayBody.appendChild(paragraph);
+        const paragraph = document.createElement('p'); paragraph.textContent = displayText(line); overlayBody.appendChild(paragraph);
       }
       overlay.hidden = false; overlayClose.focus();
     };
@@ -64,7 +64,7 @@ async function openPackageProbeV3Modal() {
 
     const bindProbeTextTooltip = (element, text) => {
       if (!text) return;
-      bindUiTooltipContent(element, { body: text });
+      bindUiTooltipContent(element, { body: displayText(text) });
     };
 
     const intent = new Map();
@@ -126,7 +126,7 @@ async function openPackageProbeV3Modal() {
         const option = menuOptionBySymbol.get(`PACKAGE_${row.package}`);
         const translation = option ? menuOptionTranslation(option) : {};
         const detail = firstMeaningfulProbeV3Text(translation.title, option?.promptZh, option?.promptEn, translation.usage, option?.usageZh, option?.usageEn);
-        return `${row.package}: ${row.before.toUpperCase()} → ${row.after.toUpperCase()}${detail ? ` · ${detail}` : ''}`;
+        return `${displayText(row.package)}: ${row.before.toUpperCase()} → ${row.after.toUpperCase()}${detail ? ` · ${displayText(detail)}` : ''}`;
       };
       if (direct.length) {
         lines.push(`${probeV3UiText('selected')} (${direct.length})`);
@@ -214,8 +214,8 @@ async function openPackageProbeV3Modal() {
           const label = document.createElement('label'); label.className = 'probe-multiselect-option';
           label.dataset.search = `${value} ${labelText}`.toLocaleLowerCase();
           const input = document.createElement('input'); input.type = 'checkbox'; input.checked = !selected.has('*') && selected.has(value);
-          const code = document.createElement('span'); code.textContent = labelText;
-          if (labelText !== value && value) code.dataset.uiTooltipBody = value;
+          const code = document.createElement('span'); code.textContent = displayText(labelText);
+          if (labelText !== value && value) code.dataset.uiTooltipBody = displayText(value);
           label.append(input, code); list.appendChild(label);
           input.addEventListener('change', () => {
             if (selected.has('*')) selected.delete('*');
@@ -226,7 +226,7 @@ async function openPackageProbeV3Modal() {
         }
         if (selected.has('*')) summaryText.textContent = probeV3UiText('all');
         else {
-          const labels = [...selected].map((value) => optionMaps[filterKey].get(value) || value || 'Default');
+          const labels = [...selected].map((value) => displayText(optionMaps[filterKey].get(value) || value || 'Default'));
           summaryText.textContent = labels.length <= 2 ? labels.join(', ') : `${labels.slice(0, 2).join(', ')} +${labels.length - 2}`;
         }
         const query = searchBox.value.trim().toLocaleLowerCase();
@@ -278,7 +278,7 @@ async function openPackageProbeV3Modal() {
       setProbeFilter(filters.profiles, [currentTarget.profile]);
     }).disabled = !currentTarget;
     shortcutButton(currentTarget
-      ? `${currentTarget.targetSystem} / ${currentTarget.subtarget} / ${currentTarget.profileLabel} · ${t('runtime.ebd8c457c647')}`
+      ? `${displayText(currentTarget.targetSystem)} / ${displayText(currentTarget.subtarget)} / ${displayText(currentTarget.profileLabel)} · ${t('runtime.ebd8c457c647')}`
       : probeV3UiText('crossSourceTarget'), () => {
       if (!currentTarget) return;
       setProbeFilter(filters.sources, ['*']);
@@ -373,11 +373,11 @@ async function openPackageProbeV3Modal() {
         if (!selectable) row.setAttribute('aria-disabled', 'true');
         const mark = document.createElement('span'); mark.className = 'probe-package-mark';
         mark.textContent = choice.isPackage ? (activeSelected ? String(currentValue).toUpperCase() : '+') : '·';
-        const code = document.createElement('code'); code.className = 'probe-package-id'; code.textContent = choice.displayId;
-        const title = document.createElement('span'); title.className = 'probe-package-title'; title.textContent = choice.title || '—';
-        const usage = document.createElement('span'); usage.className = 'probe-package-usage'; usage.textContent = choice.usage || '—';
+        const code = document.createElement('code'); code.className = 'probe-package-id'; code.textContent = displayText(choice.displayId);
+        const title = document.createElement('span'); title.className = 'probe-package-title'; title.textContent = displayText(choice.title || '—');
+        const usage = document.createElement('span'); usage.className = 'probe-package-usage'; usage.textContent = displayText(choice.usage || '—');
         bindProbeTextTooltip(title, choice.title); bindProbeTextTooltip(usage, choice.usage);
-        const rowDetails = [choice.displayId, `CONFIG_${choice.symbol}`, choice.title, choice.usage].filter(Boolean).join('\n');
+        const rowDetails = [displayText(choice.displayId), displayConfigSymbol(choice.symbol), displayText(choice.title), displayText(choice.usage)].filter(Boolean).join('\n');
         bindUiTooltipContent(row, { body: rowDetails });
         const info = document.createElement('span'); info.className = 'probe-package-info'; info.textContent = '!';
         info.setAttribute('aria-label', rowDetails); bindUiTooltipContent(info, { body: rowDetails });
@@ -491,7 +491,7 @@ async function openPackageProbeV3Modal() {
         await ensurePackageSnapshot();
         return syncPreview();
       } catch (error) {
-        accordionBody.textContent = String(error?.message || error);
+        accordionBody.textContent = displayText(error?.message || error);
         submitButton.disabled = true;
         return null;
       }
@@ -503,7 +503,7 @@ async function openPackageProbeV3Modal() {
         await ensurePackageSnapshot();
         return syncPreview();
       } catch (error) {
-        accordionBody.textContent = String(error?.message || error);
+        accordionBody.textContent = displayText(error?.message || error);
         submitButton.disabled = true;
         return null;
       }
@@ -548,7 +548,7 @@ async function openPackageProbeV3Modal() {
     renderStateSummary(); renderResults(); syncPreview(); search.focus();
   } catch (error) {
     body.textContent = '';
-    const failure = document.createElement('p'); failure.className = 'import-error'; failure.textContent = String(error?.message || error); body.appendChild(failure);
+    const failure = document.createElement('p'); failure.className = 'import-error'; failure.textContent = displayText(error?.message || error); body.appendChild(failure);
   }
 }
 

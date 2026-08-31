@@ -516,6 +516,8 @@
   "runtime.9fa9e63322ab": "另有 {value1} 項暫無官方體積資料",
   "runtime.a6286fdab37d": "來自 Catalog 的跨源官方軟體包觀測",
   "size.summary.short": "Selected {direct} · total {total}",
+  "size.summary.unknown": "{unknown} unknown",
+  "size.summary.withUnknown": "{size} + {unknown} unknown",
   "size.summary.direct": "Direct selection: {size} ({unknown} unknown)",
   "size.summary.total": "Estimated total: {size} ({unknown} unknown)",
   "size.summary.metric": "Catalog package-index estimate ({architecture}); not exact SquashFS growth.",

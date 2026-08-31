@@ -15,7 +15,7 @@ function setMenuValue(option, value, openChildren = false) {
         openKconfigPrerequisiteModal(option, value, error)) return false;
     if (violations.some((item) => item.code === 'package-conflict' || item.code === 'choice-conflict') &&
         openCatalogConflictModal(option, value, violations, false)) return false;
-    const first = String(error?.message || error).split(';')[0];
+    const first = displayText(String(error?.message || error).split(';')[0]);
     showToast(first.length > 240 ? `${first.slice(0, 237)}…` : first);
     return false;
   }
@@ -169,7 +169,7 @@ function kconfigConstraintTooltip(option, stateValue, constraints) {
     const condition = selector.condition
       ? t('runtime.273005ab00cf', { value1: selector.condition, value2: selector.conditionLevel === 2 ? 'Y' : 'M' })
       : '';
-    return `${selector.sourceSymbol}=${selector.sourceValue.toUpperCase()}${condition}`;
+    return displayText(`${selector.sourceSymbol}=${selector.sourceValue.toUpperCase()}${condition}`);
   });
   const range = t('runtime.98d3760852e2', { value1: constraints.current.toUpperCase(), value2: constraints.maximum.toUpperCase(), value3: constraints.minimum.toUpperCase() });
   let emphasis = '';
@@ -188,17 +188,17 @@ function kconfigConstraintTooltip(option, stateValue, constraints) {
   } else {
     emphasis = t('runtime.c6f6222ba9fe');
   }
-  const dependencyExpressions = (constraints.dependencyExpressions || [])
-    .map((group) => (group || []).filter(Boolean).join(' && ')).filter(Boolean).join(' || ');
+  const dependencyExpressions = displayText((constraints.dependencyExpressions || [])
+    .map((group) => (group || []).filter(Boolean).join(' && ')).filter(Boolean).join(' || '));
   const body = [range,
     selectorLines.length ? t('runtime.8e296151802b', { value1: selectorLines.join('\n') }) : '',
     dependencyExpressions ? t('runtime.67e6fec23983', { value1: dependencyExpressions }) :
-      option.depends?.length ? t('runtime.67e6fec23983', { value1: option.depends.join(' && ') }) : '',
+      option.depends?.length ? t('runtime.67e6fec23983', { value1: displayText(option.depends.join(' && ')) }) : '',
     option.defaults?.length ? t('menu.defaults', {
-      list: formatSemicolonList(option.defaults),
+      list: displayText(formatSemicolonList(option.defaults)),
     }) : '',
   ].filter(Boolean).join('\n\n');
-  return { title: `CONFIG_${option.symbol} · ${stateValue.toUpperCase()}`, emphasis, body };
+  return { title: `${displayConfigSymbol(option.symbol)} · ${stateValue.toUpperCase()}`, emphasis, body: displayText(body) };
 }
 function bindKconfigConstraintTooltip(button, option, stateValue, constraints) {
   const tooltip = kconfigConstraintTooltip(option, stateValue, constraints);
@@ -218,12 +218,14 @@ function renderCatalogOriginSlot(option, origin) {
   const badge = document.createElement(restorable ? 'button' : 'small');
   const displayKind = origin.displayKind || origin.kind;
   badge.className = `catalog-origin catalog-origin-${displayKind}${restorable ? ' catalog-origin-restore' : ''}`;
-  badge.textContent = `${origin.label}${restorable ? ' ↶' : ''}`;
-  badge.dataset.uiTooltipTitle = `CONFIG_${option.symbol} · ${origin.label}`;
-  badge.dataset.uiTooltipBody = origin.detail || origin.label;
+  const originLabel = displayText(origin.label);
+  const originDetail = displayText(origin.detail || origin.label);
+  badge.textContent = `${originLabel}${restorable ? ' ↶' : ''}`;
+  badge.dataset.uiTooltipTitle = `${displayConfigSymbol(option.symbol)} · ${originLabel}`;
+  badge.dataset.uiTooltipBody = originDetail;
   if (restorable) {
     badge.type = 'button';
-    badge.setAttribute('aria-label', `${origin.label}: ${origin.detail || ''}`);
+    badge.setAttribute('aria-label', `${originLabel}: ${originDetail}`);
     badge.onclick = (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -255,7 +257,7 @@ function renderMenuOption(option) {
     .map((item) => String(item || '').trim()).find(Boolean) || '';
   const id = document.createElement('span');
   id.className = 'menuconfig-option-label menuconfig-option-id';
-  id.textContent = packageName || option.symbol;
+  id.textContent = displayText(packageName || option.symbol);
   id.dataset.symbol = option.symbol;
   id.dataset.translation = localized;
   id.dataset.english = english;
@@ -264,7 +266,7 @@ function renderMenuOption(option) {
   bindMenuOptionTooltip(id);
   const description = document.createElement('span');
   description.className = 'menuconfig-option-label menuconfig-option-description';
-  description.textContent = [...new Set([localized, english].filter(Boolean))].join(' · ') || id.textContent;
+  description.textContent = displayText([...new Set([localized, english].filter(Boolean))].join(' · ')) || id.textContent;
   description.dataset.symbol = option.symbol;
   description.dataset.translation = localized;
   description.dataset.english = english;
@@ -329,7 +331,7 @@ function renderMenuOption(option) {
     input.value = option.type === 'string' ? String(value ?? '') : (value === 'n' ? '' : value);
     input.readOnly = option.userSettable === false;
     if (input.readOnly) {
-      input.dataset.uiTooltipTitle = `CONFIG_${option.symbol}`;
+      input.dataset.uiTooltipTitle = displayConfigSymbol(option.symbol);
       input.dataset.uiTooltipEmphasis = t('runtime.cc8d0739ba58');
       input.dataset.uiTooltipBody = t('runtime.f7342b9246cb');
       input.onclick = (event) => showDatasetTooltip(input, event);
@@ -377,9 +379,9 @@ function renderMenuLeaf(options, list) {
     const text = document.createElement('span');
     text.className = 'menuconfig-choice-text';
     const choiceLabel = String(choice?.promptEn || choice?.prompt || 'Choice').trim();
-    text.append(document.createTextNode(choiceLabel));
+    text.append(document.createTextNode(displayText(choiceLabel)));
     const select = document.createElement('select');
-    select.setAttribute('aria-label', choiceLabel);
+    select.setAttribute('aria-label', displayText(choiceLabel));
     const selected = members.find((option) =>
       (menuValues.get(option.symbol) ?? simpleKconfigDefault(option)) !== 'n');
     if (!selected) {
@@ -399,9 +401,9 @@ function renderMenuLeaf(options, list) {
         menuOptionLabel(option),
       ].filter(Boolean))];
       entry.dataset.uiTooltipBody = [
-        `CONFIG_${option.symbol}`,
-        choiceDescription.join('\n'),
-        (option.path || []).map(menuPathLabel).filter(Boolean).join(' › '),
+        displayConfigSymbol(option.symbol),
+        displayText(choiceDescription.join('\n')),
+        displayText((option.path || []).map(menuPathLabel).filter(Boolean).join(' › ')),
       ].filter(Boolean).join('\n\n');
       entry.selected = option.symbol === selected?.symbol;
       select.appendChild(entry);
@@ -606,7 +608,7 @@ function renderMenuconfig() {
     const meta = menuLabelMeta(node.label);
     const text = document.createElement('span');
     text.className = 'menuconfig-category-text';
-    text.append(document.createTextNode(meta.en || node.label));
+    text.append(document.createTextNode(displayText(meta.en || node.label)));
     const count = document.createElement('small');
     count.className = 'menuconfig-category-count';
     count.textContent = `${node.count} ›`;

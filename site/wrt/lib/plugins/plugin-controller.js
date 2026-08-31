@@ -43,7 +43,7 @@ function renderCatalogApplicationsState(box) {
   row.dataset.state = failed ? 'error' : (empty ? 'empty' : 'loading');
   if (failed) {
     row.type = 'button';
-    bindUiTooltipContent(row, { body: catalogApplicationsError });
+    bindUiTooltipContent(row, { body: displayText(catalogApplicationsError) });
     row.addEventListener('click', () => requestCatalogApplications(true));
   } else {
     row.setAttribute('role', 'status');
@@ -271,8 +271,8 @@ function renderPlugin(p) {
     if (origin.kind !== 'inactive' && origin.kind !== 'user') {
       const f = document.createElement('span');
       f.className = `flag flag-origin flag-origin-${origin.kind}`;
-      f.textContent = origin.label;
-      bindUiTooltipContent(f, { body: origin.detail || origin.label });
+      f.textContent = displayText(origin.label);
+      bindUiTooltipContent(f, { body: displayText(origin.detail || origin.label) });
       nameBtn.appendChild(f);
     }
   }
@@ -285,7 +285,7 @@ function renderPlugin(p) {
   const pkg = p.pkgs?.[state.source.id] || p.pkg || p.catalogCandidates?.[0] || p.id;
   const size = p.sizeBytes === null ? t('runtime.7b4f86f4a586')
     : t('drawer.size', { n: fmtSize(p.sizeBytes) });
-  const tooltipBody = detail + '\n' + pkg + ' · ' + size;
+  const tooltipBody = displayText(detail) + '\n' + displayText(pkg) + ' · ' + size;
   bindUiTooltipContent(item, { title: pName(p), body: tooltipBody });
   bindUiTooltipContent(nameBtn, { title: pName(p), body: tooltipBody });
   nameBtn.removeAttribute('title');
@@ -386,7 +386,7 @@ function rootfsPartitionInfo() {
   const value = Number.parseInt(raw, 10);
   if (!Number.isFinite(value) || value <= 0) return null;
   const path = (option.path || []).map(menuPathLabel).filter(Boolean);
-  return { option, value, project: option.promptEn || option.prompt || 'Root filesystem partition size (in MiB)', path };
+  return { option, value, project: displayText(option.promptEn || option.prompt || 'Root filesystem partition size (in MiB)'), path };
 }
 function packageSizeEstimate() {
   if (state.device?.id !== 'catalog-target' || !MENU_CATALOG || !catalogPackageSizesDocument) return null;
@@ -412,11 +412,22 @@ function packageSizeEstimate() {
   };
   return { direct: summarize(direct), total: summarize(total) };
 }
+function packageSizeSummaryValue(summary, formatted) {
+  if (!summary?.packages || !summary.unknown) return formatted;
+  if (summary.unknown >= summary.packages) {
+    return t('size.summary.unknown', { unknown: summary.unknown });
+  }
+  return t('size.summary.withUnknown', { size: formatted, unknown: summary.unknown });
+}
 function packageSizeEstimateText(summary) {
   if (!summary) return '';
-  return t('size.summary.short', {
+  const formatted = {
     direct: fmtSize(summary.direct.knownBytes),
     total: fmtSize(summary.total.knownBytes),
+  };
+  return t('size.summary.short', {
+    direct: packageSizeSummaryValue(summary.direct, formatted.direct),
+    total: packageSizeSummaryValue(summary.total, formatted.total),
   });
 }
 function packageSizeEstimateTooltip(summary) {
@@ -476,7 +487,7 @@ function openRootfsCapacityGuidance() {
 
   const path = document.createElement('div');
   path.className = 'rootfs-guidance-path';
-      path.textContent = `${t('runtime.c2e92eeeb4e6')}：${[...(info.path.length ? info.path : [t('menu.targetImages')]), ROOTFS_PARTSIZE_SYMBOL].join(' → ')}`;
+  path.textContent = `${t('runtime.c2e92eeeb4e6')}：${[...(info.path.length ? info.path : [t('menu.targetImages')]), displayText(ROOTFS_PARTSIZE_SYMBOL)].join(' → ')}`;
 
   const note = document.createElement('p');
   note.className = 'rootfs-guidance-note';

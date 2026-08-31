@@ -55,11 +55,11 @@ const isZhCn = () => state.lang === 'zh-CN';
 /* ============ Catalog 应用名称与说明 / Catalog application names and descriptions ============ */
 function pName(p) {
   const value = p.nameI18n?.[state.lang] || p.nameI18n?.[FALLBACK] || p.name || p.id;
-  return isZh() ? maskText(value) : value;
+  return displayText(value);
 }
 function pDesc(p) {
   const value = p.descI18n?.[state.lang] || p.descI18n?.[FALLBACK] || p.desc || '';
-  return isZh() ? maskText(value) : value;
+  return displayText(value);
 }
 
 /* V8c:体积人性化显示,输入单位为 MB / V8c: human-readable size, input value in MB */
@@ -202,9 +202,19 @@ function starMask(w) {
   return w.slice(0, 2) + '*'.repeat(stars) + w.slice(-1);
 }
 function maskText(s) {
-  if (!isZh()) return String(s);            // 非中文界面完全不处理 / Non-Chinese UIs are left untouched
-  let out = String(s);
+  let out = String(s ?? '');
+  if (!isZh()) return out;                  // 非中文界面完全不处理 / Non-Chinese UIs are left untouched
   for (const [from, to] of ZH_SUB) out = out.split(from).join(to);
   return out.replace(EN_RE, starMask);
 }
-const groupLabel = (g) => maskText(t('group.' + g));
+/* 所有用户可见的源码/包名/说明统一从这里进入显示层；不得用于 Kconfig、搜索或导出值。 /
+ * Every user-visible source/package/description string enters this display layer;
+ * never use it for Kconfig, search, or export values. */
+function displayText(value) {
+  return maskText(value);
+}
+function displayConfigSymbol(symbol) {
+  const value = String(symbol ?? '').trim();
+  return displayText(value ? `CONFIG_${value}` : '');
+}
+const groupLabel = (g) => displayText(t('group.' + g));

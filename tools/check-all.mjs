@@ -91,6 +91,7 @@ const regressionTests = [
   'test-compatibility-recommendation.mjs',
   'test-catalog-ui-contract.mjs',
   'test-package-probe-v3.mjs',
+  'test-display-privacy-size.mjs',
   'test-catalog-core-loader.mjs',
   'test-catalog-performance.mjs',
   'test-menuconfig-scalar.mjs',

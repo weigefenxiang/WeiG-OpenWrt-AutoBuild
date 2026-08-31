@@ -514,6 +514,8 @@
   "runtime.9fa9e63322ab": "另有 {value1} 项暂无官方体积数据",
   "runtime.a6286fdab37d": "来自 Catalog 的跨源官方软件包观测",
   "size.summary.short": "自选 {direct} · 总计 {total}",
+  "size.summary.unknown": "{unknown} 项大小未知",
+  "size.summary.withUnknown": "{size} + {unknown} 项未知",
   "size.summary.direct": "用户直接选择：{size}（{unknown} 项大小未知）",
   "size.summary.total": "预计最终总计：{size}（{unknown} 项大小未知）",
   "size.summary.metric": "Catalog 包索引估算值（{architecture}），不等于最终 SquashFS 的精确增量。",

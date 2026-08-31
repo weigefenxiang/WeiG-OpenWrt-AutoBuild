@@ -46,11 +46,11 @@ function probeChoiceFromMenuOption(option) {
   return {
     symbol,
     package: packageName,
-    displayId: packageName || symbol,
+    displayId: displayText(packageName || symbol),
     isPackage: Boolean(packageName),
     userSettable: option?.userSettable !== false,
-    title: firstMeaningfulProbeText(translation.title, option.promptZh, option.promptEn),
-    usage: firstMeaningfulProbeText(translation.usage, option.usageZh, option.usageEn),
+    title: displayText(firstMeaningfulProbeText(translation.title, option.promptZh, option.promptEn)),
+    usage: displayText(firstMeaningfulProbeText(translation.usage, option.usageZh, option.usageEn)),
   };
 }
 function probePackageChoices(query = '') {
@@ -125,7 +125,7 @@ function probeIssueTitle(request) {
   const channel = String(request.channel || 'main');
   const prefix = channel === 'main' ? '' : `${channel}-`;
   const titlePackages = packages.length
-    ? [`${prefix}${packages[0]}`, ...packages.slice(1, 3)].join(', ') +
+    ? [displayText(`${prefix}${packages[0]}`), ...packages.slice(1, 3).map(displayText)].join(', ') +
       (packages.length > 3 ? ` +${packages.length - 3}` : '')
     : `${prefix}menuconfig`;
   return `[probe] ${titlePackages} · ${request.mode}`.slice(0, 200);
@@ -187,10 +187,10 @@ async function openPackageProbeModal() {
     layout.appendChild(overlay);
     const closeProbeOverlay = () => { overlay.hidden = true; overlayBody.textContent = ''; };
     const showProbeOverlay = (title, lines) => {
-      overlayTitle.textContent = title;
+      overlayTitle.textContent = displayText(title);
       overlayBody.textContent = '';
       for (const line of lines) {
-        const paragraph = document.createElement('p'); paragraph.textContent = line; overlayBody.appendChild(paragraph);
+        const paragraph = document.createElement('p'); paragraph.textContent = displayText(line); overlayBody.appendChild(paragraph);
       }
       overlay.hidden = false; overlayClose.focus();
     };
@@ -199,7 +199,7 @@ async function openPackageProbeModal() {
 
     const bindProbeTextTooltip = (element, text) => {
       if (!text) return;
-      bindUiTooltipContent(element, { body: text });
+      bindUiTooltipContent(element, { body: displayText(text) });
     };
 
     const renderSelected = () => {
@@ -216,8 +216,8 @@ async function openPackageProbeModal() {
         chip.type = 'button'; chip.className = 'probe-chip';
         const packageName = option.symbol.slice('PACKAGE_'.length);
         const value = probeMenuOptionState(option);
-        chip.textContent = `${packageName}=${String(value).toUpperCase()} ×`;
-        bindUiTooltipContent(chip, { body: `CONFIG_${option.symbol}` });
+        chip.textContent = `${displayText(packageName)}=${String(value).toUpperCase()} ×`;
+        bindUiTooltipContent(chip, { body: displayConfigSymbol(option.symbol) });
         chip.addEventListener('click', () => {
           const baselineValue = probePackageBaselineState(option);
           if (setMenuValue(option, baselineValue)) {
@@ -235,7 +235,7 @@ async function openPackageProbeModal() {
           `${probeUiText('selected')} ${changed.length}`,
           changed.map((option) => {
             const packageName = option.symbol.slice('PACKAGE_'.length);
-            return `${packageName}: ${String(probePackageBaselineState(option)).toUpperCase()} → ${String(probeMenuOptionState(option)).toUpperCase()}`;
+            return `${displayText(packageName)}: ${String(probePackageBaselineState(option)).toUpperCase()} → ${String(probeMenuOptionState(option)).toUpperCase()}`;
           }),
         ));
         selectedBox.appendChild(more);
@@ -263,7 +263,7 @@ async function openPackageProbeModal() {
         const usage = document.createElement('span'); usage.className = 'probe-package-usage'; usage.textContent = choice.usage || '—';
         bindProbeTextTooltip(title, choice.title);
         bindProbeTextTooltip(usage, choice.usage);
-        const rowDetails = [choice.displayId, `CONFIG_${choice.symbol}`, choice.title, choice.usage].filter(Boolean).join('\n');
+        const rowDetails = [choice.displayId, displayConfigSymbol(choice.symbol), choice.title, choice.usage].filter(Boolean).join('\n');
         bindUiTooltipContent(row, { body: rowDetails });
         const info = document.createElement('span'); info.className = 'probe-package-info'; info.textContent = '!';
         info.setAttribute('aria-label', rowDetails);
@@ -427,7 +427,7 @@ async function openPackageProbeModal() {
         return valid ? request : null;
       } catch (error) {
         if (sequence === previewRequest) {
-          preview.textContent = String(error?.message || error);
+          preview.textContent = displayText(error?.message || error);
           submitButton.disabled = true;
         }
         return null;
@@ -460,7 +460,7 @@ async function openPackageProbeModal() {
     renderSelected(); renderResults(); void renderPreview(); search.focus();
   } catch (error) {
     body.textContent = '';
-    const failure = document.createElement('p'); failure.className = 'import-error'; failure.textContent = String(error?.message || error); body.appendChild(failure);
+    const failure = document.createElement('p'); failure.className = 'import-error'; failure.textContent = displayText(error?.message || error); body.appendChild(failure);
   }
 }
 $('modalProbe').addEventListener('click', openPackageProbeModal);
