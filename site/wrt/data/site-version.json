@@ -1,8 +1,8 @@
 {
-  "version": "v2608311102",
+  "version": "v2608311259",
   "timezone": "Asia/Shanghai",
-  "fingerprint": "adc2a663d0f80c3aae1d6b688d2b4509c4bed948ed56747a76e4073cfe812b26",
-  "siteSha256": "f0bc8d171682ce949abef97a6546674573cb023f74982091a24176205bf2f8e8",
+  "fingerprint": "31bb3d79ae3bae6f76e49a32c88a5d9e28c370c7d3fd255f33bbee99bab297a9",
+  "siteSha256": "b82088c1f23dd43d910eb4bbcbcfde8be72d3d37a358eb900458a55e0d31797d",
   "hashAlgorithm": "sha256",
   "catalogBindings": {
     "catalog-dev": {
