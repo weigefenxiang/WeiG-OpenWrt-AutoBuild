@@ -39,6 +39,7 @@ function applyMenuConfig(text) {
   const serialized = new Set([
     ...menuTouched, ...catalogRecommendedValues.keys(),
     ...catalogUserOverrides.keys(), ...catalogImportedSymbols,
+    ...catalogDependencySymbols,
   ]);
   for (const option of menuSearchOptions) {
     if (option.visible !== false && option.userSettable !== false && !option.hidden) continue;

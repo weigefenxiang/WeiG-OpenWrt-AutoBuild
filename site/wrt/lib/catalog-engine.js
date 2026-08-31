@@ -676,6 +676,7 @@ export function createCatalogValidationContext(model, target, inputValues = new 
   const resolved = target || resolveCatalogTargetContext(model, inputValues);
   const context = resolved ? createTargetContextValues(model, resolved, inputValues) :
     { values: new Map(valuesMap(inputValues)), changes: [] };
+  const contextComplete = options.contextComplete ?? targetContextComplete(resolved);
   const trustedSymbols = new Set(options.trustedSymbols || []);
   if (resolved) {
     const operations = catalogPackageOperations(resolved, resolved.rawProfile || null);
@@ -691,8 +692,18 @@ export function createCatalogValidationContext(model, target, inputValues = new 
       trustedSymbols.add(symbol);
     }
   }
-  const contextComplete = options.contextComplete ?? targetContextComplete(resolved);
   const closedSymbols = new Set([...(model?.closedDefaultSymbols || []), ...(options.closedSymbols || [])]);
+  // A complete Catalog Target/Profile identifies a closed Kconfig universe.
+  // Native Profile and lazily loaded menu values can be sparse, so a known
+  // bool/tristate symbol absent from the current value map still has the
+  // native Kconfig value N.  Keep scalar symbols deferred: their omitted
+  // values are not safely inferable from this runtime boundary.
+  if (resolved && contextComplete) {
+    for (const record of model?.records || []) {
+      if (!record?.configSymbol || !['bool', 'tristate'].includes(record.type)) continue;
+      if (!context.values.has(record.configSymbol)) closedSymbols.add(record.configSymbol);
+    }
+  }
   return {
     target: resolved, values: context.values, changes: context.changes, trustedSymbols,
     validationOptions: { phase, contextComplete, trustedSymbols, closedSymbols,

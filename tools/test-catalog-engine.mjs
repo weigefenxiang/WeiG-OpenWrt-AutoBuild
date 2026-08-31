@@ -213,6 +213,89 @@ assert(evaluateExpressionState('UNPUBLISHED_DEFAULT', new Map(), { contextComple
 assert(evaluateExpressionState('PACKAGE_missing', new Map(), { contextComplete: false }).status === 'unsatisfied',
   'missing package was not a closed-world disabled value');
 
+// A complete Target/Profile closes omitted known bool/tristate symbols at N.
+// This is required when a sparse Native baseline has not materialized every
+// Catalog record in the current value map; scalar symbols and symbols absent
+// from Catalog remain deferred.
+const sparseClosureRecords = [
+  { kind: 'config', configSymbol: 'SPARSE_GATE', kconfigSymbol: 'SPARSE_GATE',
+    type: 'bool', states: ['n', 'y'], hidden: true, visible: false },
+  { kind: 'config', configSymbol: 'SPARSE_NEGATIVE_TARGET', kconfigSymbol: 'SPARSE_NEGATIVE_TARGET',
+    type: 'bool', states: ['n', 'y'] },
+  { kind: 'config', configSymbol: 'SPARSE_POSITIVE_TARGET', kconfigSymbol: 'SPARSE_POSITIVE_TARGET',
+    type: 'bool', states: ['n', 'y'] },
+  { kind: 'config', configSymbol: 'SPARSE_NEGATIVE_ROOT', kconfigSymbol: 'SPARSE_NEGATIVE_ROOT',
+    type: 'bool', states: ['n', 'y'],
+    kconfig: { selectsExpressions: [['SPARSE_NEGATIVE_TARGET if !SPARSE_GATE']] } },
+  { kind: 'config', configSymbol: 'SPARSE_POSITIVE_ROOT', kconfigSymbol: 'SPARSE_POSITIVE_ROOT',
+    type: 'bool', states: ['n', 'y'],
+    kconfig: { selectsExpressions: [['SPARSE_POSITIVE_TARGET if SPARSE_GATE']] } },
+  { kind: 'config', configSymbol: 'SPARSE_CHAIN_ROOT', kconfigSymbol: 'SPARSE_CHAIN_ROOT',
+    type: 'bool', states: ['n', 'y'],
+    kconfig: { selectsExpressions: [['SPARSE_CHAIN_MIDDLE if !SPARSE_GATE']] } },
+  { kind: 'config', configSymbol: 'SPARSE_CHAIN_MIDDLE', kconfigSymbol: 'SPARSE_CHAIN_MIDDLE',
+    type: 'bool', states: ['n', 'y'],
+    kconfig: { selectsExpressions: [['SPARSE_CHAIN_LEAF']] } },
+  { kind: 'config', configSymbol: 'SPARSE_CHAIN_LEAF', kconfigSymbol: 'SPARSE_CHAIN_LEAF',
+    type: 'bool', states: ['n', 'y'] },
+];
+const sparseClosureModel = createCatalogModel({
+  schema: 5,
+  targets: [],
+  relations: { schema: 2, records: sparseClosureRecords, indexes: {} },
+});
+const sparseClosureTarget = {
+  system: 'sparse', board: 'sparse', subtarget: '64', arch: 'ARCH_SPARSE',
+  boardSelector: 'TARGET_sparse', targetSelector: 'TARGET_sparse_64',
+  profileSelector: 'TARGET_sparse_64_DEVICE_generic', profileSymbol: 'DEVICE_generic',
+  profile: 'generic', features: [], packages: [], profilePackages: [],
+};
+const sparseClosureContext = createCatalogValidationContext(
+  sparseClosureModel, sparseClosureTarget, new Map(), { phase: 'interactive' },
+);
+assert(sparseClosureContext.validationOptions.closedSymbols.has('SPARSE_GATE') &&
+  evaluateExpressionState('!SPARSE_GATE', sparseClosureContext.values,
+    sparseClosureContext.validationOptions).status === 'satisfied',
+  'a known omitted bool symbol was not closed to N for a complete Target/Profile');
+assert(evaluateExpressionState('SPARSE_GATE', sparseClosureContext.values,
+  sparseClosureContext.validationOptions).status === 'unsatisfied' &&
+  evaluateExpressionState('SPARSE_NOT_IN_CATALOG', sparseClosureContext.values,
+    sparseClosureContext.validationOptions).status === 'deferred',
+  'known N and genuinely absent symbols did not retain distinct expression semantics');
+const sparseNegative = applyUserIntent(sparseClosureModel, sparseClosureContext.values, {
+  symbol: 'SPARSE_NEGATIVE_ROOT', value: 'y',
+  validationOptions: sparseClosureContext.validationOptions,
+});
+assert(sparseNegative.values.get('SPARSE_NEGATIVE_TARGET') === 'y' &&
+  (sparseNegative.values.get('SPARSE_POSITIVE_TARGET') ?? 'n') === 'n',
+  'a known omitted N symbol did not activate a negative select while its positive select stayed closed');
+const sparseChain = reconcileKconfigDerivedValues(sparseClosureModel,
+  new Map([['SPARSE_CHAIN_ROOT', 'y']]), sparseClosureContext.validationOptions);
+assert(sparseChain.values.get('SPARSE_CHAIN_MIDDLE') === 'y' &&
+  sparseChain.values.get('SPARSE_CHAIN_LEAF') === 'y',
+  'multi-level reverse-select convergence did not use the closed known-symbol context');
+const sparseExplicitGateContext = createCatalogValidationContext(sparseClosureModel,
+  sparseClosureTarget, new Map([['SPARSE_GATE', 'y']]), { phase: 'interactive' });
+const sparseExplicitNegative = applyUserIntent(sparseClosureModel,
+  sparseExplicitGateContext.values, {
+    symbol: 'SPARSE_NEGATIVE_ROOT', value: 'y',
+    validationOptions: sparseExplicitGateContext.validationOptions,
+  });
+assert((sparseExplicitNegative.values.get('SPARSE_NEGATIVE_TARGET') ?? 'n') === 'n',
+  'an explicit Y gate did not disable the negative condition');
+assert(applyUserIntent(sparseClosureModel, sparseExplicitGateContext.values, {
+  symbol: 'SPARSE_POSITIVE_ROOT', value: 'y',
+  validationOptions: sparseExplicitGateContext.validationOptions,
+}).values.get('SPARSE_POSITIVE_TARGET') === 'y',
+  'an explicit Y gate did not enable the positive condition');
+const sparseIncompleteContext = createCatalogValidationContext(sparseClosureModel, {
+  ...sparseClosureTarget, profileSelector: '', profileSymbol: '', profile: '',
+}, new Map(), { phase: 'interactive' });
+assert(!sparseIncompleteContext.validationOptions.closedSymbols.has('SPARSE_GATE') &&
+  evaluateExpressionState('!SPARSE_GATE', sparseIncompleteContext.values,
+    sparseIncompleteContext.validationOptions).status === 'deferred',
+  'an incomplete Target/Profile incorrectly closed a known omitted symbol');
+
 const defaultValues = new Map([['ON', 'y'], ['MODULE', 'm'], ['OFF', 'n']]);
 const expressionDefaults = [
   ['y', 'y', 'y'],

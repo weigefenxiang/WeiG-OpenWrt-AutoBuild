@@ -30,6 +30,7 @@ vm.runInContext([
   sourceRange('normalizeImportedKconfigValue', 'importedValue'),
   sourceRange('serializeKconfigValue', 'setConfigSymbol'),
   sourceRange('setConfigSymbol', 'applyMenuConfig'),
+  sourceRange('applyMenuConfig', 'applyImportedUnknownEdits'),
 ].join('\n'), context, { filename: 'kconfig-serializer-fixture.js' });
 
 const {
@@ -38,6 +39,7 @@ const {
   normalizeImportedKconfigValue,
   serializeKconfigValue,
   setConfigSymbol,
+  applyMenuConfig,
 } = context;
 
 // bool / tristate: only real Kconfig states are valid.
@@ -119,5 +121,42 @@ assert.match(regressionOutput, /^CONFIG_TARGET_KERNEL_PARTSIZE=32$/m);
 assert.match(regressionOutput, /^CONFIG_TARGET_ROOTFS_PARTSIZE=160$/m);
 assert.match(regressionOutput, /^CONFIG_UNKNOWN_STRING="leave-me-exactly"$/m);
 assert.match(regressionOutput, /^# CONFIG_UNKNOWN_DISABLED is not set$/m);
+
+// Kconfig-derived dependencies are part of the final output layer even when
+// config import did not mark them as touched. Their values must retain the
+// Catalog option type, including an explicit n override of a native y.
+context.MENU_CATALOG = { schema: 6 };
+context.menuTouched = new Set();
+context.catalogRecommendedValues = new Map();
+context.catalogUserOverrides = new Map();
+context.catalogImportedSymbols = new Set();
+context.catalogDependencySymbols = new Set(['AUTO_Y', 'AUTO_M', 'AUTO_N']);
+context.catalogBaselineValues = new Map();
+context.menuValues = new Map([
+  ['AUTO_Y', 'y'], ['AUTO_M', 'm'], ['AUTO_N', 'n'], ['UNRELATED', 'y'],
+]);
+context.menuSearchOptions = [
+  { symbol: 'AUTO_Y', type: 'bool', visible: true, userSettable: true, hidden: false },
+  { symbol: 'AUTO_M', type: 'tristate', visible: true, userSettable: true, hidden: false },
+  { symbol: 'AUTO_N', type: 'bool', visible: true, userSettable: true, hidden: false },
+  { symbol: 'UNRELATED', type: 'bool', visible: true, userSettable: true, hidden: false },
+];
+context.menuOptionBySymbol = new Map(context.menuSearchOptions.map((option) => [option.symbol, option]));
+
+const dependencyInput = [
+  '# CONFIG_AUTO_Y is not set',
+  'CONFIG_AUTO_M=n',
+  'CONFIG_AUTO_N=y',
+  '',
+].join('\n');
+const dependencyOutput = applyMenuConfig(dependencyInput);
+assert.match(dependencyOutput, /^CONFIG_AUTO_Y=y$/m,
+  'automatic y dependency must replace a native not-set value');
+assert.match(dependencyOutput, /^CONFIG_AUTO_M=m$/m,
+  'automatic m dependency must retain tristate serialization');
+assert.match(dependencyOutput, /^# CONFIG_AUTO_N is not set$/m,
+  'automatic n dependency must replace a native y value');
+assert.doesNotMatch(dependencyOutput, /^CONFIG_UNRELATED=/m,
+  'unrelated untouched symbols must not be added to the output');
 
 console.log('Kconfig serializer hardening matrix: PASS');
