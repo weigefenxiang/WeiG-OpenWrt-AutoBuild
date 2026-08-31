@@ -37,6 +37,7 @@ modules use them. New rules should prefer the semantic roles below.
 | Subtle content | `--content-subtle` | Metadata and helper text |
 | Action accent | `--accent` / `--accent-strong` | Links, focus, selected state |
 | Accent surface | `--accent-surface` | Selected and informative surfaces |
+| Field surface | `--field-*` | Recessed text/select/textarea controls |
 | Status | `--ok`, `--warn`, `--danger` | Semantic feedback only |
 
 Raised page regions use `--surface-frame-*`, plugin category headers use
@@ -65,10 +66,16 @@ more configuration context without making the controls feel dense.
 
 Components are organized in layers: primitives, composites, then overlays.
 
-- Controls use the shared raised-control template: inset top highlight,
-  `--control-border`, a normal elevation, a one-pixel hover lift, and a
-  pressed elevation. Focus uses `--focus-ring` and remains visible in both
-  themes.
+- Buttons and action controls use the shared raised-control template. Text,
+  search, password, numeric, URL, telephone, email, select, textarea, and
+  dynamically-rendered menuconfig scalar fields use the shared recessed
+  `--field-*` template: an inset shadow, stable border geometry, filled/hover/
+  focus/disabled/read-only states, and visible focus in both themes. Choice
+  inputs (checkbox, radio, and file) and buttons keep their own contracts.
+- Plugin group headers use the same blue-gray category surface. Their default,
+  expanded, hover, and keyboard-focus states are distinguished by the shared
+  surface tokens; counts are compact capsules and do not rely on a decorative
+  side stripe.
 - Cards and plugin rows use the selectable-card tokens. Selected, disabled,
   built-in, forced, and removable states remain visually distinct.
 - Every actionable control has a target close to 44px in both dimensions;
@@ -85,7 +92,10 @@ Components are organized in layers: primitives, composites, then overlays.
   hierarchy is visible without excessive borders.
 - Grids use `minmax(0, 1fr)` and may wrap. Long Source, Branch, Target, Profile,
   package, and diagnostic values must not create horizontal page overflow.
-- The sticky action bar owns its own clearance through `--actionbar-height`.
+- The document is a column flex shell: `body` fills the dynamic viewport,
+  `main#app` absorbs short-page space, and the footer remains a normal-sized
+  final item. The sticky action bar owns its own clearance through
+  `--actionbar-height`.
   Floating controls use `--overlay-clearance` and never cover the primary
   submit action.
 - A page section may scroll internally only when it has a visible boundary and

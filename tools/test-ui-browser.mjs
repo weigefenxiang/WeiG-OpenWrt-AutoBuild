@@ -36,6 +36,7 @@ const VIEWPORTS = Object.freeze([
   { name: 'tablet-768x1024', width: 768, height: 1024 },
   { name: 'short-1024x600', width: 1024, height: 600 },
   { name: 'desktop-1366x768', width: 1366, height: 768 },
+  { name: 'desktop-1920x1080', width: 1920, height: 1080 },
 ]);
 const THEMES = Object.freeze(['light', 'dark']);
 const DOCK_CONTROL_SELECTORS = Object.freeze([
@@ -679,7 +680,178 @@ async function main() {
       input?.blur();
       return true;
     }`).catch(() => {});
-    await delay(80);
+    await waitFor('floating layers reset', () => evaluateFunction(browser, `() => {
+      const tooltip = document.getElementById('uiTooltip');
+      const modal = document.getElementById('modal');
+      const fontPanel = document.getElementById('fontPanel');
+      const timezoneMenu = document.getElementById('timezoneMenu');
+      return Boolean(tooltip?.hidden && modal?.hidden && fontPanel?.hidden && timezoneMenu?.hidden);
+    }`), 3_000, 40).catch(() => {});
+  }
+
+  async function headerTooltipState(selector) {
+    return evaluateFunction(browser, `(selector) => {
+      const target = document.querySelector(selector);
+      const tooltip = document.getElementById('uiTooltip');
+      if (!target || !tooltip) return null;
+      const tooltipRect = tooltip.getBoundingClientRect();
+      const header = document.querySelector('.site-header')?.getBoundingClientRect();
+      const actionbar = document.getElementById('actionbar')?.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const body = document.getElementById('uiTooltipBody');
+      return {
+        target: target.id || target.className,
+        expected: target.dataset.uiTooltipBody || '',
+        actual: body?.textContent || '',
+        hidden: Boolean(tooltip.hidden),
+        placement: tooltip.dataset.placement || '',
+        targetRect: { left: targetRect.left, top: targetRect.top, right: targetRect.right, bottom: targetRect.bottom },
+        tooltipRect: { left: tooltipRect.left, top: tooltipRect.top, right: tooltipRect.right, bottom: tooltipRect.bottom },
+        header: header ? { left: header.left, top: header.top, right: header.right, bottom: header.bottom } : null,
+        actionbar: actionbar ? { left: actionbar.left, top: actionbar.top, right: actionbar.right, bottom: actionbar.bottom } : null,
+        active: document.activeElement === target,
+      };
+    }`, [selector]);
+  }
+
+  function tooltipSafe(state, context) {
+    if (!state || state.hidden) return false;
+    const rect = state.tooltipRect;
+    const overlaps = (a, b) => a && b && Math.min(a.right, b.right) > Math.max(a.left, b.left) &&
+      Math.min(a.bottom, b.bottom) > Math.max(a.top, b.top);
+    return rect.left >= -2 && rect.top >= -2 && rect.right <= context.viewport.width + 2 &&
+      rect.bottom <= context.viewport.height + 2 && !overlaps(rect, state.header) &&
+      !overlaps(rect, state.actionbar);
+  }
+
+  async function exerciseHeaderTooltips(context) {
+    const selectors = ['#repoLink', '.header-actions .blog-link'];
+    const initial = [];
+    for (const selector of selectors) {
+      const target = await evaluateFunction(browser, `(selector) => {
+        const element = document.querySelector(selector);
+        if (!element) return null;
+        element.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }));
+        return { body: element.dataset.uiTooltipBody || '', aria: element.getAttribute('aria-label') || '' };
+      }`, [selector]);
+      const hovered = await waitFor(`${selector} hover tooltip`, async () => {
+        const state = await headerTooltipState(selector);
+        return state && !state.hidden && state.actual === state.expected && state.actual === target?.body &&
+          tooltipSafe(state, context) ? state : null;
+      }, 3_000, 40);
+      initial.push({ selector, body: target?.body || '', aria: target?.aria || '', hovered });
+
+      await evaluateFunction(browser, `(selector) => {
+        const element = document.querySelector(selector);
+        element?.focus({ preventScroll: true });
+        return true;
+      }`, [selector]);
+      const focused = await waitFor(`${selector} focus tooltip`, async () => {
+        const state = await headerTooltipState(selector);
+        return state && state.active && !state.hidden && state.actual === state.expected &&
+          tooltipSafe(state, context) ? state : null;
+      }, 3_000, 40);
+      if (!focused) throw new Error(`${selector} focus tooltip did not settle`);
+
+      const updatedBody = `${target?.body || target?.aria || selector} · updated`;
+      await evaluateFunction(browser, `(selector, value) => {
+        const element = document.querySelector(selector);
+        if (!element) return false;
+        element.dataset.uiTooltipBody = value;
+        element.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }));
+        return true;
+      }`, [selector, updatedBody]);
+      const updated = await waitFor(`${selector} updated tooltip`, async () => {
+        const state = await headerTooltipState(selector);
+        return state && !state.hidden && state.actual === updatedBody && tooltipSafe(state, context) ? state : null;
+      }, 3_000, 40);
+      if (!updated) throw new Error(`${selector} tooltip content update did not settle`);
+      await evaluateFunction(browser, `(selector, value) => {
+        const element = document.querySelector(selector);
+        if (!element) return false;
+        element.dataset.uiTooltipBody = value;
+        element.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }));
+        return true;
+      }`, [selector, target?.body || '']);
+      await waitFor(`${selector} tooltip restored`, async () => {
+        const state = await headerTooltipState(selector);
+        return state && !state.hidden && state.actual === (target?.body || '') ? state : null;
+      }, 3_000, 40);
+    }
+
+    const first = initial[0];
+    const second = initial[1];
+    await evaluateFunction(browser, `(selector) => document.querySelector(selector)?.focus({ preventScroll: true })`, [first.selector]);
+    await waitFor('repo tooltip before adjacent retarget', async () => {
+      const state = await headerTooltipState(first.selector);
+      return state && state.active && state.actual === first.body ? state : null;
+    }, 3_000, 40);
+    await evaluateFunction(browser, `(selector) => document.querySelector(selector)?.focus({ preventScroll: true })`, [second.selector]);
+    const retargeted = await waitFor('adjacent blog tooltip retarget', async () => {
+      const state = await headerTooltipState(second.selector);
+      return state && state.active && !state.hidden && state.actual === second.body && tooltipSafe(state, context) ? state : null;
+    }, 3_000, 40);
+    if (!retargeted) throw new Error('adjacent header tooltip retarget did not settle');
+
+    const beforeResize = retargeted.tooltipRect;
+    await evaluateFunction(browser, `() => { window.dispatchEvent(new Event('resize')); return true; }`);
+    const reanchored = await waitFor('adjacent tooltip re-anchor', async () => {
+      const state = await headerTooltipState(second.selector);
+      return state && state.active && !state.hidden && state.actual === second.body && tooltipSafe(state, context) ? state : null;
+    }, 3_000, 40);
+    if (!reanchored) throw new Error('adjacent header tooltip re-anchor did not settle');
+    if (Math.abs(reanchored.tooltipRect.left - beforeResize.left) > context.viewport.width + 2 ||
+        Math.abs(reanchored.tooltipRect.top - beforeResize.top) > context.viewport.height + 2) {
+      throw new Error('adjacent header tooltip moved outside viewport while re-anchoring');
+    }
+    await resetFloatingState();
+  }
+
+  async function assertShortPageFooter(context) {
+    await evaluateFunction(browser, `() => {
+      const main = document.getElementById('app');
+      for (const child of main?.children || []) child.style.display = 'none';
+      for (const child of document.body.children) {
+        if (!child.matches('.site-header, #app, .site-footer')) child.style.display = 'none';
+      }
+      window.scrollTo(0, 0);
+      return true;
+    }`);
+    await waitFor('short-page layout settled', () => evaluateFunction(browser,
+      `() => window.scrollY === 0 && document.querySelector('.site-footer')?.getBoundingClientRect().bottom > 0`),
+    3_000, 40);
+    const state = await evaluateFunction(browser, `() => {
+      const body = document.body;
+      const main = document.getElementById('app');
+      const footer = document.querySelector('.site-footer');
+      if (!body || !main || !footer) return null;
+      const footerRect = footer.getBoundingClientRect();
+      const bodyRect = body.getBoundingClientRect();
+      const mainRect = main.getBoundingClientRect();
+      const bodyStyle = getComputedStyle(body);
+      const mainStyle = getComputedStyle(main);
+      return {
+        bodyDisplay: bodyStyle.display,
+        bodyDirection: bodyStyle.flexDirection,
+        mainFlexGrow: Number(mainStyle.flexGrow),
+        footerTop: footerRect.top,
+        footerBottom: footerRect.bottom,
+        bodyTop: bodyRect.top,
+        bodyBottom: bodyRect.bottom,
+        mainHeight: mainRect.height,
+        scrollY: window.scrollY,
+        viewportHeight: window.innerHeight,
+        scrollHeight: document.documentElement.scrollHeight,
+      };
+    }`);
+    expect(Boolean(state), context, 'short-page footer geometry is unavailable');
+    if (!state) return;
+    expect(state.bodyDisplay === 'flex' && state.bodyDirection === 'column' && state.mainFlexGrow > 0,
+      context, 'page shell is not a growing column flex layout', state);
+    expect(Math.abs(state.footerBottom - state.viewportHeight) <= 2,
+      context, 'short-page footer leaves unused viewport space below it', state);
+    expect(state.scrollHeight <= state.viewportHeight + 2,
+      context, 'short-page shell creates avoidable document overflow', state);
   }
 
   async function runInteractions(context) {
@@ -690,22 +862,10 @@ async function main() {
     await assertInside('#importBtn', context);
     await assertInside('#siteVersion', context);
 
-    // Shared tooltip: verify the accessible focus path before opening other
-    // floating layers, so their intentional Escape/viewport lifecycle cannot
-    // affect this independent contract.
-    await waitFor('shared tooltip focus trigger', () => evaluateFunction(browser, `() => {
-      const target = document.getElementById('repoLink');
-      const tooltip = document.getElementById('uiTooltip');
-      if (!target || !tooltip) return false;
-      if (!tooltip.hidden) return true;
-      if (document.activeElement === target) target.blur();
-      target.tabIndex = 0;
-      target.focus({ preventScroll: true });
-      return !tooltip.hidden;
-    }`), 3_000, 80);
-    await waitVisible('#uiTooltip', context);
-    await assertInside('#uiTooltip', context, { actionbarSafe: true });
-    await resetFloatingState();
+    // Header actions share one tooltip layer. Exercise adjacent repository and
+    // blog triggers in sequence so hover, focus, content replacement and
+    // re-anchoring all use the same viewport-safe geometry contract.
+    await exerciseHeaderTooltips(context);
 
     // The dock may start collapsed or return to gear-only after Escape. Open
     // the shared dock panel whenever a test needs one of its child controls.
@@ -722,8 +882,10 @@ async function main() {
       input.dispatchEvent(new Event('change', { bubbles: true }));
       return input.value;
     }`);
-    await delay(80);
-    const fontValue = await evaluateFunction(browser, `() => document.getElementById('fontInput')?.value`);
+    const fontValue = await waitFor('Aa maximum value applied', async () => {
+      const value = await evaluateFunction(browser, `() => document.getElementById('fontInput')?.value`);
+      return Number(value) === 24 ? value : null;
+    }, 3_000, 40);
     expect(Number(fontValue) === 24, context, 'Aa maximum value was not applied', { value: fontValue });
     await assertInside('#fontPanel', context, { actionbarSafe: true });
     await click('#fontReset');
@@ -806,6 +968,11 @@ async function main() {
     expect(Math.abs(Number(actual.innerWidth) - viewport.width) <= 2 &&
       Math.abs(Number(actual.innerHeight) - viewport.height) <= 2,
       context, 'CDP layout viewport dimensions differ from requested size', { requested: viewport, actual, visual });
+
+    // Collapse the page content to reproduce a short result page. The shared
+    // shell must keep the real footer at the viewport edge without synthetic
+    // footer height or a blank document tail.
+    await assertShortPageFooter(context);
   }
 
   try {

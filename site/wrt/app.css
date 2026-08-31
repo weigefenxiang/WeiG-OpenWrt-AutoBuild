@@ -72,6 +72,18 @@
   --control-shadow-selected: 0 3px 8px rgba(37, 99, 235, .18), 0 8px 18px rgba(37, 99, 235, .09);
   --control-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent);
   --control-lift: -1px;
+  /* Shared recessed field surface. Keep this separate from raised buttons so
+     text entry reads as an inset workspace in every theme. */
+  --field-border: color-mix(in srgb, var(--border) 62%, #7f8da1 38%);
+  --field-surface-top: color-mix(in srgb, var(--surface-inset) 82%, var(--surface-page) 18%);
+  --field-surface-bottom: color-mix(in srgb, var(--surface-inset) 94%, var(--surface-raised) 6%);
+  --field-highlight: rgba(255, 255, 255, .42);
+  --field-inset-shadow: inset 0 2px 5px rgba(15, 23, 42, .12), inset 0 -1px 0 rgba(255, 255, 255, .24);
+  --field-shadow: 0 1px 1px rgba(15, 23, 42, .08), 0 2px 5px rgba(55, 75, 104, .08);
+  --field-shadow-hover: inset 0 2px 5px rgba(15, 23, 42, .10), inset 0 -1px 0 rgba(255, 255, 255, .28), 0 2px 7px rgba(37, 99, 235, .12);
+  --field-focus-shadow: inset 0 2px 5px rgba(15, 23, 42, .12), inset 0 -1px 0 rgba(255, 255, 255, .28), 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent);
+  --field-filled-border: color-mix(in srgb, var(--accent) 48%, var(--field-border));
+  --field-disabled-surface: color-mix(in srgb, var(--surface-inset) 70%, var(--surface-page) 30%);
   --radius: 10px;
   --shadow: 0 1px 3px rgba(16, 24, 40, .08);
 
@@ -194,6 +206,16 @@ html[data-theme="dark"] {
   --control-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
   --control-lift: -1px;
   --shadow: none;
+  --field-border: color-mix(in srgb, var(--border) 76%, var(--text3) 24%);
+  --field-surface-top: color-mix(in srgb, var(--surface-page) 28%, var(--surface-inset) 72%);
+  --field-surface-bottom: color-mix(in srgb, var(--surface-inset) 90%, var(--surface-raised) 10%);
+  --field-highlight: rgba(255, 255, 255, .07);
+  --field-inset-shadow: inset 0 2px 6px rgba(0, 0, 0, .30), inset 0 -1px 0 rgba(255, 255, 255, .06);
+  --field-shadow: 0 1px 2px rgba(0, 0, 0, .24), 0 3px 8px rgba(0, 0, 0, .14);
+  --field-shadow-hover: inset 0 2px 6px rgba(0, 0, 0, .28), inset 0 -1px 0 rgba(255, 255, 255, .08), 0 3px 10px color-mix(in srgb, var(--accent) 18%, transparent);
+  --field-focus-shadow: inset 0 2px 6px rgba(0, 0, 0, .30), inset 0 -1px 0 rgba(255, 255, 255, .08), 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+  --field-filled-border: color-mix(in srgb, var(--accent) 58%, var(--field-border));
+  --field-disabled-surface: color-mix(in srgb, var(--surface-page) 52%, var(--surface-inset) 48%);
   --surface-frame-shadow: 0 4px 14px rgba(0, 0, 0, .28), 0 18px 42px rgba(0, 0, 0, .22);
   --surface-frame-highlight: rgba(255, 255, 255, .08);
   --surface-category-shadow: 0 2px 5px rgba(0, 0, 0, .28), 0 8px 18px rgba(0, 0, 0, .18);
@@ -253,6 +275,16 @@ html[data-theme="dark"] {
     --control-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
     --control-lift: -1px;
     --shadow: none;
+    --field-border: color-mix(in srgb, var(--border) 76%, var(--text3) 24%);
+    --field-surface-top: color-mix(in srgb, var(--surface-page) 28%, var(--surface-inset) 72%);
+    --field-surface-bottom: color-mix(in srgb, var(--surface-inset) 90%, var(--surface-raised) 10%);
+    --field-highlight: rgba(255, 255, 255, .07);
+    --field-inset-shadow: inset 0 2px 6px rgba(0, 0, 0, .30), inset 0 -1px 0 rgba(255, 255, 255, .06);
+    --field-shadow: 0 1px 2px rgba(0, 0, 0, .24), 0 3px 8px rgba(0, 0, 0, .14);
+    --field-shadow-hover: inset 0 2px 6px rgba(0, 0, 0, .28), inset 0 -1px 0 rgba(255, 255, 255, .08), 0 3px 10px color-mix(in srgb, var(--accent) 18%, transparent);
+    --field-focus-shadow: inset 0 2px 6px rgba(0, 0, 0, .30), inset 0 -1px 0 rgba(255, 255, 255, .08), 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+    --field-filled-border: color-mix(in srgb, var(--accent) 58%, var(--field-border));
+    --field-disabled-surface: color-mix(in srgb, var(--surface-page) 52%, var(--surface-inset) 48%);
     --surface-frame-shadow: 0 4px 14px rgba(0, 0, 0, .28), 0 18px 42px rgba(0, 0, 0, .22);
     --surface-frame-highlight: rgba(255, 255, 255, .08);
     --surface-category-shadow: 0 2px 5px rgba(0, 0, 0, .28), 0 8px 18px rgba(0, 0, 0, .18);
@@ -272,8 +304,11 @@ body.modal-open { overflow: hidden; }
 body {
   position: relative;
   isolation: isolate;
+  display: flex;
+  flex-direction: column;
   margin: 0;
-  min-height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   min-width: 0;
   background:
     radial-gradient(circle at 12% -10%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 34rem),
@@ -288,6 +323,10 @@ body {
   font: var(--font-body)/var(--font-line-body) var(--font-family-sans);
   transition: background-color var(--motion-slow) var(--ease-standard), color var(--motion-slow) var(--ease-standard);
 }
+/* The application canvas absorbs short-page space, keeping the action bar and
+   footer in normal document order without inventing footer height. */
+main#app { flex: 1 0 auto; min-height: 0; }
+.site-footer { flex: 0 0 auto; }
 /* Keep the star field behind the work surfaces, with no hit target or layout
    effect. The surface modules provide the opaque/raised foreground layers. */
 body::before {
@@ -771,21 +810,37 @@ button.catalog-applications-state{cursor:pointer}
 .group-head {
   position: relative;
   display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 13px 14px 13px 18px; font-size: var(--font-item-title); font-weight: 600;
+  min-height: 52px; padding: 12px 14px; font-size: var(--font-item-title); font-weight: 650;
   background: linear-gradient(180deg, var(--surface-category-top) 0%, var(--surface-category-bottom) 100%);
-  border: none; border-bottom: 1px solid var(--surface-category-border);
-  box-shadow: inset 0 1px 0 var(--surface-category-highlight), var(--surface-category-shadow);
+  border: 0; border-bottom: 1px solid var(--surface-category-border);
+  box-shadow: inset 0 1px 0 var(--surface-category-highlight), inset 0 -1px 0 color-mix(in srgb, var(--surface-category-border) 72%, transparent), var(--surface-category-shadow);
   color: var(--text); text-align: left;
+  transition: background var(--motion-base) var(--ease-standard), border-color var(--motion-base) var(--ease-standard), box-shadow var(--motion-base) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
 }
-.group-head::before {
-  content: ""; position: absolute; inset: 9px auto 9px 0; width: 3px;
-  border-radius: 0 3px 3px 0; background: var(--surface-category-accent);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--surface-category-accent) 32%, transparent);
+.group-head:hover {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-category-top) 82%, var(--accent) 18%) 0%, color-mix(in srgb, var(--surface-category-bottom) 88%, var(--accent) 12%) 100%);
+  box-shadow: inset 0 1px 0 var(--surface-category-highlight), inset 0 -1px 0 color-mix(in srgb, var(--accent) 42%, var(--surface-category-border)), 0 4px 12px color-mix(in srgb, var(--accent) 14%, transparent);
 }
-.group-ico { font-size: 15px; color: var(--surface-category-accent); }
-.group-badge { font-weight: 400; font-size: 13.5px; color: var(--accent-text); background: var(--accent-bg); border-radius: 999px; padding: 1px 8px; }
+.group-head:focus-visible {
+  outline: 3px solid var(--accent); outline-offset: -3px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-category-top) 76%, var(--accent) 24%) 0%, color-mix(in srgb, var(--surface-category-bottom) 84%, var(--accent) 16%) 100%);
+}
+.group-head[aria-expanded="true"] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-category-top) 88%, var(--accent) 12%) 0%, color-mix(in srgb, var(--surface-category-bottom) 92%, var(--accent) 8%) 100%);
+  box-shadow: inset 0 1px 0 var(--surface-category-highlight), inset 0 -1px 0 color-mix(in srgb, var(--accent) 38%, var(--surface-category-border)), var(--surface-category-shadow);
+}
+.group-head[aria-expanded="true"]:hover {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-category-top) 76%, var(--accent) 24%) 0%, color-mix(in srgb, var(--surface-category-bottom) 84%, var(--accent) 16%) 100%);
+}
+.group-ico { font-size: 15px; color: var(--surface-category-accent); filter: drop-shadow(0 1px 1px color-mix(in srgb, var(--text) 20%, transparent)); }
+.group-badge, .group-count {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 2ch;
+  padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--surface-category-border));
+  border-radius: var(--radius-pill); background: color-mix(in srgb, var(--accent-bg) 78%, var(--surface-category-bottom));
+  color: var(--accent-text); font-size: var(--font-badge); font-weight: 650; line-height: 1.2;
+}
 .group-badge:empty { display: none; }
-.group-count { font-weight: 400; font-size: var(--font-meta); color: var(--text3); margin-left: auto; }
+.group-count { margin-left: auto; color: var(--text2); }
 .chev { color: var(--text3); font-size: 12px; transition: transform var(--motion-base) var(--ease-standard); }
 .group.collapsed .chev { transform: rotate(-90deg); }
 .group.collapsed .plugin-grid { display: none; }
@@ -1516,28 +1571,90 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
 }
 @media(max-width:560px){.catalog-load-details{grid-template-columns:1fr;grid-template-areas:"summary" "diagnostics" "actions"}.catalog-load-actions{grid-template-columns:1fr;min-width:0}.catalog-status-link,.catalog-copy-diagnostics{width:100%}}
 
-/* 标准交互控件模板：以后新增输入/下拉/按钮/选择框优先复用 .control-field / .control-action / .control-choice */
-:where(.control-field, input[type="search"], input[type="text"], input[type="password"], input[type="number"], select, textarea) {
-  border: 1px solid var(--control-border);
-  background: linear-gradient(180deg, var(--control-surface-top) 0%, var(--control-surface-bottom) 100%);
+/* Shared recessed field template. The explicit type list deliberately keeps
+   checkbox/radio/file/button controls on their own interaction contract. */
+:is(
+  .control-field:not(button):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+  input[type="search"], input[type="text"], input[type="password"], input[type="number"],
+  input[type="url"], input[type="tel"], input[type="email"], select, textarea
+) {
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, var(--field-surface-top) 0%, var(--field-surface-bottom) 100%);
+  background-clip: padding-box;
   color: var(--text);
-  box-shadow: inset 0 1px 0 var(--control-highlight), var(--control-shadow);
+  box-shadow: var(--field-inset-shadow), var(--field-shadow);
   outline: none;
-  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease, color .15s ease, opacity .15s ease;
+  font: inherit;
+  font-size: var(--font-body);
+  line-height: 1.4;
+  transition: border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard), opacity var(--motion-fast) var(--ease-standard);
 }
-:where(.control-field, input[type="search"], input[type="text"], input[type="password"], input[type="number"], select, textarea):hover:not(:disabled):not([readonly]) {
-  border-color: color-mix(in srgb, var(--accent) 58%, var(--control-border));
-  box-shadow: inset 0 1px 0 var(--control-highlight), var(--control-shadow-hover);
+:is(
+  input[type="search"], input[type="text"], input[type="password"], input[type="number"],
+  input[type="url"], input[type="tel"], input[type="email"], textarea
+) {
+  caret-color: var(--accent);
 }
-:where(.control-field, input[type="search"], input[type="text"], input[type="password"], input[type="number"], select, textarea):focus-visible {
+:is(
+  .control-field:not(button):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+  input[type="search"], input[type="text"], input[type="password"], input[type="number"],
+  input[type="url"], input[type="tel"], input[type="email"], select, textarea
+):hover:not(:disabled):not([readonly]) {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--field-border));
+  box-shadow: var(--field-inset-shadow), var(--field-shadow-hover);
+}
+:is(
+  .control-field:not(button):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+  input[type="search"], input[type="text"], input[type="password"], input[type="number"],
+  input[type="url"], input[type="tel"], input[type="email"], select, textarea
+):focus {
   border-color: var(--accent);
-  box-shadow: inset 0 1px 0 var(--control-highlight), var(--control-shadow), var(--control-focus-ring);
+  box-shadow: var(--field-focus-shadow);
 }
-:where(input[type="search"], input[type="text"], input[type="password"], input[type="number"], select, textarea):disabled,
-:where(input[type="search"], input[type="text"], input[type="password"], input[type="number"], textarea)[readonly] {
-  opacity: .58;
-  background: var(--card2);
-  box-shadow: none;
+:is(
+  .control-field:not(button):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+  input[type="search"], input[type="text"], input[type="password"], input[type="number"],
+  input[type="url"], input[type="tel"], input[type="email"], select, textarea
+):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Native placeholder state is the only value-aware CSS signal available to
+   dynamically-created Kconfig scalar inputs. A .field-filled hook remains
+   available for future controls that can track value changes explicitly. */
+:is(
+  .control-field.field-filled:not(button):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+  input[type="search"].field-filled, input[type="text"].field-filled,
+  input[type="password"].field-filled, input[type="number"].field-filled,
+  input[type="url"].field-filled, input[type="tel"].field-filled,
+  input[type="email"].field-filled,
+  select.field-filled, textarea.field-filled,
+  input[type="search"]:not(:placeholder-shown), input[type="text"]:not(:placeholder-shown),
+  input[type="password"]:not(:placeholder-shown), input[type="number"]:not(:placeholder-shown),
+  input[type="url"]:not(:placeholder-shown), input[type="tel"]:not(:placeholder-shown),
+  input[type="email"]:not(:placeholder-shown)
+):not(:disabled):not([readonly]) {
+  border-color: var(--field-filled-border);
+}
+:is(
+  .control-field:not(button):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+  input[type="search"], input[type="text"], input[type="password"], input[type="number"],
+  input[type="url"], input[type="tel"], input[type="email"], select, textarea
+)[readonly] {
+  background: linear-gradient(180deg, var(--field-disabled-surface) 0%, var(--field-surface-bottom) 100%);
+  box-shadow: var(--field-inset-shadow);
+  color: var(--text2);
+  cursor: text;
+}
+:is(
+  input[type="search"], input[type="text"], input[type="password"], input[type="number"],
+  input[type="url"], input[type="tel"], input[type="email"], select, textarea
+):disabled {
+  opacity: .62;
+  background: var(--field-disabled-surface);
+  box-shadow: var(--field-inset-shadow);
+  color: var(--text3);
   cursor: not-allowed;
 }
 

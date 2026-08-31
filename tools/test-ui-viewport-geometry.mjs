@@ -81,6 +81,32 @@ assert.equal(anchorInsideActionbar.placement, 'above',
 assert.ok(anchorInsideActionbar.top + anchorInsideActionbar.height <= 232,
   'an anchor inside an actionbar must keep the layer outside its safe boundary');
 
+const anchorInsideHeader = geometry.calculateFloatingGeometry({
+  anchorRect: { left: 180, top: 25, right: 220, bottom: 45, width: 40, height: 20 },
+  layerRect: { width: 160, height: 60 }, viewportRect: {
+    left: 0, top: 0, right: 400, bottom: 300, width: 400, height: 300,
+  },
+  avoidRects: [{ left: 0, top: 0, right: 400, bottom: 60, width: 400, height: 60 }],
+  placements: ['below', 'above'], margin: 8, gap: 8,
+});
+assert.equal(anchorInsideHeader.placement, 'below',
+  'an anchor inside a top obstruction must prefer the safe region below it');
+assert.ok(anchorInsideHeader.top >= 68,
+  'an anchor inside a top obstruction must keep the layer below its safe boundary');
+
+const centeredContainingObstruction = geometry.calculateFloatingGeometry({
+  anchorRect: { left: 180, top: 180, right: 220, bottom: 200, width: 40, height: 20 },
+  layerRect: { width: 160, height: 60 }, viewportRect: {
+    left: 0, top: 0, right: 400, bottom: 400, width: 400, height: 400,
+  },
+  avoidRects: [{ left: 0, top: 180, right: 400, bottom: 260, width: 400, height: 80 }],
+  placements: ['below', 'above'], margin: 8, gap: 8,
+});
+assert.equal(centeredContainingObstruction.placement, 'above',
+  'a containing obstruction must choose the larger outside safe region');
+assert.ok(centeredContainingObstruction.top + centeredContainingObstruction.height <= 172,
+  'a containing obstruction must leave the layer on its selected safe side');
+
 const owner = geometry.calculateFloatingGeometry({
   anchorRect: { left: 260, top: 140, right: 300, bottom: 180, width: 40, height: 40 },
   layerRect: { width: 300, height: 120 }, viewportRect: viewport,

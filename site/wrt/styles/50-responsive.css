@@ -193,28 +193,90 @@
 }
 @media(max-width:560px){.catalog-load-details{grid-template-columns:1fr;grid-template-areas:"summary" "diagnostics" "actions"}.catalog-load-actions{grid-template-columns:1fr;min-width:0}.catalog-status-link,.catalog-copy-diagnostics{width:100%}}
 
-/* 标准交互控件模板：以后新增输入/下拉/按钮/选择框优先复用 .control-field / .control-action / .control-choice */
-:where(.control-field, input[type="search"], input[type="text"], input[type="password"], input[type="number"], select, textarea) {
-  border: 1px solid var(--control-border);
-  background: linear-gradient(180deg, var(--control-surface-top) 0%, var(--control-surface-bottom) 100%);
+/* Shared recessed field template. The explicit type list deliberately keeps
+   checkbox/radio/file/button controls on their own interaction contract. */
+:is(
+  .control-field:not(button):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+  input[type="search"], input[type="text"], input[type="password"], input[type="number"],
+  input[type="url"], input[type="tel"], input[type="email"], select, textarea
+) {
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, var(--field-surface-top) 0%, var(--field-surface-bottom) 100%);
+  background-clip: padding-box;
   color: var(--text);
-  box-shadow: inset 0 1px 0 var(--control-highlight), var(--control-shadow);
+  box-shadow: var(--field-inset-shadow), var(--field-shadow);
   outline: none;
-  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease, color .15s ease, opacity .15s ease;
+  font: inherit;
+  font-size: var(--font-body);
+  line-height: 1.4;
+  transition: border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard), opacity var(--motion-fast) var(--ease-standard);
 }
-:where(.control-field, input[type="search"], input[type="text"], input[type="password"], input[type="number"], select, textarea):hover:not(:disabled):not([readonly]) {
-  border-color: color-mix(in srgb, var(--accent) 58%, var(--control-border));
-  box-shadow: inset 0 1px 0 var(--control-highlight), var(--control-shadow-hover);
+:is(
+  input[type="search"], input[type="text"], input[type="password"], input[type="number"],
+  input[type="url"], input[type="tel"], input[type="email"], textarea
+) {
+  caret-color: var(--accent);
 }
-:where(.control-field, input[type="search"], input[type="text"], input[type="password"], input[type="number"], select, textarea):focus-visible {
+:is(
+  .control-field:not(button):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+  input[type="search"], input[type="text"], input[type="password"], input[type="number"],
+  input[type="url"], input[type="tel"], input[type="email"], select, textarea
+):hover:not(:disabled):not([readonly]) {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--field-border));
+  box-shadow: var(--field-inset-shadow), var(--field-shadow-hover);
+}
+:is(
+  .control-field:not(button):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+  input[type="search"], input[type="text"], input[type="password"], input[type="number"],
+  input[type="url"], input[type="tel"], input[type="email"], select, textarea
+):focus {
   border-color: var(--accent);
-  box-shadow: inset 0 1px 0 var(--control-highlight), var(--control-shadow), var(--control-focus-ring);
+  box-shadow: var(--field-focus-shadow);
 }
-:where(input[type="search"], input[type="text"], input[type="password"], input[type="number"], select, textarea):disabled,
-:where(input[type="search"], input[type="text"], input[type="password"], input[type="number"], textarea)[readonly] {
-  opacity: .58;
-  background: var(--card2);
-  box-shadow: none;
+:is(
+  .control-field:not(button):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+  input[type="search"], input[type="text"], input[type="password"], input[type="number"],
+  input[type="url"], input[type="tel"], input[type="email"], select, textarea
+):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Native placeholder state is the only value-aware CSS signal available to
+   dynamically-created Kconfig scalar inputs. A .field-filled hook remains
+   available for future controls that can track value changes explicitly. */
+:is(
+  .control-field.field-filled:not(button):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+  input[type="search"].field-filled, input[type="text"].field-filled,
+  input[type="password"].field-filled, input[type="number"].field-filled,
+  input[type="url"].field-filled, input[type="tel"].field-filled,
+  input[type="email"].field-filled,
+  select.field-filled, textarea.field-filled,
+  input[type="search"]:not(:placeholder-shown), input[type="text"]:not(:placeholder-shown),
+  input[type="password"]:not(:placeholder-shown), input[type="number"]:not(:placeholder-shown),
+  input[type="url"]:not(:placeholder-shown), input[type="tel"]:not(:placeholder-shown),
+  input[type="email"]:not(:placeholder-shown)
+):not(:disabled):not([readonly]) {
+  border-color: var(--field-filled-border);
+}
+:is(
+  .control-field:not(button):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+  input[type="search"], input[type="text"], input[type="password"], input[type="number"],
+  input[type="url"], input[type="tel"], input[type="email"], select, textarea
+)[readonly] {
+  background: linear-gradient(180deg, var(--field-disabled-surface) 0%, var(--field-surface-bottom) 100%);
+  box-shadow: var(--field-inset-shadow);
+  color: var(--text2);
+  cursor: text;
+}
+:is(
+  input[type="search"], input[type="text"], input[type="password"], input[type="number"],
+  input[type="url"], input[type="tel"], input[type="email"], select, textarea
+):disabled {
+  opacity: .62;
+  background: var(--field-disabled-surface);
+  box-shadow: var(--field-inset-shadow);
+  color: var(--text3);
   cursor: not-allowed;
 }
 

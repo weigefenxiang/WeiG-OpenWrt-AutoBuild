@@ -326,7 +326,8 @@ expect(
   css.includes('font: var(--font-body)/var(--font-line-body) var(--font-family-sans)') &&
   css.includes('.brand h1 { margin: 0; font-size: var(--font-page-title);') &&
   css.includes('.step h2 { font-size: var(--font-section-title);') &&
-  css.includes('padding: 13px 14px 13px 18px; font-size: var(--font-item-title); font-weight: 600;') &&
+  css.includes('min-height: 52px; padding: 12px 14px; font-size: var(--font-item-title); font-weight: 650;') &&
+  !css.includes('.group-head::before') && css.includes('.group-head[aria-expanded="true"]') &&
   css.includes('.plugin-name.fit-s1 { font-size: var(--font-item-title-fit-1); }') &&
   css.includes('.plugin-name.fit-s2 { font-size: var(--font-item-title-fit-2); }') &&
   css.includes('.ui-tooltip-title{display:block;margin:0;color:var(--text);font-size:var(--font-item-title);') &&
@@ -453,8 +454,10 @@ expect(css.includes('/* 统一交互控件立体模板 / shared elevated interac
   css.includes('--control-border: color-mix(in srgb, var(--border) 52%, #91a0b4 48%);') &&
   css.includes('--control-shadow: 0 1px 1px rgba(15, 23, 42, .08), 0 3px 7px rgba(55, 75, 104, .13)') &&
   (css.match(/--control-shadow: 0 1px 2px rgba\(0, 0, 0, \.24\), 0 5px 12px rgba\(0, 0, 0, \.18\);/g) || []).length >= 2 &&
-  css.includes('/* 标准交互控件模板：以后新增输入/下拉/按钮/选择框优先复用 .control-field / .control-action / .control-choice */') &&
-  css.includes(':where(.control-field, input[type="search"], input[type="text"], input[type="password"], input[type="number"], select, textarea) {') &&
+  css.includes('/* Shared recessed field template.') &&
+  css.includes('.control-field:not(button):not([type="checkbox"])') &&
+  css.includes('input[type="url"], input[type="tel"], input[type="email"], select, textarea') &&
+  css.includes(':placeholder-shown') && css.includes(')[readonly]') && css.includes('):disabled') &&
   css.includes('.control-action, .control-choice, .btn, .icon-btn, .text-btn, .pill, .device-summary, .catalog-copy-diagnostics,') &&
   css.includes('transform: translateY(var(--control-lift));') &&
   css.includes('.defconfig-switch:has(input:checked),') &&

@@ -35,10 +35,16 @@ const tokens = readFileSync(join(ROOT, 'site', 'wrt', 'styles', modules[0]), 'ut
 for (const token of ['--font-page-title: 27px', '--font-section-title: 20px', '--font-item-title: 17px',
   '--font-emphasis: 15px', '--font-body: 15px', '--font-description: 14px', '--font-meta: 13px', '--font-badge: 12px',
   '--content-max: 1440px', '--surface-frame-top:', '--surface-category-top:', '--surface-overlay-top:', '--star-field-a:',
+  '--field-border:', '--field-surface-top:', '--field-surface-bottom:', '--field-inset-shadow:', '--field-filled-border:',
   '--z-sticky:', '--z-dropdown:', '--z-dock:', '--z-floating:', '--z-toast:', '--z-modal:', '--z-tooltip:']) {
   if (!tokens.includes(token)) fail(`token contract missing ${token}`);
 }
 
+if (output.includes('.group-head::before')) fail('plugin group headers must not use a decorative side stripe');
+for (const selector of ['input[type="url"]', 'input[type="tel"]', 'input[type="email"]', ':placeholder-shown', 'main#app { flex: 1 0 auto;', '.site-footer { flex: 0 0 auto;']) {
+  if (!output.includes(selector)) fail(`shared visual contract missing ${selector}`);
+}
+if (!output.includes('.control-field:not(button):not([type="checkbox"])')) fail('field contract does not exclude choice/button controls');
 if (/^\.toast\s*\{/m.test(output)) fail('generic toast presentation remains in generated app.css');
 if (/z-index:\s*\d+/.test(output)) fail('generated CSS contains a numeric z-index outside the layer token contract');
 if (output.includes('.modal.package-probe') || /\.probe-[A-Za-z]/.test(output)) {

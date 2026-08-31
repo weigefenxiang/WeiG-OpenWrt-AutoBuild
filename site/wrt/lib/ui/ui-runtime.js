@@ -109,9 +109,26 @@ function calculateFloatingGeometry({
       } else if (rect.bottom < anchor.bottom && rect.bottom > top) {
         top = Math.min(bottom, Math.max(top, rect.bottom + safeMargin));
       } else if (rect.top <= anchor.top && rect.bottom >= anchor.bottom) {
-        // The anchor is inside the obstruction. Prefer the upper safe region
-        // for bottom-docked controls; the placement chooser can flip above.
-        bottom = Math.max(top, Math.min(bottom, rect.top - safeMargin));
+        /*
+         * The anchor is inside the obstruction.  Do not assume that every
+         * containing obstruction is a bottom dock: a sticky header contains
+         * its controls just as often as an actionbar does.  Keep the larger
+         * outside region and let the placement chooser select the direction.
+         * Ties use the anchor's position as a stable top/bottom hint, so a
+         * control in the upper half opens below and one in the lower half
+         * opens above.  This is intentionally geometry-only; no header,
+         * actionbar, or element id is part of the contract.
+         */
+        const roomAbove = Math.max(0, rect.top - top);
+        const roomBelow = Math.max(0, bottom - rect.bottom);
+        const midpoint = top + ((bottom - top) / 2);
+        const preferBelow = roomBelow > roomAbove ||
+          (roomBelow === roomAbove && (anchor.top + anchor.bottom) / 2 <= midpoint);
+        if (preferBelow) {
+          top = Math.min(bottom, Math.max(top, rect.bottom + safeMargin));
+        } else {
+          bottom = Math.max(top, Math.min(bottom, rect.top - safeMargin));
+        }
       }
     } else if (rect.bottom <= anchor.top + safeGap && rect.bottom > top) {
       top = Math.min(bottom, Math.max(top, rect.bottom + safeMargin));

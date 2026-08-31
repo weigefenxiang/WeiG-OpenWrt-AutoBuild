@@ -67,6 +67,18 @@
   --control-shadow-selected: 0 3px 8px rgba(37, 99, 235, .18), 0 8px 18px rgba(37, 99, 235, .09);
   --control-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent);
   --control-lift: -1px;
+  /* Shared recessed field surface. Keep this separate from raised buttons so
+     text entry reads as an inset workspace in every theme. */
+  --field-border: color-mix(in srgb, var(--border) 62%, #7f8da1 38%);
+  --field-surface-top: color-mix(in srgb, var(--surface-inset) 82%, var(--surface-page) 18%);
+  --field-surface-bottom: color-mix(in srgb, var(--surface-inset) 94%, var(--surface-raised) 6%);
+  --field-highlight: rgba(255, 255, 255, .42);
+  --field-inset-shadow: inset 0 2px 5px rgba(15, 23, 42, .12), inset 0 -1px 0 rgba(255, 255, 255, .24);
+  --field-shadow: 0 1px 1px rgba(15, 23, 42, .08), 0 2px 5px rgba(55, 75, 104, .08);
+  --field-shadow-hover: inset 0 2px 5px rgba(15, 23, 42, .10), inset 0 -1px 0 rgba(255, 255, 255, .28), 0 2px 7px rgba(37, 99, 235, .12);
+  --field-focus-shadow: inset 0 2px 5px rgba(15, 23, 42, .12), inset 0 -1px 0 rgba(255, 255, 255, .28), 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent);
+  --field-filled-border: color-mix(in srgb, var(--accent) 48%, var(--field-border));
+  --field-disabled-surface: color-mix(in srgb, var(--surface-inset) 70%, var(--surface-page) 30%);
   --radius: 10px;
   --shadow: 0 1px 3px rgba(16, 24, 40, .08);
 
@@ -189,6 +201,16 @@ html[data-theme="dark"] {
   --control-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
   --control-lift: -1px;
   --shadow: none;
+  --field-border: color-mix(in srgb, var(--border) 76%, var(--text3) 24%);
+  --field-surface-top: color-mix(in srgb, var(--surface-page) 28%, var(--surface-inset) 72%);
+  --field-surface-bottom: color-mix(in srgb, var(--surface-inset) 90%, var(--surface-raised) 10%);
+  --field-highlight: rgba(255, 255, 255, .07);
+  --field-inset-shadow: inset 0 2px 6px rgba(0, 0, 0, .30), inset 0 -1px 0 rgba(255, 255, 255, .06);
+  --field-shadow: 0 1px 2px rgba(0, 0, 0, .24), 0 3px 8px rgba(0, 0, 0, .14);
+  --field-shadow-hover: inset 0 2px 6px rgba(0, 0, 0, .28), inset 0 -1px 0 rgba(255, 255, 255, .08), 0 3px 10px color-mix(in srgb, var(--accent) 18%, transparent);
+  --field-focus-shadow: inset 0 2px 6px rgba(0, 0, 0, .30), inset 0 -1px 0 rgba(255, 255, 255, .08), 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+  --field-filled-border: color-mix(in srgb, var(--accent) 58%, var(--field-border));
+  --field-disabled-surface: color-mix(in srgb, var(--surface-page) 52%, var(--surface-inset) 48%);
   --surface-frame-shadow: 0 4px 14px rgba(0, 0, 0, .28), 0 18px 42px rgba(0, 0, 0, .22);
   --surface-frame-highlight: rgba(255, 255, 255, .08);
   --surface-category-shadow: 0 2px 5px rgba(0, 0, 0, .28), 0 8px 18px rgba(0, 0, 0, .18);
@@ -248,6 +270,16 @@ html[data-theme="dark"] {
     --control-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
     --control-lift: -1px;
     --shadow: none;
+    --field-border: color-mix(in srgb, var(--border) 76%, var(--text3) 24%);
+    --field-surface-top: color-mix(in srgb, var(--surface-page) 28%, var(--surface-inset) 72%);
+    --field-surface-bottom: color-mix(in srgb, var(--surface-inset) 90%, var(--surface-raised) 10%);
+    --field-highlight: rgba(255, 255, 255, .07);
+    --field-inset-shadow: inset 0 2px 6px rgba(0, 0, 0, .30), inset 0 -1px 0 rgba(255, 255, 255, .06);
+    --field-shadow: 0 1px 2px rgba(0, 0, 0, .24), 0 3px 8px rgba(0, 0, 0, .14);
+    --field-shadow-hover: inset 0 2px 6px rgba(0, 0, 0, .28), inset 0 -1px 0 rgba(255, 255, 255, .08), 0 3px 10px color-mix(in srgb, var(--accent) 18%, transparent);
+    --field-focus-shadow: inset 0 2px 6px rgba(0, 0, 0, .30), inset 0 -1px 0 rgba(255, 255, 255, .08), 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+    --field-filled-border: color-mix(in srgb, var(--accent) 58%, var(--field-border));
+    --field-disabled-surface: color-mix(in srgb, var(--surface-page) 52%, var(--surface-inset) 48%);
     --surface-frame-shadow: 0 4px 14px rgba(0, 0, 0, .28), 0 18px 42px rgba(0, 0, 0, .22);
     --surface-frame-highlight: rgba(255, 255, 255, .08);
     --surface-category-shadow: 0 2px 5px rgba(0, 0, 0, .28), 0 8px 18px rgba(0, 0, 0, .18);

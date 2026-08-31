@@ -6,8 +6,11 @@ body.modal-open { overflow: hidden; }
 body {
   position: relative;
   isolation: isolate;
+  display: flex;
+  flex-direction: column;
   margin: 0;
-  min-height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   min-width: 0;
   background:
     radial-gradient(circle at 12% -10%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 34rem),
@@ -22,6 +25,10 @@ body {
   font: var(--font-body)/var(--font-line-body) var(--font-family-sans);
   transition: background-color var(--motion-slow) var(--ease-standard), color var(--motion-slow) var(--ease-standard);
 }
+/* The application canvas absorbs short-page space, keeping the action bar and
+   footer in normal document order without inventing footer height. */
+main#app { flex: 1 0 auto; min-height: 0; }
+.site-footer { flex: 0 0 auto; }
 /* Keep the star field behind the work surfaces, with no hit target or layout
    effect. The surface modules provide the opaque/raised foreground layers. */
 body::before {

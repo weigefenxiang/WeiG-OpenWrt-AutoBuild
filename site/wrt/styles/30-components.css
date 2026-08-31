@@ -99,21 +99,37 @@ button.catalog-applications-state{cursor:pointer}
 .group-head {
   position: relative;
   display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 13px 14px 13px 18px; font-size: var(--font-item-title); font-weight: 600;
+  min-height: 52px; padding: 12px 14px; font-size: var(--font-item-title); font-weight: 650;
   background: linear-gradient(180deg, var(--surface-category-top) 0%, var(--surface-category-bottom) 100%);
-  border: none; border-bottom: 1px solid var(--surface-category-border);
-  box-shadow: inset 0 1px 0 var(--surface-category-highlight), var(--surface-category-shadow);
+  border: 0; border-bottom: 1px solid var(--surface-category-border);
+  box-shadow: inset 0 1px 0 var(--surface-category-highlight), inset 0 -1px 0 color-mix(in srgb, var(--surface-category-border) 72%, transparent), var(--surface-category-shadow);
   color: var(--text); text-align: left;
+  transition: background var(--motion-base) var(--ease-standard), border-color var(--motion-base) var(--ease-standard), box-shadow var(--motion-base) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
 }
-.group-head::before {
-  content: ""; position: absolute; inset: 9px auto 9px 0; width: 3px;
-  border-radius: 0 3px 3px 0; background: var(--surface-category-accent);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--surface-category-accent) 32%, transparent);
+.group-head:hover {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-category-top) 82%, var(--accent) 18%) 0%, color-mix(in srgb, var(--surface-category-bottom) 88%, var(--accent) 12%) 100%);
+  box-shadow: inset 0 1px 0 var(--surface-category-highlight), inset 0 -1px 0 color-mix(in srgb, var(--accent) 42%, var(--surface-category-border)), 0 4px 12px color-mix(in srgb, var(--accent) 14%, transparent);
 }
-.group-ico { font-size: 15px; color: var(--surface-category-accent); }
-.group-badge { font-weight: 400; font-size: 13.5px; color: var(--accent-text); background: var(--accent-bg); border-radius: 999px; padding: 1px 8px; }
+.group-head:focus-visible {
+  outline: 3px solid var(--accent); outline-offset: -3px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-category-top) 76%, var(--accent) 24%) 0%, color-mix(in srgb, var(--surface-category-bottom) 84%, var(--accent) 16%) 100%);
+}
+.group-head[aria-expanded="true"] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-category-top) 88%, var(--accent) 12%) 0%, color-mix(in srgb, var(--surface-category-bottom) 92%, var(--accent) 8%) 100%);
+  box-shadow: inset 0 1px 0 var(--surface-category-highlight), inset 0 -1px 0 color-mix(in srgb, var(--accent) 38%, var(--surface-category-border)), var(--surface-category-shadow);
+}
+.group-head[aria-expanded="true"]:hover {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-category-top) 76%, var(--accent) 24%) 0%, color-mix(in srgb, var(--surface-category-bottom) 84%, var(--accent) 16%) 100%);
+}
+.group-ico { font-size: 15px; color: var(--surface-category-accent); filter: drop-shadow(0 1px 1px color-mix(in srgb, var(--text) 20%, transparent)); }
+.group-badge, .group-count {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 2ch;
+  padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--surface-category-border));
+  border-radius: var(--radius-pill); background: color-mix(in srgb, var(--accent-bg) 78%, var(--surface-category-bottom));
+  color: var(--accent-text); font-size: var(--font-badge); font-weight: 650; line-height: 1.2;
+}
 .group-badge:empty { display: none; }
-.group-count { font-weight: 400; font-size: var(--font-meta); color: var(--text3); margin-left: auto; }
+.group-count { margin-left: auto; color: var(--text2); }
 .chev { color: var(--text3); font-size: 12px; transition: transform var(--motion-base) var(--ease-standard); }
 .group.collapsed .chev { transform: rotate(-90deg); }
 .group.collapsed .plugin-grid { display: none; }
