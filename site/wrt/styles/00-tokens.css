@@ -119,11 +119,11 @@
   --surface-frame-border: color-mix(in srgb, var(--border) 78%, var(--accent) 22%);
   --surface-frame-shadow: 0 4px 14px rgba(15, 23, 42, .14), 0 18px 42px rgba(55, 75, 104, .10);
   --surface-frame-highlight: color-mix(in srgb, #fff 48%, transparent);
-  --surface-category-top: color-mix(in srgb, var(--card2) 84%, var(--card) 16%);
-  --surface-category-bottom: color-mix(in srgb, var(--card2) 92%, var(--bg) 8%);
-  --surface-category-border: color-mix(in srgb, var(--border) 82%, var(--accent) 18%);
+  --surface-category-top: color-mix(in srgb, var(--card2) 74%, var(--accent-bg) 26%);
+  --surface-category-bottom: color-mix(in srgb, var(--card2) 86%, var(--accent-bg) 14%);
+  --surface-category-border: color-mix(in srgb, var(--border) 66%, var(--accent) 34%);
   --surface-category-shadow: 0 2px 5px rgba(15, 23, 42, .13), 0 8px 18px rgba(55, 75, 104, .08);
-  --surface-category-highlight: color-mix(in srgb, #fff 34%, transparent);
+  --surface-category-highlight: color-mix(in srgb, #fff 42%, transparent);
   --surface-category-accent: var(--accent);
   --surface-overlay-top: color-mix(in srgb, var(--card) 94%, #fff 6%);
   --surface-overlay-bottom: color-mix(in srgb, var(--card2) 70%, var(--card) 30%);

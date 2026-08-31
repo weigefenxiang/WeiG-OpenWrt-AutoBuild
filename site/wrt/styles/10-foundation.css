@@ -19,8 +19,10 @@ body {
     radial-gradient(circle at 22% 78%, var(--star-field-b) 0 .85px, transparent 1.5px),
     radial-gradient(circle at 72% 88%, var(--star-field-a) 0 .9px, transparent 1.5px),
     radial-gradient(circle at 92% 64%, var(--star-field-b) 0 .8px, transparent 1.4px),
+    radial-gradient(circle at 47% 12%, var(--star-field-a) 0 .7px, transparent 1.4px),
+    radial-gradient(circle at 64% 55%, var(--star-field-b) 0 .65px, transparent 1.35px),
     var(--surface-page);
-  background-size: auto, 420px 360px, 620px 520px, 560px 470px, 700px 580px, 510px 430px, auto;
+  background-size: auto, 420px 360px, 620px 520px, 560px 470px, 700px 580px, 510px 430px, 760px 610px, 880px 720px, auto;
   color: var(--content-strong);
   font: var(--font-body)/var(--font-line-body) var(--font-family-sans);
   transition: background-color var(--motion-slow) var(--ease-standard), color var(--motion-slow) var(--ease-standard);

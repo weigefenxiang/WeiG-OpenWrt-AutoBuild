@@ -101,7 +101,9 @@ button.catalog-applications-state{cursor:pointer}
   display: flex; align-items: center; gap: 8px; width: 100%;
   min-height: 52px; padding: 12px 14px; font-size: var(--font-item-title); font-weight: 650;
   background: linear-gradient(180deg, var(--surface-category-top) 0%, var(--surface-category-bottom) 100%);
-  border: 0; border-bottom: 1px solid var(--surface-category-border);
+  border: 1px solid var(--surface-category-border);
+  border-radius: calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 10px 10px;
+  background-clip: padding-box;
   box-shadow: inset 0 1px 0 var(--surface-category-highlight), inset 0 -1px 0 color-mix(in srgb, var(--surface-category-border) 72%, transparent), var(--surface-category-shadow);
   color: var(--text); text-align: left;
   transition: background var(--motion-base) var(--ease-standard), border-color var(--motion-base) var(--ease-standard), box-shadow var(--motion-base) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
@@ -121,6 +123,16 @@ button.catalog-applications-state{cursor:pointer}
 .group-head[aria-expanded="true"]:hover {
   background: linear-gradient(180deg, color-mix(in srgb, var(--surface-category-top) 76%, var(--accent) 24%) 0%, color-mix(in srgb, var(--surface-category-bottom) 84%, var(--accent) 16%) 100%);
 }
+.group:has(.plugin input[type="checkbox"]:checked) .group-head {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--surface-category-border));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-category-top) 70%, var(--accent) 30%) 0%, color-mix(in srgb, var(--surface-category-bottom) 78%, var(--accent) 22%) 100%);
+  box-shadow: inset 0 1px 0 var(--surface-category-highlight), inset 0 -1px 0 color-mix(in srgb, var(--accent) 54%, var(--surface-category-border)), 0 4px 14px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.group:has(.plugin input[type="checkbox"]:checked) .group-count {
+  border-color: color-mix(in srgb, var(--accent) 64%, var(--surface-category-border));
+  background: color-mix(in srgb, var(--accent-bg) 90%, var(--surface-category-bottom));
+  color: var(--accent-text);
+}
 .group-ico { font-size: 15px; color: var(--surface-category-accent); filter: drop-shadow(0 1px 1px color-mix(in srgb, var(--text) 20%, transparent)); }
 .group-badge, .group-count {
   display: inline-flex; align-items: center; justify-content: center; min-width: 2ch;
@@ -133,7 +145,10 @@ button.catalog-applications-state{cursor:pointer}
 .chev { color: var(--text3); font-size: 12px; transition: transform var(--motion-base) var(--ease-standard); }
 .group.collapsed .chev { transform: rotate(-90deg); }
 .group.collapsed .plugin-grid { display: none; }
-.group.collapsed .group-head { border-bottom: none; }
+.group.collapsed .group-head {
+  border-bottom-color: var(--surface-category-border);
+  border-radius: calc(var(--radius-md) - 1px);
+}
 /* 搜索/只看热门时分组固定展开,不可折叠 */
 .group.searching .chev { display: none; }
 .group.searching .group-head { cursor: default; }

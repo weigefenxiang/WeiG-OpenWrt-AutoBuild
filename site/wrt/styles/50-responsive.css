@@ -212,6 +212,26 @@
   line-height: 1.4;
   transition: border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard), opacity var(--motion-fast) var(--ease-standard);
 }
+/* Native select menus are rendered by the browser/OS, so set both the
+   color-scheme contract and option colors. This keeps the language menu and
+   every dynamically-created select legible in light, dark, and auto modes. */
+select { color-scheme: light dark; }
+select option {
+  background-color: var(--field-surface-bottom);
+  color: var(--text);
+}
+select option:checked {
+  background-color: var(--accent-bg);
+  color: var(--accent-text);
+}
+html[data-theme="dark"] select { color-scheme: dark; }
+html[data-theme="light"] select { color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) select { color-scheme: dark; }
+}
+@media (prefers-color-scheme: light) {
+  html:not([data-theme]) select { color-scheme: light; }
+}
 :is(
   input[type="search"], input[type="text"], input[type="password"], input[type="number"],
   input[type="url"], input[type="tel"], input[type="email"], textarea

@@ -11,7 +11,16 @@
 .brand-icon { width: 30px; height: 30px; color: var(--accent); flex: none; }
 .brand h1 { margin: 0; font-size: var(--font-page-title); font-weight: 600; line-height: 1.3; }   /* V8b:桌面基准档加大,断点缩小值不变 / V8b: bigger desktop base; breakpoint sizes unchanged */
 .brand .sub { margin: 0; font-size: var(--font-description); color: var(--text2); }
-.header-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
+.header-actions { margin-left: auto; display: flex; align-items: stretch; gap: 8px; flex: none; }
+.header-actions > :is(.icon-btn, .text-btn) {
+  display: inline-flex; align-items: center; justify-content: center;
+  box-sizing: border-box; height: 44px; min-height: 44px; flex: none;
+}
+.header-actions > .icon-btn { width: 44px; min-width: 44px; padding: 0; }
+.header-actions > .icon-btn > :is(svg, img) {
+  display: block; width: 20px; height: 20px; flex: none; object-fit: contain;
+}
+.header-actions > .text-btn { line-height: 1.2; padding-block: 0; }
 
 /* 右下角悬浮坞:语言/自检/字号/主题;手机端默认收成 ⚙ / bottom-right floating dock (lang/self-test/font/theme); gear-only by default on mobile */
 .side-dock {

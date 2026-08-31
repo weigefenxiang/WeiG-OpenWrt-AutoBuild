@@ -315,6 +315,12 @@ function renderUiTooltip({ title = '', emphasis = '', body = '' } = {}) {
   emphasisEl.hidden = !emphasis;
   bodyEl.hidden = !body;
 }
+function tooltipCanStartSingleLine({ title = '', emphasis = '', body = '' } = {}) {
+  const visible = [title, emphasis, body]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return visible.length === 1 && !/[\r\n]/.test(visible[0]);
+}
 function positionUiTooltip(target, event = null) {
   if (!uiTooltip || uiTooltip.hidden || !target) return;
   const viewport = readViewportRect();
@@ -350,6 +356,13 @@ function positionUiTooltip(target, event = null) {
       height: Math.min(360, Math.max(rect.height || 0, uiTooltip.scrollHeight || 0, 1)),
     };
   };
+  const compactCandidate = uiTooltip.dataset.tooltipSingleLine === 'true';
+  // A tooltip may be retargeted while already visible. Clear the previous
+  // geometry before measuring so a new message receives its natural width.
+  uiTooltip.style.removeProperty('width');
+  uiTooltip.style.removeProperty('max-width');
+  uiTooltip.style.removeProperty('max-height');
+  uiTooltip.classList.toggle('is-single-line', compactCandidate);
   const apply = (geometry) => {
     uiTooltip.style.width = `${Math.max(1, Math.round(geometry.width))}px`;
     uiTooltip.style.maxWidth = `${Math.max(1, Math.round(geometry.maxWidth))}px`;
@@ -361,7 +374,17 @@ function positionUiTooltip(target, event = null) {
   const overlapsAvoid = (rect) => avoidRects.some((obstruction) =>
     Math.min(rect.right, obstruction.right) > Math.max(rect.left, obstruction.left) &&
     Math.min(rect.bottom, obstruction.bottom) > Math.max(rect.top, obstruction.top));
-  let geometry = calculate(measureLayer());
+  let layerSize = measureLayer();
+  let geometry = calculate(layerSize);
+  // Compact display is only a first pass for short, single-block messages. If
+  // the selected placement cannot provide the measured natural width, switch
+  // back to the normal wrapping rules and measure again. This stays generic:
+  // no tooltip trigger or button receives a special case.
+  if (compactCandidate && (geometry.width + 1 < layerSize.width || geometry.maxWidth + 1 < layerSize.width)) {
+    uiTooltip.classList.remove('is-single-line');
+    layerSize = measureLayer();
+    geometry = calculate(layerSize);
+  }
   apply(geometry);
   // Width/max-height can change an auto-sized tooltip after the first pass.
   // Re-read the rendered box once and recompute if it grew into an avoided
@@ -381,6 +404,7 @@ function showUiTooltip(target, { title = '', emphasis = '', body = '', event = n
   uiTooltipTarget = target;
   uiTooltipPinned = Boolean(pinned);
   uiTooltip.classList.toggle('is-pinned', uiTooltipPinned);
+  uiTooltip.dataset.tooltipSingleLine = String(tooltipCanStartSingleLine({ title, emphasis, body }));
   renderUiTooltip({ title, emphasis, body });
   uiTooltip.hidden = false;
   positionUiTooltip(target, event);
@@ -401,6 +425,8 @@ function hideUiTooltip(force = false) {
   uiTooltipTarget = null;
   uiTooltipPinned = false;
   uiTooltip.classList.remove('is-pinned');
+  uiTooltip.classList.remove('is-single-line');
+  delete uiTooltip.dataset.tooltipSingleLine;
   renderUiTooltip();
   uiTooltip.style.removeProperty('left');
   uiTooltip.style.removeProperty('top');

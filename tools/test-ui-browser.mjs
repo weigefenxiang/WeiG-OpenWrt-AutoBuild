@@ -719,6 +719,7 @@ async function main() {
       const actionbar = document.getElementById('actionbar')?.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
       const body = document.getElementById('uiTooltipBody');
+      const bodyStyle = body ? getComputedStyle(body) : null;
       return {
         target: target.id || target.className,
         expected: target.dataset.uiTooltipBody || '',
@@ -730,6 +731,11 @@ async function main() {
         header: header ? { left: header.left, top: header.top, right: header.right, bottom: header.bottom } : null,
         actionbar: actionbar ? { left: actionbar.left, top: actionbar.top, right: actionbar.right, bottom: actionbar.bottom } : null,
         active: document.activeElement === target,
+        singleLine: tooltip.classList.contains('is-single-line'),
+        singleLineCandidate: tooltip.dataset.tooltipSingleLine === 'true',
+        bodyWhiteSpace: bodyStyle?.whiteSpace || '',
+        bodyHeight: body?.getBoundingClientRect().height || 0,
+        bodyLineHeight: bodyStyle ? parseFloat(bodyStyle.lineHeight) || 0 : 0,
       };
     }`, [selector]);
   }
@@ -827,6 +833,47 @@ async function main() {
     await resetFloatingState();
   }
 
+  async function exerciseDockTooltips(context) {
+    const selectors = ['#selfTestBtn', '#densityBtn', '#themeBtn'];
+    for (const selector of selectors) {
+      const target = await evaluateFunction(browser, `(selector) => {
+        const element = document.querySelector(selector);
+        if (!element) return null;
+        element.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }));
+        return { body: element.dataset.uiTooltipBody || '', aria: element.getAttribute('aria-label') || '' };
+      }`, [selector]);
+      const hovered = await waitFor(`${selector} hover tooltip`, async () => {
+        const state = await headerTooltipState(selector);
+        return state && !state.hidden && state.actual === state.expected && state.actual === target?.body &&
+          tooltipSafe(state, context) ? state : null;
+      }, 3_000, 40);
+      if (!hovered) throw new Error(`${selector} hover tooltip did not settle`);
+      expect(hovered.singleLineCandidate === true, context,
+        `${selector} tooltip was not classified as a single-block message`, hovered);
+      if (hovered.singleLine) {
+        expect(hovered.bodyWhiteSpace === 'nowrap' && hovered.bodyHeight <= hovered.bodyLineHeight + 2,
+          context, `${selector} short tooltip wrapped despite fitting`, hovered);
+      }
+      if (context.viewport.width >= 768) {
+        expect(hovered.singleLine === true, context,
+          `${selector} desktop tooltip did not use the single-line layout`, hovered);
+      }
+
+      await evaluateFunction(browser, `(selector) => {
+        const element = document.querySelector(selector);
+        element?.focus({ preventScroll: true });
+        return true;
+      }`, [selector]);
+      const focused = await waitFor(`${selector} focus tooltip`, async () => {
+        const state = await headerTooltipState(selector);
+        return state && state.active && !state.hidden && state.actual === state.expected &&
+          tooltipSafe(state, context) ? state : null;
+      }, 3_000, 40);
+      if (!focused) throw new Error(`${selector} focus tooltip did not settle`);
+    }
+    await resetFloatingState();
+  }
+
   async function assertShortPageFooter(context) {
     await evaluateFunction(browser, `() => {
       const main = document.getElementById('app');
@@ -882,6 +929,33 @@ async function main() {
     await assertInside('#importBtn', context);
     await assertInside('#siteVersion', context);
 
+    const visualContract = await evaluateFunction(browser, `() => {
+      const actions = [...document.querySelectorAll('.header-actions > .icon-btn, .header-actions > .text-btn')];
+      const boxes = actions.map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { height: rect.height, width: rect.width, display: getComputedStyle(element).display };
+      });
+      const lang = document.getElementById('langSel');
+      const option = lang?.options?.[0];
+      return {
+        actionCount: actions.length,
+        boxes,
+        colorScheme: lang ? getComputedStyle(lang).colorScheme : '',
+        optionColor: option ? getComputedStyle(option).color : '',
+        optionBackground: option ? getComputedStyle(option).backgroundColor : '',
+        starfield: getComputedStyle(document.body).backgroundImage.includes('radial-gradient'),
+        bodyAnimation: getComputedStyle(document.body).animationName,
+      };
+    }`);
+    const heights = (visualContract?.boxes || []).map((box) => Number(box.height));
+    expect(visualContract?.actionCount === 3 && heights.every((height) => height >= 43) &&
+      Math.max(...heights) - Math.min(...heights) <= 1,
+    context, 'header actions do not share one 44px control height', visualContract);
+    expect(visualContract?.colorScheme === context.theme, context,
+      'native selects do not follow the active color scheme', visualContract);
+    expect(visualContract?.starfield === true && visualContract?.bodyAnimation === 'none', context,
+      'page starfield is missing or uses continuous body animation', visualContract);
+
     // Header actions share one tooltip layer. Exercise adjacent repository and
     // blog triggers in sequence so hover, focus, content replacement and
     // re-anchoring all use the same viewport-safe geometry contract.
@@ -891,6 +965,7 @@ async function main() {
     // the shared dock panel whenever a test needs one of its child controls.
     await ensureDockControlsVisible(context);
     await assertInside('#sideDock', context, { actionbarSafe: true });
+    await exerciseDockTooltips(context);
 
     // Font panel: use the public Aa controls and exercise its maximum value.
     await click('#densityBtn');
