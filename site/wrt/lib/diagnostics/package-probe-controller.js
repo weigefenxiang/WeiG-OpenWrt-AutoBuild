@@ -217,7 +217,7 @@ async function openPackageProbeModal() {
         const packageName = option.symbol.slice('PACKAGE_'.length);
         const value = probeMenuOptionState(option);
         chip.textContent = `${displayText(packageName)}=${String(value).toUpperCase()} ×`;
-        bindUiTooltipContent(chip, { body: displayConfigSymbol(option.symbol) });
+        bindUiTooltipContent(chip, { body: displayConfigSymbol(option.symbol, { kind: 'config' }) });
         chip.addEventListener('click', () => {
           const baselineValue = probePackageBaselineState(option);
           if (setMenuValue(option, baselineValue)) {
@@ -263,7 +263,7 @@ async function openPackageProbeModal() {
         const usage = document.createElement('span'); usage.className = 'probe-package-usage'; usage.textContent = choice.usage || '—';
         bindProbeTextTooltip(title, choice.title);
         bindProbeTextTooltip(usage, choice.usage);
-        const rowDetails = [choice.displayId, displayConfigSymbol(choice.symbol), choice.title, choice.usage].filter(Boolean).join('\n');
+        const rowDetails = [choice.displayId, displayConfigSymbol(choice.symbol, { kind: 'config' }), choice.title, choice.usage].filter(Boolean).join('\n');
         bindUiTooltipContent(row, { body: rowDetails });
         const info = document.createElement('span'); info.className = 'probe-package-info'; info.textContent = '!';
         info.setAttribute('aria-label', rowDetails);

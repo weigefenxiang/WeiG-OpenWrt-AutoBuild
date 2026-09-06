@@ -377,7 +377,7 @@ async function openPackageProbeV3Modal() {
         const title = document.createElement('span'); title.className = 'probe-package-title'; title.textContent = displayText(choice.title || '—');
         const usage = document.createElement('span'); usage.className = 'probe-package-usage'; usage.textContent = displayText(choice.usage || '—');
         bindProbeTextTooltip(title, choice.title); bindProbeTextTooltip(usage, choice.usage);
-        const rowDetails = [displayText(choice.displayId), displayConfigSymbol(choice.symbol), displayText(choice.title), displayText(choice.usage)].filter(Boolean).join('\n');
+        const rowDetails = [displayText(choice.displayId), displayConfigSymbol(choice.symbol, { kind: 'config' }), displayText(choice.title), displayText(choice.usage)].filter(Boolean).join('\n');
         bindUiTooltipContent(row, { body: rowDetails });
         const info = document.createElement('span'); info.className = 'probe-package-info'; info.textContent = '!';
         info.setAttribute('aria-label', rowDetails); bindUiTooltipContent(info, { body: rowDetails });

@@ -534,7 +534,7 @@ function menuOptionPopupText(element) {
     element.dataset.english || '',
   ].filter(Boolean))];
   return [
-    displayConfigSymbol(element.dataset.symbol),
+    displayConfigSymbol(element.dataset.symbol, { kind: 'config' }),
     description.length ? displayText(description.join('\n')) : '',
     displayText(element.dataset.path || ''),
   ].filter(Boolean).join('\n\n');
@@ -1009,7 +1009,9 @@ function relationMenuOption(record) {
     selectsVariants: expressions.selectsExpressions || [],
     implies: expressions.impliesExpressions?.flat?.() || [],
     impliesVariants: expressions.impliesExpressions || [],
-    conflicts: (record.conflicts || []).map((name) => `PACKAGE_${name}`),
+    // Keep bare virtual capabilities intact.  Prefixing every conflict with
+    // PACKAGE_ creates a false concrete package identity in the menu layer.
+    conflicts: [...new Set((record.conflicts || []).map((name) => String(name || '').trim()).filter(Boolean))],
     hidden: true,
     visible: false,
     userSettable: false,

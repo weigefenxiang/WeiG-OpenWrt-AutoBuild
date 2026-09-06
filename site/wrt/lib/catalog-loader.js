@@ -234,6 +234,31 @@ function bindingMatchesIndex(binding, index) {
     binding.codeSha === String(index?.provenance?.codeSha || '').toLowerCase());
 }
 
+function mergeGraphContractMetadata(relations, graphDocument) {
+  const merged = { ...(relations || {}) };
+  // Catalog graph assets stamp the contract on the wrapper as well as on the
+  // compact relations payload.  Preserve either surface during assembly so a
+  // split asset cannot silently hide the narrow package-closure assertion.
+  for (const field of [
+    'relationsComplete', 'relationCapabilities',
+    'packageClosureComplete', 'packageClosureCapabilities', 'packageClosureValidation',
+    'validation',
+  ]) {
+    if (field === 'validation' && graphDocument?.validation &&
+        typeof graphDocument.validation === 'object' && !Array.isArray(graphDocument.validation)) {
+      // The compact payload remains the canonical validation surface, while
+      // wrapper-only provenance (for example variableAssignments) must not be
+      // discarded when the graph is assembled from split assets.
+      const compactValidation = merged.validation && typeof merged.validation === 'object' &&
+        !Array.isArray(merged.validation) ? merged.validation : {};
+      merged.validation = { ...graphDocument.validation, ...compactValidation };
+    } else if (!Object.hasOwn(merged, field) && Object.hasOwn(graphDocument || {}, field)) {
+      merged[field] = graphDocument[field];
+    }
+  }
+  return merged;
+}
+
 export async function decodeCatalogBytes(buffer, Decompression = globalThis.DecompressionStream) {
   const bytes = new Uint8Array(buffer);
   let text;
@@ -251,8 +276,8 @@ export function validateCatalogDocument(data, expected, engine) {
   const schema = Number(data?.schema || 0);
   const relationsSchema = Number(data?.relations?.schema || 0);
   if (schema < MIN_CATALOG_SCHEMA) throw new Error(`Catalog schema ${schema}; required ${MIN_CATALOG_SCHEMA}`);
-  if (![2, 3].includes(relationsSchema)) {
-    throw new Error(`Catalog relations schema ${relationsSchema}; required 2 or 3`);
+  if (![2, 3, 4].includes(relationsSchema)) {
+    throw new Error(`Catalog relations schema ${relationsSchema}; required 2, 3, or 4`);
   }
   const expectedCommit = String(expected?.commit || '');
   const actualCommit = String(data?.source?.commit || '');
@@ -688,8 +713,8 @@ export function createCatalogLoader({
           preferredAssetProvider, forceRefresh, stage: 'graph',
         }),
       ]);
-      if (Number(core.data?.schema || 0) < 6 || Number(graph.data?.relations?.schema || 0) !== 3) {
-        throw loaderError('Catalog split assets do not satisfy schema 6 / relations 3', diagnostics);
+      if (Number(core.data?.schema || 0) < 6 || ![3, 4].includes(Number(graph.data?.relations?.schema || 0))) {
+        throw loaderError('Catalog split assets do not satisfy schema 6 / relations 3 or 4', diagnostics);
       }
       const expectedCommit = String(branch.commit || '');
       for (const data of [core.data, graph.data]) {
@@ -700,7 +725,7 @@ export function createCatalogLoader({
       }
       const data = {
         ...core.data,
-        relations: graph.data.relations,
+        relations: mergeGraphContractMetadata(graph.data.relations, graph.data),
         menu: { categories: [], labels: {}, options: [], choices: [] },
         splitAssets: true,
       };

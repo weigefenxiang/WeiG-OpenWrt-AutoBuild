@@ -1,6 +1,32 @@
 const LEVEL = Object.freeze({ n: 0, m: 1, y: 2 });
 const STATE = Object.freeze(['n', 'm', 'y']);
 const UNKNOWN = -1;
+// Package-build closure is intentionally narrower than the full typed
+// Kconfig relation contract.  A Catalog may have a complete package-info
+// graph while still being inconclusive for typed defaults/visibility/choice
+// evaluation.  Keep the two producer assertions separate at the model
+// boundary so graph-derived compatibility decisions do not weaken typed
+// validation.
+const PACKAGE_CLOSURE_CAPABILITY = 'complete-package-build-closure-v1';
+const KCONFIG_RELATION_CAPABILITY = 'complete-kconfig-relations-v1';
+// This is the single typed-relation capability contract shared by the browser
+// evaluator and the schema-6 Worker.  A producer may expose a readable graph
+// without exposing every relation surface; consumers must not silently treat
+// such a graph as authoritative for derived Kconfig decisions.
+export const REQUIRED_KCONFIG_RELATION_CAPABILITIES = Object.freeze([
+  'kconfig-expression-ast-v1',
+  'typed-kconfig-v1',
+  'conditional-defaults-v1',
+  'conditional-ranges-v1',
+  'visibility-conditions-v1',
+  'choice-relations-v1',
+  'choice-reset-conditions-v1',
+  'module-semantics-v1',
+  'typed-package-capabilities-v1',
+  'alternatives-v1',
+  'forward-reverse-edges-v1',
+  KCONFIG_RELATION_CAPABILITY,
+]);
 
 function unique(values) {
   return [...new Set(values.filter(Boolean))];
@@ -11,6 +37,167 @@ function normalizeValue(value) {
   return Object.hasOwn(LEVEL, text) ? text : text;
 }
 
+export function decodeKconfigString(value) {
+  const text = String(value ?? '');
+  if (!(text.startsWith('"') && text.endsWith('"'))) return text;
+  const body = text.slice(1, -1);
+  return body.replace(/\\([\s\S])/g, '$1');
+}
+
+export function encodeKconfigString(value) {
+  const text = String(value ?? '');
+  if (/[\0\r\n]/.test(text)) throw new Error('Kconfig strings cannot contain NUL or line breaks');
+  return `"${text.replace(/[\\"]/g, '\\$&')}"`;
+}
+
+// Source and .config readers both remove escape backslashes without JSON
+// control escapes. Keep the source boundary explicit for its quote syntax.
+function decodeKconfigExpressionString(value) {
+  const text = String(value ?? '');
+  if (text.startsWith("'") && text.endsWith("'")) return text.slice(1, -1).replace(/\\([\s\S])/g, '$1');
+  return decodeKconfigString(text);
+}
+
+function mapValue(map, key) {
+  if (map instanceof Map) return map.get(key);
+  if (map && typeof map === 'object') return map[key];
+  return undefined;
+}
+
+function expressionSymbolType(symbol, options = {}) {
+  const type = String(mapValue(options.symbolTypes, symbol) || '').trim().toLowerCase();
+  return ['bool', 'tristate', 'string', 'int', 'hex', 'unknown'].includes(type) ? type : '';
+}
+
+function parseExpressionInteger(value, type = '') {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  const normalizedType = String(type || '').toLowerCase();
+  const parseSignedDecimal = (source) => {
+    if (!/^[+-]?\d+$/.test(source)) return null;
+    try { return { kind: 'signed', value: BigInt(source) }; } catch { return null; }
+  };
+  const parseHex = (source, allowPrefix = true) => {
+    const match = source.match(/^([+-]?)(?:0[xX])?([0-9a-fA-F]+)$/);
+    if (!match || (!allowPrefix && /[a-f]/i.test(match[2]))) return null;
+    try {
+      const value = BigInt(`0x${match[2]}`);
+      return { kind: 'unsigned', value: match[1] === '-' ? -value : value };
+    } catch { return null; }
+  };
+  if (normalizedType === 'bool' || normalizedType === 'tristate') {
+    const level = LEVEL[text];
+    return level === undefined ? null : { kind: 'signed', value: BigInt(level) };
+  }
+  if (normalizedType === 'int') return parseSignedDecimal(text);
+  if (normalizedType === 'hex') return parseHex(text);
+  // Unknown Kconfig symbols are parsed by native expr_parse_string() with
+  // base 0.  Cover the decimal/hex forms used by Catalog expressions without
+  // routing through Number (which loses precision above 2^53).
+  if (/^[+-]?0[xX][0-9a-f]+$/i.test(text)) return parseHex(text);
+  const octal = text.match(/^([+-]?)0([0-7]+)$/);
+  if (octal) {
+    try {
+      const value = BigInt(`0o${octal[2]}`);
+      return { kind: 'signed', value: octal[1] === '-' ? -value : value };
+    } catch { return null; }
+  }
+  return parseSignedDecimal(text);
+}
+
+function expressionLiteralOperand(value, raw = value, quoted = false) {
+  const source = String(raw ?? value ?? '');
+  const text = String(value ?? source);
+  if (quoted || (source.startsWith('"') && source.endsWith('"'))) {
+    const stringValue = quoted && !(source.startsWith('"') && source.endsWith('"'))
+      ? text : decodeKconfigExpressionString(source);
+    return { type: 'string', level: 0, stringValue, numeric: null,
+      unknownData: false, nativeUndefined: false };
+  }
+  if (Object.hasOwn(LEVEL, text)) {
+    return { type: 'tristate', level: LEVEL[text], stringValue: text,
+      numeric: { kind: 'signed', value: BigInt(LEVEL[text]) }, unknownData: false, nativeUndefined: false };
+  }
+  if (/^[+-]?(?:0x[0-9a-f]+|\d+)$/i.test(text)) {
+    const type = /^[-+]?0x/i.test(text) ? 'hex' : 'int';
+    return { type, level: 0, stringValue: text, numeric: parseExpressionInteger(text, type),
+      unknownData: false, nativeUndefined: false };
+  }
+  return { type: 'unknown', level: 0, stringValue: text,
+    numeric: parseExpressionInteger(text, 'unknown'), unknownData: false, nativeUndefined: true };
+}
+
+function expressionOperand(token, inputValues, options = {}, { literal = false } = {}) {
+  const values = valuesMap(inputValues);
+  const source = String(token ?? '');
+  if (literal || /^".*"$/.test(source) || Object.hasOwn(LEVEL, source) ||
+      /^[+-]?(?:0x[0-9a-f]+|\d+)$/i.test(source)) {
+    return expressionLiteralOperand(source, source);
+  }
+  if (values.has(source)) {
+    const explicitType = expressionSymbolType(source, options);
+    const type = explicitType ||
+      (Object.hasOwn(LEVEL, String(values.get(source))) ? 'tristate' : 'unknown');
+    const stringValue = String(values.get(source));
+    const inferredScalar = !explicitType && type === 'unknown';
+    const level = type === 'bool' || type === 'tristate'
+      ? (Object.hasOwn(LEVEL, stringValue) ? LEVEL[stringValue] : UNKNOWN)
+      : inferredScalar ? UNKNOWN : 0;
+    return { type, level, stringValue, numeric: parseExpressionInteger(stringValue, type),
+      unknownData: inferredScalar, nativeUndefined: false };
+  }
+  const undefinedSymbol = mapValue(options.undefinedSymbols, source);
+  if (undefinedSymbol && undefinedSymbol.reason === 'undefined-kconfig-symbol' &&
+      undefinedSymbol.nativeType === 'unknown' && undefinedSymbol.booleanValue === 'n' &&
+      String(undefinedSymbol.stringValue ?? source) === source) {
+    return { type: 'unknown', level: 0, stringValue: source,
+      numeric: parseExpressionInteger(source, 'unknown'), unknownData: false, nativeUndefined: true };
+  }
+  if (/^PACKAGE_/.test(source) || options.closedSymbols?.has?.(source) ||
+      (/^TARGET_/.test(source) && options.contextComplete)) {
+    const type = expressionSymbolType(source, options) || 'tristate';
+    return { type, level: 0, stringValue: 'n', numeric: { kind: 'signed', value: 0n },
+      unknownData: false, nativeUndefined: false };
+  }
+  // An absent symbol with no producer proof is not native N.  Keep it
+  // deferred so incomplete Catalog data cannot be promoted to a decision.
+  return { type: 'unknown', level: UNKNOWN, stringValue: source, numeric: null,
+    unknownData: true, nativeUndefined: false };
+}
+
+function compareExpressionOperands(left, operator, right) {
+  if (!left || !right || left.level === UNKNOWN || right.level === UNKNOWN ||
+      left.unknownData || right.unknownData) return UNKNOWN;
+  const leftString = left.type === 'string';
+  const rightString = right.type === 'string';
+  let result;
+  if (leftString && rightString) {
+    const a = String(left.stringValue); const b = String(right.stringValue);
+    result = a === b ? 0 : a < b ? -1 : 1;
+  } else {
+    // This follows scripts/config/expr.c: when at least one side is not
+    // S_STRING, parse each operand using its own type.  If either parse fails,
+    // native code falls back to strcmp on the original string values.
+    const leftNumeric = left.numeric || parseExpressionInteger(left.stringValue, left.type);
+    const rightNumeric = right.numeric || parseExpressionInteger(right.stringValue, right.type);
+    if (leftNumeric && rightNumeric) {
+      const unsigned = leftNumeric.kind === 'unsigned' || rightNumeric.kind === 'unsigned';
+      const a = leftNumeric.value; const b = rightNumeric.value;
+      result = unsigned ? (a > b ? 1 : a < b ? -1 : 0) : (a > b ? 1 : a < b ? -1 : 0);
+    } else {
+      const a = String(left.stringValue); const b = String(right.stringValue);
+      result = a === b ? 0 : a < b ? -1 : 1;
+    }
+  }
+  if (operator === '=') return result === 0 ? 2 : 0;
+  if (operator === '!=') return result !== 0 ? 2 : 0;
+  if (operator === '<') return result < 0 ? 2 : 0;
+  if (operator === '>') return result > 0 ? 2 : 0;
+  if (operator === '<=') return result <= 0 ? 2 : 0;
+  if (operator === '>=') return result >= 0 ? 2 : 0;
+  return UNKNOWN;
+}
+
 export function resolveCatalogUserOverride(inheritedValue, requestedValue) {
   const inherited = normalizeValue(inheritedValue);
   const requested = normalizeValue(requestedValue);
@@ -18,7 +205,11 @@ export function resolveCatalogUserOverride(inheritedValue, requestedValue) {
 }
 
 function stateLevel(value) {
-  return LEVEL[normalizeValue(value)] ?? (value ? 2 : 0);
+  const normalized = normalizeValue(value);
+  if (Object.hasOwn(LEVEL, normalized)) return LEVEL[normalized];
+  const text = decodeKconfigString(normalized);
+  if (/^[+-]?(?:0x[0-9a-f]+|\d+)$/i.test(text)) return Number(text) === 0 ? 0 : 2;
+  return text ? 2 : 0;
 }
 
 function valuesMap(values) {
@@ -139,6 +330,30 @@ function packageNameFromSymbol(symbol) {
   return String(symbol || '').startsWith('PACKAGE_') ? String(symbol).slice(8) : '';
 }
 
+function relationCapabilities(relations = {}) {
+  const values = Array.isArray(relations.capabilities) ? relations.capabilities
+    : Array.isArray(relations.relationCapabilities) ? relations.relationCapabilities : [];
+  return [...values]
+    .map(String).filter(Boolean);
+}
+
+function packageClosureContract(relations = {}) {
+  // Schema-4 compact assets stamp the narrow contract on these exact
+  // top-level fields.  Do not infer it from an older nested/legacy shape:
+  // those assets remain readable but graph-derived recommendations are
+  // inconclusive.
+  const values = Array.isArray(relations.packageClosureCapabilities)
+    ? relations.packageClosureCapabilities : [];
+  const capabilities = [...values].map(String).filter(Boolean);
+  return {
+    capabilities,
+    complete: relations.packageClosureComplete === true &&
+      capabilities.includes(PACKAGE_CLOSURE_CAPABILITY),
+    validation: relations.packageClosureValidation && typeof relations.packageClosureValidation === 'object'
+      ? relations.packageClosureValidation : {},
+  };
+}
+
 function ruleParts(raw) {
   const match = String(raw || '').trim().match(/^([^\s]+)(?:\s+if\s+(.+))?$/);
   return match ? { symbol: match[1], condition: match[2] || '' } : { symbol: '', condition: '' };
@@ -146,44 +361,83 @@ function ruleParts(raw) {
 
 const EXPRESSION_TOKEN_CACHE = new Map();
 function expressionTokens(expression) {
-  const source = String(expression || '');
-  if (!EXPRESSION_TOKEN_CACHE.has(source)) {
-    EXPRESSION_TOKEN_CACHE.set(source, source.match(/\|\||&&|!=|<=|>=|=|<|>|!|\(|\)|"(?:[^"\\]|\\.)*"|[A-Za-z0-9_+@./-]+/g) || []);
+  const original = String(expression || '');
+  if (!EXPRESSION_TOKEN_CACHE.has(original)) {
+    let quoted = false;
+    let escaped = false;
+    let source = '';
+    for (let index = 0; index < original.length; index += 1) {
+      const character = original[index];
+      if (escaped) { source += character; escaped = false; continue; }
+      if (quoted && character === '\\') { source += character; escaped = true; continue; }
+      if (character === '"') { quoted = !quoted; source += character; continue; }
+      if (!quoted && character === '#') break;
+      source += character;
+    }
+    const tokens = [];
+    let at = 0;
+    let invalid = '';
+    const isWord = (character) => /[A-Za-z0-9_./-]/.test(character);
+    const markInvalid = (character) => { if (!invalid) invalid = character; };
+    while (at < source.length) {
+      const character = source[at];
+      if (/\s/.test(character)) { at += 1; continue; }
+      const two = source.slice(at, at + 2);
+      if (['||', '&&', '!=', '<=', '>='].includes(two)) {
+        tokens.push(two); at += 2; continue;
+      }
+      if (['=', '<', '>', '!', '(', ')'].includes(character)) {
+        tokens.push(character); at += 1; continue;
+      }
+      // Native Kconfig's lexer ignores an unsupported @ outside a quoted
+      // literal.  Keep the raw spelling for provenance while tokenizing the
+      // expression in the same source domain as the producer AST.
+      if (character === '@') { at += 1; continue; }
+      if (character === '"') {
+        const start = at;
+        let escaped = false;
+        let closed = false;
+        at += 1;
+        while (at < source.length) {
+          const next = source[at++];
+          if (escaped) { escaped = false; continue; }
+          if (next === '\\') { escaped = true; continue; }
+          if (next === '"') { closed = true; break; }
+          if (next === '\r' || next === '\n') markInvalid(next);
+        }
+        const token = source.slice(start, at);
+        tokens.push(token);
+        if (!closed || escaped) markInvalid(token);
+        continue;
+      }
+      if (isWord(character)) {
+        const start = at;
+        while (at < source.length && isWord(source[at])) at += 1;
+        tokens.push(source.slice(start, at));
+        continue;
+      }
+      markInvalid(character);
+      // Retain the offending character as a token so parser diagnostics and
+      // the complete-consumption check cannot silently skip a suffix.
+      tokens.push(character);
+      at += 1;
+    }
+    Object.defineProperties(tokens, {
+      complete: { value: !invalid, enumerable: false },
+      invalid: { value: invalid, enumerable: false },
+      syntaxValid: { value: null, writable: true, enumerable: false },
+    });
+    EXPRESSION_TOKEN_CACHE.set(original, tokens);
   }
-  return EXPRESSION_TOKEN_CACHE.get(source);
+  return EXPRESSION_TOKEN_CACHE.get(original);
 }
 
 function evaluateExpressionRaw(expression, inputValues, options = {}) {
-  if (!expression) return 2;
-  const values = valuesMap(inputValues);
+  if (!String(expression || '').trim()) return 2;
   const tokens = expressionTokens(expression);
+  if (tokens.complete === false || !tokens.length) return UNKNOWN;
   let at = 0;
-  const raw = (token) => {
-    if (token === 'y' || token === 'm' || token === 'n') return token;
-    if (/^".*"$/.test(token || '')) return token.slice(1, -1).replace(/\\"/g, '"');
-    if (/^-?(?:0x[0-9a-f]+|\d+)$/i.test(token || '')) return token;
-    if (values.has(token)) return normalizeValue(values.get(token));
-    if (/^PACKAGE_/.test(token || '')) return 'n';
-    if (/^TARGET_/.test(token || '')) return options.contextComplete ? 'n' : UNKNOWN;
-    if (options.closedSymbols?.has?.(token)) return 'n';
-    return UNKNOWN;
-  };
-  const asLevel = (value) => value === UNKNOWN ? UNKNOWN : stateLevel(value);
-  const compare = (left, op, right) => {
-    if (left === UNKNOWN || right === UNKNOWN) return UNKNOWN;
-    if (op === '=') return left === right ? 2 : 0;
-    if (op === '!=') return left !== right ? 2 : 0;
-    const leftNumber = Number(left);
-    const rightNumber = Number(right);
-    const numeric = Number.isFinite(leftNumber) && Number.isFinite(rightNumber);
-    const a = numeric ? leftNumber : String(left);
-    const b = numeric ? rightNumber : String(right);
-    if (op === '<') return a < b ? 2 : 0;
-    if (op === '>') return a > b ? 2 : 0;
-    if (op === '<=') return a <= b ? 2 : 0;
-    if (op === '>=') return a >= b ? 2 : 0;
-    return 0;
-  };
+  let parseError = false;
   const negate = (value) => value === UNKNOWN ? UNKNOWN : 2 - value;
   const intersect = (left, right) => {
     if (left === 0 || right === 0) return 0;
@@ -200,15 +454,24 @@ function evaluateExpressionRaw(expression, inputValues, options = {}) {
       at++;
       const value = or();
       if (tokens[at] === ')') at++;
+      else parseError = true;
       return value;
     }
-    const left = raw(tokens[at++] || 'n');
+    if (at >= tokens.length || ['&&', '||', ')', '=', '!=', '<', '>', '<=', '>='].includes(tokens[at])) {
+      parseError = true;
+      return UNKNOWN;
+    }
+    const left = expressionOperand(tokens[at++], inputValues, options);
     if (['=', '!=', '<', '>', '<=', '>='].includes(tokens[at])) {
       const op = tokens[at++];
-      const right = raw(tokens[at++] || 'n');
-      return compare(left, op, right);
+      if (at >= tokens.length || ['&&', '||', ')', '=', '!=', '<', '>', '<=', '>='].includes(tokens[at])) {
+        parseError = true;
+        return UNKNOWN;
+      }
+      const right = expressionOperand(tokens[at++], inputValues, options);
+      return compareExpressionOperands(left, op, right);
     }
-    return asLevel(left);
+    return left.level;
   };
   const unary = () => tokens[at] === '!' ? (at++, negate(unary())) : primary();
   const and = () => {
@@ -221,7 +484,9 @@ function evaluateExpressionRaw(expression, inputValues, options = {}) {
     while (tokens[at] === '||') { at++; value = union(value, and()); }
     return value;
   };
-  return or();
+  const result = or();
+  tokens.syntaxValid = !parseError && at === tokens.length;
+  return tokens.syntaxValid ? result : UNKNOWN;
 }
 
 export function evaluateExpressionState(expression, inputValues, options = {}) {
@@ -232,6 +497,11 @@ export function evaluateExpressionState(expression, inputValues, options = {}) {
 
 export function evaluateExpression(expression, inputValues, options = {}) {
   const result = evaluateExpressionRaw(expression, inputValues, options);
+  // Malformed input is never promoted by the public convenience fallback.
+  // Unknown symbols may still use the caller's explicit policy, but an
+  // invalid suffix/character must remain UNKNOWN for fail-closed consumers.
+  const tokens = expressionTokens(expression);
+  if (tokens.complete === false || tokens.syntaxValid === false) return UNKNOWN;
   if (result !== UNKNOWN) return result;
   if (options?.unknown === 'deny') return 0;
   if (options?.unknown === 'module') return 1;
@@ -240,6 +510,14 @@ export function evaluateExpression(expression, inputValues, options = {}) {
 }
 
 function defaultParts(raw) {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    // Typed `value` is already decoded. Prefer original source spelling when
+    // available so literal quotes/backslashes are not decoded a second time.
+    const sourceValue = raw.raw === undefined ? undefined : defaultParts(String(raw.raw)).valueExpression;
+    const valueExpression = String(raw.valueExpression ?? sourceValue ?? raw.value ?? raw.default ?? '').trim();
+    const condition = String(raw.condition ?? raw.if ?? '').trim();
+    return { valueExpression, condition };
+  }
   const source = String(raw || '').trim();
   let quoted = false;
   let escaped = false;
@@ -281,6 +559,149 @@ function nestedExpressionStrings(value) {
   return value.flatMap(nestedExpressionStrings);
 }
 
+function expressionAstSymbols(value, seen = new Set()) {
+  const symbols = new Set();
+  const visit = (node) => {
+    if (node === null || node === undefined) return;
+    if (typeof node === 'string') {
+      for (const symbol of referencedExpressionSymbols(node)) symbols.add(symbol);
+      return;
+    }
+    if (typeof node !== 'object' || seen.has(node)) return;
+    seen.add(node);
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    if (node.kind === 'symbol' && String(node.name || '').trim()) {
+      symbols.add(String(node.name).trim());
+    }
+    for (const child of Object.values(node)) visit(child);
+  };
+  visit(value);
+  return symbols;
+}
+
+function normalizeExpressionAstNode(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const kind = String(value.kind || value.type || '').trim().toLowerCase();
+  if (kind === 'symbol') {
+    const name = String(value.name ?? value.symbol ?? '').trim();
+    return name ? { kind: 'symbol', name, ...(value.raw !== undefined ? { raw: String(value.raw) } : {}) } : null;
+  }
+  if (kind === 'literal') {
+    if (value.value === undefined && value.raw === undefined) return null;
+    return { kind: 'literal', value: value.value ?? value.raw,
+      ...(value.raw !== undefined ? { raw: String(value.raw) } : {}),
+      ...(value.quoted === true ? { quoted: true } : {}) };
+  }
+  if (kind === 'unknown') return { kind: 'unknown', raw: String(value.raw || '') };
+  if (kind === 'not') {
+    const child = normalizeExpressionAstNode(value.value ?? value.child ?? value.operand);
+    return child ? { kind: 'not', value: child } : null;
+  }
+  if (kind === 'compare') {
+    const left = normalizeExpressionAstNode(value.left);
+    const right = normalizeExpressionAstNode(value.right);
+    const operator = String(value.operator || value.op || '').trim();
+    return left && right && ['=', '!=', '<', '>', '<=', '>='].includes(operator)
+      ? { kind: 'compare', operator, left, right } : null;
+  }
+  if (kind === 'and' || kind === 'or') {
+    const source = Array.isArray(value.values) ? value.values
+      : Array.isArray(value.children) ? value.children
+        : Array.isArray(value.args) ? value.args : [];
+    const values = source.map(normalizeExpressionAstNode);
+    return values.length && values.every(Boolean) ? { kind, values } : null;
+  }
+  return null;
+}
+
+function normalizeExpressionAst(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value) &&
+      (Object.hasOwn(value, 'ast') || Object.hasOwn(value, 'complete'))) {
+    const ast = normalizeExpressionAstNode(value.ast);
+    return {
+      raw: String(value.raw || '').trim(),
+      ast,
+      complete: value.complete !== false && Boolean(ast),
+    };
+  }
+  const ast = normalizeExpressionAstNode(value);
+  return { raw: '', ast, complete: Boolean(ast) };
+}
+
+function relationTarget(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return String(value.target || value.symbol || value.name ||
+      (value.raw ? ruleParts(value.raw).symbol : '')).trim();
+  }
+  return ruleParts(value).symbol;
+}
+
+function normalizeKconfigRelation(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const target = relationTarget(value);
+    const condition = String(value.condition || value.if || '').trim();
+    const targetAstValue = value.targetAst ?? value.expressionAst ?? null;
+    const conditionAstValue = value.conditionAst ?? null;
+    const targetAst = targetAstValue === null ? null : normalizeExpressionAst(targetAstValue);
+    const conditionAst = conditionAstValue === null ? null : normalizeExpressionAst(conditionAstValue);
+    return {
+      ...value,
+      target,
+      symbol: target,
+      name: target,
+      condition,
+      targetAst,
+      expressionAst: targetAst,
+      conditionAst,
+      raw: String(value.raw || value.target || value.symbol || value.name || '').trim(),
+    };
+  }
+  const parsed = ruleParts(value);
+  const target = String(parsed.symbol || '').trim();
+  return { raw: String(value || '').trim(), target, symbol: target, name: target,
+    condition: parsed.condition, targetAst: null, expressionAst: null, conditionAst: null };
+}
+
+function kconfigRelationParts(value) {
+  const normalized = normalizeKconfigRelation(value);
+  return {
+    ...normalized,
+    symbol: normalized.target,
+    conditionAst: normalized.conditionAst,
+    raw: normalized.raw,
+  };
+}
+
+function kconfigRelationRows(record, kind) {
+  const typedField = kind === 'select' ? 'selectRelations' : 'implyRelations';
+  const rawField = kind === 'select' ? 'selectsExpressions' : 'impliesExpressions';
+  const typed = record?.kconfig?.[typedField] || record?.[typedField];
+  if (typed && ((Array.isArray(typed) && typed.length) || !Array.isArray(typed))) {
+    return (Array.isArray(typed) ? typed : [typed])
+      .flatMap((row) => Array.isArray(row) ? row : [row]).map(normalizeKconfigRelation);
+  }
+  const typedVariants = record?.kconfig?.[`${typedField}Variants`] || record?.[`${typedField}Variants`];
+  if (Array.isArray(typedVariants) && typedVariants.length) {
+    return typedVariants.flatMap((row) => Array.isArray(row) ? row : [row]).map(normalizeKconfigRelation);
+  }
+  const rawRows = record?.kconfig?.[rawField] || record?.[rawField] || [];
+  const flatRows = Array.isArray(rawRows) ? rawRows.flatMap((row) => Array.isArray(row) ? row : [row]) : [rawRows];
+  return flatRows.filter(Boolean).map(normalizeKconfigRelation);
+}
+
+function unwrapExpressionAst(value) {
+  // Catalog expression tables carry the parser envelope (`{ raw, ast,
+  // complete, ... }`) so the raw spelling and completeness provenance survive
+  // serialization.  The evaluator consumes the AST node itself; accepting
+  // both forms keeps readable schema-2 records and compact schema-4 records
+  // on one path.
+  const normalized = normalizeExpressionAst(value);
+  return normalized.complete ? normalized.ast : null;
+}
+
 export function allowedKconfigStates(option = {}) {
   const type = String(option.type || '').toLowerCase();
   const typeStates = type === 'bool' ? ['n', 'y'] : type === 'tristate' ? STATE : [];
@@ -297,26 +718,100 @@ export function normalizeKconfigStateValue(option, value, fallback = 'n') {
   return allowed.includes(fallback) ? fallback : allowed[0] || 'n';
 }
 
-function scalarDefaultValue(valueExpression) {
-  return String(valueExpression || '').trim().replace(/^"|"$/g, '');
+function moduleSupportLevel(model, values, options = {}) {
+  const moduleRecord = model?.bySymbol?.get('MODULES') || model?.bySymbol?.get('CONFIG_MODULES');
+  if (!moduleRecord?.configSymbol) return 2;
+  if (values.has(moduleRecord.configSymbol)) return stateLevel(values.get(moduleRecord.configSymbol));
+  if (options.closedSymbols?.has?.(moduleRecord.configSymbol)) return 0;
+  return UNKNOWN;
+}
+
+function modelKconfigStates(model, record, values, options = {}) {
+  const states = allowedKconfigStates(record);
+  if (String(record?.type || '').toLowerCase() !== 'tristate') return states;
+  const modules = moduleSupportLevel(model, values, options);
+  return modules === 0 ? states.filter((value) => value !== 'm') : states;
+}
+
+function stateForKconfigLevel(model, record, level, values, options = {}) {
+  if (level === 1 && String(record?.type || '').toLowerCase() === 'tristate' &&
+      moduleSupportLevel(model, values, options) === 0) return 'n';
+  return STATE[level] || 'n';
+}
+
+function scalarDefaultValue(valueExpression, type = 'string', inputValues = new Map(), raw = null, options = {}) {
+  const expression = String(valueExpression || '').trim();
+  const valueKind = String(raw?.valueKind || '').trim();
+  const literal = valueKind === 'literal' || (!valueKind &&
+    (/^"(?:[^"\\]|\\.)*"$/.test(expression) ||
+      (type === 'int' && /^[+-]?\d+$/.test(expression)) ||
+      (type === 'hex' && /^[+-]?0[xX][0-9a-fA-F]+$/.test(expression))));
+  if (valueKind === 'unknown' || (!literal &&
+      valueKind !== 'expression' && valueKind !== '')) return UNKNOWN;
+  if (!literal) {
+    if (inputValues instanceof Map && inputValues.has(expression)) {
+      return String(inputValues.get(expression));
+    }
+    const operand = expressionOperand(expression, inputValues, options);
+    return operand.unknownData ? UNKNOWN : operand.stringValue;
+  }
+  const value = decodeKconfigExpressionString(expression);
+  if (type === 'int') {
+    if (!/^[+-]?\d+$/.test(value)) return value;
+    // Native scalar defaults retain the exact token. Never round via Number.
+    return value;
+  }
+  if (type === 'hex') {
+    if (!/^[+-]?(?:0[xX])?[0-9a-fA-F]+$/.test(value)) return value;
+    return value;
+  }
+  return value;
+}
+
+function scalarValueValid(type, value) {
+  const normalized = String(value ?? '');
+  if (type === 'string') return !/[\0\r\n]/.test(normalized);
+  if (type === 'int') return /^[+-]?\d+$/.test(normalized);
+  if (type === 'hex') return /^[+-]?0[xX][0-9a-fA-F]+$/.test(normalized);
+  return true;
 }
 
 export function resolveKconfigDefault(option = {}, inputValues = new Map(), options = {}) {
   const type = String(option.type || '').toLowerCase();
   const fallback = type === 'string' ? '' : 'n';
-  for (const raw of option.defaults || []) {
+  // Compact relations schema 4 carries the typed/default-order table beside
+  // the legacy display table.  Consume it when present so a conditional
+  // string/int/hex default is evaluated in the same order as Kconfig instead
+  // of reconstructing a lossy `value if condition` spelling.
+  const defaults = Array.isArray(option.defaultsTyped) && option.defaultsTyped.length
+    ? option.defaultsTyped : (option.defaults || []);
+  for (const raw of defaults) {
+    if (raw && typeof raw === 'object' && raw.valid === false) {
+      return { status: 'deferred', value: fallback, reason: 'invalid-typed-default' };
+    }
     const { valueExpression, condition } = defaultParts(raw);
     if (!valueExpression) continue;
     const conditionState = evaluateExpressionRaw(condition, inputValues, options);
-    if (conditionState === UNKNOWN) return { status: 'deferred', value: fallback };
+    if (conditionState === UNKNOWN) {
+      return { status: 'deferred', value: fallback, reason: 'unknown-default-condition', condition };
+    }
     if (conditionState === 0) continue;
     if (type === 'bool' || type === 'tristate') {
       const level = evaluateExpressionRaw(valueExpression, inputValues, options);
-      if (level === UNKNOWN) return { status: 'deferred', value: fallback };
+      if (level === UNKNOWN) {
+        return { status: 'deferred', value: fallback, reason: 'unknown-default-value', valueExpression };
+      }
       const resolved = type === 'bool' && level === 1 ? 'y' : STATE[level] || fallback;
       return { status: 'resolved', value: normalizeKconfigStateValue(option, resolved, fallback) };
     }
-    return { status: 'resolved', value: scalarDefaultValue(valueExpression) };
+    const value = scalarDefaultValue(valueExpression, type, inputValues, raw, options);
+    if (value === UNKNOWN) {
+      return { status: 'deferred', value: fallback, reason: 'unknown-default-value', valueExpression };
+    }
+    if (!scalarValueValid(type, value)) {
+      return { status: 'deferred', value: fallback, reason: 'invalid-default-value', valueExpression };
+    }
+    return { status: 'resolved', value };
   }
   return { status: 'fallback', value: fallback };
 }
@@ -326,12 +821,15 @@ function compactStates(mask) {
 }
 
 export function expandCompactRelations(compact) {
-  if (Number(compact?.schema || 0) !== 3) throw new Error('Catalog relations schema 3 is required');
+  const relationSchema = Number(compact?.schema || 0);
+  if (![3, 4].includes(relationSchema)) throw new Error('Catalog relations schema 3 or 4 is required');
+  const schema4 = relationSchema === 4;
   const strings = compact.strings || [];
   const expressions = compact.expressions || [];
   const stringLists = compact.stringLists || [];
   const expressionLists = compact.expressionLists || [];
   const variants = compact.expressionVariants || [];
+  const expressionAsts = compact.expressionAsts || [];
   const flags = compact.flags || { visible: 1, userSettable: 2, canDisable: 4, hasKconfig: 8, package: 16 };
   const list = (id) => id < 0 ? [] : (stringLists[id] || []).map((item) => strings[item] || '');
   const expressionRows = (id) => id < 0 ? [] : (variants[id] || []).map((listId) =>
@@ -339,30 +837,173 @@ export function expandCompactRelations(compact) {
   const indexes = (rows) => Object.fromEntries((rows || []).map(([keyId, listId]) => [
     strings[keyId] || '', list(listId),
   ]));
+  const recordIndexes = (rows) => Object.fromEntries((rows || []).map(([keyId, value]) => [
+    strings[keyId] || '', Number(value),
+  ]));
+  const fields = Array.isArray(compact.fields) ? compact.fields : [];
+  const fieldIndex = (name, fallback) => {
+    const index = fields.indexOf(name);
+    return index >= 0 ? index : fallback;
+  };
+  const fieldValue = (row, name, fallback) => Array.isArray(row)
+    ? row[fieldIndex(name, fallback)]
+    : row?.[name];
+  const expression = (id) => id === undefined || id === null || id < 0 ? '' : expressions[id] || '';
+  const decodeTypedDefaultRows = (id) => (schema4 ? (compact.typedDefaults?.[id] || []).map((row) => ({
+    type: compact.types?.[row.typeCode] || '',
+    value: row.value,
+    raw: strings[row.rawId] || '',
+    condition: expression(row.conditionId),
+    valueKind: compact.valueKinds?.[row.valueKindCode] || '',
+    valid: row.valid !== false,
+    precise: row.precise !== false,
+  })) : []);
+  const decodeTypedRangeRows = (id) => (schema4 ? (compact.ranges?.[id] || []).map((row) => ({
+    type: compact.types?.[row.typeCode] || '',
+    min: row.min,
+    max: row.max,
+    minRaw: strings[row.minRawId] || '',
+    maxRaw: strings[row.maxRawId] || '',
+    raw: strings[row.rawId] || '',
+    condition: expression(row.conditionId),
+    minKind: compact.valueKinds?.[row.minKindCode] || '',
+    maxKind: compact.valueKinds?.[row.maxKindCode] || '',
+    valid: row.valid !== false,
+  })) : []);
+  const decodeCapabilityRows = (id) => (schema4
+    ? (compact.capabilities?.[id] || { provides: [], conflicts: [] })
+    : { provides: [], conflicts: [] });
+  const decodeDependencyRows = (id) => (compact.packageDependencies?.[id] || []).map((row) => {
+    // Schema 3 encoded each dependency as [required, conditionId, rawId,
+    // packagesId].  Schema 4 keeps the typed dependency/capability objects so
+    // no relation information is lost while crossing the compact boundary.
+    if (Array.isArray(row)) return {
+      raw: strings[row[2]] || '',
+      required: Boolean(row[0]),
+      condition: row[1] < 0 ? '' : expressions[row[1]] || '',
+      packages: list(row[3]),
+      targets: [],
+    };
+    return {
+      raw: String(row?.raw || ''),
+      required: row?.required !== false,
+      kind: String(row?.kind || 'package'),
+      condition: String(row?.condition || ''),
+      packages: Array.isArray(row?.packages) ? row.packages.map(String).filter(Boolean) : [],
+      targets: Array.isArray(row?.targets) ? row.targets : [],
+    };
+  });
+  const decodeEdgeRows = () => (schema4 ? (compact.edges || []).map((edge) => ({
+    from: strings[edge.fromId] || '',
+    to: strings[edge.toId] || '',
+    relation: strings[edge.relationId] || '',
+    condition: expression(edge.conditionId),
+    expression: expression(edge.expressionId),
+    // `null` means candidate/reference only. Keep it explicit across the
+    // compact boundary so consumers cannot promote an OR/reference edge to a
+    // mandatory dependency by treating an omitted field as `true`.
+    required: edge.required === null ? null : edge.required === true,
+    kind: strings[edge.kindId] || '',
+    alternatives: (compact.alternativeLists?.[edge.alternativesId] || []).map((listId) => list(listId)),
+    providers: list(edge.providersId),
+    ...(edge.expressionAstId === undefined || edge.expressionAstId < 0 ? {} : {
+      expressionAst: expressionAsts[edge.expressionAstId] || null,
+    }),
+    ...(edge.conditionAstId === undefined || edge.conditionAstId < 0 ? {} : {
+      conditionAst: expressionAsts[edge.conditionAstId] || null,
+    }),
+    ownerSelf: edge.ownerSelf === true,
+  })) : []);
+  const decodeNumericIndex = (rows) => Object.fromEntries((rows || []).map(([key, listId]) => [
+    String(key), (compact.numberLists?.[listId] || []).map(Number),
+  ]));
   const records = (compact.records || []).map((row) => {
-    const [symbolId, recordFlags, typeCode, originCode, statesMask, choiceId, defaultsId,
-      dependsId, selectsId, impliesId, packageDependenciesId, providesId, conflictsId] = row;
+    const symbolId = fieldValue(row, 'symbolId', 0);
+    const recordFlags = fieldValue(row, 'flags', 1);
+    const typeCode = fieldValue(row, 'typeCode', 2);
+    const originCode = fieldValue(row, 'originCode', 3);
+    const statesMask = fieldValue(row, 'statesMask', 4);
+    const choiceId = fieldValue(row, 'choiceId', 5);
+    const defaultsId = fieldValue(row, 'defaultsId', 6);
+    const dependsId = fieldValue(row, 'dependsVariantsId', 7);
+    const selectsId = fieldValue(row, 'selectsVariantsId', 8);
+    const impliesId = fieldValue(row, 'impliesVariantsId', 9);
+    const packageDependenciesId = fieldValue(row, 'packageDependenciesId', 10);
+    const providesId = fieldValue(row, 'providesId', 11);
+    const conflictsId = fieldValue(row, 'conflictsId', 12);
+    const packageConflictsId = fieldValue(row, 'packageConflictsId', 13);
+    const kconfigConflictsId = fieldValue(row, 'kconfigConflictsId', 14);
     const symbol = strings[symbolId] || '';
     const isPackage = Boolean(recordFlags & flags.package);
     const hasKconfig = Boolean(recordFlags & flags.hasKconfig);
     const dependsExpressions = expressionRows(dependsId);
     const selectsExpressions = expressionRows(selectsId);
     const impliesExpressions = expressionRows(impliesId);
-    const packageDepends = (compact.packageDependencies?.[packageDependenciesId] || []).map(
-      ([required, conditionId, rawId, packagesId]) => ({
-        raw: strings[rawId] || '',
-        required: Boolean(required),
-        condition: conditionId < 0 ? '' : expressions[conditionId] || '',
-        packages: list(packagesId),
-      }),
-    );
-    const defaults = (compact.defaults?.[defaultsId] || []).map(([valueId, conditionId]) => {
+    const packageDepends = decodeDependencyRows(packageDependenciesId);
+    const defaults = (compact.defaults?.[defaultsId] || []).map(([valueId, conditionId, rawId]) => {
       const value = strings[valueId] || '';
       const condition = conditionId < 0 ? '' : expressions[conditionId] || '';
-      return condition ? `${value} if ${condition}` : value;
+      const fallback = condition ? `${value} if ${condition}` : value;
+      // Schema 4 keeps the exact source spelling in the optional third tuple
+      // cell. Older schema-3 rows have no rawId and retain the reconstructed
+      // fallback for backwards compatibility.
+      return rawId === undefined ? fallback : (strings[rawId] ?? fallback);
     });
     const provides = list(providesId);
     const conflicts = list(conflictsId);
+    const packageConflicts = list(packageConflictsId);
+    const typedDefaults = decodeTypedDefaultRows(fieldValue(row, 'typedDefaultsId', -1));
+    const rangesTyped = decodeTypedRangeRows(fieldValue(row, 'rangesId', -1));
+    const promptIf = list(fieldValue(row, 'promptIfId', -1));
+    const promptConditions = list(fieldValue(row, 'promptConditionsId', -1));
+    const visibleIf = list(fieldValue(row, 'visibleIfId', -1));
+    const menuVisibleIf = list(fieldValue(row, 'menuVisibleIfId', -1));
+    const directDepends = list(fieldValue(row, 'directDependsId', -1));
+    const inheritedDepends = list(fieldValue(row, 'inheritedDependsId', -1));
+    const directVisibleIf = list(fieldValue(row, 'directVisibleIfId', -1));
+    const inheritedVisibleIf = list(fieldValue(row, 'inheritedVisibleIfId', -1));
+    const inheritedMenuVisibleIf = list(fieldValue(row, 'inheritedMenuVisibleIfId', -1));
+    const optionFlags = list(fieldValue(row, 'optionFlagsId', -1));
+    const options = list(fieldValue(row, 'optionsId', -1));
+    const definitionsId = fieldValue(row, 'definitionsId', -1);
+    const nodes = schema4 ? (compact.definitions?.[definitionsId] || []) : [];
+    const capabilityRows = decodeCapabilityRows(fieldValue(row, 'capabilityRelationsId', -1));
+    const definitionRows = Array.isArray(nodes) ? nodes : [];
+    // Keep empty definition slots: their position is the variant identity and
+    // must stay aligned with the legacy expression-variant tables. Filtering
+    // them here changes which definition an AST belongs to and can turn a
+    // conditional alternative into an unrelated dependency.
+    const definitionFieldVariants = (field) => definitionRows.map((node) =>
+      Array.isArray(node?.[field]) ? node[field].map((value) => value ?? null) : []);
+    const dependsAstVariants = definitionFieldVariants('dependsAst');
+    const directDependsAstVariants = definitionFieldVariants('directDependsAst');
+    const inheritedDependsAstVariants = definitionFieldVariants('inheritedDependsAst');
+    const selectRelationsVariants = definitionFieldVariants('selectRelations');
+    const implyRelationsVariants = definitionFieldVariants('implyRelations');
+    const promptIfAstVariants = definitionFieldVariants('promptIfAst');
+    const visibleIfAstVariants = definitionFieldVariants('visibleIfAst');
+    const menuVisibleIfAstVariants = definitionFieldVariants('menuVisibleIfAst');
+    const directVisibleIfAstVariants = definitionFieldVariants('directVisibleIfAst');
+    const inheritedVisibleIfAstVariants = definitionFieldVariants('inheritedVisibleIfAst');
+    const inheritedMenuVisibleIfAstVariants = definitionFieldVariants('inheritedMenuVisibleIfAst');
+    const firstDefinition = definitionRows[0] || {};
+    const kconfigConflicts = [
+      ...(schema4 ? (compact.kconfigConflicts?.[kconfigConflictsId] || []) : []),
+      ...definitionRows.flatMap((node) => Array.isArray(node?.kconfigConflicts) ? node.kconfigConflicts : []),
+    ];
+    const symbolsInExpression = (raw) => {
+      const tokens = expressionTokens(raw);
+      const end = tokens.indexOf('if');
+      return unique((end < 0 ? tokens : tokens.slice(0, end)).filter((token) =>
+        /^[A-Za-z0-9_./-]+$/.test(token) && !Object.hasOwn(LEVEL, token) &&
+        !/^(?:0[xX][0-9a-fA-F]+|[+-]?\d+)$/.test(token))).sort();
+    };
+    const packageVariants = (rows) => rows.map((row) => unique(row.flatMap(symbolsInExpression)
+      .filter((symbol) => symbol.startsWith('PACKAGE_'))));
+    const allSymbols = (rows) => unique(rows.flatMap((row) => row.flatMap(symbolsInExpression)));
+    const dependsVariants = packageVariants(dependsExpressions);
+    const selectsVariants = packageVariants(selectsExpressions);
+    const impliesVariants = packageVariants(impliesExpressions);
     return {
       kind: isPackage ? 'package' : 'config',
       package: isPackage && symbol.startsWith('PACKAGE_') ? symbol.slice(8) : '',
@@ -378,29 +1019,140 @@ export function expandCompactRelations(compact) {
       choice: choiceId < 0 ? '' : strings[choiceId] || '',
       type: compact.types?.[typeCode] || '',
       defaults,
-      kconfig: { dependsExpressions, selectsExpressions, impliesExpressions },
-      packageInfo: { depends: packageDepends, provides, conflicts },
+      defaultsTyped: typedDefaults,
+      ranges: rangesTyped.map((range) => range.raw || `${range.minRaw} ${range.maxRaw}`),
+      rangesTyped,
+      promptIf,
+      promptConditions: promptConditions.length ? promptConditions : promptIf,
+      visibleIf,
+      menuVisibleIf,
+      directDepends,
+      inheritedDepends,
+      directVisibleIf,
+      inheritedVisibleIf,
+      inheritedMenuVisibleIf,
+      visibility: {
+        promptIf,
+        menuVisibleIf,
+        effective: visibleIf,
+        direct: directVisibleIf,
+        inherited: inheritedVisibleIf,
+        inheritedMenu: inheritedMenuVisibleIf,
+      },
+      optionFlags,
+      options,
+      modules: optionFlags.includes('modules') || Boolean(recordFlags & flags.modules),
+      optional: Boolean(recordFlags & flags.optional),
+      nodes,
+      path: firstDefinition.path || [],
+      parent: firstDefinition.parent || '',
+      locations: definitionRows.map((definition) => definition.location).filter(Boolean),
+      sources: unique(definitionRows.map((definition) => definition.source)),
+      // Keep the first definition as the aggregate semantic surface.  The
+      // variants retain every definition; flattening a multi-definition symbol
+      // here duplicates conditions and changes dependency proof semantics.
+      dependsAst: firstDefinition.dependsAst || [],
+      dependsAstVariants,
+      directDependsAst: firstDefinition.directDependsAst || [],
+      directDependsAstVariants,
+      inheritedDependsAst: firstDefinition.inheritedDependsAst || [],
+      inheritedDependsAstVariants,
+      selectRelations: selectRelationsVariants.flat(),
+      selectRelationsVariants,
+      implyRelations: implyRelationsVariants.flat(),
+      implyRelationsVariants,
+      promptIfAst: firstDefinition.promptIfAst || [],
+      visibleIfAst: firstDefinition.visibleIfAst || [],
+      menuVisibleIfAst: firstDefinition.menuVisibleIfAst || [],
+      directVisibleIfAst: firstDefinition.directVisibleIfAst || [],
+      inheritedVisibleIfAst: firstDefinition.inheritedVisibleIfAst || [],
+      inheritedMenuVisibleIfAst: firstDefinition.inheritedMenuVisibleIfAst || [],
+      kconfig: {
+        dependsExpressions, selectsExpressions, impliesExpressions,
+        dependsVariants, selectsVariants, impliesVariants,
+        depends: unique(dependsVariants.flat()),
+        dependsAllSymbols: allSymbols(dependsExpressions),
+        selectsAllSymbols: allSymbols(selectsExpressions),
+        impliesAllSymbols: allSymbols(impliesExpressions),
+        directDepends, inheritedDepends,
+        selects: unique(selectsVariants.flat()), implies: unique(impliesVariants.flat()),
+        defaultsTyped: typedDefaults, rangesTyped,
+        dependsAst: firstDefinition.dependsAst || [], dependsAstVariants,
+        directDependsAst: firstDefinition.directDependsAst || [], directDependsAstVariants,
+        inheritedDependsAst: firstDefinition.inheritedDependsAst || [], inheritedDependsAstVariants,
+        selectRelations: selectRelationsVariants.flat(), selectRelationsVariants,
+        implyRelations: implyRelationsVariants.flat(), implyRelationsVariants,
+        promptIfAst: firstDefinition.promptIfAst || [], visibleIfAst: firstDefinition.visibleIfAst || [],
+        menuVisibleIfAst: firstDefinition.menuVisibleIfAst || [], directVisibleIfAst: firstDefinition.directVisibleIfAst || [],
+        inheritedVisibleIfAst: firstDefinition.inheritedVisibleIfAst || [],
+        inheritedMenuVisibleIfAst: firstDefinition.inheritedMenuVisibleIfAst || [],
+      },
+      packageInfo: {
+        depends: packageDepends,
+        rawDepends: packageDepends.map((item) => item.raw),
+        dependencyRelations: packageDepends,
+        provides, conflicts,
+        packageConflicts, kconfigConflicts,
+        providesRelations: capabilityRows.provides || [],
+        conflictsRelations: capabilityRows.conflicts || [],
+      },
+      packageDepends: packageDepends.map((item) => item.raw),
+      dependencyPackages: unique(packageDepends.flatMap((item) => item.packages || [])),
       provides,
       conflicts,
+      packageConflicts,
+      kconfigConflicts,
+      providesRelations: capabilityRows.provides || [],
+      conflictsRelations: capabilityRows.conflicts || [],
+      dependencyRelations: packageDepends,
     };
   });
+  // Completeness is a producer assertion, never inferred from the presence of
+  // a capability name.  A stale/partial payload that happens to retain the
+  // capability list must remain inconclusive to Worker planning.
+  const complete = compact.relationsComplete === true;
+  const packageClosure = packageClosureContract(compact);
+  const validation = {
+    ...(compact.validation || {}),
+    ...(complete ? { relationsComplete: true } : { relationsComplete: false }),
+  };
   return {
     schema: 2,
     records,
     indexes: {
+      ...(schema4 ? { byPackage: recordIndexes(compact.indexes?.byPackage),
+        bySymbol: recordIndexes(compact.indexes?.bySymbol) } : {}),
       providers: indexes(compact.indexes?.providers),
       reverseDependencies: indexes(compact.indexes?.reverseDependencies),
       reverseKconfig: indexes(compact.indexes?.reverseKconfig),
+      ...(schema4 ? { reverseSelects: indexes(compact.indexes?.reverseSelects),
+        reverseImplies: indexes(compact.indexes?.reverseImplies) } : {}),
       choices: indexes(compact.indexes?.choices),
+      ...(schema4 ? { forwardEdges: decodeNumericIndex(compact.indexes?.forwardEdges),
+        reverseEdges: decodeNumericIndex(compact.indexes?.reverseEdges) } : {}),
     },
+    ...(schema4 ? { choices: compact.choices || [], edges: decodeEdgeRows() } : {}),
     summary: compact.summary || {},
-    validation: compact.validation || {},
+    relationsComplete: complete,
+    capabilities: compact.relationCapabilities || [],
+    packageClosureComplete: packageClosure.complete,
+    packageClosureCapabilities: packageClosure.capabilities,
+    packageClosureValidation: packageClosure.validation,
+    validation,
   };
 }
 
 function normalizeRecord(record) {
-  const configSymbol = record.configSymbol || record.symbol ||
+  const explicitKind = String(record?.kind || '').trim().toLowerCase();
+  const isVirtual = explicitKind === 'virtual' || record?.virtual === true || record?.isVirtual === true;
+  const rawConfigSymbol = record.configSymbol || record.symbol ||
     (record.package ? `PACKAGE_${record.package}` : '');
+  // Virtual capabilities are relation names, never Kconfig symbols or
+  // concrete packages.  Keep their name only as provenance; otherwise a
+  // generic PACKAGE_/CONFIG_ fallback would manufacture a fake Probe root
+  // such as CONFIG_libudev.
+  const configSymbol = isVirtual ? '' : rawConfigSymbol;
+  const packageName = isVirtual ? '' : (record.package || packageNameFromSymbol(configSymbol));
   const rawStates = Array.isArray(record.states) ? record.states : [];
   const type = String(record.type || (rawStates.includes('m') ? 'tristate' : rawStates.length ? 'bool' : ''))
     .toLowerCase();
@@ -410,6 +1162,29 @@ function normalizeRecord(record) {
     (record.kconfig?.selectsVariants || []).map((row) => row) || [];
   const impliesExpressions = record.kconfig?.impliesExpressions ||
     (record.kconfig?.impliesVariants || []).map((row) => row) || [];
+  const normalizeAstRows = (value) => {
+    if (value === undefined || value === null) return [];
+    const rows = Array.isArray(value) ? value.flatMap((row) => Array.isArray(row) ? row : [row]) : [value];
+    return rows.filter((row) => row !== undefined).map(normalizeExpressionAst);
+  };
+  const normalizeAstVariants = (value) => Array.isArray(value)
+    ? value.map((row) => row === null ? [normalizeExpressionAst(null)] : normalizeAstRows(row)) : [];
+  const astSource = (field) => record[field] ?? record.kconfig?.[field] ?? record.visibility?.[field];
+  const astVariantsSource = (field) => record[`${field}Variants`] ?? record.kconfig?.[`${field}Variants`];
+  const dependsAstVariants = normalizeAstVariants(astVariantsSource('dependsAst'));
+  const directDependsAstVariants = normalizeAstVariants(astVariantsSource('directDependsAst'));
+  const inheritedDependsAstVariants = normalizeAstVariants(astVariantsSource('inheritedDependsAst'));
+  const promptIfAst = normalizeAstRows(astSource('promptIfAst'));
+  const visibleIfAst = normalizeAstRows(astSource('visibleIfAst'));
+  const menuVisibleIfAst = normalizeAstRows(astSource('menuVisibleIfAst'));
+  const directVisibleIfAst = normalizeAstRows(astSource('directVisibleIfAst'));
+  const inheritedVisibleIfAst = normalizeAstRows(astSource('inheritedVisibleIfAst'));
+  const inheritedMenuVisibleIfAst = normalizeAstRows(astSource('inheritedMenuVisibleIfAst'));
+  const dependsAst = normalizeAstRows(astSource('dependsAst') ?? dependsAstVariants);
+  const directDependsAst = normalizeAstRows(astSource('directDependsAst') ?? directDependsAstVariants);
+  const inheritedDependsAst = normalizeAstRows(astSource('inheritedDependsAst') ?? inheritedDependsAstVariants);
+  const selectRelations = kconfigRelationRows(record, 'select');
+  const implyRelations = kconfigRelationRows(record, 'imply');
   const packageDepends = record.packageInfo?.depends || (record.packageDepends || []).map((raw) => ({
     raw,
     required: String(raw).startsWith('+') || !String(raw).startsWith('@'),
@@ -418,10 +1193,12 @@ function normalizeRecord(record) {
   }));
   return {
     ...record,
-    kind: record.kind || (configSymbol.startsWith('PACKAGE_') ? 'package' : 'config'),
-    package: record.package || packageNameFromSymbol(configSymbol),
+    ...(isVirtual ? { virtualName: String(record.virtualName || record.name || rawConfigSymbol || '')
+      .replace(/^PACKAGE_/, '') } : {}),
+    kind: isVirtual ? 'virtual' : (record.kind || (configSymbol.startsWith('PACKAGE_') ? 'package' : 'config')),
+    package: packageName,
     configSymbol,
-    kconfigSymbol: record.kconfigSymbol || record.symbol || '',
+    kconfigSymbol: isVirtual ? '' : (record.kconfigSymbol || record.symbol || ''),
     type,
     states: allowedKconfigStates({ type, states: rawStates }),
     visible: record.visible !== false,
@@ -433,12 +1210,81 @@ function normalizeRecord(record) {
       dependsExpressions,
       selectsExpressions,
       impliesExpressions,
+      dependsAst,
+      dependsAstVariants,
+      directDependsAst,
+      directDependsAstVariants,
+      inheritedDependsAst,
+      inheritedDependsAstVariants,
+      selectRelations,
+      implyRelations,
+      promptIfAst,
+      visibleIfAst,
+      menuVisibleIfAst,
+      directVisibleIfAst,
+      inheritedVisibleIfAst,
+      inheritedMenuVisibleIfAst,
     },
+    dependsAst,
+    dependsAstVariants,
+    directDependsAst,
+    directDependsAstVariants,
+    inheritedDependsAst,
+    inheritedDependsAstVariants,
+    selectRelations,
+    implyRelations,
+    promptIfAst,
+    visibleIfAst,
+    menuVisibleIfAst,
+    directVisibleIfAst,
+    inheritedVisibleIfAst,
+    inheritedMenuVisibleIfAst,
     packageInfo: {
       ...(record.packageInfo || {}),
       depends: packageDepends,
     },
   };
+}
+
+function catalogSymbolTypes(relations, records) {
+  const types = new Map();
+  for (const record of records || []) {
+    const symbol = String(record?.configSymbol || '').trim();
+    const type = String(record?.type || '').trim().toLowerCase();
+    if (symbol && ['bool', 'tristate', 'string', 'int', 'hex', 'unknown'].includes(type)) {
+      types.set(symbol, type);
+    }
+  }
+  // Target projection symbols are not always materialized as records.  The
+  // Catalog producer supplies their native type only after a complete source
+  // parse; consume that evidence instead of guessing from a TARGET_ prefix.
+  if (relations?.validation?.kconfigSymbolProof?.complete !== true) return types;
+  for (const row of relations?.validation?.externalSymbolDefinitions || []) {
+    const symbol = String(row?.symbol || '').trim();
+    const type = String(row?.type || '').trim().toLowerCase();
+    if (symbol && !types.has(symbol) && ['bool', 'tristate', 'string', 'int', 'hex', 'unknown'].includes(type)) {
+      types.set(symbol, type);
+    }
+  }
+  return types;
+}
+
+function catalogUndefinedSymbols(relations, records) {
+  const validation = relations?.validation || {};
+  if (validation.kconfigSymbolProof?.complete !== true || !Array.isArray(validation.kconfigUndefinedSymbols)) {
+    return new Map();
+  }
+  const defined = new Set((records || []).map((record) => String(record?.configSymbol || '').trim()).filter(Boolean));
+  const result = new Map();
+  for (const row of validation.kconfigUndefinedSymbols) {
+    const owner = String(row?.symbol || '').trim();
+    const missing = String(row?.missing || '').trim();
+    if (!owner || !missing || defined.has(missing) || row?.reason !== 'undefined-kconfig-symbol' ||
+        row?.nativeType !== 'unknown' || row?.booleanValue !== 'n' ||
+        String(row?.stringValue ?? missing) !== missing) continue;
+    result.set(missing, { ...row, symbol: owner, missing });
+  }
+  return result;
 }
 
 function normalizedFeatureKey(value) {
@@ -455,14 +1301,113 @@ function featureSymbolCandidates(feature, bySymbol) {
   }));
 }
 
+function normalizeChoiceDetail(choice, members = []) {
+  if (!choice || typeof choice !== 'object') return null;
+  const id = String(choice.id || '').trim();
+  if (!id) return null;
+  const astRows = (field) => {
+    const value = choice[field] ?? choice[`${field}Variants`] ?? choice.visibility?.[field];
+    if (value === undefined || value === null) return [];
+    const rows = Array.isArray(value) ? value.flatMap((row) => Array.isArray(row) ? row : [row]) : [value];
+    return rows.filter((row) => row !== undefined).map(normalizeExpressionAst);
+  };
+  const dependsAst = astRows('dependsAst');
+  const resetIfAst = astRows('resetIfAst');
+  const promptIfAst = astRows('promptIfAst');
+  const visibleIfAst = astRows('visibleIfAst');
+  const menuVisibleIfAst = astRows('menuVisibleIfAst');
+  const directVisibleIfAst = astRows('directVisibleIfAst');
+  const inheritedVisibleIfAst = astRows('inheritedVisibleIfAst');
+  const inheritedMenuVisibleIfAst = astRows('inheritedMenuVisibleIfAst');
+  return {
+    ...choice,
+    id,
+    type: String(choice.type || '').toLowerCase(),
+    optional: choice.optional === true,
+    modules: choice.modules === true || (choice.optionFlags || []).includes('modules'),
+    depends: Array.isArray(choice.depends) ? choice.depends.map(String).filter(Boolean) : [],
+    dependsAst,
+    // Keep the producer's reset condition spelling and its typed AST together.
+    // The browser may inspect this pair only for an interactive choice switch;
+    // import/validation paths must not consume it as an automatic reset.
+    resetIf: choice.resetIf ?? choice.resetIfVariants ?? [],
+    resetIfAst,
+    promptIfAst,
+    visibleIfAst,
+    menuVisibleIfAst,
+    directVisibleIfAst,
+    inheritedVisibleIfAst,
+    inheritedMenuVisibleIfAst,
+    defaults: Array.isArray(choice.defaults) ? [...choice.defaults] : [],
+    defaultsTyped: Array.isArray(choice.defaultsTyped) ? [...choice.defaultsTyped] : [],
+    ranges: Array.isArray(choice.ranges) ? [...choice.ranges] : [],
+    rangesTyped: Array.isArray(choice.rangesTyped) ? [...choice.rangesTyped] : [],
+    members: unique([...(choice.members || []), ...members]),
+  };
+}
+
+function flattenExpressionRows(value) {
+  if (value === undefined || value === null) return [];
+  if (Array.isArray(value)) return value.flatMap(flattenExpressionRows);
+  return [value];
+}
+
+function expressionAstRaw(value) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? String(value.raw || '').trim() : '';
+}
+
+function evaluateExpressionConditionRows(rawValue, astValue, inputValues, options = {}) {
+  const rawRows = flattenExpressionRows(rawValue).filter((row) => String(row || '').trim());
+  const astRows = flattenExpressionRows(astValue).filter((row) => row !== undefined && row !== null);
+  const typed = options.typedRelationsComplete === true;
+  if (!astRows.length) {
+    return typed && rawRows.length
+      ? rawRows.map(() => UNKNOWN)
+      : rawRows.map((row) => evaluateExpressionRaw(row, inputValues, options));
+  }
+  const levels = [];
+  const count = Math.max(rawRows.length, astRows.length);
+  for (let index = 0; index < count; index++) {
+    const raw = rawRows[index];
+    const ast = astRows[index];
+    if (ast === undefined || ast === null) { levels.push(UNKNOWN); continue; }
+    const astRaw = expressionAstRaw(ast);
+    if (raw !== undefined && astRaw && String(raw).trim() !== astRaw) {
+      levels.push(UNKNOWN);
+      continue;
+    }
+    const astLevel = expressionAstDependencyProof(ast, inputValues, options).level;
+    if (raw === undefined) { levels.push(astLevel); continue; }
+    const rawLevel = evaluateExpressionRaw(raw, inputValues, options);
+    levels.push(astLevel === UNKNOWN || rawLevel === UNKNOWN || astLevel !== rawLevel ? UNKNOWN : astLevel);
+  }
+  return levels;
+}
+
+function conditionStateFromLevels(levels, requirements = []) {
+  if (levels.some((level) => level === 0)) return { status: 'unsatisfied', maximum: 0, requirements };
+  if (levels.some((level) => level === UNKNOWN)) return { status: 'deferred', maximum: 0, requirements };
+  return { status: 'satisfied', maximum: levels.reduce((minimum, level) => Math.min(minimum, level), 2), requirements };
+}
+
+function evaluateKconfigRelationCondition(relation, inputValues, options = {}) {
+  const normalized = kconfigRelationParts(relation);
+  return evaluateExpressionConditionRows(normalized.condition, normalized.conditionAst,
+    inputValues, options)[0] ?? 2;
+}
+
 export function createCatalogModel(catalog) {
   const schema = Number(catalog?.schema || 0);
   const relationsSchema = Number(catalog?.relations?.schema || 0);
-  if (!catalog || schema < 5 || ![2, 3].includes(relationsSchema)) {
-    throw new Error('Catalog schema 5+ / relations schema 2 or 3 is required');
+  if (!catalog || schema < 5 || ![2, 3, 4].includes(relationsSchema)) {
+    throw new Error('Catalog schema 5+ / relations schema 2, 3, or 4 is required');
   }
-  const relations = relationsSchema === 3 ? expandCompactRelations(catalog.relations) : catalog.relations;
+  const relations = [3, 4].includes(relationsSchema) ? expandCompactRelations(catalog.relations) : catalog.relations;
+  const packageClosure = packageClosureContract(relations);
   const records = (relations.records || []).map(normalizeRecord);
+  const symbolTypes = catalogSymbolTypes(relations, records);
+  const undefinedKconfigSymbols = catalogUndefinedSymbols(relations, records);
   const bySymbol = new Map();
   const byPackage = new Map();
   for (const record of records) {
@@ -512,12 +1457,34 @@ export function createCatalogModel(catalog) {
       index.set(target, sources);
     }
   };
+  const indexRelations = (index, source, rows) => {
+    for (const relation of rows || []) {
+      const target = relationTarget(relation);
+      if (!target) continue;
+      const sources = index.get(target) || [];
+      if (!sources.includes(source)) sources.push(source);
+      index.set(target, sources);
+    }
+  };
   for (const record of records) {
     indexRules(reverseSelects, record.configSymbol, record.kconfig?.selectsExpressions);
     indexRules(reverseImplies, record.configSymbol, record.kconfig?.impliesExpressions);
+    indexRelations(reverseSelects, record.configSymbol, record.kconfig?.selectRelations);
+    indexRelations(reverseImplies, record.configSymbol, record.kconfig?.implyRelations);
   }
   const choices = new Map();
   for (const [id, rows] of Object.entries(relations.indexes?.choices || {})) choices.set(id, [...rows]);
+  const choiceDetails = new Map();
+  const rawChoices = Array.isArray(relations.choices) ? relations.choices :
+    (relations.choices && typeof relations.choices === 'object' ? Object.values(relations.choices) : []);
+  for (const rawChoice of rawChoices) {
+    const id = String(rawChoice?.id || '').trim();
+    if (!id) continue;
+    const detail = normalizeChoiceDetail(rawChoice, choices.get(id) || []);
+    if (!detail) continue;
+    choiceDetails.set(id, detail);
+    if (!choices.has(id)) choices.set(id, [...detail.members]);
+  }
   const featureSymbols = new Map();
   const targetFeatureSymbols = new Set();
   const archSymbols = new Set();
@@ -533,6 +1500,11 @@ export function createCatalogModel(catalog) {
       for (const symbol of symbols) targetFeatureSymbols.add(symbol);
     }
   }
+  const declaredRelationsComplete = relations.relationsComplete === true ||
+    relations.validation?.relationsComplete === true;
+  const capabilities = relationCapabilities(relations);
+  const typedRelationsComplete = declaredRelationsComplete &&
+    REQUIRED_KCONFIG_RELATION_CAPABILITIES.every((capability) => capabilities.includes(capability));
   return {
     schema: 1,
     catalog,
@@ -548,11 +1520,142 @@ export function createCatalogModel(catalog) {
       record.hidden === true && record.userSettable === false && ['bool', 'tristate'].includes(record.type) &&
       Array.isArray(record.defaults) && record.defaults.length > 0),
     choices,
+    choiceDetails,
     featureSymbols,
     targetFeatureSymbols,
     archSymbols,
     closedDefaultSymbols,
+    symbolTypes,
+    undefinedKconfigSymbols,
+    // Preserve the producer-declared capability/edge surfaces for consumers
+    // that need to distinguish a complete graph from a legacy readable one.
+    relationCapabilities: capabilities,
+    edges: [...(relations.edges || [])],
+    relationsSchema,
+    // New graph-derived planning is only deterministic when the producer
+    // explicitly declares the relation capability.  Legacy schemas remain
+    // readable, but a missing declaration is not silently promoted to a
+    // complete graph.
+    // Keep the producer assertion and the complete typed-Kconfig contract
+    // separate.  The latter is required for deterministic typed preflight;
+    // schema-2 readable assets retain their historical assertion for legacy
+    // expression consumers only.
+    relationsComplete: typedRelationsComplete,
+    declaredRelationsComplete,
+    typedRelationsComplete,
+    relationValidation: relations.validation || {},
+    packageClosureComplete: packageClosure.complete,
+    packageClosureCapabilities: packageClosure.capabilities,
+    packageClosureValidation: packageClosure.validation,
   };
+}
+
+function choiceDependencyRows(choice) {
+  const ast = Array.isArray(choice?.dependsAst) ? choice.dependsAst.filter(Boolean) : [];
+  const raw = Array.isArray(choice?.depends) ? choice.depends.flatMap(nestedExpressionStrings).filter(Boolean) : [];
+  return { ast, raw };
+}
+
+function choiceDependencyState(model, choice, values, options = {}) {
+  const rows = choiceDependencyRows(choice);
+  const levels = [
+    ...evaluateExpressionConditionRows(rows.raw, rows.ast, values, options),
+    ...evaluateExpressionConditionRows(choice?.promptIf, choice?.promptIfAst, values, options),
+    ...evaluateExpressionConditionRows(choice?.visibleIf, choice?.visibleIfAst, values, options),
+    ...evaluateExpressionConditionRows(choice?.menuVisibleIf, choice?.menuVisibleIfAst, values, options),
+  ];
+  const requirements = [
+    ...flattenExpressionRows(rows.raw), ...flattenExpressionRows(choice?.promptIf),
+    ...flattenExpressionRows(choice?.visibleIf), ...flattenExpressionRows(choice?.menuVisibleIf),
+  ].filter(Boolean);
+  return conditionStateFromLevels(levels, requirements);
+}
+
+// Kconfig's choice reset-if properties are evaluated only by the interactive
+// frontends while changing a non-Y member to Y.  Native mconf/nconf then clear
+// the global user definition layer, not merely the choice members.  The
+// browser has no equivalent global user-layer reset, so retain the condition
+// in the model and fail closed at that one interaction boundary.  Static
+// validation/import/reconstruction never calls this helper.
+function choiceResetConditionState(model, choice, values, options = {}) {
+  const rawRows = flattenExpressionRows(choice?.resetIf)
+    .filter((row) => String(row || '').trim());
+  const astRows = flattenExpressionRows(choice?.resetIfAst)
+    .filter((row) => row !== undefined && row !== null);
+  if (!rawRows.length && !astRows.length) return {
+    status: 'unsatisfied', maximum: 0, levels: [], reason: 'no-reset-condition',
+  };
+  if (model?.typedRelationsComplete !== true) return {
+    status: 'deferred', maximum: 0, levels: [UNKNOWN],
+    reason: 'missing-choice-reset-capability',
+  };
+  const levels = evaluateExpressionConditionRows(rawRows, astRows, values, {
+    ...options, typedRelationsComplete: true,
+  });
+  // P_RESET is an OR over the individual reset-if properties: a condition is
+  // effective when its expression is M or Y.  An unresolved row therefore
+  // remains deferred only when no other row has already proven a reset.
+  if (levels.some((level) => level > 0)) return {
+    status: 'satisfied', maximum: Math.max(...levels), levels,
+    reason: 'native-reset-required',
+  };
+  if (levels.some((level) => level === UNKNOWN)) return {
+    status: 'deferred', maximum: 0, levels,
+    reason: 'unknown-reset-condition',
+  };
+  return { status: 'unsatisfied', maximum: 0, levels, reason: 'reset-condition-false' };
+}
+
+function throwChoiceResetIntentError(choice, symbol, value, current, state, constraints = null) {
+  const deferred = state.status === 'deferred';
+  const mode = deferred ? 'deferred' : 'unsupported';
+  const violation = {
+    code: deferred ? 'choice-reset-deferred' : 'choice-reset-unsupported',
+    choice: String(choice?.id || ''),
+    symbol,
+    current,
+    requested: value,
+    status: state.status,
+    reason: state.reason,
+    levels: [...(state.levels || [])],
+    resetIf: choice?.resetIf ?? [],
+    resetIfAst: choice?.resetIfAst ?? [],
+    deferred,
+    unsupported: !deferred,
+  };
+  const message = deferred
+    ? `${choice?.id || 'choice'} reset condition is deferred; the typed reset contract is unavailable or unresolved`
+    : `${choice?.id || 'choice'} selection requires a native user-layer reset, which is not supported by the browser evaluator`;
+  const error = new Error(message);
+  error.name = 'CatalogIntentError';
+  error.intent = { symbol, value };
+  if (constraints) error.constraints = constraints;
+  error.choiceReset = {
+    mode, choice: violation.choice, symbol, current, requested: value,
+    reason: state.reason, levels: violation.levels,
+  };
+  error.violations = [violation];
+  error.deferred = deferred;
+  error.unsupported = !deferred;
+  throw error;
+}
+
+function choiceDefaultMember(model, choice, values, options = {}) {
+  const dependency = choiceDependencyState(model, choice, values, options);
+  if (dependency.status !== 'satisfied') return null;
+  const defaults = Array.isArray(choice?.defaultsTyped) && choice.defaultsTyped.length
+    ? choice.defaultsTyped : (choice?.defaults || []);
+  const members = new Set(choice?.members || []);
+  for (const raw of defaults) {
+    const { valueExpression, condition } = defaultParts(raw);
+    if (!valueExpression) continue;
+    const conditionLevel = evaluateExpressionRaw(condition, values, options);
+    if (conditionLevel === 0) continue;
+    if (conditionLevel === UNKNOWN) return null;
+    const candidate = String(valueExpression).replace(/^CONFIG_/, '').trim();
+    if (members.has(candidate)) return candidate;
+  }
+  return null;
 }
 
 export function catalogPackageOperations(target, profile) {
@@ -707,7 +1810,8 @@ export function createCatalogValidationContext(model, target, inputValues = new 
   return {
     target: resolved, values: context.values, changes: context.changes, trustedSymbols,
     validationOptions: { phase, contextComplete, trustedSymbols, closedSymbols,
-      deferred: options.deferred || 'ignore' },
+      deferred: options.deferred || 'ignore', typedRelationsComplete: model?.typedRelationsComplete === true,
+      symbolTypes: model?.symbolTypes, undefinedSymbols: model?.undefinedKconfigSymbols },
   };
 }
 
@@ -717,7 +1821,8 @@ export function parseConfigDocument(text) {
     let match = line.match(/^CONFIG_([A-Za-z0-9_+@.\/-]+)=(.*)$/);
     if (match) {
       const raw = match[2];
-      values.set(match[1], raw === 'y' || raw === 'm' ? raw : raw.replace(/^"|"$/g, ''));
+      values.set(match[1], raw === 'y' || raw === 'm' || raw === 'n'
+        ? raw : decodeKconfigString(raw));
       continue;
     }
     match = line.match(/^# CONFIG_([A-Za-z0-9_+@.\/-]+) is not set$/);
@@ -734,6 +1839,7 @@ function dependencyVariants(record) {
 
 function validationOptions(inputValues, options = {}) {
   const values = valuesMap(inputValues);
+  const model = options.model;
   const trustedSymbols = options.trustedSymbols instanceof Set ? options.trustedSymbols : new Set(options.trustedSymbols || []);
   const contextComplete = options.contextComplete ?? Boolean(String(values.get('TARGET_BOARD') || '').trim() &&
     String(values.get('TARGET_SUBTARGET') || '').trim() && String(values.get('TARGET_PROFILE') || '').trim());
@@ -742,6 +1848,9 @@ function validationOptions(inputValues, options = {}) {
     explicitSymbols: options.explicitSymbols instanceof Set ? options.explicitSymbols : new Set(options.explicitSymbols || []),
     closedSymbols: options.closedSymbols instanceof Set ? options.closedSymbols : new Set(options.closedSymbols || []),
     deferred: options.deferred || 'ignore',
+    typedRelationsComplete: options.typedRelationsComplete === true,
+    symbolTypes: options.symbolTypes || model?.symbolTypes || new Map(),
+    undefinedSymbols: options.undefinedSymbols || model?.undefinedKconfigSymbols || new Map(),
   };
 }
 
@@ -798,10 +1907,10 @@ function activeSelectRequirements(model, record, values, options = {}) {
     if (!source) continue;
     const sourceValue = normalizeValue(values.get(sourceSymbol) ?? 'n');
     if (stateLevel(sourceValue) === 0) continue;
-    for (const raw of nestedExpressionStrings(source.kconfig?.selectsExpressions || [])) {
-      const rule = ruleParts(raw);
+    for (const raw of kconfigRelationRows(source, 'select')) {
+      const rule = kconfigRelationParts(raw);
       if (rule.symbol !== record.configSymbol) continue;
-      const conditionLevel = evaluateExpressionRaw(rule.condition, values, options);
+      const conditionLevel = evaluateKconfigRelationCondition(rule, values, options);
       if (conditionLevel === UNKNOWN || conditionLevel === 0) continue;
       const level = selectRequirement(record, sourceValue, conditionLevel);
       if (!level) continue;
@@ -818,10 +1927,10 @@ function activeImplyRequirements(model, record, values, options = {}) {
     const source = model.bySymbol.get(sourceSymbol);
     const sourceValue = normalizeValue(values.get(sourceSymbol) ?? 'n');
     if (!source || stateLevel(sourceValue) === 0) continue;
-    for (const raw of nestedExpressionStrings(source.kconfig?.impliesExpressions || [])) {
-      const rule = ruleParts(raw);
+    for (const raw of kconfigRelationRows(source, 'imply')) {
+      const rule = kconfigRelationParts(raw);
       if (rule.symbol !== record.configSymbol) continue;
-      const conditionLevel = evaluateExpressionRaw(rule.condition, values, options);
+      const conditionLevel = evaluateKconfigRelationCondition(rule, values, options);
       if (conditionLevel === UNKNOWN || conditionLevel === 0) continue;
       const level = selectRequirement(record, sourceValue, conditionLevel);
       if (level) active.push({ sourceSymbol, sourceValue, condition: rule.condition,
@@ -865,16 +1974,21 @@ function selectSuppressionDiagnostics(model, values, options = {}) {
 
 export function kconfigStateConstraints(model, record = {}, inputValues = new Map(), options = {}) {
   const values = valuesMap(inputValues);
-  const normalizedOptions = validationOptions(values, options);
+  const normalizedOptions = validationOptions(values, {
+    ...options, model, typedRelationsComplete: model?.typedRelationsComplete === true,
+  });
   const requestedSymbol = String(record.configSymbol || record.symbol || '').trim();
   const canonical = model?.bySymbol?.get(requestedSymbol) || record;
   const configSymbol = String(canonical.configSymbol || requestedSymbol).trim();
-  const legalStates = allowedKconfigStates(canonical);
+  const moduleLevel = moduleSupportLevel(model, values, normalizedOptions);
+  const legalStates = modelKconfigStates(model, canonical, values, normalizedOptions);
   const dependency = dependencyState(canonical, values, 2, normalizedOptions);
   const maximumLevel = dependency.status === 'deferred' ? 2 : dependency.maximum;
   const selectors = effectiveSelectRequirements(model, canonical, values, normalizedOptions);
   const minimumLevel = selectors.reduce((maximum, item) => Math.max(maximum, item.level), 0);
-  const readOnly = canonical.userSettable === false;
+  const visibilityViolations = visibilityKconfigViolations(canonical, values,
+    { ...normalizedOptions, deferred: 'error' });
+  const readOnly = canonical.userSettable === false || visibilityViolations.length > 0;
   const directlySelectable = readOnly ? [] : legalStates.filter((value) => {
     const level = stateLevel(value);
     if (level < minimumLevel) return false;
@@ -897,9 +2011,9 @@ export function kconfigStateConstraints(model, record = {}, inputValues = new Ma
         (readOnly || minimumLevel > 0 || record.canDisable === false), code };
   });
   return { symbol: configSymbol, current, legalStates, selectableStates: directlySelectable, readOnly,
-    minimumLevel, minimum: STATE[minimumLevel], maximumLevel, maximum: STATE[maximumLevel],
+    minimumLevel, minimum: STATE[minimumLevel], maximumLevel, maximum: STATE[maximumLevel], moduleLevel,
     dependencyStatus: dependency.status, dependencyExpressions: dependency.requirements,
-    selectors, states };
+    selectors, states, visibilityViolations };
 }
 
 export function selectableKconfigStates(record = {}, inputValues = new Map(), options = {}) {
@@ -917,12 +2031,25 @@ function enforceablePackage(model, name) {
   });
 }
 
-function packageSatisfied(model, name, values) {
-  const direct = model.byPackage.get(name);
-  if (direct && recordEnabled(direct, values)) return true;
-  return (model.providers.get(name) || []).some((provider) => {
-    const row = model.byPackage.get(provider); return row ? recordEnabled(row, values) : false;
-  });
+function packageProviderRecords(model, name, { excludePackage = '' } = {}) {
+  const capability = packageCapabilityName(name);
+  const excluded = packageCapabilityName(excludePackage);
+  const capabilityNames = (record) => [
+    ...(record?.provides || []), ...(record?.packageInfo?.provides || []),
+    ...(record?.providesRelations || []), ...(record?.packageInfo?.providesRelations || []),
+  ].map((value) => typeof value === 'object' ? (value.name || value.raw || '') : value)
+    .map(packageCapabilityName).filter(Boolean);
+  const candidates = [
+    model?.byPackage?.get(capability),
+    ...(model?.providers?.get(capability) || []).map((provider) =>
+      model?.byPackage?.get(packageCapabilityName(provider))),
+    ...(model?.records || []).filter((record) => capabilityNames(record).includes(capability)),
+  ].filter((record) => record?.package && record.package !== excluded);
+  return [...new Map(candidates.map((record) => [record.package, record])).values()];
+}
+
+function packageSatisfied(model, name, values, options = {}) {
+  return packageProviderRecords(model, name, options).some((record) => recordEnabled(record, values));
 }
 
 function packageDependencyViolations(model, record, values, options) {
@@ -947,10 +2074,127 @@ function packageDependencyViolations(model, record, values, options) {
   return violations;
 }
 
+function normalizeRangeRows(record) {
+  const rows = Array.isArray(record?.rangesTyped) && record.rangesTyped.length
+    ? record.rangesTyped : (record?.ranges || record?.kconfig?.ranges || record?.range || []);
+  return (Array.isArray(rows) ? rows : [rows]).map((raw) => {
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      return {
+        minimum: String(raw.minimum ?? raw.min ?? raw.minRaw ?? '').trim(),
+        maximum: String(raw.maximum ?? raw.max ?? raw.maxRaw ?? '').trim(),
+        condition: String(raw.condition ?? raw.if ?? '').trim(),
+      };
+    }
+    const { valueExpression, condition } = defaultParts(raw);
+    const parts = String(valueExpression || '').trim().split(/\s+/).filter(Boolean);
+    return { minimum: parts[0] || '', maximum: parts[1] || '', condition };
+  }).filter((row) => row.minimum && row.maximum);
+}
+
+function scalarRangeNumber(type, value) {
+  return parseExpressionInteger(String(value), type)?.value ?? null;
+}
+
+function scalarKconfigViolations(record, values, options) {
+  const type = String(record?.type || '').toLowerCase();
+  if (!['string', 'int', 'hex'].includes(type) || !values.has(record.configSymbol)) return [];
+  const value = String(values.get(record.configSymbol));
+  if (!scalarValueValid(type, value)) return [{ code: 'kconfig-scalar-invalid', symbol: record.configSymbol,
+    package: record.package, type, value }];
+  if (type === 'string') return [];
+  const actual = scalarRangeNumber(type, value);
+  if (actual === null) return [{ code: 'kconfig-scalar-invalid', symbol: record.configSymbol,
+    package: record.package, type, value }];
+  for (const range of normalizeRangeRows(record)) {
+    if (range.condition) {
+      const condition = evaluateExpressionRaw(range.condition, values, options);
+      if (condition === 0) continue;
+      if (condition === UNKNOWN) return [{ code: 'kconfig-range-deferred', symbol: record.configSymbol,
+        package: record.package, range, deferred: true }];
+    }
+    const lower = expressionOperand(range.minimum, values, options);
+    const upper = expressionOperand(range.maximum, values, options);
+    const minimum = lower.unknownData ? null : scalarRangeNumber(type, lower.stringValue);
+    const maximum = upper.unknownData ? null : scalarRangeNumber(type, upper.stringValue);
+    if (minimum === null || maximum === null) return [{ code: 'kconfig-range-deferred',
+      symbol: record.configSymbol, package: record.package, range, deferred: true }];
+    if (actual < minimum || actual > maximum) {
+      return [{ code: 'kconfig-range-unsatisfied', symbol: record.configSymbol, package: record.package,
+        value, range }];
+    }
+  }
+  return [];
+}
+
+function moduleKconfigViolations(model, record, values, options) {
+  if (String(record?.type || '').toLowerCase() !== 'tristate' ||
+      normalizeValue(values.get(record.configSymbol) ?? 'n') !== 'm') return [];
+  const modules = moduleSupportLevel(model, values, options);
+  if (modules === 0) return [{ code: 'kconfig-modules-unsatisfied', symbol: record.configSymbol,
+    package: record.package, dependency: 'MODULES' }];
+  if (modules === UNKNOWN && options.deferred !== 'ignore') return [{
+    code: 'kconfig-modules-deferred', symbol: record.configSymbol, package: record.package,
+    dependency: 'MODULES', deferred: true,
+  }];
+  return [];
+}
+
+function visibilityKconfigViolations(record, values, options) {
+  const conditions = [
+    [record?.promptIf || record?.visibility?.promptIf || [], record?.promptIfAst || record?.kconfig?.promptIfAst || []],
+    [record?.visibleIf || record?.visibility?.effective || record?.visibility?.visibleIf || [],
+      record?.visibleIfAst || record?.kconfig?.visibleIfAst || []],
+    [record?.menuVisibleIf || record?.visibility?.menuVisibleIf || [],
+      record?.menuVisibleIfAst || record?.kconfig?.menuVisibleIfAst || []],
+  ];
+  const violations = [];
+  for (const [rawRows, astRows] of conditions) {
+    const levels = evaluateExpressionConditionRows(rawRows, astRows, values, options);
+    const requirements = flattenExpressionRows(rawRows);
+    for (let index = 0; index < levels.length; index++) {
+      const state = levels[index];
+      const condition = requirements[index] || expressionAstRaw(flattenExpressionRows(astRows)[index]) || '';
+      if (state === 0) violations.push({ code: 'kconfig-visibility-unsatisfied', symbol: record.configSymbol,
+        package: record.package, dependency: condition });
+      else if (state === UNKNOWN && options.deferred !== 'ignore') violations.push({
+        code: 'kconfig-visibility-deferred', symbol: record.configSymbol, package: record.package,
+        dependency: condition, deferred: true,
+      });
+    }
+  }
+  return violations;
+}
+
 function isKconfigSelectWarning(item) {
   return item?.code === 'kconfig-select-warning' ||
     (item?.warning === true && item?.code === 'kconfig-dependency-unsatisfied' &&
       Array.isArray(item?.selectedBy) && item.selectedBy.length > 0);
+}
+
+function kconfigRelationViolations(record, values, options) {
+  if (options.typedRelationsComplete !== true) return [];
+  const violations = [];
+  for (const [kind, rows] of [['select', kconfigRelationRows(record, 'select')],
+    ['imply', kconfigRelationRows(record, 'imply')]]) {
+    for (const relation of rows) {
+      const normalized = kconfigRelationParts(relation);
+      if (!normalized.symbol) {
+        if (options.deferred !== 'ignore') violations.push({
+          code: 'kconfig-relation-deferred', symbol: record.configSymbol, package: record.package,
+          relation: kind, dependency: normalized.raw || kind, deferred: true, reason: 'missing-target',
+        });
+        continue;
+      }
+      const condition = evaluateExpressionConditionRows(normalized.condition, normalized.conditionAst,
+        values, options)[0] ?? 2;
+      if (condition === UNKNOWN && options.deferred !== 'ignore') violations.push({
+        code: 'kconfig-relation-deferred', symbol: record.configSymbol, package: record.package,
+        relation: kind, dependency: normalized.condition || normalized.raw || normalized.symbol,
+        deferred: true, reason: 'unknown-condition',
+      });
+    }
+  }
+  return violations;
 }
 
 function isBlockingViolation(item) {
@@ -958,7 +2202,8 @@ function isBlockingViolation(item) {
 }
 
 function recordViolations(model, record, values, rawOptions = {}) {
-  if (!recordEnabled(record, values)) return [];
+  const scalar = ['string', 'int', 'hex'].includes(String(record?.type || '').toLowerCase());
+  if (scalar ? !values.has(record.configSymbol) : !recordEnabled(record, values)) return [];
   const options = validationOptions(values, rawOptions);
   if (options.trustedSymbols.has(record.configSymbol)) return [];
   const violations = [];
@@ -985,14 +2230,20 @@ function recordViolations(model, record, values, rawOptions = {}) {
     code: 'kconfig-dependency-deferred', symbol: record.configSymbol, package: record.package,
     actual, maximum: dependency.maximum, requirements: dependency.requirements, deferred: true });
   violations.push(...packageDependencyViolations(model, record, values, options));
+  violations.push(...moduleKconfigViolations(model, record, values, options));
+  violations.push(...scalarKconfigViolations(record, values, options));
+  violations.push(...kconfigRelationViolations(record, values, options));
+  // Prompt/menu visibility limits interactive edits, not native default or
+  // reverse-selected values. Hidden values are valid serialized Kconfig.
   return violations;
 }
 
 export function violationKey(item) {
   if (!item) return '';
-  if (item.code === 'package-conflict') return `${item.code}:${[item.package, item.otherPackage].sort().join(':')}`;
-  if (item.code === 'choice-conflict') return `${item.code}:${item.choice}:${[...(item.symbols || [])].sort().join(',')}`;
-  return `${item.code}:${item.symbol || item.package || ''}:${item.dependency || ''}`;
+  if (item.code === 'package-conflict') return `${item.code}:${[item.package, item.otherPackage,
+    ...(item.otherPackages || [])].filter(Boolean).sort().join(':')}:${item.capability || ''}`;
+  if (String(item.code || '').startsWith('choice-')) return `${item.code}:${item.choice}:${[...(item.symbols || [])].sort().join(',')}`;
+  return `${item.code}:${item.symbol || item.package || ''}:${item.dependency || item.value || ''}`;
 }
 
 function formatKconfigRequirements(requirements = []) {
@@ -1001,23 +2252,63 @@ function formatKconfigRequirements(requirements = []) {
 
 export function validateConfig(model, inputValues, rawOptions = {}) {
   const values = valuesMap(inputValues);
-  const options = validationOptions(values, rawOptions);
+  const options = validationOptions(values, {
+    ...rawOptions, model,
+    typedRelationsComplete: model?.typedRelationsComplete === true,
+  });
   const violations = [];
   for (const record of model.records) violations.push(...recordViolations(model, record, values, options));
   const conflictKeys = new Set();
   for (const record of model.records) {
     if (!recordEnabled(record, values)) continue;
     for (const otherName of record.conflicts || record.packageInfo?.conflicts || []) {
-      if (!packageSatisfied(model, otherName, values)) continue;
-      const pair = [record.package, otherName].sort();
-      const key = pair.join('\0');
+      const capability = String(otherName || '').replace(/^PACKAGE_/, '');
+      // A package commonly provides the capability it conflicts with.  Native
+      // Kconfig treats that as the owner, not as a conflict with itself.  Only
+      // another enabled concrete provider can form a real package conflict.
+      const allProviders = packageProviderRecords(model, capability);
+      const providers = allProviders
+        .filter((provider) => provider.package !== record.package && recordEnabled(provider, values));
+      if (!providers.length) {
+        if (!allProviders.length && model.relationsComplete === true) {
+          violations.push({ code: 'package-conflict-deferred', package: record.package,
+            capability, deferred: true, reason: 'provider-missing' });
+        }
+        continue;
+      }
+      const names = providers.map((provider) => provider.package).sort();
+      const pair = [record.package, ...(names.length === 1 ? names : [capability])].sort();
+      const key = `${pair.join('\0')}\0${capability}`;
       if (conflictKeys.has(key)) continue;
-      conflictKeys.add(key); violations.push({ code: 'package-conflict', package: pair[0], otherPackage: pair[1] });
+      conflictKeys.add(key);
+      violations.push({ code: 'package-conflict', package: record.package,
+        capability, ...(names.length === 1 ? { otherPackage: names[0] } : {
+          otherPackages: names, ambiguous: true,
+        }) });
     }
   }
   for (const [choice, symbols] of model.choices) {
+    const detail = model.choiceDetails?.get(choice);
     const selected = symbols.filter((symbol) => normalizeValue(values.get(symbol) ?? 'n') === 'y');
     const enabled = symbols.filter((symbol) => stateLevel(values.get(symbol) ?? 'n') > 0);
+    if (detail && enabled.length) {
+      const dependency = choiceDependencyState(model, detail, values, options);
+      if (dependency.status === 'unsatisfied') violations.push({ code: 'choice-dependency-unsatisfied',
+        choice, symbols: enabled, requirements: dependency.requirements });
+      else if (dependency.status === 'deferred' && options.deferred !== 'ignore') violations.push({
+        code: 'choice-dependency-deferred', choice, symbols: enabled,
+        requirements: dependency.requirements, deferred: true,
+      });
+      if (String(detail.type || '').toLowerCase() === 'bool' &&
+          enabled.some((symbol) => normalizeValue(values.get(symbol) ?? 'n') === 'm')) {
+        violations.push({ code: 'choice-state-invalid', choice, symbols: enabled, state: 'm' });
+      }
+      if (String(detail.type || '').toLowerCase() === 'tristate' && detail.modules !== true &&
+          enabled.some((symbol) => normalizeValue(values.get(symbol) ?? 'n') === 'm')) {
+        violations.push({ code: 'choice-modules-unsatisfied', choice, symbols: enabled,
+          dependency: 'choice modules' });
+      }
+    }
     if (selected.length > 1 || (selected.length === 1 && enabled.length > 1)) {
       violations.push({ code: 'choice-conflict', choice, symbols: enabled });
     }
@@ -1033,40 +2324,45 @@ function setValue(values, changes, symbol, value, reason, source = '') {
   values.set(symbol, next); changes.push({ symbol, from: previous, to: next, reason, source }); return true;
 }
 
-function enabledState(record, requested) { return requested === 'm' && record?.states?.includes('m') ? 'm' : 'y'; }
+function enabledState(model, record, requested, values = new Map(), options = {}) {
+  if (requested === 'm' && record?.states?.includes('m')) {
+    return moduleSupportLevel(model, values, options) === 0 ? 'n' : 'm';
+  }
+  return 'y';
+}
 
 function applyKconfigRules(model, record, requested, values, changes, options = {}) {
-  for (const rows of record.kconfig?.selectsExpressions || []) {
-    for (const raw of Array.isArray(rows) ? rows : [rows]) {
-      const { symbol, condition } = ruleParts(raw);
-      if (!symbol) continue;
-      const conditionLevel = evaluateExpressionRaw(condition, values, options);
-      if (conditionLevel === UNKNOWN || conditionLevel === 0) continue;
-      const target = model.bySymbol.get(symbol);
-      if (!target) continue;
-      const requiredLevel = selectRequirement(target, requested, conditionLevel);
-      // A reverse select cannot make a target with dir_dep=N active.  This is
-      // deliberately a generic Kconfig rule; do not special-case package or
-      // source names here.
-      if (dependencyLevel(target, values, options) === 0) continue;
-      if (stateLevel(values.get(symbol) ?? 'n') >= requiredLevel) continue;
-      setValue(values, changes, symbol, STATE[requiredLevel], 'select', record.configSymbol);
-    }
+  for (const raw of kconfigRelationRows(record, 'select')) {
+    const { symbol, condition, conditionAst } = kconfigRelationParts(raw);
+    if (!symbol) continue;
+    const conditionLevel = evaluateKconfigRelationCondition({ condition, conditionAst }, values, options);
+    if (conditionLevel === UNKNOWN || conditionLevel === 0) continue;
+    const target = model.bySymbol.get(symbol);
+    if (!target) continue;
+    const requiredLevel = selectRequirement(target, requested, conditionLevel);
+    // A reverse select cannot make a target with dir_dep=N active.  This is
+    // deliberately a generic Kconfig rule; do not special-case package or
+    // source names here.
+    if (dependencyLevel(target, values, options) === 0) continue;
+    if (stateLevel(values.get(symbol) ?? 'n') >= requiredLevel) continue;
+    setValue(values, changes, symbol, stateForKconfigLevel(model, target, requiredLevel, values, options),
+      'select', record.configSymbol);
   }
 }
 
 function applyImplyRules(model, record, requested, values, changes, options = {}) {
-  for (const raw of nestedExpressionStrings(record.kconfig?.impliesExpressions || [])) {
-    const { symbol, condition } = ruleParts(raw);
+  for (const raw of kconfigRelationRows(record, 'imply')) {
+    const { symbol, condition, conditionAst } = kconfigRelationParts(raw);
     const target = model.bySymbol.get(symbol);
     if (!target || options.explicitSymbols?.has(symbol)) continue;
-    const conditionLevel = evaluateExpressionRaw(condition, values, options);
+    const conditionLevel = evaluateKconfigRelationCondition({ condition, conditionAst }, values, options);
     if (conditionLevel === UNKNOWN || conditionLevel === 0) continue;
     let requiredLevel = selectRequirement(target, requested, conditionLevel);
     const maximum = dependencyLevel(target, values, options);
     if (maximum !== UNKNOWN) requiredLevel = Math.min(requiredLevel, maximum);
     if (stateLevel(values.get(symbol) ?? 'n') >= requiredLevel) continue;
-    setValue(values, changes, symbol, STATE[requiredLevel], 'imply', record.configSymbol);
+    setValue(values, changes, symbol, stateForKconfigLevel(model, target, requiredLevel, values, options),
+      'imply', record.configSymbol);
   }
 }
 
@@ -1140,7 +2436,7 @@ function applyDirectKconfigDependencies(model, record, requested, values, change
   }
   plans.sort((a, b) => a.cost - b.cost || a.key.localeCompare(b.key));
   for (const target of plans[0]?.targets || []) setValue(values, changes, target.configSymbol,
-    enabledState(target, requested), 'kconfig-dependency', record.configSymbol);
+    enabledState(model, target, requested, values, options), 'kconfig-dependency', record.configSymbol);
 }
 
 function applyDirectPackageDependencies(model, record, requested, values, changes, options = {}) {
@@ -1153,22 +2449,95 @@ function applyDirectPackageDependencies(model, record, requested, values, change
       .filter((target) => target?.kconfigSymbol && target.states?.length);
     if (candidates.length !== 1) continue;
     const target = candidates[0];
-    setValue(values, changes, target.configSymbol, enabledState(target, requested), 'package-dependency', record.configSymbol);
+    setValue(values, changes, target.configSymbol, enabledState(model, target, requested, values, options),
+      'package-dependency', record.configSymbol);
   }
 }
 
-function reverseCandidates(model, record) {
-  const symbols = new Set([...(model.reverseKconfig.get(record.configSymbol) || []),
-    ...(model.reverseSelects?.get(record.configSymbol) || [])]);
-  for (const packageRow of model.reverseDependencies.get(record.package) || []) {
-    const dependent = model.byPackage.get(packageRow); if (dependent?.configSymbol) symbols.add(dependent.configSymbol);
-  }
-  for (const provided of record.provides || []) {
-    for (const packageRow of model.reverseDependencies.get(provided) || []) {
-      const dependent = model.byPackage.get(packageRow); if (dependent?.configSymbol) symbols.add(dependent.configSymbol);
+function symbolAliases(symbol) {
+  const value = String(symbol || '').trim();
+  if (!value) return new Set();
+  const unprefixed = value.replace(/^CONFIG_/, '');
+  return new Set([value, unprefixed, `CONFIG_${unprefixed}`]);
+}
+
+function recordProvidesNames(record) {
+  return new Set([
+    record?.package,
+    ...(record?.provides || []), ...(record?.packageInfo?.provides || []),
+    ...(record?.providesRelations || []), ...(record?.packageInfo?.providesRelations || []),
+  ].flatMap((value) => {
+    const name = typeof value === 'object' ? (value.name || value.raw || '') : value;
+    const normalized = packageCapabilityName(name);
+    return normalized ? [normalized] : [];
+  }));
+}
+
+function recordForwardReferences(record) {
+  const symbols = new Set();
+  const addExpressions = (rows) => {
+    const visit = (expression) => {
+      if (Array.isArray(expression)) {
+        for (const child of expression) visit(child);
+      } else if (typeof expression === 'string') {
+        for (const symbol of referencedExpressionSymbols(expression)) symbols.add(symbol);
+      } else if (expression && typeof expression === 'object') {
+        for (const symbol of expressionAstSymbols(expression)) symbols.add(symbol);
+      }
+    };
+    visit(rows);
+  };
+  const addAsts = (rows) => {
+    for (const row of rows || []) for (const symbol of expressionAstSymbols(row)) symbols.add(symbol);
+  };
+  addExpressions(record?.kconfig?.dependsExpressions);
+  addExpressions(record?.kconfig?.dependsVariants);
+  addExpressions(record?.directDepends);
+  addExpressions(record?.inheritedDepends);
+  addAsts(record?.kconfig?.dependsAst);
+  addAsts(record?.kconfig?.dependsAstVariants);
+  // A typed select/imply relation points forward to its target. Its condition
+  // is also a real Kconfig reference, so retain both pieces for candidate
+  // discovery; the current-state evaluator below decides whether it is active.
+  for (const kind of ['select', 'imply']) {
+    for (const relation of kconfigRelationRows(record, kind)) {
+      const target = relationTarget(relation);
+      if (target) symbols.add(target);
+      for (const symbol of expressionAstSymbols(relation?.conditionAst)) symbols.add(symbol);
+      for (const symbol of referencedExpressionSymbols(relation?.condition || '')) symbols.add(symbol);
     }
   }
-  return [...symbols];
+  return symbols;
+}
+
+function recordForwardDependsOn(record, target) {
+  if (!record?.configSymbol || !target?.configSymbol || record.configSymbol === target.configSymbol) return false;
+  const aliases = symbolAliases(target.configSymbol);
+  if ([...recordForwardReferences(record)].some((symbol) => aliases.has(String(symbol).trim()))) return true;
+
+  if (!target.package) return false;
+  const targetNames = recordProvidesNames(target);
+  for (const dependency of record.packageInfo?.depends || []) {
+    for (const name of dependency?.packages || []) {
+      if (targetNames.has(packageCapabilityName(name))) return true;
+    }
+    for (const relation of dependency?.targets || []) {
+      const name = typeof relation === 'object' ? (relation.name || relation.raw || '') : relation;
+      if (targetNames.has(packageCapabilityName(name))) return true;
+    }
+  }
+  return false;
+}
+
+function reverseCandidates(model, record) {
+  // Reverse indexes are an acceleration hint only.  Stale indexes have been
+  // observed in older Catalog assets, and using one without checking the
+  // dependent's forward relation can disable an unrelated enabled option or
+  // keep an orphan package alive.  Prove every candidate from its own
+  // dependency/select/imply/package-provider data before returning it.
+  return (model?.records || [])
+    .filter((candidate) => recordForwardDependsOn(candidate, record))
+    .map((candidate) => candidate.configSymbol);
 }
 
 function cascadeDisabled(model, values, changes, initialSymbols, options = {}) {
@@ -1210,13 +2579,11 @@ function cascadeEnabled(model, values, changes, initialSymbols, options = {}) {
 }
 
 function activeSelectsSymbol(record, targetSymbol, values, options = {}) {
-  for (const rows of record.kconfig?.selectsExpressions || []) {
-    for (const raw of Array.isArray(rows) ? rows : [rows]) {
-      const rule = ruleParts(raw);
-      if (rule.symbol !== targetSymbol) continue;
-      const conditionLevel = evaluateExpressionRaw(rule.condition, values, options);
-      if (conditionLevel !== UNKNOWN && selectRequirement({ type: 'tristate' }, values.get(record.configSymbol) ?? 'n', conditionLevel) > 0) return true;
-    }
+  for (const raw of kconfigRelationRows(record, 'select')) {
+    const rule = kconfigRelationParts(raw);
+    if (rule.symbol !== targetSymbol) continue;
+    const conditionLevel = evaluateKconfigRelationCondition(rule, values, options);
+    if (conditionLevel !== UNKNOWN && selectRequirement({ type: 'tristate' }, values.get(record.configSymbol) ?? 'n', conditionLevel) > 0) return true;
   }
   return false;
 }
@@ -1273,7 +2640,7 @@ function enforceActiveReverseRelations(model, values, changes, options = {}) {
       const active = dependencyMaximum === 0 ? [] : rawActive;
       const minimum = active.reduce((level, item) => Math.max(level, item.level), 0);
       if (minimum > stateLevel(values.get(targetSymbol) ?? 'n')) {
-        if (setValue(values, changes, targetSymbol, STATE[minimum], 'select',
+        if (setValue(values, changes, targetSymbol, stateForKconfigLevel(model, target, minimum, values, options), 'select',
           active.find((item) => item.level === minimum)?.sourceSymbol || '')) {
           cascadeEnabled(model, values, changes, [targetSymbol], options);
           progress = true;
@@ -1289,7 +2656,7 @@ function enforceActiveReverseRelations(model, values, changes, options = {}) {
       const maximum = dependencyLevel(target, values, options);
       if (maximum !== UNKNOWN) minimum = Math.min(minimum, maximum);
       if (minimum > stateLevel(values.get(targetSymbol) ?? 'n')) {
-        progress = setValue(values, changes, targetSymbol, STATE[minimum], 'imply',
+        progress = setValue(values, changes, targetSymbol, stateForKconfigLevel(model, target, minimum, values, options), 'imply',
           active.find((item) => item.level === minimum)?.sourceSymbol || '') || progress;
       }
     }
@@ -1311,7 +2678,7 @@ function derivedDefaultState(model, record, values, options = {}) {
   if (dependencyMaximum !== UNKNOWN) implyLevel = Math.min(implyLevel, dependencyMaximum);
   let level = Math.max(defaultLevel, implyLevel, selectorLevel);
   if (record.type === 'bool' && level === 1) level = 2;
-  const value = normalizeKconfigStateValue(record, STATE[level] || 'n');
+  const value = normalizeKconfigStateValue(record, stateForKconfigLevel(model, record, level, values, options));
   if (selectorLevel >= implyLevel && selectorLevel > defaultLevel) return { value, reason: 'select',
     source: selectors.find((item) => item.level === selectorLevel)?.sourceSymbol || '' };
   if (implyLevel > defaultLevel) return { value, reason: 'imply',
@@ -1369,7 +2736,9 @@ function reconcileNonUserSettableDependents(model, values, changes, options = {}
 export function reconcileKconfigDerivedValues(model, inputValues, rawOptions = {}) {
   const values = new Map(valuesMap(inputValues));
   const changes = [];
-  const options = validationOptions(values, rawOptions);
+  const options = validationOptions(values, {
+    ...rawOptions, model, typedRelationsComplete: model?.typedRelationsComplete === true,
+  });
   const reconciledSymbols = reconcileNonUserSettableDependents(model, values, changes, options);
   const derived = reconcileDerivedDefaults(model, values, changes, options);
   for (const symbol of reconciledSymbols) {
@@ -1446,7 +2815,9 @@ export function deriveKconfigPrerequisitePlans(model, inputValues, record, reque
   const value = normalizeValue(requestedValue ?? intent.value ?? 'n');
   if (!target?.configSymbol || value === 'n' || !model?.bySymbol) return { candidates: [], recommended: null };
   const initialValues = new Map(valuesMap(inputValues));
-  const options = validationOptions(initialValues, intent.validationOptions || {});
+  const options = validationOptions(initialValues, {
+    ...(intent.validationOptions || {}), model, typedRelationsComplete: model?.typedRelationsComplete === true,
+  });
   const normalizedIntent = {
     ...intent,
     explicitSymbols: new Set(intent.explicitSymbols || options.explicitSymbols || []),
@@ -1532,7 +2903,9 @@ export function applyUserIntent(model, inputValues, intent) {
   const value = normalizeValue(intent?.value ?? 'n');
   const record = model.bySymbol.get(symbol);
   if (!record) throw new Error(`Catalog does not define ${symbol}`);
-  const options = validationOptions(initialValues, intent?.validationOptions || {});
+  const options = validationOptions(initialValues, {
+    ...(intent?.validationOptions || {}), model, typedRelationsComplete: model?.typedRelationsComplete === true,
+  });
   const normalizedIntent = {
     ...(intent || {}),
     explicitSymbols: new Set(intent?.explicitSymbols || options.explicitSymbols || []),
@@ -1546,12 +2919,12 @@ export function applyUserIntent(model, inputValues, intent) {
   const constraints = kconfigStateConstraints(model, record, initialValues, options);
   const legal = constraints.legalStates.includes(value);
   const alreadyRequested = value !== 'n' && legal && constraints.current === value &&
-    constraints.dependencyStatus === 'satisfied' && record.userSettable !== false;
+    constraints.dependencyStatus === 'satisfied' && !constraints.readOnly;
   const systemSelectable = legal && stateLevel(value) >= constraints.minimumLevel &&
     (value === 'n' ? record.canDisable !== false :
       (stateLevel(value) <= constraints.maximumLevel || stateLevel(value) <= constraints.minimumLevel));
   const repairablePositiveIntent = value !== 'n' && constraints.minimumLevel === 0 &&
-    constraints.legalStates.includes(value) && record.userSettable !== false;
+    constraints.legalStates.includes(value) && !constraints.readOnly;
   const allowed = intent?.force === true ? systemSelectable :
     (constraints.selectableStates.includes(value) || repairablePositiveIntent || alreadyRequested);
   if (!allowed) {
@@ -1564,6 +2937,22 @@ export function applyUserIntent(model, inputValues, intent) {
     error.name = 'CatalogIntentError'; error.intent = { symbol, value }; error.constraints = constraints;
     if (prerequisitePlans?.recommended) error.prerequisitePlans = prerequisitePlans;
     throw error;
+  }
+  // Native mconf/nconf may reset the entire user definition layer when a
+  // choice reset-if condition is active.  Only a real interactive transition
+  // from a non-Y member to Y can reach this boundary.  Do not run this check
+  // from import, validateConfig, or Worker reconstruction: those paths model
+  // non-interactive conf/defconfig semantics and must remain readable.
+  if (record.choice && value === 'y' &&
+      normalizeValue(initialValues.get(symbol) ?? 'n') !== 'y') {
+    const choice = model.choiceDetails?.get(record.choice);
+    if (choice) {
+      const resetState = choiceResetConditionState(model, choice, initialValues, options);
+      if (resetState.status !== 'unsatisfied') {
+        throwChoiceResetIntentError(choice, symbol, value,
+          normalizeValue(initialValues.get(symbol) ?? 'n'), resetState, constraints);
+      }
+    }
   }
   const beforeKeys = new Set(validateConfig(model, initialValues, options).map(violationKey));
   setValue(values, changes, symbol, value, 'user');
@@ -1602,7 +2991,8 @@ export function applyUserIntent(model, inputValues, intent) {
       if (preferredRecord.choice && (model.choices.get(preferredRecord.choice) || []).some((sibling) =>
         sibling !== preferredSymbol && normalizeValue(values.get(sibling) ?? 'n') === 'y')) effectiveLevel = 0;
       if (preferredRecord.type === 'bool' && effectiveLevel === 1) effectiveLevel = 2;
-      const effective = normalizeKconfigStateValue(preferredRecord, STATE[effectiveLevel]);
+      const effective = normalizeKconfigStateValue(preferredRecord,
+        stateForKconfigLevel(model, preferredRecord, effectiveLevel, values, options));
       if (normalizeValue(values.get(preferredSymbol) ?? 'n') === effective) continue;
       if (setValue(values, changes, preferredSymbol, effective, 'preferred-intent')) restored = true;
     }
@@ -1644,7 +3034,7 @@ function configurationRepairValidationOptions(values, rawOptions = {}) {
     ? rawOptions.validationOptions : {};
   const merged = { ...nested };
   for (const key of ['phase', 'contextComplete', 'trustedSymbols', 'explicitSymbols',
-    'closedSymbols', 'deferred']) {
+    'closedSymbols', 'deferred', 'typedRelationsComplete', 'symbolTypes', 'undefinedSymbols', 'model']) {
     if (Object.hasOwn(rawOptions, key)) merged[key] = rawOptions[key];
   }
   return validationOptions(values, merged);
@@ -1753,7 +3143,9 @@ function configurationRepairCandidate(model, values, violation, rawOptions, vali
 export function deriveConfigurationRepairPlan(model, inputValues, rawOptions = {}) {
   rawOptions = rawOptions && typeof rawOptions === 'object' ? rawOptions : {};
   const initialValues = new Map(valuesMap(inputValues));
-  const validation = configurationRepairValidationOptions(initialValues, rawOptions);
+  const validation = configurationRepairValidationOptions(initialValues, {
+    ...rawOptions, typedRelationsComplete: model?.typedRelationsComplete === true,
+  });
   const initialViolations = validateConfig(model, initialValues, validation)
     .filter(isBlockingViolation);
   let values = new Map(initialValues);
@@ -1869,6 +3261,10 @@ const COMPATIBILITY_RULE_KEYS_V2 = new Set(['id', 'issue', 'match', 'scope', 'if
 const COMPATIBILITY_RULE_KEYS_V3 = new Set([...COMPATIBILITY_RULE_KEYS_V2, 'sourceCommits', 'targetScope', 'failure']);
 const COMPATIBILITY_RULE_KEYS_V4 = new Set([...COMPATIBILITY_RULE_KEYS_V3, 'buildDependency']);
 const COMPATIBILITY_RULE_KEYS_V5 = new Set([...COMPATIBILITY_RULE_KEYS_V4, 'policy', 'environments', 'evidence']);
+// `triggerPackages` is retained only for reading already-published legacy
+// rules.  New rules describe the failed package and derive active triggers
+// from the exact Catalog graph, so a manually maintained trigger list can no
+// longer become a second source of truth.
 const COMPATIBILITY_BUILD_DEPENDENCY_KEYS = new Set(['package', 'triggerPackages']);
 const COMPATIBILITY_ENVIRONMENT_KEYS = new Set(['source', 'branch', 'packageAvailability', 'targetScope']);
 const COMPATIBILITY_EVIDENCE_KEYS = new Set(['source', 'branch', 'sourceCommit', 'targetScope', 'refs']);
@@ -2024,12 +3420,14 @@ function normalizeCompatibilityBuildDependency(value, label) {
   compatibilityKeys(value, COMPATIBILITY_BUILD_DEPENDENCY_KEYS, label);
   const packageName = String(value.package || '').trim();
   if (!COMPATIBILITY_PACKAGE_RE.test(packageName)) throw compatibilityError(`${label}.package is invalid`);
-  const triggerPackages = compatibilityStrings(value.triggerPackages,
-    `${label}.triggerPackages`, COMPATIBILITY_PACKAGE_RE, 1, 16);
+  const hasLegacyTriggers = value.triggerPackages !== undefined;
+  const triggerPackages = hasLegacyTriggers
+    ? compatibilityStrings(value.triggerPackages, `${label}.triggerPackages`, COMPATIBILITY_PACKAGE_RE, 1, 16)
+    : [];
   if (triggerPackages.includes(packageName)) {
     throw compatibilityError(`${label}.triggerPackages must not contain the build package`);
   }
-  return { package: packageName, triggerPackages };
+  return { package: packageName, triggerPackages, legacy: hasLegacyTriggers };
 }
 
 export function normalizeCompatibilityDocument(raw) {
@@ -2120,15 +3518,54 @@ export function normalizeCompatibilityDocument(raw) {
 
 function materializeCompatibilityDefaults(model, inputValues, options) {
   const values = new Map(valuesMap(inputValues));
-  for (let pass = 0; pass < 8; pass++) {
-    let changed = false;
-    for (const record of model?.records || []) {
-      if (!record.configSymbol || values.has(record.configSymbol)) continue;
-      const resolved = resolveKconfigDefault(record, values, options);
-      if (resolved.status !== 'resolved') continue;
-      values.set(record.configSymbol, resolved.value); changed = true;
+  const records = (model?.records || []).filter((record) => record?.configSymbol);
+  const dependents = new Map();
+  const addDependent = (symbol, record) => {
+    const key = String(symbol || '').trim();
+    if (!key) return;
+    const rows = dependents.get(key) || [];
+    if (!rows.includes(record)) rows.push(record);
+    dependents.set(key, rows);
+  };
+  // A bounded pass count silently misses long default chains.  A dependency
+  // worklist revisits only records whose typed default expression mentions a
+  // value that just became known, and naturally stops at cycles/UNKNOWN.
+  for (const record of records) {
+    const defaults = Array.isArray(record.defaultsTyped) && record.defaultsTyped.length
+      ? record.defaultsTyped : (record.defaults || []);
+    for (const raw of defaults) {
+      const { valueExpression, condition } = defaultParts(raw);
+      for (const symbol of [...referencedExpressionSymbols(valueExpression),
+        ...referencedExpressionSymbols(condition)]) addDependent(symbol, record);
     }
-    if (!changed) break;
+  }
+  const queue = [...records];
+  const queued = new Set(records);
+  while (queue.length) {
+    const record = queue.shift();
+    queued.delete(record);
+    if (values.has(record.configSymbol)) continue;
+    const resolved = resolveKconfigDefault(record, values, options);
+    if (resolved.status !== 'resolved') continue;
+    values.set(record.configSymbol, resolved.value);
+    for (const dependent of dependents.get(record.configSymbol) || []) {
+      if (!values.has(dependent.configSymbol) && !queued.has(dependent)) {
+        queued.add(dependent); queue.push(dependent);
+      }
+    }
+  }
+  // Choice defaults are defaults for a member symbol, not ordinary scalar
+  // records.  Apply only when the choice has no active member and its own
+  // conditions are satisfied; an unresolved condition remains UNKNOWN and is
+  // deliberately not guessed into a selected member.
+  for (const choice of model?.choiceDetails?.values?.() || []) {
+    const members = (choice.members || []).map((symbol) => model.bySymbol.get(symbol)).filter(Boolean);
+    if (members.some((record) => stateLevel(values.get(record.configSymbol) ?? 'n') > 0)) continue;
+    const memberSymbol = choiceDefaultMember(model, choice, values, options);
+    if (!memberSymbol) continue;
+    const member = model.bySymbol.get(memberSymbol);
+    if (!member || !allowedKconfigStates(member).includes('y')) continue;
+    values.set(memberSymbol, 'y');
   }
   return values;
 }
@@ -2139,7 +3576,7 @@ function compatibilityRecordMatches(rule, record, values) {
     : recordEnabled(record, values);
 }
 
-function compatibilityRuleTriggered(rule, records, values, options, triggerRecords = []) {
+function compatibilityRuleTriggered(rule, records, values, options, triggerRecords = [], graphMatch = false) {
   if (rule.if) {
     const condition = evaluateExpressionState(rule.if, values, options);
     if (condition.status === 'deferred') throw compatibilityError(`${rule.id}.if cannot be resolved from the active Catalog`);
@@ -2147,8 +3584,16 @@ function compatibilityRuleTriggered(rule, records, values, options, triggerRecor
   }
   const direct = records.every((record) => compatibilityRecordMatches(rule, record, values));
   if (direct) return true;
-  return Boolean(rule.buildDependency) && triggerRecords.some((record) =>
-    compatibilityRecordMatches(rule, record, values));
+  if (!rule.buildDependency) return false;
+  if (triggerRecords.some((record) => compatibilityRecordMatches(rule, record, values))) return true;
+  if (!graphMatch) return false;
+  // A graph-derived match proves the failed package is reached by an active
+  // root.  Any additional direct package listed by a rule is still a normal
+  // conjunct and must be selected; otherwise an unrelated N package could be
+  // bypassed merely because some other consumer reaches the same target.
+  const failedPackage = packageCapabilityName(rule.buildDependency.package);
+  return records.filter((record) => record.package !== failedPackage)
+    .every((record) => compatibilityRecordMatches(rule, record, values));
 }
 
 function compatibilityRuleScopeMismatch(rule, sourceCommit, target) {
@@ -2203,7 +3648,9 @@ export function evaluateCompatibilityRules(model, document, inputValues, context
     subtarget: String(context.targetSubtarget || ''),
     profile: String(context.targetProfile || ''),
   };
-  const options = context.validationOptions || {};
+  const options = {
+    ...(context.validationOptions || {}), typedRelationsComplete: model.typedRelationsComplete === true,
+  };
   const values = materializeCompatibilityDefaults(model, inputValues, options);
   const warnings = [];
   const diagnostics = [];
@@ -2257,7 +3704,15 @@ export function evaluateCompatibilityRules(model, document, inputValues, context
       .map((record) => [record.configSymbol, record])).values()];
     let packageMatch;
     try {
-      packageMatch = compatibilityRuleTriggered(rule, records, values, options, triggerRecords);
+      // New schema-4 buildDependency rules are package-only by design.  Their
+      // trigger is derived from the exact active Catalog graph, so an enabled
+      // consumer with a currently disabled failed dependency still triggers a
+      // warning.  Legacy triggerPackages remain readable but do not participate
+      // in this graph path.
+      const graphMatch = rule.buildDependency && !rule.buildDependency.legacy
+        ? buildDependencyGraphReachable(model, buildDependencyRecord, values, options)
+        : false;
+      packageMatch = compatibilityRuleTriggered(rule, records, values, options, triggerRecords, graphMatch);
     } catch (error) {
       if (mismatches.length) continue;
       throw error;
@@ -2290,7 +3745,9 @@ function compatibilityPlanChanges(startingValues, resultValues, rawChanges) {
 function compatibilityDisablePlan(model, record, inputValues, intent = {}) {
   const startingValues = new Map(valuesMap(inputValues));
   let values = new Map(startingValues);
-  const options = validationOptions(values, intent.validationOptions || {});
+  const options = validationOptions(values, {
+    ...(intent.validationOptions || {}), model, typedRelationsComplete: model?.typedRelationsComplete === true,
+  });
   const steps = [];
   const allChanges = [];
   const visiting = new Set();
@@ -2374,9 +3831,13 @@ function compatibilityDisablePlan(model, record, inputValues, intent = {}) {
   };
 }
 
-function compatibilityWarningTriggered(warning, values, options = {}) {
+function compatibilityWarningTriggered(model, warning, values, options = {}) {
+  const graphMatch = warning?.rule?.buildDependency && !warning.rule.buildDependency.legacy
+    ? buildDependencyGraphReachable(model, warning.buildDependencyRecord ||
+      packageGraphRecord(model, warning.rule.buildDependency.package), values, options)
+    : false;
   return compatibilityRuleTriggered(warning.rule, warning.directRecords || warning.records, values, options,
-    warning.triggerRecords || []);
+    warning.triggerRecords || [], graphMatch);
 }
 
 function compatibilityValuesKey(values) {
@@ -2424,7 +3885,7 @@ function compatibilityPlanCandidate(startingValues, steps, values, changes, fall
   };
 }
 
-function deriveBuildDependencyPlans(model, inputValues, warning, intent = {}) {
+function deriveLegacyBuildDependencyPlans(model, inputValues, warning, intent = {}) {
   const rule = warning.rule;
   const startingValues = new Map(valuesMap(warning.values || inputValues));
   const directRecords = warning.directRecords || (rule.packages || []).map((packageName) =>
@@ -2494,6 +3955,513 @@ function deriveBuildDependencyPlans(model, inputValues, warning, intent = {}) {
   return { candidates: normalizedCandidates, recommended: cheapest.length === 1 ? cheapest[0] : null };
 }
 
+function packageCapabilityName(value) {
+  return String(value || '').trim().replace(/^PACKAGE_/, '');
+}
+
+function packageGraphRecord(model, value) {
+  const name = packageCapabilityName(value);
+  return model?.byPackage?.get(name) || null;
+}
+
+function packageGraphTargets(model, name) {
+  const capability = packageCapabilityName(name);
+  const direct = model?.byPackage?.get(capability);
+  const providers = (model?.providers?.get(capability) || [])
+    .map((provider) => packageGraphRecord(model, provider)).filter(Boolean);
+  const capabilityNames = (record) => [
+    ...(record?.provides || []), ...(record?.packageInfo?.provides || []),
+    ...(record?.providesRelations || []), ...(record?.packageInfo?.providesRelations || []),
+  ].map((value) => typeof value === 'object' ? (value.name || value.raw || '') : value)
+    .map(packageCapabilityName).filter(Boolean);
+  const records = (model?.records || []).filter((record) => capabilityNames(record).includes(capability));
+  return [...new Map([...(direct ? [direct] : []), ...providers, ...records]
+    .map((record) => [record.package, record])).values()];
+}
+
+function activePackageTargets(model, name, values) {
+  return packageGraphTargets(model, name).filter((record) => recordEnabled(record, values));
+}
+
+function packageDependencyTargets(model, names, values, source) {
+  const requested = [...new Set((names || []).map(packageCapabilityName).filter(Boolean))];
+  const targets = requested.flatMap((name) => packageGraphTargets(model, name));
+  const self = targets.some((record) => record.package === source);
+  // An owner-provided virtual capability satisfies an alternative package
+  // dependency by itself.  Do not replace that exact self-provider fact with
+  // an unrelated external provider (or an ambiguous edge).
+  if (self) return { records: [], self: true, inactive: false };
+  const active = [...new Map(requested.flatMap((name) => activePackageTargets(model, name, values))
+    .map((record) => [record.package, record])).values()]
+    .filter((record) => record.package !== source);
+  if (active.length) return { records: active, inactive: false };
+  // A required package may currently be `n` in an imported override while an
+  // enabled consumer still declares it.  Keep that exact concrete target as
+  // a potential build edge; this is what lets a package-only compatibility
+  // rule explain `docker=y, dockerd=n` without inventing a trigger list.
+  const available = [...new Map(targets
+    .map((record) => [record.package, record])).values()]
+    .filter((record) => record.package !== source);
+  return { records: available, self, inactive: true };
+}
+
+/*
+ * Evaluate the lossless schema-4 Kconfig AST for graph planning.  The raw
+ * expression evaluator remains the compatibility fallback for old readable
+ * records, but a complete schema-4 graph must use its producer AST so an OR
+ * expression is treated as an alternative branch rather than a bag of
+ * referenced symbols.
+ */
+function expressionAstDependencyProof(ast, inputValues, options = {}) {
+  ast = unwrapExpressionAst(ast);
+  const values = valuesMap(inputValues);
+  const unknown = () => ({ level: UNKNOWN, value: UNKNOWN, symbols: new Set(),
+    requiredSymbols: new Set(), ambiguous: true });
+  const atom = (node) => {
+    if (!node || typeof node !== 'object') return unknown();
+    if (node.kind === 'literal') {
+      const operand = expressionLiteralOperand(node.value ?? node.raw ?? '', node.raw ?? node.value ?? '', node.quoted === true);
+      return { level: operand.level, value: operand.stringValue, operand, symbols: new Set(),
+        requiredSymbols: new Set(), ambiguous: false };
+    }
+    if (node.kind === 'symbol') {
+      const symbol = String(node.name || '').trim();
+      if (!symbol) return unknown();
+      const operand = expressionOperand(symbol, values, options);
+      const proven = mapValue(options.undefinedSymbols, symbol) && operand.nativeUndefined;
+      const symbols = proven ? new Set() : new Set([symbol]);
+      const requiredSymbols = proven ? new Set() : new Set([symbol]);
+      return { level: operand.level, value: operand.level === UNKNOWN ? UNKNOWN : operand.stringValue,
+        operand, symbols, requiredSymbols, ambiguous: false };
+    }
+    if (node.kind === 'unknown') return unknown();
+    if (node.kind === 'not') {
+      const child = expressionAstDependencyProof(node.value, inputValues, options);
+      return { level: child.level === UNKNOWN ? UNKNOWN : 2 - child.level,
+        value: child.level === UNKNOWN ? UNKNOWN : child.level > 0 ? 'n' : 'y',
+        // A negative condition being true because its symbol is N does not
+        // make that symbol a package prerequisite.
+        symbols: new Set(), requiredSymbols: new Set(), ambiguous: child.ambiguous };
+    }
+    if (node.kind === 'compare') {
+      const left = expressionAstDependencyProof(node.left, inputValues, options);
+      const right = expressionAstDependencyProof(node.right, inputValues, options);
+      const level = compareExpressionOperands(left.operand, String(node.operator || ''), right.operand);
+      return { level, value: level === UNKNOWN ? UNKNOWN : level > 0 ? 'y' : 'n',
+        symbols: new Set([...(left.symbols || []), ...(right.symbols || [])]),
+        requiredSymbols: new Set([...(left.requiredSymbols || []), ...(right.requiredSymbols || [])]),
+        ambiguous: left.ambiguous || right.ambiguous };
+    }
+    if (node.kind === 'and' || node.kind === 'or') {
+      const rows = Array.isArray(node.values) ? node.values : [];
+      if (!rows.length) return unknown();
+      const combineAnd = (left, right) => {
+        const requiredSymbols = new Set([...(left.requiredSymbols || []), ...(right.requiredSymbols || [])]);
+        if (left.level === 0 || right.level === 0) return { level: 0, value: 'n', symbols: new Set(),
+          requiredSymbols, ambiguous: left.ambiguous || right.ambiguous ||
+            left.level === UNKNOWN || right.level === UNKNOWN };
+        if (left.level === UNKNOWN || right.level === UNKNOWN) return { level: UNKNOWN, value: UNKNOWN,
+          symbols: new Set(), requiredSymbols, ambiguous: true };
+        return { level: Math.min(left.level, right.level), value: left.level <= right.level ? left.value : right.value,
+          symbols: new Set([...(left.symbols || []), ...(right.symbols || [])]), requiredSymbols,
+          ambiguous: left.ambiguous || right.ambiguous };
+      };
+      const combineOr = (left, right) => {
+        const requiredSymbols = new Set([...(left.requiredSymbols || []), ...(right.requiredSymbols || [])]);
+        if (left.level === UNKNOWN || right.level === UNKNOWN) {
+          if (left.level === 2) return left;
+          if (right.level === 2) return right;
+          return { level: UNKNOWN, value: UNKNOWN, symbols: new Set(), requiredSymbols, ambiguous: true };
+        }
+        const level = Math.max(left.level, right.level);
+        if (level === 0) return { level: 0, value: 'n', symbols: new Set(), requiredSymbols, ambiguous: true };
+        if (left.level !== right.level) return left.level === level ? left : right;
+        const leftUnconditional = left.level === 2 && left.symbols.size === 0 && !left.ambiguous;
+        const rightUnconditional = right.level === 2 && right.symbols.size === 0 && !right.ambiguous;
+        if (leftUnconditional) return left;
+        if (rightUnconditional) return right;
+        const same = left.symbols.size === right.symbols.size &&
+          [...left.symbols].every((item) => right.symbols.has(item));
+        return { level, value: left.value, symbols: new Set([...left.symbols, ...right.symbols]),
+          requiredSymbols, ambiguous: left.ambiguous || right.ambiguous || !same };
+      };
+      let result = expressionAstDependencyProof(rows[0], inputValues, options);
+      for (const child of rows.slice(1)) {
+        const next = expressionAstDependencyProof(child, inputValues, options);
+        result = node.kind === 'and' ? combineAnd(result, next) : combineOr(result, next);
+      }
+      return result;
+    }
+    return unknown();
+  };
+  return atom(ast);
+}
+
+function expressionDependencyProof(expression, inputValues, options = {}) {
+  const tokens = expressionTokens(expression);
+  if (tokens.complete === false || !tokens.length) {
+    return { level: UNKNOWN, symbols: new Set(), requiredSymbols: new Set(), ambiguous: true };
+  }
+  let at = 0;
+  let parseError = false;
+  const atom = (token) => {
+    const operand = expressionOperand(token, inputValues, options);
+    const isLiteral = token === 'y' || token === 'm' || token === 'n' ||
+      /^".*"$/.test(token || '') || /^[+-]?(?:0x[0-9a-f]+|\d+)$/i.test(token || '');
+    const proven = !isLiteral && mapValue(options.undefinedSymbols, token) && operand.nativeUndefined;
+    const symbols = proven || isLiteral ? new Set() : new Set([token]);
+    const requiredSymbols = proven || isLiteral ? new Set() : new Set([token]);
+    return { level: operand.level, value: operand.level === UNKNOWN ? UNKNOWN : operand.stringValue,
+      operand, symbols, requiredSymbols, ambiguous: false };
+  };
+  const combineAnd = (left, right) => {
+    const requiredSymbols = new Set([...(left.requiredSymbols || []), ...(right.requiredSymbols || [])]);
+    if (left.level === 0 || right.level === 0) return { level: 0, symbols: new Set(), requiredSymbols,
+      ambiguous: left.ambiguous || right.ambiguous || left.level === UNKNOWN || right.level === UNKNOWN };
+    if (left.level === UNKNOWN || right.level === UNKNOWN) return { level: UNKNOWN, symbols: new Set(), requiredSymbols, ambiguous: true };
+    return { level: Math.min(left.level, right.level), symbols: new Set([...left.symbols, ...right.symbols]),
+      requiredSymbols, ambiguous: left.ambiguous || right.ambiguous };
+  };
+  const combineOr = (left, right) => {
+    if (left.level === UNKNOWN || right.level === UNKNOWN) {
+      if (left.level === 2 || right.level === 2) return left.level === 2 ? left : right;
+      return { level: UNKNOWN, symbols: new Set(), requiredSymbols: new Set([
+        ...(left.requiredSymbols || []), ...(right.requiredSymbols || []),
+      ]), ambiguous: true };
+    }
+    const level = Math.max(left.level, right.level);
+    if (level === 0) return { level: 0, symbols: new Set(), requiredSymbols: new Set([
+      ...(left.requiredSymbols || []), ...(right.requiredSymbols || []),
+    ]), ambiguous: true };
+    if (left.level !== right.level) return left.level === level ? left : right;
+    // A literal `y` (or another already-reduced constant) proves the OR
+    // without requiring either symbol.  Do not turn `y || A` into an
+    // ambiguous dependency edge.
+    const leftUnconditional = left.level === 2 && left.symbols.size === 0 && !left.ambiguous;
+    const rightUnconditional = right.level === 2 && right.symbols.size === 0 && !right.ambiguous;
+    if (leftUnconditional) return left;
+    if (rightUnconditional) return right;
+    const same = left.symbols.size === right.symbols.size && [...left.symbols].every((item) => right.symbols.has(item));
+    return { level, symbols: new Set([...left.symbols, ...right.symbols]),
+      requiredSymbols: new Set([...(left.requiredSymbols || []), ...(right.requiredSymbols || [])]),
+      ambiguous: left.ambiguous || right.ambiguous || !same };
+  };
+  const primary = () => {
+    if (tokens[at] === '(') {
+      at++;
+      const value = or();
+      if (tokens[at] === ')') at++;
+      else parseError = true;
+      return value;
+    }
+    if (at >= tokens.length || ['&&', '||', ')', '=', '!=', '<', '>', '<=', '>='].includes(tokens[at])) {
+      parseError = true;
+      return { level: UNKNOWN, value: UNKNOWN, symbols: new Set(), requiredSymbols: new Set(), ambiguous: true };
+    }
+    const token = tokens[at++];
+    const left = atom(token);
+    if (['=', '!=', '<', '>', '<=', '>='].includes(tokens[at])) {
+      const operator = tokens[at++];
+      if (at >= tokens.length || ['&&', '||', ')', '=', '!=', '<', '>', '<=', '>='].includes(tokens[at])) {
+        parseError = true;
+        return { level: UNKNOWN, value: UNKNOWN, symbols: new Set(), requiredSymbols: new Set(), ambiguous: true };
+      }
+      const right = atom(tokens[at++]);
+      const level = compareExpressionOperands(left.operand, operator, right.operand);
+      return { level, value: level === UNKNOWN ? UNKNOWN : level > 0 ? 'y' : 'n',
+        symbols: new Set([...left.symbols, ...right.symbols]),
+        requiredSymbols: new Set([...(left.requiredSymbols || []), ...(right.requiredSymbols || [])]),
+        ambiguous: left.ambiguous || right.ambiguous };
+    }
+    return left;
+  };
+  const unary = () => {
+    if (tokens[at] === '!') { at++; const value = unary(); return { level: value.level === UNKNOWN ? UNKNOWN : 2 - value.level,
+      symbols: new Set(), requiredSymbols: new Set(), ambiguous: value.ambiguous }; }
+    return primary();
+  };
+  const and = () => { let value = unary(); while (tokens[at] === '&&') { at++; value = combineAnd(value, unary()); } return value; };
+  const or = () => { let value = and(); while (tokens[at] === '||') { at++; value = combineOr(value, and()); } return value; };
+  const result = or();
+  // A malformed/partially parsed expression is not a proof.  Preserve it as
+  // UNKNOWN instead of silently using whichever prefix happened to parse.
+  return parseError || at !== tokens.length
+    ? (tokens.syntaxValid = false, { level: UNKNOWN, symbols: new Set(), requiredSymbols: new Set(), ambiguous: true })
+    : (tokens.syntaxValid = true, result);
+}
+
+/*
+ * Build a conditional package/Kconfig graph from the exact Catalog model.
+ * `reverseDependencies` is useful for indexing, but deriving edges from the
+ * records as well means a consumer can still reason about a freshly loaded
+ * graph whose optional indexes are absent.  Unknown conditions or unresolved
+ * providers are retained as provenance and never silently treated as an edge.
+ */
+function activePackageGraph(model, values, options = {}) {
+  const graph = new Map();
+  const unknown = [];
+  const addUnknown = (source, reason) => unknown.push({ source, reason });
+  const addEdge = (source, target) => {
+    const name = packageCapabilityName(target);
+    if (!name || name === source) return;
+    const targets = packageGraphTargets(model, name);
+    if (!targets.length) {
+      addUnknown(source, `missing-provider:${name}`);
+      return;
+    }
+    for (const record of targets) {
+      const bucket = graph.get(source) || new Set();
+      bucket.add(record.package); graph.set(source, bucket);
+    }
+  };
+  const addActiveDependencyEdge = (source, dependency) => {
+    const packages = [...new Set((dependency?.packages || []).map(packageCapabilityName).filter(Boolean))];
+    if (!packages.length) return;
+    if (dependency.required === false) return;
+    const condition = String(dependency.condition || '').trim();
+    if (condition) {
+      const state = evaluateExpressionRaw(condition, values, options);
+      if (state === 0) return;
+      if (state === UNKNOWN) {
+        addUnknown(source, `unknown-package-condition:${condition}`);
+        return;
+      }
+    }
+    const resolution = packageDependencyTargets(model, packages, values, source);
+    const candidates = resolution.records;
+    const external = candidates.filter((record) => record.package !== source);
+    // A package may list a virtual capability that it provides itself.  That
+    // is satisfied by the owner and must not create a self edge.
+    if (!external.length && resolution.self) return;
+    if (external.length === 1) {
+      addEdge(source, external[0].package);
+      return;
+    }
+    if (external.length > 1) {
+      addUnknown(source, `ambiguous-provider:${packages.join(' || ')}`);
+      return;
+    }
+    if (dependency.required !== false) addUnknown(source, `inactive-provider:${packages.join(' || ')}`);
+  };
+  const addKconfigEdge = (source, symbol) => {
+    const target = model?.bySymbol?.get(symbol);
+    if (!target) { addUnknown(source, `missing-symbol:${symbol}`); return; }
+    if (target.package) addEdge(source, target.package);
+  };
+  for (const record of model?.records || []) {
+    if (!record?.package || !record.configSymbol || !recordEnabled(record, values)) continue;
+    const source = record.package;
+    graph.set(source, graph.get(source) || new Set());
+    for (const dependency of record.packageInfo?.depends || []) {
+      addActiveDependencyEdge(source, dependency);
+    }
+    // The narrow package-closure contract is sufficient for exact
+    // package-info dependency/provider paths, but it does not certify typed
+    // Kconfig expressions.  Never turn an incomplete Kconfig relation into a
+    // graph edge merely because the package closure itself is complete.
+    // Compact schema-4 assets must carry the complete typed-Kconfig
+    // capability.  Schema-2 readable assets have no capability table and are
+    // retained only for the legacy expression graph path; they never certify
+    // typed preflight through `model.relationsComplete`.
+    const kconfigGraphComplete = model.relationsSchema === 2
+      ? model.declaredRelationsComplete === true
+      : model.relationsComplete === true;
+    if (!kconfigGraphComplete) continue;
+    const dependsVariants = record.kconfig?.dependsExpressions || [];
+    const dependsAstVariants = Array.isArray(record.kconfig?.dependsAstVariants) &&
+      record.kconfig.dependsAstVariants.length ? record.kconfig.dependsAstVariants : null;
+    const graphVariants = (Array.isArray(dependsVariants) && dependsVariants.length
+      ? dependsVariants : [[]]);
+    const proofs = graphVariants.map((variant, variantIndex) => {
+        const expressions = Array.isArray(variant) ? variant : [variant];
+        const astExpressions = dependsAstVariants
+          ? (Array.isArray(dependsAstVariants[variantIndex])
+            ? dependsAstVariants[variantIndex] : [dependsAstVariants[variantIndex]])
+          : [];
+        const typedAstMissing = model.typedRelationsComplete === true && expressions.some((expression) =>
+          String(expression || '').trim()) &&
+          (!dependsAstVariants || astExpressions.length !== expressions.length || astExpressions.some((ast) => !ast));
+        if (typedAstMissing) return { level: UNKNOWN, symbols: new Set(), requiredSymbols: new Set(), ambiguous: true };
+        const proofInputs = dependsAstVariants && astExpressions.length ? astExpressions : expressions;
+        let symbols = new Set(); let requiredSymbols = new Set(); let level = 2; let ambiguous = false;
+        for (let expressionIndex = 0; expressionIndex < proofInputs.length; expressionIndex++) {
+          const expression = proofInputs[expressionIndex];
+          const usesAst = dependsAstVariants && astExpressions.length;
+          const proof = usesAst
+            ? expressionAstDependencyProof(expression, values, options)
+            : expressionDependencyProof(expression, values, options);
+          if (usesAst) {
+            const rawExpression = expressions[expressionIndex];
+            const astRaw = expressionAstRaw(expression);
+            const rawProof = rawExpression === undefined ? null : expressionDependencyProof(rawExpression, values, options);
+            if ((rawExpression !== undefined && astRaw && String(rawExpression || '').trim() !== astRaw) ||
+                (rawProof && rawProof.level !== proof.level)) {
+              return { level: UNKNOWN, symbols: new Set(), requiredSymbols: new Set(), ambiguous: true };
+            }
+          }
+          requiredSymbols = new Set([...requiredSymbols, ...(proof.requiredSymbols || [])]);
+          if (proof.level === 0) return { level: 0, symbols: new Set(), requiredSymbols,
+            ambiguous: proof.ambiguous };
+          if (proof.level === UNKNOWN) return { level: UNKNOWN, symbols: new Set(), requiredSymbols, ambiguous: true };
+          level = Math.min(level, proof.level);
+          symbols = new Set([...symbols, ...proof.symbols]); ambiguous ||= proof.ambiguous;
+        }
+        return { level, symbols, requiredSymbols, ambiguous };
+      });
+    const satisfied = proofs.filter((proof) => proof.level > 0);
+    const sameProof = satisfied.length > 1 && satisfied.every((proof) => {
+      const first = satisfied[0];
+      return proof.symbols.size === first.symbols.size && [...proof.symbols].every((item) => first.symbols.has(item));
+    });
+    if (satisfied.some((proof) => proof.ambiguous) || (satisfied.length > 1 && !sameProof)) {
+      addUnknown(source, 'ambiguous-kconfig-dependency');
+    } else if (satisfied.length === 1) {
+      for (const symbol of satisfied[0].symbols) addKconfigEdge(source, symbol);
+    } else if (sameProof) {
+      for (const symbol of satisfied[0].symbols) addKconfigEdge(source, symbol);
+    } else if (proofs.length === 1 && proofs[0].level === 0 && !proofs[0].ambiguous) {
+      // A single unsatisfied direct dependency is still an exact potential
+      // edge.  It is intentionally restricted to the parser's proof result;
+      // arbitrary symbols mentioned in an `A || B` expression are never
+      // promoted to mandatory edges.
+      for (const symbol of proofs[0].requiredSymbols || []) addKconfigEdge(source, symbol);
+    } else if (proofs.some((proof) => proof.level === UNKNOWN || proof.ambiguous)) {
+      addUnknown(source, 'unknown-kconfig-dependency');
+    }
+    for (const [field, rows, relationField] of [
+      ['selectsExpressions', record.kconfig?.selectsExpressions, record.kconfig?.selectRelations],
+      ['impliesExpressions', record.kconfig?.impliesExpressions, record.kconfig?.implyRelations],
+    ]) {
+      const typedRelations = Array.isArray(relationField) && relationField.length
+        ? relationField : null;
+      if (typedRelations) {
+        for (const relation of typedRelations) {
+          const symbol = String(relation?.target || relation?.symbol || relation?.name || '').trim();
+          if (!symbol) { addUnknown(source, `invalid-${field}-relation`); continue; }
+          const level = evaluateKconfigRelationCondition(relation, values, options);
+          if (level === 0) continue;
+          if (level === UNKNOWN) { addUnknown(source, `unknown-${field}:${relation.raw || symbol}`); continue; }
+          addKconfigEdge(source, symbol);
+        }
+      } else {
+        for (const expression of nestedExpressionStrings(rows || [])) {
+          const { symbol, condition } = ruleParts(expression);
+          if (!symbol) continue;
+          const level = model.typedRelationsComplete === true
+            ? UNKNOWN : evaluateExpressionRaw(condition, values, options);
+          if (level === 0) continue;
+          if (level === UNKNOWN) { addUnknown(source, `unknown-${field}:${expression}`); continue; }
+          addKconfigEdge(source, symbol);
+        }
+      }
+    }
+  }
+  return { graph, unknown };
+}
+
+function buildDependencyGraphClosure(model, failedRecord, values, options = {}) {
+  if (!failedRecord?.package) return { status: 'inconclusive', roots: [], closure: new Set(), unknown: ['missing-failed-package'] };
+  if (model?.packageClosureComplete !== true) {
+    return { status: 'inconclusive', roots: [], closure: new Set([failedRecord.package]),
+      unknown: ['catalog-package-closure-incomplete'] };
+  }
+  const { graph, unknown } = activePackageGraph(model, values, options);
+  const reverse = new Map();
+  for (const [source, targets] of graph) {
+    for (const target of targets) {
+      const parents = reverse.get(target) || new Set();
+      parents.add(source); reverse.set(target, parents);
+    }
+  }
+  const closure = new Set([failedRecord.package]);
+  const queue = [failedRecord.package];
+  while (queue.length) {
+    const target = queue.shift();
+    for (const parent of reverse.get(target) || []) {
+      if (!closure.has(parent)) { closure.add(parent); queue.push(parent); }
+    }
+  }
+  const activeParents = (name) => [...(reverse.get(name) || [])].filter((parent) => closure.has(parent));
+  const explicitSymbols = new Set(options.explicitSymbols || []);
+  const candidates = [...closure].map((name) => packageGraphRecord(model, name)).filter((record) =>
+    record && record.package !== failedRecord.package && recordEnabled(record, values) &&
+    (record.userSettable !== false || explicitSymbols.has(record.configSymbol)));
+  const roots = candidates.filter((record) => !activeParents(record.package).some((parent) => {
+    const parentRecord = packageGraphRecord(model, parent);
+    return parentRecord && (parentRecord.userSettable !== false || explicitSymbols.has(parentRecord.configSymbol));
+  }));
+  // An incomplete graph can only produce a deterministic result when every
+  // active upstream path was resolved.  Do not guess a root from a partial
+  // graph: callers surface an inconclusive recommendation instead.
+  const relevantUnknown = unknown.filter((item) => item.source !== failedRecord.package && closure.has(item.source));
+  if (relevantUnknown.length) {
+    return { status: 'inconclusive', roots: [], closure, unknown: relevantUnknown, graph, reverse };
+  }
+  return { status: 'resolved', roots, closure, unknown: [], graph, reverse };
+}
+
+function buildDependencyGraphReachable(model, failedRecord, values, options = {}) {
+  const closure = buildDependencyGraphClosure(model, failedRecord, values, options);
+  // The failed package itself is always the seed. A second member proves
+  // that an active package/Kconfig path reaches it. An incomplete or
+  // ambiguous graph deliberately stays inconclusive rather than warning.
+  return closure.status === 'resolved' && closure.closure.size > 1;
+}
+
+function deriveGraphBuildDependencyPlans(model, inputValues, warning, intent = {}) {
+  const startingValues = new Map(valuesMap(warning.values || inputValues));
+  const options = validationOptions(startingValues, {
+    ...(intent.validationOptions || {}), model, typedRelationsComplete: model?.typedRelationsComplete === true,
+  });
+  const failedRecord = warning.buildDependencyRecord ||
+    packageGraphRecord(model, warning.rule?.buildDependency?.package);
+  const closure = buildDependencyGraphClosure(model, failedRecord, startingValues, options);
+  if (closure.status !== 'resolved') {
+    return { candidates: [], recommended: null, status: 'inconclusive', reason: closure.unknown };
+  }
+  const targetRecords = [...closure.roots, ...(failedRecord ? [failedRecord] : [])]
+    .filter((record, index, rows) => rows.findIndex((item) => item.configSymbol === record.configSymbol) === index);
+  if (!targetRecords.length) return { candidates: [], recommended: null, status: 'inconclusive', reason: ['no-active-root'] };
+  const requiredTargets = targetRecords.map((record) => ({
+    symbol: record.configSymbol,
+    package: record.package || packageNameFromSymbol(record.configSymbol),
+    value: 'n',
+  }));
+  let values = new Map(startingValues);
+  let changes = [];
+  const allSteps = [];
+  for (const record of targetRecords) {
+    if (normalizeValue(values.get(record.configSymbol) ?? 'n') === 'n') continue;
+    let plan = null;
+    try { plan = compatibilityDisablePlan(model, record, values, intent); } catch { plan = null; }
+    if (!plan) {
+      return { candidates: [], recommended: null, status: 'inconclusive', reason: [`cannot-disable:${record.package}`] };
+    }
+    values = plan.values;
+    changes = compatibilityPlanChanges(startingValues, values, [...changes, ...plan.changes]);
+    allSteps.push(...plan.steps);
+  }
+  const stepBySymbol = new Map();
+  for (const record of targetRecords) stepBySymbol.set(record.configSymbol, {
+    symbol: record.configSymbol, package: record.package, value: 'n',
+  });
+  // Keep user-facing actions to direct roots plus the failed package.  Any
+  // selector/derived cleanup generated by the shared intent engine remains an
+  // automatic change and is not promoted to a new manually curated trigger.
+  const steps = [...stepBySymbol.values()];
+  const candidate = compatibilityPlanCandidate(startingValues, steps, values, changes,
+    failedRecord?.package || '', requiredTargets);
+  if (compatibilityWarningTriggered(model, { ...warning, values }, values, options)) {
+    return { candidates: [], recommended: null, status: 'inconclusive', reason: ['warning-remains-active'] };
+  }
+  return { candidates: [candidate], recommended: candidate, status: 'resolved', closure: closure.closure };
+}
+
+function deriveBuildDependencyPlans(model, inputValues, warning, intent = {}) {
+  if (warning?.rule?.buildDependency?.legacy) return deriveLegacyBuildDependencyPlans(model, inputValues, warning, intent);
+  return deriveGraphBuildDependencyPlans(model, inputValues, warning, intent);
+}
+
 export function deriveCompatibilityPlans(model, inputValues, warning, intent = {}) {
   const rule = warning?.rule;
   const records = warning?.records || [];
@@ -2506,7 +4474,7 @@ export function deriveCompatibilityPlans(model, inputValues, warning, intent = {
     try {
       const plan = compatibilityDisablePlan(model, record, startingValues, intent);
       if (!plan?.steps.length) continue;
-      const resolved = !compatibilityWarningTriggered({ ...warning, values: plan.values }, plan.values,
+      const resolved = !compatibilityWarningTriggered(model, { ...warning, values: plan.values }, plan.values,
         intent.validationOptions || {});
       if (!resolved) continue;
       const stepSymbols = new Set(plan.steps.map((step) => step.symbol));
@@ -2562,7 +4530,24 @@ export function formatViolations(violations) {
       return requirement ? `${item.symbol} has deferred Kconfig dependency ${requirement}` : `${item.symbol} has deferred Kconfig dependencies`;
     }
     if (item.code === 'package-dependency-deferred') return `${item.symbol} has deferred package dependencies`;
-    if (item.code === 'package-conflict') return `${item.package} conflicts with ${item.otherPackage}`;
+    if (item.code === 'kconfig-modules-unsatisfied') return `${item.symbol} requires MODULES=y for M`;
+    if (item.code === 'kconfig-modules-deferred') return `${item.symbol} has deferred MODULES semantics`;
+    if (item.code === 'kconfig-scalar-invalid') return `${item.symbol} has an invalid ${item.type} value`;
+    if (item.code === 'kconfig-range-unsatisfied') return `${item.symbol} is outside its Kconfig range`;
+    if (item.code === 'kconfig-range-deferred') return `${item.symbol} has a deferred Kconfig range`;
+    if (item.code === 'kconfig-visibility-unsatisfied') return `${item.symbol} is not visible under ${item.dependency}`;
+    if (item.code === 'kconfig-visibility-deferred') return `${item.symbol} has a deferred visibility condition`;
+    if (item.code === 'choice-dependency-unsatisfied') return `${item.choice} has unsatisfied Kconfig dependencies`;
+    if (item.code === 'choice-dependency-deferred') return `${item.choice} has deferred Kconfig dependencies`;
+    if (item.code === 'choice-reset-unsupported') return `${item.choice} selection requires an unsupported native user-layer reset`;
+    if (item.code === 'choice-reset-deferred') return `${item.choice} reset condition is deferred until the typed reset contract is available`;
+    if (item.code === 'choice-modules-unsatisfied') return `${item.choice} does not allow module members`;
+    if (item.code === 'choice-state-invalid') return `${item.choice} has an invalid member state`;
+    if (item.code === 'package-conflict') {
+      const other = item.otherPackage || (item.otherPackages || []).join(' || ') || item.capability || 'unknown provider';
+      return `${item.package} conflicts with ${other}`;
+    }
+    if (item.code === 'package-conflict-deferred') return `${item.package} has an unresolved conflict provider ${item.capability}`;
     if (item.code === 'choice-conflict') return `${item.choice} enables multiple values: ${item.symbols.join(', ')}`;
     return item.code || 'catalog validation error';
   }).join('; ');

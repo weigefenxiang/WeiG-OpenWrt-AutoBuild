@@ -459,6 +459,24 @@ jobs:
           : > defconfig.diff
           : > defconfig.log
 
+      - name: Generate upstream package metadata / 生成上游软件包元数据
+        run: |
+          cd openwrt
+          set -o pipefail
+          # `prepare-tmpinfo` is the stable upstream entry point used by old
+          # OpenWrt/LEDE branches to scan package metadata into tmp/.packageinfo.
+          # It is deliberately separate from the optional `make defconfig` and
+          # must not change the reconstructed configuration.
+          CONFIG_HASH_BEFORE="$(sha256sum .config | awk '{print $1}')"
+          test -n "$CONFIG_HASH_BEFORE"
+          make prepare-tmpinfo V=s 2>&1 | tee "$GITHUB_WORKSPACE/package-metadata.log"
+          CONFIG_HASH_AFTER="$(sha256sum .config | awk '{print $1}')"
+          if [ "$CONFIG_HASH_BEFORE" != "$CONFIG_HASH_AFTER" ]; then
+            echo "::error::prepare-tmpinfo changed the authoritative .config; refusing to continue."
+            exit 1
+          fi
+          test -s tmp/.packageinfo
+
       - name: Verify explicit configuration overrides / 核验显式配置覆盖
         run: |
           node tools/verify-effective-config.mjs \
@@ -466,6 +484,23 @@ jobs:
             --config openwrt/.config \
             --out config-verification.json \
             --stage post-defconfig
+
+      - name: Verify upstream build dependency closure / 核验上游构建依赖闭包
+        env:
+          REQUEST_MANIFEST: request-attachments.json
+          UPSTREAM_DIR: openwrt
+          CONFIG_PATH: openwrt/.config
+          CATALOG_REVISION: ${{ steps.req.outputs.catalog_revision }}
+          SOURCE_COMMIT: ${{ steps.req.outputs.source_commit }}
+          BUILD_CLOSURE_OUT: build-closure-verification.json
+        run: |
+          node tools/verify-build-closure.mjs \
+            --request-manifest "$REQUEST_MANIFEST" \
+            --upstream-dir "$UPSTREAM_DIR" \
+            --config "$CONFIG_PATH" \
+            --catalog-revision "$CATALOG_REVISION" \
+            --source-commit "$SOURCE_COMMIT" \
+            --out "$BUILD_CLOSURE_OUT"
 
       - name: Apply package mirror / 应用软件包镜像（APK/OPKG）
         env:
@@ -578,10 +613,12 @@ jobs:
             reconstructed.config
             request-overrides.json
             config-verification.json
+            build-closure-verification.json
             pre-defconfig.config
             defconfig.config
             defconfig.diff
             defconfig.log
+            package-metadata.log
             build.config
             build-metadata.txt
             request-audit.json
@@ -726,6 +763,7 @@ jobs:
         run: |
           mkdir -p failure-logs
           cp download.log failure-logs/ 2>/dev/null || true
+          cp package-metadata.log build-closure-verification.json failure-logs/ 2>/dev/null || true
           cp build-metadata.txt failure-logs/ 2>/dev/null || true
           cp profile-baseline.config reconstructed.config request-overrides.json config-verification.json request-audit.json package-mirror-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig.log build.config failure-logs/ 2>/dev/null || true
           cp openwrt/.config failure-logs/final.config 2>/dev/null || true

@@ -648,9 +648,11 @@ function catalogConflictRows(option, requestedValue, violations) {
   for (const violation of violations || []) {
     if (violation.code === 'package-conflict') {
       const left = catalogConflictRecordForPackage(violation.package);
-      const right = catalogConflictRecordForPackage(violation.otherPackage);
       if (left?.configSymbol) symbols.add(left.configSymbol);
-      if (right?.configSymbol) symbols.add(right.configSymbol);
+      for (const packageName of [violation.otherPackage, ...(violation.otherPackages || [])]) {
+        const right = catalogConflictRecordForPackage(packageName);
+        if (right?.configSymbol) symbols.add(right.configSymbol);
+      }
     } else if (violation.code === 'choice-conflict') {
       for (const symbol of violation.symbols || []) symbols.add(symbol);
     }
@@ -672,8 +674,10 @@ function catalogConflictPlanInvalid(plan, violations) {
   for (const violation of violations || []) {
     if (violation.code === 'package-conflict') {
       const left = catalogConflictRecordForPackage(violation.package)?.configSymbol;
-      const right = catalogConflictRecordForPackage(violation.otherPackage)?.configSymbol;
-      if (left && right && (plan.get(left) || 'n') !== 'n' && (plan.get(right) || 'n') !== 'n') return true;
+      const rightSymbols = [violation.otherPackage, ...(violation.otherPackages || [])]
+        .map((packageName) => catalogConflictRecordForPackage(packageName)?.configSymbol).filter(Boolean);
+      if (left && rightSymbols.some((right) =>
+        (plan.get(left) || 'n') !== 'n' && (plan.get(right) || 'n') !== 'n')) return true;
     }
     if (violation.code === 'choice-conflict') {
       const enabled = (violation.symbols || []).filter((symbol) => (plan.get(symbol) || 'n') !== 'n');

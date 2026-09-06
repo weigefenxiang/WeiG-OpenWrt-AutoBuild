@@ -198,7 +198,7 @@ function kconfigConstraintTooltip(option, stateValue, constraints) {
       list: displayText(formatSemicolonList(option.defaults)),
     }) : '',
   ].filter(Boolean).join('\n\n');
-  return { title: `${displayConfigSymbol(option.symbol)} · ${stateValue.toUpperCase()}`, emphasis, body: displayText(body) };
+  return { title: `${displayConfigSymbol(option.symbol, { kind: 'config' })} · ${stateValue.toUpperCase()}`, emphasis, body: displayText(body) };
 }
 function bindKconfigConstraintTooltip(button, option, stateValue, constraints) {
   const tooltip = kconfigConstraintTooltip(option, stateValue, constraints);
@@ -221,7 +221,7 @@ function renderCatalogOriginSlot(option, origin) {
   const originLabel = displayText(origin.label);
   const originDetail = displayText(origin.detail || origin.label);
   badge.textContent = `${originLabel}${restorable ? ' ↶' : ''}`;
-  badge.dataset.uiTooltipTitle = `${displayConfigSymbol(option.symbol)} · ${originLabel}`;
+  badge.dataset.uiTooltipTitle = `${displayConfigSymbol(option.symbol, { kind: 'config' })} · ${originLabel}`;
   badge.dataset.uiTooltipBody = originDetail;
   if (restorable) {
     badge.type = 'button';
@@ -331,7 +331,7 @@ function renderMenuOption(option) {
     input.value = option.type === 'string' ? String(value ?? '') : (value === 'n' ? '' : value);
     input.readOnly = option.userSettable === false;
     if (input.readOnly) {
-      input.dataset.uiTooltipTitle = displayConfigSymbol(option.symbol);
+      input.dataset.uiTooltipTitle = displayConfigSymbol(option.symbol, { kind: 'config' });
       input.dataset.uiTooltipEmphasis = t('runtime.cc8d0739ba58');
       input.dataset.uiTooltipBody = t('runtime.f7342b9246cb');
       input.onclick = (event) => showDatasetTooltip(input, event);
@@ -401,7 +401,7 @@ function renderMenuLeaf(options, list) {
         menuOptionLabel(option),
       ].filter(Boolean))];
       entry.dataset.uiTooltipBody = [
-        displayConfigSymbol(option.symbol),
+        displayConfigSymbol(option.symbol, { kind: 'config' }),
         displayText(choiceDescription.join('\n')),
         displayText((option.path || []).map(menuPathLabel).filter(Boolean).join(' › ')),
       ].filter(Boolean).join('\n\n');

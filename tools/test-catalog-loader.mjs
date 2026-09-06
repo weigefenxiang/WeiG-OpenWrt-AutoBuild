@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
-import { createCatalogModel } from '../site/wrt/lib/catalog-engine.js';
+import {
+  createCatalogModel, REQUIRED_KCONFIG_RELATION_CAPABILITIES,
+} from '../site/wrt/lib/catalog-engine.js';
 import {
   createCatalogLoader, formatCatalogDiagnostics, legacyCatalogContract, sha256Hex, validateCatalogProvenance,
 } from '../site/wrt/lib/catalog-loader.js';
@@ -559,15 +561,33 @@ assert(formatCatalogDiagnostics(staleError.diagnostics).includes('Catalog schema
 
 const splitCommit = '4'.repeat(40);
 const compactEmpty = {
-  schema: 3,
-  fields: [],
-  flags: { visible: 1, userSettable: 2, canDisable: 4, hasKconfig: 8, package: 16 },
+  schema: 4,
+  fields: [
+    'symbolId', 'flags', 'typeCode', 'originCode', 'statesMask', 'choiceId', 'defaultsId',
+    'dependsVariantsId', 'selectsVariantsId', 'impliesVariantsId', 'packageDependenciesId',
+    'providesId', 'conflictsId', 'packageConflictsId', 'kconfigConflictsId', 'typedDefaultsId', 'rangesId',
+    'promptIfId', 'promptConditionsId',
+    'visibleIfId', 'menuVisibleIfId', 'directDependsId', 'inheritedDependsId', 'directVisibleIfId',
+    'inheritedVisibleIfId', 'inheritedMenuVisibleIfId', 'optionFlagsId', 'optionsId', 'definitionsId',
+    'capabilityRelationsId',
+  ],
+  flags: { visible: 1, userSettable: 2, canDisable: 4, hasKconfig: 8, package: 16, modules: 32, optional: 64 },
   types: ['', 'bool', 'tristate', 'string', 'int', 'hex'],
   origins: ['', 'kconfig-only', 'kconfig+packageinfo', 'hidden-kconfig-only',
     'hidden-kconfig+packageinfo', 'packageinfo-only'],
+  valueKinds: ['', 'literal', 'expression', 'unknown'],
+  relationCapabilities: [...REQUIRED_KCONFIG_RELATION_CAPABILITIES],
+  relationsComplete: true,
+  packageClosureComplete: true,
+  packageClosureCapabilities: ['packageinfo-dependencies-v1', 'packageinfo-alternatives-v1',
+    'packageinfo-conditions-v1', 'packageinfo-virtual-providers-v1',
+    'package-forward-reverse-edges-v1', 'complete-package-build-closure-v1'],
+  packageClosureValidation: { producer: 'fixture-graph-compact' },
   strings: [], expressions: [], stringLists: [], expressionLists: [], expressionVariants: [],
-  defaults: [], packageDependencies: [], records: [],
-  indexes: { providers: [], reverseDependencies: [], reverseKconfig: [], choices: [] },
+  defaults: [], typedDefaults: [], ranges: [], packageDependencies: [], capabilities: [], kconfigConflicts: [],
+  definitions: [], choices: [], expressionAsts: [], alternativeLists: [], numberLists: [], edges: [], records: [],
+  indexes: { byPackage: [], bySymbol: [], providers: [], reverseDependencies: [], reverseKconfig: [],
+    reverseSelects: [], reverseImplies: [], choices: [], forwardEdges: [], reverseEdges: [] },
   summary: {}, validation: { structurallyValid: true },
 };
 const splitDocuments = {
@@ -577,6 +597,16 @@ const splitDocuments = {
   }),
   graph: compressedDocument({
     schema: 6, kind: 'graph', source: { repo: 'example/upstream', commit: splitCommit },
+    packageClosureComplete: true,
+    packageClosureCapabilities: ['complete-package-build-closure-v1'],
+    packageClosureValidation: { producer: 'fixture-graph-wrapper' },
+    relationsComplete: true,
+    relationCapabilities: compactEmpty.relationCapabilities,
+    validation: {
+      variableAssignments: ['CONFIG_FIXTURE=y'],
+      dynamicExpressions: ['CONFIG_FIXTURE if CONFIG_GATE'],
+      producer: 'fixture-graph-wrapper',
+    },
     relations: compactEmpty,
   }),
   menu: compressedDocument({ schema: 1, kind: 'menu', options: [], choices: [], labels: {}, categories: [] }),
@@ -610,7 +640,16 @@ const splitLoader = createCatalogLoader({
 });
 const splitBundle = await splitLoader.fetchBundle({ sourceId: 'ImmortalWrt', branchName: 'openwrt-25.12' });
 assert(splitBundle.data.schema === 6 && splitBundle.data.splitAssets === true &&
-  splitBundle.model.catalog.relations.schema === 3, 'schema 6 core/graph bundle was not assembled');
+  splitBundle.model.catalog.relations.schema === 4 && splitBundle.model.relationsComplete === true,
+  'schema 6 core/graph bundle was not assembled with the full relations v4 contract');
+assert(splitBundle.model.packageClosureComplete === true &&
+  splitBundle.model.packageClosureCapabilities.includes('complete-package-build-closure-v1') &&
+  splitBundle.model.packageClosureValidation.producer === 'fixture-graph-compact',
+  'split graph compact package-closure metadata was not preserved on the canonical model');
+assert(splitBundle.model.relationValidation.structurallyValid === true &&
+  splitBundle.model.relationValidation.variableAssignments.includes('CONFIG_FIXTURE=y') &&
+  splitBundle.model.relationValidation.dynamicExpressions.includes('CONFIG_FIXTURE if CONFIG_GATE'),
+  'split graph relation validation metadata was not preserved on the canonical model');
 assert(!splitCalls.some((url) => url.includes(splitAssets.menu.asset)),
   'menu shard was downloaded before Advanced requested it');
 const splitMenu = await splitBundle.loadShard('menu');

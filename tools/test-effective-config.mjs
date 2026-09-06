@@ -10,6 +10,12 @@ import { parseOverrideDocument, verifyEffectiveConfig } from './verify-effective
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const workflow = readFileSync(join(root, '.github', 'workflows', 'custom-build.yml'), 'utf8');
+const requestParser = readFileSync(join(root, 'tools', 'parse-request.mjs'), 'utf8');
+assert.doesNotMatch(requestParser, /validateConfig\s*\(/,
+  'Worker reconstruction must not validate the entire native baseline as interactive user edits');
+assert.equal(verifyEffectiveConfig({ overrides: { schema: 1, overrides: [] },
+  configText: 'CONFIG_HIDDEN_NATIVE_DEFAULT=y\nCONFIG_NATIVE_STRING="value"\n' }).checked, 0,
+  'without explicit overrides the fidelity gate must preserve native values without inspecting them');
 
 const requested = {
   schema: 1,

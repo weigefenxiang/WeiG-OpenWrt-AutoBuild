@@ -84,6 +84,7 @@ const regressionTests = [
   'test-build-request-identity.mjs',
   'test-request-audit.mjs',
   'test-build-diagnostics.mjs',
+  'test-build-closure.mjs',
   'test-project-config.mjs',
   'test-catalog-loader.mjs',
   'test-catalog-engine.mjs',

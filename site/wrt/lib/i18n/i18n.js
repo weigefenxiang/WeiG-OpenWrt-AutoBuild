@@ -213,8 +213,44 @@ function maskText(s) {
 function displayText(value) {
   return maskText(value);
 }
-function displayConfigSymbol(symbol) {
-  const value = String(symbol ?? '').trim();
-  return displayText(value ? `CONFIG_${value}` : '');
+/*
+ * Format an internal Catalog identity for a user-facing diagnostic.  Catalog
+ * relations deliberately use two different namespaces: `PACKAGE_<name>` is
+ * a concrete package/Kconfig symbol while a bare package name can be a
+ * virtual capability (for example `libudev`).  Adding CONFIG_ to every input
+ * collapses those namespaces and produces invalid names such as
+ * CONFIG_libudev.  Keep the conversion typed and conservative: callers must
+ * identify a bare value as a Kconfig symbol, concrete package, or virtual
+ * capability.  Unknown bare values stay unchanged instead of being guessed.
+ */
+function configIdentity(symbol, { kind = '' } = {}) {
+  const raw = String(symbol ?? '').trim();
+  if (!raw) return { raw: '', kind: kind || 'empty', configSymbol: '', packageName: '' };
+  if (kind === 'virtual') {
+    const name = raw.replace(/^CONFIG_(?:PACKAGE_)?/, '');
+    return { raw, kind, configSymbol: '', packageName: name };
+  }
+  if (raw.startsWith('CONFIG_')) {
+    const configSymbol = raw.slice('CONFIG_'.length);
+    const packageName = configSymbol.startsWith('PACKAGE_') ? configSymbol.slice(8) : '';
+    return { raw, kind: packageName ? 'package' : 'config', configSymbol, packageName };
+  }
+  if (raw.startsWith('PACKAGE_')) {
+    return { raw, kind: 'package', configSymbol: raw, packageName: raw.slice(8) };
+  }
+  if (kind === 'virtual') return { raw, kind, configSymbol: '', packageName: raw };
+  if (kind === 'package') return { raw, kind, configSymbol: `PACKAGE_${raw}`, packageName: raw };
+  if (kind === 'config') return { raw, kind, configSymbol: raw, packageName: '' };
+  return { raw, kind: kind || 'unknown', configSymbol: '', packageName: raw };
+}
+function displayPackageName(packageName) {
+  const identity = configIdentity(packageName, { kind: 'package' });
+  return displayText(identity.packageName || identity.raw);
+}
+function displayConfigSymbol(symbol, options = {}) {
+  const identity = configIdentity(symbol, options);
+  if (!identity.raw) return '';
+  if (!['config', 'package'].includes(identity.kind)) return displayText(identity.raw);
+  return displayText(`CONFIG_${identity.configSymbol}`);
 }
 const groupLabel = (g) => displayText(t('group.' + g));

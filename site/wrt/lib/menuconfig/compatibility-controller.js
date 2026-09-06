@@ -10,6 +10,20 @@ function kconfigRequirementText(requirements = []) {
   return displayText(requirements.map((group) => (group || []).filter(Boolean).join(' && ')).filter(Boolean).join(' || '));
 }
 
+function displayCompatibilityIdentity(violation = {}) {
+  if (violation.symbol) return displayConfigSymbol(violation.symbol, { kind: 'config' });
+  if (violation.package) return displayPackageName(violation.package);
+  return displayText(violation.code || 'configuration-invalid');
+}
+function displayCompatibilityDetail(violation = {}) {
+  if (violation.code === 'package-conflict') {
+    const providers = [violation.otherPackage, ...(violation.otherPackages || [])]
+      .filter(Boolean).map(displayPackageName);
+    return displayText(`${violation.capability || 'conflict'}: ${providers.join(' || ') || 'unknown provider'}`);
+  }
+  return displayText(violation.dependency || violation.code || 'configuration-invalid');
+}
+
 function openKconfigPrerequisiteModal(option, value, error) {
   const plan = error?.prerequisitePlans?.recommended;
   if (!plan?.steps?.length) return false;
@@ -45,13 +59,13 @@ function openKconfigPrerequisiteModal(option, value, error) {
   for (const step of plan.steps) {
     const item = document.createElement('li');
     const symbol = document.createElement('code');
-    symbol.textContent = `${displayConfigSymbol(step.symbol)}=${String(step.value || 'n').toUpperCase()}`;
+    symbol.textContent = `${displayConfigSymbol(step.symbol, { kind: 'config' })}=${String(step.value || 'n').toUpperCase()}`;
     item.appendChild(symbol);
     list.appendChild(item);
   }
   const target = document.createElement('li');
   target.className = 'compatibility-recommendation-action';
-  target.textContent = `${t('runtime.kconfigPrerequisiteTarget')}: ${displayConfigSymbol(option.symbol)}=${String(value).toUpperCase()}`;
+  target.textContent = `${t('runtime.kconfigPrerequisiteTarget')}: ${displayConfigSymbol(option.symbol, { kind: 'config' })}=${String(value).toUpperCase()}`;
   list.appendChild(target);
   body.appendChild(list);
   const automatic = (plan.automaticChanges || []).filter((change) => change.symbol !== option.symbol);
@@ -59,7 +73,7 @@ function openKconfigPrerequisiteModal(option, value, error) {
     const automaticLine = document.createElement('p');
     automaticLine.className = 'compatibility-recommendation-detail';
     automaticLine.textContent = t('runtime.kconfigPrerequisiteAutomatic', {
-      value1: automatic.map((change) => `${displayConfigSymbol(change.symbol)}=${String(change.to).toUpperCase()}`).join(', '),
+      value1: automatic.map((change) => `${displayConfigSymbol(change.symbol, { kind: 'config' })}=${String(change.to).toUpperCase()}`).join(', '),
     });
     body.appendChild(automaticLine);
   }
@@ -173,7 +187,7 @@ function openCatalogConflictModal(option, value, violations, openChildren = fals
     const name = document.createElement('code');
     name.textContent = displayText(row.label);
     bindUiTooltipContent(name, {
-      body: row.symbol.startsWith('PACKAGE_') ? displayConfigSymbol(row.symbol) : displayText(row.symbol),
+      body: row.symbol.startsWith('PACKAGE_') ? displayConfigSymbol(row.symbol, { kind: 'config' }) : displayText(row.symbol),
     });
     const stateBox = document.createElement('span');
     stateBox.className = 'catalog-conflict-state';
@@ -241,7 +255,8 @@ function configurationBlockingViolations(values = menuValues) {
 
 function configurationViolationKey(item = {}) {
   if (item.code === 'package-conflict') {
-    return `${item.code}:${[item.package, item.otherPackage].filter(Boolean).sort().join(':')}`;
+    return `${item.code}:${[item.package, item.otherPackage, ...(item.otherPackages || [])]
+      .filter(Boolean).sort().join(':')}:${item.capability || ''}`;
   }
   if (item.code === 'choice-conflict') {
     return `${item.code}:${item.choice || ''}:${[...(item.symbols || [])].sort().join(',')}`;
@@ -288,9 +303,16 @@ function forcedConfigurationAudit(evaluation) {
     .map((item) => [configurationViolationKey(item), {
       code: String(item.code || 'configuration-invalid'),
       ...(item.symbol ? { symbol: String(item.symbol) } : {}),
-      ...((item.dependency || item.choice || item.otherPackage) ? {
+      ...(item.package ? { package: String(item.package) } : {}),
+      ...(item.otherPackage ? { otherPackage: String(item.otherPackage) } : {}),
+      ...(Array.isArray(item.otherPackages) && item.otherPackages.length ? {
+        otherPackages: [...new Set(item.otherPackages.map((value) => String(value || '').trim()).filter(Boolean))].sort(),
+      } : {}),
+      ...(item.capability ? { capability: String(item.capability) } : {}),
+      ...(item.condition ? { condition: String(item.condition) } : {}),
+      ...((item.dependency || item.choice || item.otherPackage || (Array.isArray(item.otherPackages) && item.otherPackages.length)) ? {
         dependency: String(item.dependency || item.choice ||
-          [item.package, item.otherPackage].filter(Boolean).sort().join(' || ')),
+          [item.package, item.otherPackage, ...(item.otherPackages || [])].filter(Boolean).sort().join(' || ')),
       } : {}),
     }])).values()].slice(0, 64);
   return forced.length ? { schema: 1, ...configurationPreflightIdentity(), forced } : null;
@@ -409,9 +431,9 @@ function openConfigurationPreflightModal(evaluation) {
         const line = document.createElement('div');
         line.className = 'catalog-conflict-row';
         const name = document.createElement('code');
-        name.textContent = displayConfigSymbol(violation.symbol || violation.package || violation.code);
+        name.textContent = displayCompatibilityIdentity(violation);
         const detail = document.createElement('span');
-        detail.textContent = displayText(violation.dependency || violation.code || 'configuration-invalid');
+        detail.textContent = displayCompatibilityDetail(violation);
         line.append(name, detail);
         violationList.appendChild(line);
       }
@@ -919,7 +941,7 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
         line.dataset.symbol = row.record.configSymbol;
         const name = document.createElement('code');
         name.textContent = displayText(row.record.package || row.record.configSymbol);
-        bindUiTooltipContent(name, { body: displayConfigSymbol(row.record.configSymbol) });
+        bindUiTooltipContent(name, { body: displayConfigSymbol(row.record.configSymbol, { kind: 'config' }) });
         const stateBox = document.createElement('span');
         stateBox.className = 'catalog-conflict-state';
         for (const stateValue of ['n', 'm', 'y']) {

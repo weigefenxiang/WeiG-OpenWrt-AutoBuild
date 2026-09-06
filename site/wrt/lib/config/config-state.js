@@ -31,7 +31,7 @@ function normalizeImportedKconfigValue(entry, type = 'bool', fallbackValue = '')
   }
   let value = String(entry?.value ?? '');
   if (normalizedType === 'string' && /^"(?:[^"\\]|\\.)*"$/.test(value)) {
-    try { value = JSON.parse(value); } catch (error) { /* keep the raw literal */ }
+    value = CATALOG_ENGINE.decodeKconfigString(value);
   }
   return normalizeKconfigValueByType(value, normalizedType);
 }

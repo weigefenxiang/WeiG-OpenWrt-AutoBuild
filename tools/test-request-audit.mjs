@@ -9,7 +9,8 @@ const valid = {
     sourceCommit: 'b'.repeat(40), target: 'x86/64/DEVICE_generic',
     forced: [{
       code: 'package-dependency-unsatisfied', symbol: 'PACKAGE_libffmpeg-full',
-      dependency: 'lame-lib',
+      dependency: 'lame-lib', condition: 'USE_FFMPEG', package: 'libffmpeg-full',
+      otherPackage: 'lame-lib', otherPackages: ['lame-lib', 'libavcodec'], capability: 'ffmpeg-api',
     }],
   },
   compatibility: {

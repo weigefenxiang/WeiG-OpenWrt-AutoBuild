@@ -20,6 +20,7 @@ const uiSession = readFileSync(join(root, 'site', 'wrt', 'lib', 'ui-session-stat
 const uiComponents = readFileSync(join(root, 'site', 'wrt', 'lib', 'ui-components.js'), 'utf8');
 const pageShell = readFileSync(join(root, 'site', 'wrt', 'lib', 'page-shell-ui.js'), 'utf8');
 const packageProbeV3 = readFileSync(join(root, 'site', 'wrt', 'lib', 'package-probe-v3-ui.js'), 'utf8');
+const compatibilityController = readFileSync(join(root, 'site', 'wrt', 'lib', 'menuconfig', 'compatibility-controller.js'), 'utf8');
 const uiComponentsCss = readFileSync(join(root, 'site', 'wrt', 'ui-components.css'), 'utf8');
 const siteConfig = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'config', 'site.json'), 'utf8'));
 const catalogLoading = siteConfig.catalog?.loading || {};
@@ -280,6 +281,13 @@ expect(!uiSession.includes('compatibilityRememberDefault') &&
   css.includes('.compatibility-remember{display:inline-flex;') &&
   !css.includes('.st-option.compatibility-remember'),
   'force-confirm remember-choice control, page-session default, tooltip, or non-persistence regressed');
+
+expect(compatibilityController.includes('function configurationViolationKey(item = {})') &&
+  compatibilityController.includes('item.capability ||') &&
+  compatibilityController.includes('item.package ? { package: String(item.package) }') &&
+  compatibilityController.includes('otherPackages: [...new Set(item.otherPackages.map') &&
+  compatibilityController.includes('capability: String(item.capability)'),
+  'forced configuration audit dropped package-conflict package/provider/capability identity');
 
 expect(app.includes('function applySourceDefaults() {') &&
   app.includes("if (state.source.id === 'lede') {") &&

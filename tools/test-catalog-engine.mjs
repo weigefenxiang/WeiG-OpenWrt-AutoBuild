@@ -4,11 +4,13 @@ import {
   applyUserIntent,
   compatibilityAcknowledgementKey,
   createCatalogModel,
+  expandCompactRelations,
   createCatalogValidationContext,
   deriveConfigurationRepairPlan,
   deriveCompatibilityPlans,
   deriveKconfigPrerequisitePlans,
   evaluateCompatibilityRules,
+  evaluateExpression,
   evaluateExpressionState,
   kconfigStateConstraints,
   normalizeCompatibilityDocument,
@@ -16,6 +18,7 @@ import {
   normalizeKconfigStateValue,
   orderCatalogIndex,
   resolveKconfigDefault,
+  REQUIRED_KCONFIG_RELATION_CAPABILITIES,
   preferredCatalogTarget,
   reconcileKconfigDerivedValues,
   resolveCatalogUserOverride,
@@ -24,6 +27,7 @@ import {
   validateConfig,
 } from '../site/wrt/lib/catalog-engine.js';
 import { safeCatalogDataRef } from '../site/wrt/lib/catalog-loader.js';
+import { createRuntimeMenu } from '../site/wrt/lib/catalog-schema6.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -33,6 +37,93 @@ function expectThrow(fn, pattern, message) {
   try { fn(); } catch (error) { thrown = error; }
   assert(thrown && pattern.test(String(thrown.message || thrown)), message);
 }
+
+// Expression parsing is fail-closed at both layers: the lexer retains every
+// source character, and the parser cannot accept a valid prefix followed by
+// an illegal character, operand, or unmatched parenthesis.
+for (const expression of ['CONFIG_A trailing', 'CONFIG_A?', 'CONFIG_A &&', '(CONFIG_A', 'CONFIG_A)']) {
+  assert(evaluateExpressionState(expression, new Map([['CONFIG_A', 'y']])).status === 'deferred' &&
+    evaluateExpression(expression, new Map([['CONFIG_A', 'y']])) === -1,
+  `malformed typed expression was promoted from UNKNOWN: ${expression}`);
+}
+assert(evaluateExpressionState('CONFIG_A && !CONFIG_B', new Map([
+  ['CONFIG_A', 'y'], ['CONFIG_B', 'n'],
+])).status === 'satisfied', 'valid typed expression did not consume all operands');
+assert(evaluateExpressionState('@PACKAGE_missing', new Map()).status === 'unsatisfied',
+  'source-domain @ was not ignored consistently with the Catalog AST lexer');
+
+// Typed expression operands must follow native scripts/config semantics.  In
+// particular, scalar symbols are tristate N when used bare, while comparisons
+// use the declared type and exact integer values instead of Number rounding.
+const typedOperandOptions = {
+  symbolTypes: new Map([
+    ['SCALAR_STRING', 'string'], ['SCALAR_INT', 'int'], ['SCALAR_HEX', 'hex'],
+    ['BOOL_VALUE', 'bool'], ['TRI_VALUE', 'tristate'],
+  ]),
+  undefinedSymbols: new Map([['PROVEN_MISSING', {
+    symbol: 'OWNER', missing: 'PROVEN_MISSING', reason: 'undefined-kconfig-symbol',
+    nativeType: 'unknown', booleanValue: 'n', stringValue: 'PROVEN_MISSING',
+  }]]),
+};
+const typedOperandValues = new Map([
+  ['SCALAR_STRING', 'alpha'], ['SCALAR_INT', '9007199254740993'], ['SCALAR_HEX', '0x10'],
+  ['BOOL_VALUE', 'y'], ['TRI_VALUE', 'm'],
+]);
+assert(evaluateExpressionState('SCALAR_STRING', typedOperandValues, typedOperandOptions).level === 0 &&
+  evaluateExpressionState('SCALAR_INT', typedOperandValues, typedOperandOptions).level === 0 &&
+  evaluateExpressionState('BOOL_VALUE', typedOperandValues, typedOperandOptions).level === 2 &&
+  evaluateExpressionState('TRI_VALUE', typedOperandValues, typedOperandOptions).level === 1,
+  'typed bare symbol semantics diverged from native tristate evaluation');
+assert(evaluateExpression('SCALAR_INT = 9007199254740993', typedOperandValues, typedOperandOptions) === 2 &&
+  evaluateExpression('SCALAR_INT > 9007199254740992', typedOperandValues, typedOperandOptions) === 2 &&
+  evaluateExpression('SCALAR_INT = 9007199254740992', typedOperandValues, typedOperandOptions) === 0 &&
+  evaluateExpression('SCALAR_STRING = "alpha # not a comment"', new Map([['SCALAR_STRING', 'alpha # not a comment']]), typedOperandOptions) === 2 &&
+  evaluateExpression('SCALAR_STRING = "alpha" # source comment', typedOperandValues, typedOperandOptions) === 2,
+  'typed comparison lost scalar type or integer precision');
+assert(evaluateExpressionState('PROVEN_MISSING', new Map(), typedOperandOptions).level === 0 &&
+  evaluateExpression('PROVEN_MISSING = "PROVEN_MISSING"', new Map(), typedOperandOptions) === 2 &&
+  evaluateExpressionState('UNPROVEN_MISSING', new Map(), typedOperandOptions).status === 'deferred',
+  'proven undefined Kconfig symbols were not separated from unknown data');
+
+const typedCapabilities = [...REQUIRED_KCONFIG_RELATION_CAPABILITIES];
+const typedComparisonExpression = 'SCALAR_INT > 9007199254740992 # source comment';
+const typedComparisonAst = { raw: typedComparisonExpression, complete: true, ast: {
+  kind: 'compare', operator: '>', left: { kind: 'symbol', name: 'SCALAR_INT' },
+  right: { kind: 'literal', value: '9007199254740992', raw: '9007199254740992' },
+} };
+const typedValidationCatalog = {
+  schema: 6, targets: [],
+  relations: {
+    schema: 2, relationsComplete: true, capabilities: typedCapabilities,
+    validation: {
+      kconfigSymbolProof: { complete: true },
+      kconfigUndefinedSymbols: [{
+        symbol: 'PACKAGE_typed-target', missing: 'PROVEN_MISSING',
+        reason: 'undefined-kconfig-symbol', nativeType: 'unknown', booleanValue: 'n', stringValue: 'PROVEN_MISSING',
+      }],
+    },
+    records: [
+      { kind: 'config', configSymbol: 'SCALAR_INT', type: 'int', states: [], visible: false },
+      { kind: 'package', package: 'typed-target', configSymbol: 'PACKAGE_typed-target', type: 'bool', states: ['n', 'y'],
+        kconfig: { dependsExpressions: [[typedComparisonExpression]], dependsAstVariants: [[typedComparisonAst]] } },
+      { kind: 'package', package: 'undefined-target', configSymbol: 'PACKAGE_undefined-target', type: 'bool', states: ['n', 'y'],
+        kconfig: { dependsExpressions: [['PROVEN_MISSING']], dependsAstVariants: [[{
+          raw: 'PROVEN_MISSING', complete: true, ast: { kind: 'symbol', name: 'PROVEN_MISSING' },
+        }]] } },
+    ],
+  },
+};
+const typedValidationModel = createCatalogModel(typedValidationCatalog);
+const typedValidation = validateConfig(typedValidationModel, new Map([
+  ['SCALAR_INT', '9007199254740993'], ['PACKAGE_typed-target', 'y'], ['PACKAGE_undefined-target', 'y'],
+]), { deferred: 'report' });
+assert(!typedValidation.some((item) => item.package === 'typed-target' && item.code === 'kconfig-dependency-unsatisfied') &&
+  typedValidation.some((item) => item.package === 'undefined-target' && item.code === 'kconfig-dependency-unsatisfied') &&
+  !typedValidation.some((item) => item.package === 'undefined-target' && item.deferred),
+  'AST/raw typed proof did not share operand semantics or consume proven undefined metadata');
+assert(!typedValidationModel.bySymbol.has('PROVEN_MISSING') &&
+  typedValidationModel.undefinedKconfigSymbols.has('PROVEN_MISSING'),
+  'proven undefined symbol was incorrectly materialized as a configuration record');
 
 const overrideMutationCases = [
   { inherited: 'n', requested: 'y', expected: 'y', label: 'bool enable' },
@@ -170,6 +261,564 @@ const compactModel = createCatalogModel({
 assert(compactModel.byPackage.get('compact-addon')?.configSymbol === 'PACKAGE_compact-addon' &&
   compactModel.bySymbol.get('PACKAGE_compact-addon')?.states.join(',') === 'n,m,y',
   'compact relations schema 3 was not decoded into the canonical engine model');
+
+// Schema 4 keeps the typed/default/visibility/provider tables addressable by
+// field name. This fixture intentionally uses the full producer field order so
+// a shifted column cannot silently turn a virtual capability into a Kconfig
+// symbol or discard a package dependency.
+const compactRelationsFields = [
+  'symbolId', 'flags', 'typeCode', 'originCode', 'statesMask', 'choiceId', 'defaultsId',
+  'dependsVariantsId', 'selectsVariantsId', 'impliesVariantsId', 'packageDependenciesId',
+  'providesId', 'conflictsId', 'packageConflictsId', 'kconfigConflictsId', 'typedDefaultsId', 'rangesId',
+  'promptIfId', 'promptConditionsId',
+  'visibleIfId', 'menuVisibleIfId', 'directDependsId', 'inheritedDependsId', 'directVisibleIfId',
+  'inheritedVisibleIfId', 'inheritedMenuVisibleIfId', 'optionFlagsId', 'optionsId', 'definitionsId',
+  'capabilityRelationsId',
+];
+const compactRelationsV4 = {
+  schema: 4,
+  fields: compactRelationsFields,
+  flags: { visible: 1, userSettable: 2, canDisable: 4, hasKconfig: 8, package: 16 },
+  types: ['', 'bool', 'tristate', 'string', 'int', 'hex'],
+  origins: ['', 'kconfig-only', 'kconfig+packageinfo', 'hidden-kconfig-only',
+    'hidden-kconfig+packageinfo', 'packageinfo-only'],
+  valueKinds: ['', 'literal', 'expression', 'unknown'],
+  relationCapabilities: [
+    'kconfig-expression-ast-v1', 'typed-kconfig-v1', 'conditional-defaults-v1', 'conditional-ranges-v1',
+    'visibility-conditions-v1', 'choice-relations-v1', 'choice-reset-conditions-v1', 'module-semantics-v1',
+    'typed-package-capabilities-v1', 'alternatives-v1', 'forward-reverse-edges-v1',
+    'complete-kconfig-relations-v1',
+  ],
+  relationsComplete: true,
+  packageClosureComplete: true,
+  packageClosureCapabilities: ['packageinfo-dependencies-v1', 'packageinfo-alternatives-v1',
+    'packageinfo-conditions-v1', 'packageinfo-virtual-providers-v1',
+    'package-forward-reverse-edges-v1', 'complete-package-build-closure-v1'],
+  strings: ['PACKAGE_provider', 'PACKAGE_consumer', 'virtual-api', 'CONFIG_GATE', 'hello', '1', '4', 'hello if CONFIG_GATE'],
+  expressions: ['CONFIG_GATE'],
+  stringLists: [[], [2], [0], [3]],
+  expressionLists: [[], [0]],
+  expressionVariants: [[], [1]],
+  defaults: [[], [[4, 0, 7]]],
+  typedDefaults: [[], [{ typeCode: 3, value: 'hello', rawId: 4, conditionId: -1,
+    valueKindCode: 1, valid: true, precise: true }]],
+  ranges: [[], [{ typeCode: 4, min: '1', max: '4', minRawId: 5, maxRawId: 6,
+    rawId: 5, conditionId: -1, minKindCode: 1, maxKindCode: 1, valid: true }]],
+  packageDependencies: [[], [{ raw: '+provider', required: true, kind: 'package',
+    condition: '', packages: ['provider'], targets: [] }]],
+  capabilities: [
+    { provides: [], conflicts: [] },
+    { provides: [{ raw: 'virtual-api', name: 'virtual-api', kind: 'virtual',
+      providers: ['provider'], effectiveProviders: ['provider'], ownerSelf: false }], conflicts: [] },
+  ],
+  kconfigConflicts: [[]],
+  definitions: [[]],
+  choices: [{ id: 'COMPACT_CHOICE', type: 'bool', members: ['COMPACT_A'],
+    resetIf: ['CONFIG_GATE'],
+    resetIfAst: [{ raw: 'CONFIG_GATE', ast: { kind: 'symbol', name: 'CONFIG_GATE' }, complete: true }] }],
+  numberLists: [[]],
+  edges: [],
+  indexes: { providers: [[2, 2]], reverseDependencies: [], reverseKconfig: [],
+    reverseSelects: [], reverseImplies: [], choices: [], forwardEdges: [], reverseEdges: [] },
+  records: [
+    [0, 31, 2, 2, 7, -1, 0, 0, 0, 0, 1, 0, 0, -1, -1, -1, -1, -1, -1, -1,
+      -1, -1, -1, -1, -1, -1, -1, -1, -1, 1],
+    [1, 31, 2, 2, 7, -1, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1,
+      -1, -1, -1, -1, -1, -1, -1, -1, -1, 0],
+    [3, 8, 3, 1, 0, -1, 1, 0, 0, 0, 0, 0, 0, -1, -1, 1, 1, -1, -1, -1,
+      -1, -1, -1, -1, -1, -1, -1, -1, -1, 0],
+  ],
+};
+const expandedRelationsV4 = expandCompactRelations(compactRelationsV4);
+assert(expandedRelationsV4.relationsComplete === true &&
+  expandedRelationsV4.records.find((record) => record.package === 'provider')
+    ?.packageInfo.providesRelations[0]?.name === 'virtual-api' &&
+  expandedRelationsV4.records.find((record) => record.package === 'provider')
+    ?.packageInfo.dependencyRelations[0]?.packages[0] === 'provider' &&
+  expandedRelationsV4.records.find((record) => record.configSymbol === 'CONFIG_GATE')
+    ?.defaults?.[0] === 'hello if CONFIG_GATE' &&
+  expandedRelationsV4.records.find((record) => record.configSymbol === 'CONFIG_GATE')
+    ?.defaultsTyped[0]?.value === 'hello' &&
+  expandedRelationsV4.choices[0]?.resetIf?.[0] === 'CONFIG_GATE' &&
+  expandedRelationsV4.choices[0]?.resetIfAst?.[0]?.ast?.name === 'CONFIG_GATE',
+  'compact relations schema 4 did not preserve typed fields and capability relations');
+
+const multiDefinitionRecord = [...compactRelationsV4.records[2]];
+multiDefinitionRecord[28] = 1;
+const multiDefinitionAst = (name) => ({ raw: name, complete: true,
+  ast: { kind: 'symbol', name } });
+const multiDefinitionRelations = expandCompactRelations({
+  ...compactRelationsV4,
+  strings: [...compactRelationsV4.strings, 'OTHER_GATE'],
+  definitions: [[], [
+    { dependsAst: [multiDefinitionAst('CONFIG_GATE')], directDependsAst: [multiDefinitionAst('CONFIG_GATE')],
+      inheritedDependsAst: [multiDefinitionAst('CONFIG_GATE')], promptIfAst: [multiDefinitionAst('CONFIG_GATE')],
+      visibleIfAst: [multiDefinitionAst('CONFIG_GATE')], menuVisibleIfAst: [multiDefinitionAst('CONFIG_GATE')],
+      directVisibleIfAst: [multiDefinitionAst('CONFIG_GATE')], inheritedVisibleIfAst: [multiDefinitionAst('CONFIG_GATE')],
+      inheritedMenuVisibleIfAst: [multiDefinitionAst('CONFIG_GATE')] },
+    { dependsAst: [multiDefinitionAst('OTHER_GATE')], directDependsAst: [multiDefinitionAst('OTHER_GATE')],
+      inheritedDependsAst: [multiDefinitionAst('OTHER_GATE')], promptIfAst: [multiDefinitionAst('OTHER_GATE')],
+      visibleIfAst: [multiDefinitionAst('OTHER_GATE')], menuVisibleIfAst: [multiDefinitionAst('OTHER_GATE')],
+      directVisibleIfAst: [multiDefinitionAst('OTHER_GATE')], inheritedVisibleIfAst: [multiDefinitionAst('OTHER_GATE')],
+      inheritedMenuVisibleIfAst: [multiDefinitionAst('OTHER_GATE')] },
+  ]],
+  records: [multiDefinitionRecord],
+});
+const multiDefinitionDecoded = multiDefinitionRelations.records[0];
+assert(multiDefinitionDecoded.dependsAst?.[0]?.raw === 'CONFIG_GATE' &&
+  multiDefinitionDecoded.dependsAstVariants?.length === 2 &&
+  multiDefinitionDecoded.dependsAstVariants[1]?.[0]?.raw === 'OTHER_GATE' &&
+  multiDefinitionDecoded.promptIfAst?.[0]?.raw === 'CONFIG_GATE' &&
+  multiDefinitionDecoded.promptIfAst?.length === 1,
+  'schema 4 multi-definition aggregate duplicated variants instead of using firstDefinition');
+const compactV4Model = createCatalogModel({ schema: 6, targets: [], relations: compactRelationsV4 });
+assert(compactV4Model.relationsComplete === true && compactV4Model.relationCapabilities.includes('complete-kconfig-relations-v1'),
+  'schema 4 complete relation capability was not propagated to the canonical model');
+assert(compactV4Model.packageClosureComplete === true &&
+  compactV4Model.packageClosureCapabilities.includes('complete-package-build-closure-v1'),
+  'schema 4 narrow package closure capability was not propagated to the canonical model');
+
+// Schema-4 AST envelopes are canonicalized for every condition surface and
+// evaluated through the same tri-state proof path as raw expressions. A
+// producer-declared typed graph must not fall back to a raw condition when its
+// AST is absent, incomplete, or inconsistent with that raw spelling.
+const astCondition = (raw, ast, complete = true) => ({ raw, ast, complete });
+const schema4ConditionModel = createCatalogModel({ schema: 6, targets: [], relations: {
+  schema: 2, relationsComplete: true, relationCapabilities: [...REQUIRED_KCONFIG_RELATION_CAPABILITIES],
+  records: [
+    { kind: 'config', configSymbol: 'AST_GATE', kconfigSymbol: 'AST_GATE', type: 'bool', states: ['n', 'y'] },
+    { kind: 'config', configSymbol: 'AST_VISIBLE', kconfigSymbol: 'AST_VISIBLE', type: 'bool', states: ['n', 'y'],
+      visibleIf: ['AST_GATE'], visibleIfAst: [astCondition('AST_GATE', { kind: 'symbol', name: 'AST_GATE' })] },
+    { kind: 'config', configSymbol: 'AST_PROMPT', kconfigSymbol: 'AST_PROMPT', type: 'bool', states: ['n', 'y'],
+      promptIf: ['AST_GATE'], promptIfAst: [astCondition('AST_GATE', { kind: 'symbol', name: 'AST_GATE' })] },
+    { kind: 'config', configSymbol: 'AST_MENU', kconfigSymbol: 'AST_MENU', type: 'bool', states: ['n', 'y'],
+      menuVisibleIf: ['AST_GATE'], menuVisibleIfAst: [astCondition('AST_GATE', { kind: 'symbol', name: 'AST_GATE' })] },
+    { kind: 'config', configSymbol: 'AST_CHOICE_A', kconfigSymbol: 'AST_CHOICE_A', type: 'bool', states: ['n', 'y'], choice: 'AST_CHOICE' },
+  ],
+  choices: [{ id: 'AST_CHOICE', type: 'bool', members: ['AST_CHOICE_A'], depends: ['AST_GATE'],
+    dependsAst: [astCondition('AST_GATE', { kind: 'symbol', name: 'AST_GATE' })],
+    promptIf: ['AST_GATE'], promptIfAst: [astCondition('AST_GATE', { kind: 'symbol', name: 'AST_GATE' })],
+    visibleIf: ['AST_GATE'], visibleIfAst: [astCondition('AST_GATE', { kind: 'symbol', name: 'AST_GATE' })],
+    menuVisibleIf: ['AST_GATE'], menuVisibleIfAst: [astCondition('AST_GATE', { kind: 'symbol', name: 'AST_GATE' })] }],
+  indexes: { choices: { AST_CHOICE: ['AST_CHOICE_A'] } },
+} });
+const astEnabledValues = new Map([
+  ['AST_GATE', 'y'], ['AST_VISIBLE', 'y'], ['AST_PROMPT', 'y'], ['AST_MENU', 'y'], ['AST_CHOICE_A', 'y'],
+]);
+assert(validateConfig(schema4ConditionModel, astEnabledValues, { deferred: 'error' }).length === 0,
+  'schema-4 prompt/visible/menu/choice ASTs did not agree with their raw expressions');
+const astDisabledValues = new Map(astEnabledValues).set('AST_GATE', 'n');
+assert(validateConfig(schema4ConditionModel, astDisabledValues).filter((item) =>
+  item.code === 'kconfig-visibility-unsatisfied').length === 0 &&
+  validateConfig(schema4ConditionModel, astDisabledValues).some((item) => item.code === 'choice-dependency-unsatisfied'),
+  'visibility must not invalidate native values, while choice dependencies remain enforced');
+for (const symbol of ['AST_VISIBLE', 'AST_PROMPT', 'AST_MENU']) {
+  const constraints = kconfigStateConstraints(schema4ConditionModel,
+    schema4ConditionModel.bySymbol.get(symbol), astDisabledValues);
+  assert(constraints.readOnly && constraints.selectableStates.length === 0 &&
+    constraints.visibilityViolations.some((item) => item.code === 'kconfig-visibility-unsatisfied'),
+    'hidden prompts must prevent direct menu edits without invalidating native values');
+  expectThrow(() => applyUserIntent(schema4ConditionModel, astDisabledValues, { symbol, value: 'n' }),
+    /cannot be set/, 'a hidden prompt allowed a manual edit');
+}
+const incompleteAstModel = createCatalogModel({ schema: 6, targets: [], relations: {
+  schema: 2, relationsComplete: true, relationCapabilities: [...REQUIRED_KCONFIG_RELATION_CAPABILITIES],
+  records: [{ kind: 'config', configSymbol: 'AST_GATE', kconfigSymbol: 'AST_GATE', type: 'bool', states: ['n', 'y'] },
+    { kind: 'config', configSymbol: 'AST_VISIBLE', kconfigSymbol: 'AST_VISIBLE', type: 'bool', states: ['n', 'y'],
+      visibleIf: ['AST_GATE'], visibleIfAst: [astCondition('AST_GATE', null, false)] }], indexes: {},
+} });
+assert(kconfigStateConstraints(incompleteAstModel, incompleteAstModel.bySymbol.get('AST_VISIBLE'),
+  new Map([['AST_GATE', 'y'], ['AST_VISIBLE', 'y']])).visibilityViolations
+  .some((item) => item.code === 'kconfig-visibility-deferred' && item.deferred === true),
+  'typed visibility with an incomplete AST silently fell back to raw evaluation');
+const inconsistentAstModel = createCatalogModel({ schema: 6, targets: [], relations: {
+  schema: 2, relationsComplete: true, relationCapabilities: [...REQUIRED_KCONFIG_RELATION_CAPABILITIES],
+  records: [{ kind: 'config', configSymbol: 'AST_GATE', kconfigSymbol: 'AST_GATE', type: 'bool', states: ['n', 'y'] },
+    { kind: 'config', configSymbol: 'AST_VISIBLE', kconfigSymbol: 'AST_VISIBLE', type: 'bool', states: ['n', 'y'],
+      visibleIf: ['AST_GATE'], visibleIfAst: [astCondition('AST_GATE', { kind: 'symbol', name: 'OTHER_GATE' })] }], indexes: {},
+} });
+assert(kconfigStateConstraints(inconsistentAstModel, inconsistentAstModel.bySymbol.get('AST_VISIBLE'),
+  new Map([['AST_GATE', 'y'], ['AST_VISIBLE', 'y']])).visibilityViolations
+  .some((item) => item.code === 'kconfig-visibility-deferred'),
+  'raw/AST visibility mismatch was treated as a valid condition');
+
+const absentScalarModel = createCatalogModel({ schema: 6, relations: { schema: 2, records:
+  ['string', 'int', 'hex'].map((type) => ({ kind: 'config', configSymbol: `ABSENT_${type}`,
+    kconfigSymbol: `ABSENT_${type}`, type, kconfig: { dependsExpressions: [['UNRESOLVED_GATE']] } })) } });
+assert(validateConfig(absentScalarModel, new Map(), { deferred: 'error' }).length === 0,
+  'an absent native scalar was validated as an enabled user value');
+
+const normalizedRelationModel = createCatalogModel({ schema: 6, targets: [], relations: {
+  schema: 2, relationsComplete: true, relationCapabilities: [...REQUIRED_KCONFIG_RELATION_CAPABILITIES],
+  records: [
+    { kind: 'config', configSymbol: 'REL_SOURCE', kconfigSymbol: 'REL_SOURCE', type: 'bool', states: ['n', 'y'],
+      kconfig: { selectRelations: [{ target: 'REL_TARGET' }, { symbol: 'REL_TARGET' }, { name: 'REL_TARGET' }] } },
+    { kind: 'config', configSymbol: 'REL_TARGET', kconfigSymbol: 'REL_TARGET', type: 'bool', states: ['n', 'y'] },
+    { kind: 'config', configSymbol: 'REL_MISSING', kconfigSymbol: 'REL_MISSING', type: 'bool', states: ['n', 'y'],
+      kconfig: { implyRelations: [{ condition: 'REL_TARGET' }] } },
+  ], indexes: {},
+} });
+assert(normalizedRelationModel.bySymbol.get('REL_SOURCE').selectRelations.every((row) =>
+  row.target === 'REL_TARGET' && row.symbol === 'REL_TARGET' && row.name === 'REL_TARGET'),
+  'select relation target/symbol/name fields were not normalized to one identity');
+assert(validateConfig(normalizedRelationModel, new Map([['REL_MISSING', 'y']]), { deferred: 'error' })
+  .some((item) => item.code === 'kconfig-relation-deferred' && item.reason === 'missing-target'),
+  'a typed select/imply relation with no target was silently skipped');
+
+// A virtual capability is only a provider namespace.  It must never become a
+// synthetic CONFIG_/PACKAGE_ symbol or a selectable/probe package of its own.
+const virtualIdentityModel = createCatalogModel({ schema: 5, targets: [], relations: {
+  schema: 2,
+  records: [
+    { kind: 'virtual', name: 'libudev', configSymbol: 'libudev', package: 'libudev' },
+    { kind: 'package', package: 'libudev-zero', configSymbol: 'PACKAGE_libudev-zero',
+      kconfigSymbol: 'PACKAGE_libudev-zero', states: ['n', 'y'],
+      packageInfo: { provides: ['libudev'] } },
+  ], indexes: { providers: { libudev: ['libudev-zero'] }, reverseDependencies: {}, reverseKconfig: {}, choices: {} },
+} });
+assert(!virtualIdentityModel.bySymbol.has('libudev') && !virtualIdentityModel.byPackage.has('libudev') &&
+  virtualIdentityModel.byPackage.get('libudev-zero')?.packageInfo.provides.includes('libudev'),
+  'virtual capability was promoted to a synthetic Kconfig/package identity');
+
+// Choice metadata and MODULES are part of the same shared evaluator contract:
+// a tristate member may be M only while MODULES is enabled, and a choice's
+// own dependency/default must be evaluated before package compatibility rules.
+const choiceModulesModel = createCatalogModel({ schema: 6, targets: [], relations: {
+  schema: 2,
+  records: [
+    { kind: 'config', configSymbol: 'MODULES', kconfigSymbol: 'MODULES', type: 'bool', states: ['n', 'y'] },
+    { kind: 'config', configSymbol: 'CHOICE_GATE', kconfigSymbol: 'CHOICE_GATE', type: 'bool', states: ['n', 'y'] },
+    { kind: 'package', package: 'choice-a', configSymbol: 'PACKAGE_choice-a',
+      kconfigSymbol: 'PACKAGE_choice-a', type: 'tristate', states: ['n', 'm', 'y'], choice: 'C_MODE' },
+    { kind: 'package', package: 'choice-b', configSymbol: 'PACKAGE_choice-b',
+      kconfigSymbol: 'PACKAGE_choice-b', type: 'tristate', states: ['n', 'm', 'y'], choice: 'C_MODE' },
+  ],
+  choices: [{ id: 'C_MODE', type: 'tristate', optional: false, modules: true,
+    depends: ['CHOICE_GATE'], defaults: ['PACKAGE_choice-a'] }],
+  indexes: { providers: {}, reverseDependencies: {}, reverseKconfig: {}, choices: {
+    C_MODE: ['PACKAGE_choice-a', 'PACKAGE_choice-b'],
+  } },
+  validation: { relationsComplete: true },
+} });
+const moduleOff = parseConfigDocument([
+  'CONFIG_MODULES=n', 'CONFIG_PACKAGE_choice-a=m', 'CONFIG_CHOICE_GATE=y',
+].join('\n'));
+assert(kconfigStateConstraints(choiceModulesModel, choiceModulesModel.bySymbol.get('PACKAGE_choice-a'), moduleOff)
+  .legalStates.join(',') === 'n,y' && validateConfig(choiceModulesModel, moduleOff)
+    .some((item) => item.code === 'kconfig-modules-unsatisfied'),
+  'MODULES=n did not remove M from tristate states and report an imported M value');
+const moduleOn = parseConfigDocument([
+  'CONFIG_MODULES=y', 'CONFIG_PACKAGE_choice-a=m', 'CONFIG_CHOICE_GATE=y',
+].join('\n'));
+assert(kconfigStateConstraints(choiceModulesModel, choiceModulesModel.bySymbol.get('PACKAGE_choice-a'), moduleOn)
+  .legalStates.join(',') === 'n,m,y' && !validateConfig(choiceModulesModel, moduleOn)
+    .some((item) => item.code === 'kconfig-modules-unsatisfied'),
+  'MODULES=y incorrectly rejected a tristate M value');
+const blockedChoice = parseConfigDocument([
+  'CONFIG_MODULES=y', 'CONFIG_PACKAGE_choice-a=y', 'CONFIG_CHOICE_GATE=n',
+].join('\n'));
+assert(validateConfig(choiceModulesModel, blockedChoice).some((item) =>
+  item.code === 'choice-dependency-unsatisfied' && item.choice === 'C_MODE'),
+  'choice dependency condition was not validated by the shared evaluator');
+const choiceRule = { schema: 4, rules: [{ id: 'CHOICE-DEFAULT', issue: 'build-failure', match: 'all-selected',
+  scope: { Demo: ['stable'] }, sourceCommits: ['a'.repeat(40)], packages: ['choice-a'], refs: ['run:choice'],
+  failure: { phase: 'package-compile', cause: 'package-caused', code: 'fixture-choice' } }] };
+const choiceDefaultResult = evaluateCompatibilityRules(choiceModulesModel, choiceRule,
+  parseConfigDocument('CONFIG_MODULES=y\nCONFIG_CHOICE_GATE=y\n'), {
+    sourceId: 'Demo', branchName: 'stable', sourceCommit: 'a'.repeat(40),
+  });
+assert(choiceDefaultResult.values.get('PACKAGE_choice-a') === 'y' && choiceDefaultResult.warnings.length === 1,
+  'choice default was not materialized before compatibility evaluation');
+
+// A package-only buildDependency rule is triggered by a graph path even when
+// the failed target is currently N. The graph uses a required package/Kconfig
+// edge, preserves the failed target in the plan, and does not need a manual
+// triggerPackages list.
+const graphDependencyModel = createCatalogModel({ schema: 6, targets: [], relations: {
+  schema: 2,
+  records: [
+    { kind: 'package', package: 'docker', configSymbol: 'PACKAGE_docker',
+      kconfigSymbol: 'PACKAGE_docker', states: ['n', 'y'],
+      packageInfo: { depends: [{ raw: '+dockerd', required: true, packages: ['dockerd'] }] } },
+    { kind: 'package', package: 'dockerd', configSymbol: 'PACKAGE_dockerd',
+      kconfigSymbol: 'PACKAGE_dockerd', states: ['n', 'y'] },
+  ],
+    indexes: { providers: {}, reverseDependencies: {}, reverseKconfig: {}, choices: {} },
+    packageClosureComplete: true,
+    packageClosureCapabilities: ['complete-package-build-closure-v1'],
+    validation: { relationsComplete: false },
+} });
+const graphDependencyRule = {
+  schema: 4,
+  rules: [{ id: 'BLD-GRAPH', issue: 'build-failure', match: 'all-selected',
+    scope: { Demo: ['stable'] }, sourceCommits: ['a'.repeat(40)], packages: ['dockerd'],
+    refs: ['run:graph'],
+    failure: { phase: 'package-compile', cause: 'package-caused', code: 'fixture-graph' },
+    buildDependency: { package: 'dockerd' } }],
+};
+const graphDependencyValues = parseConfigDocument([
+  'CONFIG_PACKAGE_docker=y', '# CONFIG_PACKAGE_dockerd is not set',
+].join('\n'));
+const graphDependencyContext = { sourceId: 'Demo', branchName: 'stable', sourceCommit: 'a'.repeat(40) };
+const graphDependencyWarning = evaluateCompatibilityRules(
+  graphDependencyModel, graphDependencyRule, graphDependencyValues, graphDependencyContext,
+).warnings[0];
+assert(graphDependencyModel.relationsComplete === false && graphDependencyModel.packageClosureComplete === true &&
+  graphDependencyWarning?.rule.buildDependency.legacy === false &&
+  graphDependencyWarning.records.map((record) => record.package).join(',') === 'dockerd',
+  'package-only buildDependency did not trigger from an active consumer reaching an N target');
+const graphDependencyPlans = deriveCompatibilityPlans(
+  graphDependencyModel, graphDependencyValues, graphDependencyWarning,
+);
+assert(graphDependencyPlans.recommended?.steps.some((step) => step.package === 'docker') &&
+  graphDependencyPlans.recommended.requiredTargets.some((target) => target.package === 'dockerd') &&
+  evaluateCompatibilityRules(graphDependencyModel, graphDependencyRule,
+    graphDependencyPlans.recommended.values, graphDependencyContext).warnings.length === 0,
+  'graph-derived package-only plan did not disable the active root and failed target atomically');
+
+// Without the explicit narrow closure assertion a package-only rule is
+// inconclusive, even if a readable legacy relation object happens to contain
+// the same package names.
+const incompleteGraphModel = createCatalogModel(structuredClone({
+  schema: 6, targets: [], relations: {
+    schema: 2,
+    records: graphDependencyModel.records,
+    indexes: { providers: {}, reverseDependencies: {}, reverseKconfig: {}, choices: {} },
+    validation: { relationsComplete: false },
+  },
+}));
+const incompleteGraphResult = evaluateCompatibilityRules(
+  incompleteGraphModel, graphDependencyRule, graphDependencyValues, graphDependencyContext,
+);
+assert(incompleteGraphResult.warnings.length === 0,
+  'package-only compatibility warning bypassed the missing package-closure contract');
+
+// OR expressions are alternatives, not a list of mandatory edges. Only the
+// branch that is actually selected may reach the failed package; all-N or
+// unresolved alternatives remain inconclusive and must not warn.
+const graphOrModel = createCatalogModel({ schema: 6, targets: [], relations: {
+  schema: 2,
+  records: [
+    { kind: 'package', package: 'or-consumer', configSymbol: 'PACKAGE_or-consumer',
+      kconfigSymbol: 'PACKAGE_or-consumer', states: ['n', 'y'],
+      kconfig: { dependsExpressions: [['PACKAGE_or-a || PACKAGE_or-b']] } },
+    { kind: 'package', package: 'or-a', configSymbol: 'PACKAGE_or-a',
+      kconfigSymbol: 'PACKAGE_or-a', states: ['n', 'y'] },
+    { kind: 'package', package: 'or-b', configSymbol: 'PACKAGE_or-b',
+      kconfigSymbol: 'PACKAGE_or-b', states: ['n', 'y'] },
+  ],
+  indexes: { providers: {}, reverseDependencies: {}, reverseKconfig: {}, choices: {} },
+  packageClosureComplete: true,
+  packageClosureCapabilities: ['complete-package-build-closure-v1'],
+  validation: { relationsComplete: true },
+} });
+const graphOrRule = {
+  schema: 4,
+  rules: [{ id: 'BLD-OR', issue: 'build-failure', match: 'all-selected',
+    scope: { Demo: ['stable'] }, sourceCommits: ['a'.repeat(40)], packages: ['or-a'],
+    refs: ['run:or'], failure: { phase: 'package-compile', cause: 'package-caused', code: 'fixture-or' },
+    buildDependency: { package: 'or-a' } }],
+};
+const orResult = (a, b) => evaluateCompatibilityRules(graphOrModel, graphOrRule,
+  parseConfigDocument([ 'CONFIG_PACKAGE_or-consumer=y', `CONFIG_PACKAGE_or-a=${a}`,
+    `CONFIG_PACKAGE_or-b=${b}` ].join('\n')), graphDependencyContext);
+assert(orResult('n', 'n').warnings.length === 0 && orResult('n', 'y').warnings.length === 0 &&
+  orResult('y', 'n').warnings.length === 1,
+  'graph planner treated an OR dependency as two unconditional package edges');
+
+// The same alternative is exercised through the schema-4 lossless AST, not
+// only through the legacy expression spelling. This prevents a compact
+// decoder regression from reintroducing static references as mandatory edges.
+const astGraphStrings = ['PACKAGE_ast-consumer', 'PACKAGE_ast-a', 'PACKAGE_ast-b'];
+const astGraphRecord = (symbolId, definitionsId = -1) => [
+  symbolId, 31, 2, 2, 7, -1, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1,
+  -1, -1, -1, -1, -1, -1, -1, -1, definitionsId, 0,
+];
+const astGraphCompact = {
+  ...compactRelationsV4,
+  strings: astGraphStrings,
+  stringLists: [[]], expressionLists: [[]], expressionVariants: [[]], defaults: [[]],
+  typedDefaults: [[]], ranges: [[]], packageDependencies: [[]], capabilities: [{ provides: [], conflicts: [] }],
+  kconfigConflicts: [[]],
+  definitions: [[{ dependsAst: [{ raw: 'PACKAGE_ast-a || PACKAGE_ast-b', complete: true, ast: {
+    kind: 'or', values: [
+      { kind: 'symbol', name: 'PACKAGE_ast-a' }, { kind: 'symbol', name: 'PACKAGE_ast-b' },
+    ],
+  } }] }]],
+  edges: [], numberLists: [],
+  indexes: { providers: [], reverseDependencies: [], reverseKconfig: [], reverseSelects: [],
+    reverseImplies: [], choices: [], forwardEdges: [], reverseEdges: [] },
+  records: [astGraphRecord(0, 0), astGraphRecord(1), astGraphRecord(2)],
+};
+const astOrModel = createCatalogModel({ schema: 6, targets: [], relations: astGraphCompact });
+const astOrRule = { ...graphOrRule, rules: [{ ...graphOrRule.rules[0], packages: ['ast-a'],
+  buildDependency: { package: 'ast-a' } }] };
+const astOrResult = (a, b) => evaluateCompatibilityRules(astOrModel, astOrRule,
+  parseConfigDocument([ 'CONFIG_PACKAGE_ast-consumer=y', `CONFIG_PACKAGE_ast-a=${a}`,
+    `CONFIG_PACKAGE_ast-b=${b}` ].join('\n')), graphDependencyContext);
+assert(astOrResult('n', 'n').warnings.length === 0 && astOrResult('n', 'y').warnings.length === 0 &&
+  astOrResult('y', 'n').warnings.length === 1,
+  'schema-4 AST alternatives were not evaluated as conditional graph edges');
+
+// Package-info conditions are graph predicates, not unconditional reverse
+// references.  An inactive condition must not make an N failed package look
+// reachable; an active condition must produce the same warning/recommendation
+// path as an unconditional dependency.
+const conditionalGraphModel = createCatalogModel({ schema: 6, targets: [], relations: {
+  schema: 2,
+  records: [
+    { kind: 'config', configSymbol: 'GRAPH_CONDITION', kconfigSymbol: 'GRAPH_CONDITION',
+      type: 'bool', states: ['n', 'y'] },
+    { kind: 'package', package: 'conditional-root', configSymbol: 'PACKAGE_conditional-root',
+      kconfigSymbol: 'PACKAGE_conditional-root', states: ['n', 'y'],
+      packageInfo: { depends: [{ raw: '+conditional-failed if GRAPH_CONDITION', required: true,
+        condition: 'GRAPH_CONDITION', packages: ['conditional-failed'] }] } },
+    { kind: 'package', package: 'conditional-failed', configSymbol: 'PACKAGE_conditional-failed',
+      kconfigSymbol: 'PACKAGE_conditional-failed', states: ['n', 'y'] },
+  ],
+  indexes: { providers: {}, reverseDependencies: {}, reverseKconfig: {}, choices: {} },
+  packageClosureComplete: true,
+  packageClosureCapabilities: ['complete-package-build-closure-v1'],
+  validation: { relationsComplete: false },
+} });
+const conditionalGraphRule = {
+  schema: 4,
+  rules: [{ id: 'BLD-CONDITION', issue: 'build-failure', match: 'all-selected',
+    scope: { Demo: ['stable'] }, sourceCommits: ['a'.repeat(40)], packages: ['conditional-failed'],
+    refs: ['run:condition'],
+    failure: { phase: 'package-compile', cause: 'package-caused', code: 'fixture-condition' },
+    buildDependency: { package: 'conditional-failed' } }],
+};
+const conditionalContext = { sourceId: 'Demo', branchName: 'stable', sourceCommit: 'a'.repeat(40) };
+const conditionalResult = (condition) => evaluateCompatibilityRules(conditionalGraphModel,
+  conditionalGraphRule, parseConfigDocument([
+    `CONFIG_GRAPH_CONDITION=${condition}`,
+    'CONFIG_PACKAGE_conditional-root=y', '# CONFIG_PACKAGE_conditional-failed is not set',
+  ].join('\n')), conditionalContext);
+assert(conditionalResult('n').warnings.length === 0 && conditionalResult('y').warnings.length === 1,
+  'package-info condition was not applied to graph reachability');
+
+// Two direct roots may share one dependency.  The graph planner must disable
+// both roots and the failed target, while leaving the shared package untouched
+// so a surviving/independent consumer can continue using it.
+const sharedGraphModel = createCatalogModel({ schema: 6, targets: [], relations: {
+  schema: 2,
+  records: [
+    { kind: 'package', package: 'shared-root-a', configSymbol: 'PACKAGE_shared-root-a',
+      kconfigSymbol: 'PACKAGE_shared-root-a', states: ['n', 'y'],
+      packageInfo: { depends: [
+        { raw: '+shared-graph', required: true, packages: ['shared-graph'] },
+        { raw: '+shared-failed', required: true, packages: ['shared-failed'] },
+      ] } },
+    { kind: 'package', package: 'shared-root-b', configSymbol: 'PACKAGE_shared-root-b',
+      kconfigSymbol: 'PACKAGE_shared-root-b', states: ['n', 'y'],
+      packageInfo: { depends: [{ raw: '+shared-graph', required: true, packages: ['shared-graph'] }] } },
+    { kind: 'package', package: 'shared-graph', configSymbol: 'PACKAGE_shared-graph',
+      kconfigSymbol: 'PACKAGE_shared-graph', states: ['n', 'y'] },
+    { kind: 'package', package: 'shared-failed', configSymbol: 'PACKAGE_shared-failed',
+      kconfigSymbol: 'PACKAGE_shared-failed', states: ['n', 'y'] },
+  ],
+  indexes: { providers: {}, reverseDependencies: {}, reverseKconfig: {}, choices: {} },
+  packageClosureComplete: true,
+  packageClosureCapabilities: ['complete-package-build-closure-v1'],
+  validation: { relationsComplete: false },
+} });
+const sharedGraphRule = {
+  schema: 4,
+  rules: [{ id: 'BLD-SHARED', issue: 'build-failure', match: 'all-selected',
+    scope: { Demo: ['stable'] }, sourceCommits: ['a'.repeat(40)], packages: ['shared-failed'],
+    refs: ['run:shared'],
+    failure: { phase: 'package-compile', cause: 'package-caused', code: 'fixture-shared' },
+    buildDependency: { package: 'shared-failed' } }],
+};
+const sharedGraphValues = parseConfigDocument([
+  'CONFIG_PACKAGE_shared-root-a=y', 'CONFIG_PACKAGE_shared-root-b=y',
+  'CONFIG_PACKAGE_shared-graph=y', '# CONFIG_PACKAGE_shared-failed is not set',
+].join('\n'));
+const sharedGraphWarning = evaluateCompatibilityRules(sharedGraphModel, sharedGraphRule,
+  sharedGraphValues, conditionalContext).warnings[0];
+const sharedGraphPlan = deriveCompatibilityPlans(sharedGraphModel, sharedGraphValues, sharedGraphWarning);
+assert(sharedGraphWarning && sharedGraphPlan.recommended?.steps.map((step) => step.package).join(',') ===
+  'shared-root-a,shared-failed' &&
+  sharedGraphPlan.recommended.requiredTargets.map((target) => target.package).join(',') ===
+    'shared-root-a,shared-failed' &&
+  sharedGraphPlan.recommended.values.get('PACKAGE_shared-graph') === 'y' &&
+  sharedGraphPlan.recommended.values.get('PACKAGE_shared-root-b') === 'y' &&
+  evaluateCompatibilityRules(sharedGraphModel, sharedGraphRule, sharedGraphPlan.recommended.values,
+    conditionalContext).warnings.length === 0,
+  'shared package graph recommendation did not preserve the shared dependency while disabling all roots');
+
+// A package with no path to the failed target must not warn.  If an active
+// path is accompanied by an unresolved conditional relation, the result is
+// likewise fail-closed rather than a guessed compatibility conclusion.
+const noPathGraphModel = createCatalogModel({ schema: 6, targets: [], relations: {
+  schema: 2,
+  records: [
+    { kind: 'package', package: 'unrelated-root', configSymbol: 'PACKAGE_unrelated-root',
+      kconfigSymbol: 'PACKAGE_unrelated-root', states: ['n', 'y'] },
+    { kind: 'package', package: 'unreachable-failed', configSymbol: 'PACKAGE_unreachable-failed',
+      kconfigSymbol: 'PACKAGE_unreachable-failed', states: ['n', 'y'] },
+  ],
+  indexes: { providers: {}, reverseDependencies: {}, reverseKconfig: {}, choices: {} },
+  packageClosureComplete: true,
+  packageClosureCapabilities: ['complete-package-build-closure-v1'],
+  validation: { relationsComplete: false },
+} });
+const noPathRule = {
+  schema: 4,
+  rules: [{ id: 'BLD-NOPATH', issue: 'build-failure', match: 'all-selected',
+    scope: { Demo: ['stable'] }, sourceCommits: ['a'.repeat(40)], packages: ['unreachable-failed'],
+    refs: ['run:no-path'],
+    failure: { phase: 'package-compile', cause: 'package-caused', code: 'fixture-no-path' },
+    buildDependency: { package: 'unreachable-failed' } }],
+};
+assert(evaluateCompatibilityRules(noPathGraphModel, noPathRule,
+  parseConfigDocument('CONFIG_PACKAGE_unrelated-root=y\n'), conditionalContext).warnings.length === 0,
+  'a package graph without a path to the failed target produced a warning');
+
+const unknownGraphModel = createCatalogModel({ schema: 6, targets: [], relations: {
+  schema: 2,
+  records: [
+    { kind: 'package', package: 'unknown-root', configSymbol: 'PACKAGE_unknown-root',
+      kconfigSymbol: 'PACKAGE_unknown-root', states: ['n', 'y'],
+      packageInfo: { depends: [
+        { raw: '+unknown-failed', required: true, packages: ['unknown-failed'] },
+        { raw: '+unknown-extra if GRAPH_NOT_CATALOGED', required: true, condition: 'GRAPH_NOT_CATALOGED',
+          packages: ['unknown-extra'] },
+      ] } },
+    { kind: 'package', package: 'unknown-failed', configSymbol: 'PACKAGE_unknown-failed',
+      kconfigSymbol: 'PACKAGE_unknown-failed', states: ['n', 'y'] },
+    { kind: 'package', package: 'unknown-extra', configSymbol: 'PACKAGE_unknown-extra',
+      kconfigSymbol: 'PACKAGE_unknown-extra', states: ['n', 'y'] },
+  ],
+  indexes: { providers: {}, reverseDependencies: {}, reverseKconfig: {}, choices: {} },
+  packageClosureComplete: true,
+  packageClosureCapabilities: ['complete-package-build-closure-v1'],
+  validation: { relationsComplete: false },
+} });
+const unknownGraphRule = {
+  schema: 4,
+  rules: [{ id: 'BLD-UNKNOWN', issue: 'build-failure', match: 'all-selected',
+    scope: { Demo: ['stable'] }, sourceCommits: ['a'.repeat(40)], packages: ['unknown-failed'],
+    refs: ['run:unknown'],
+    failure: { phase: 'package-compile', cause: 'package-caused', code: 'fixture-unknown' },
+    buildDependency: { package: 'unknown-failed' } }],
+};
+assert(evaluateCompatibilityRules(unknownGraphModel, unknownGraphRule,
+  parseConfigDocument('CONFIG_PACKAGE_unknown-root=y\n'), conditionalContext).warnings.length === 0,
+  'an unresolved package graph condition was treated as a definite compatibility warning');
+
+const selfProviderModel = createCatalogModel({ schema: 5, targets: [], relations: {
+  schema: 2,
+  records: [{ kind: 'package', package: 'self-provider', configSymbol: 'PACKAGE_self-provider',
+    kconfigSymbol: 'PACKAGE_self-provider', states: ['n', 'y'],
+    packageInfo: { provides: ['virtual-self'], conflicts: ['virtual-self'] } }],
+  indexes: { providers: { 'virtual-self': ['self-provider'] }, reverseDependencies: {}, reverseKconfig: {}, choices: {} },
+  validation: { relationsComplete: true },
+} });
+assert(!validateConfig(selfProviderModel, parseConfigDocument('CONFIG_PACKAGE_self-provider=y\n'))
+  .some((item) => item.code === 'package-conflict'),
+  'a package was reported as conflicting with its own virtual capability provider');
 const selectedTarget = {
   system: targetFull.board,
   board: targetFull.board,
@@ -800,8 +1449,8 @@ const escapedStringDefault = '"a\\\"b\\\\c"';
 for (const [type, raw, expected] of [
   ['string', '""', ''], ['string', '"hello"', 'hello'], ['string', '"n"', 'n'],
   ['string', '"use if available"', 'use if available'],
-  ['string', '"say \\"if ready\\" now"', 'say \\"if ready\\" now'],
-  ['string', escapedStringDefault, escapedStringDefault.slice(1, -1)],
+  ['string', '"say \\"if ready\\" now"', 'say "if ready" now'],
+  ['string', escapedStringDefault, 'a"b\\c'],
   ['int', '160', '160'], ['hex', '0x20', '0x20'],
 ]) {
   const scalar = resolveKconfigDefault({ type, defaults: [raw] }, defaultValues);
@@ -1017,6 +1666,100 @@ const choice = applyUserIntent(model, parseConfigDocument([
 ].join('\n')), { symbol: 'FORMAT_B', value: 'y' });
 assert(choice.values.get('FORMAT_A') === 'n' && choice.values.get('FORMAT_B') === 'y',
   'generic choice enforcement failed');
+
+// Choice reset-if is an interactive-only native frontend operation.  The
+// shared model keeps the raw/typed condition pair, but refuses to silently
+// clear the global user layer because that reset is not implemented in the
+// browser/Worker evaluator.
+const resetChoiceCatalog = (capabilities = REQUIRED_KCONFIG_RELATION_CAPABILITIES) => ({
+  schema: 6,
+  targets: [],
+  relations: {
+    schema: 2,
+    relationsComplete: true,
+    relationCapabilities: [...capabilities],
+    records: [
+      { kind: 'config', configSymbol: 'RESET_GATE', kconfigSymbol: 'RESET_GATE',
+        type: 'tristate', states: ['n', 'm', 'y'] },
+      { kind: 'config', configSymbol: 'RESET_A', kconfigSymbol: 'RESET_A',
+        type: 'bool', states: ['n', 'y'], choice: 'RESET_CHOICE' },
+      { kind: 'config', configSymbol: 'RESET_B', kconfigSymbol: 'RESET_B',
+        type: 'bool', states: ['n', 'y'], choice: 'RESET_CHOICE' },
+    ],
+    choices: [{ id: 'RESET_CHOICE', type: 'bool', members: ['RESET_A', 'RESET_B'],
+      resetIf: ['RESET_GATE'],
+      resetIfAst: [{ raw: 'RESET_GATE', ast: { kind: 'symbol', name: 'RESET_GATE' }, complete: true }] }],
+    indexes: { providers: {}, reverseDependencies: {}, reverseKconfig: {},
+      choices: { RESET_CHOICE: ['RESET_A', 'RESET_B'] } },
+  },
+});
+const resetChoiceModel = createCatalogModel(resetChoiceCatalog());
+const resetRuntimeChoice = createRuntimeMenu(resetChoiceModel).choices.find((row) => row.id === 'RESET_CHOICE');
+assert(resetChoiceModel.choiceDetails.get('RESET_CHOICE')?.resetIf?.[0] === 'RESET_GATE' &&
+  resetChoiceModel.choiceDetails.get('RESET_CHOICE')?.resetIfAst?.[0]?.ast?.name === 'RESET_GATE' &&
+  resetRuntimeChoice?.resetIf?.[0] === 'RESET_GATE' &&
+  resetRuntimeChoice?.resetIfAst?.[0]?.ast?.name === 'RESET_GATE',
+  'choice reset-if raw/AST fields were not retained through the canonical/runtime menu model');
+const resetFalse = applyUserIntent(resetChoiceModel, parseConfigDocument([
+  'CONFIG_RESET_GATE=n', 'CONFIG_RESET_A=y', '# CONFIG_RESET_B is not set',
+].join('\n')), { symbol: 'RESET_B', value: 'y' });
+assert(resetFalse.values.get('RESET_A') === 'n' && resetFalse.values.get('RESET_B') === 'y',
+  'false choice reset-if condition did not allow an ordinary choice switch');
+const resetTrueValues = parseConfigDocument([
+  'CONFIG_RESET_GATE=y', 'CONFIG_RESET_A=y', '# CONFIG_RESET_B is not set',
+].join('\n'));
+let resetTrueError = null;
+try { applyUserIntent(resetChoiceModel, resetTrueValues, { symbol: 'RESET_B', value: 'y' }); }
+catch (error) { resetTrueError = error; }
+assert(resetTrueError?.name === 'CatalogIntentError' && resetTrueError.unsupported === true &&
+  resetTrueError.choiceReset?.mode === 'unsupported' &&
+  resetTrueError.violations?.[0]?.code === 'choice-reset-unsupported' &&
+  resetTrueError.violations?.[0]?.status === 'satisfied',
+  'true choice reset-if condition did not fail closed with a structured unsupported intent error');
+let resetModuleError = null;
+try {
+  applyUserIntent(resetChoiceModel, parseConfigDocument([
+    'CONFIG_RESET_GATE=m', 'CONFIG_RESET_A=y', '# CONFIG_RESET_B is not set',
+  ].join('\n')), { symbol: 'RESET_B', value: 'y' });
+} catch (error) { resetModuleError = error; }
+assert(resetModuleError?.choiceReset?.mode === 'unsupported' &&
+  resetModuleError.violations?.[0]?.status === 'satisfied',
+  'M-valued choice reset-if condition was not treated as an active native reset');
+let resetUnknownError = null;
+const unknownResetModel = createCatalogModel({ ...resetChoiceCatalog(), relations: {
+  ...resetChoiceCatalog().relations,
+  choices: [{ id: 'RESET_CHOICE', type: 'bool', members: ['RESET_A', 'RESET_B'],
+    resetIf: ['RESET_UNKNOWN'],
+    resetIfAst: [{ raw: 'RESET_UNKNOWN', ast: { kind: 'symbol', name: 'RESET_UNKNOWN' }, complete: true }] }],
+} });
+try {
+  applyUserIntent(unknownResetModel, parseConfigDocument([
+    'CONFIG_RESET_GATE=n', 'CONFIG_RESET_A=y', '# CONFIG_RESET_B is not set',
+  ].join('\n')), { symbol: 'RESET_B', value: 'y' });
+} catch (error) { resetUnknownError = error; }
+assert(resetUnknownError?.name === 'CatalogIntentError' && resetUnknownError.deferred === true &&
+  resetUnknownError.choiceReset?.mode === 'deferred' &&
+  resetUnknownError.violations?.[0]?.code === 'choice-reset-deferred',
+  'unknown choice reset-if condition did not remain deferred');
+const missingResetCapabilityModel = createCatalogModel(resetChoiceCatalog(
+  REQUIRED_KCONFIG_RELATION_CAPABILITIES.filter((capability) => capability !== 'choice-reset-conditions-v1')));
+let missingResetCapabilityError = null;
+try {
+  applyUserIntent(missingResetCapabilityModel, resetTrueValues, { symbol: 'RESET_B', value: 'y' });
+} catch (error) { missingResetCapabilityError = error; }
+assert(missingResetCapabilityModel.typedRelationsComplete === false &&
+  missingResetCapabilityError?.deferred === true &&
+  missingResetCapabilityError.violations?.[0]?.reason === 'missing-choice-reset-capability',
+  'missing choice-reset capability was not handled as a deferred interactive intent');
+const sameMember = applyUserIntent(resetChoiceModel, resetTrueValues, { symbol: 'RESET_A', value: 'y' });
+assert(sameMember.values.get('RESET_A') === 'y' && !sameMember.changes.length,
+  'clicking the already-Y choice member incorrectly invoked reset handling');
+const disableMember = applyUserIntent(resetChoiceModel, resetTrueValues, { symbol: 'RESET_A', value: 'n' });
+assert(disableMember.values.get('RESET_A') === 'n',
+  'disabling a choice member incorrectly invoked reset handling');
+assert(validateConfig(resetChoiceModel, resetTrueValues).every((item) =>
+  !String(item.code || '').startsWith('choice-reset-')),
+  'non-interactive validation incorrectly rejected a true reset-if condition');
 const conflicts = validateConfig(model, parseConfigDocument([
   'CONFIG_PACKAGE_backend-a=y',
   'CONFIG_PACKAGE_backend-b=y',

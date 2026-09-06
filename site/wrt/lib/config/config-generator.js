@@ -11,17 +11,13 @@ function serializeKconfigValue(value, type = 'unknown', symbol = 'Kconfig option
   const normalizedType = String(type || 'unknown').toLowerCase();
   if (normalizedType === 'unknown') return raw === 'n' ? null : raw;
   let normalized = raw;
-  if (normalizedType === 'string' && /^"(?:[^"\\]|\\.)*"$/.test(raw)) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (typeof parsed === 'string') normalized = parsed;
-    } catch (error) { /* quote the literal input below */ }
-  }
+  // Typed values are semantic editor values. Only the import boundary decodes
+  // raw .config literals; a string containing quote characters is not wire.
   normalized = normalizeKconfigValueByType(normalized, normalizedType, symbol);
   if (normalizedType === 'bool' || normalizedType === 'tristate') {
     return normalized === 'n' ? null : normalized;
   }
-  if (normalizedType === 'string') return JSON.stringify(normalized);
+  if (normalizedType === 'string') return CATALOG_ENGINE.encodeKconfigString(normalized);
   return normalized;
 }
 function setConfigSymbol(text, symbol, value, type = 'unknown') {

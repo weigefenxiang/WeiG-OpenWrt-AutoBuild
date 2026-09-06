@@ -23,7 +23,10 @@ function runtimeOption(record) {
     selectsVariants: record.kconfig?.selectsExpressions || [],
     implies: record.kconfig?.impliesExpressions?.flat?.() || [],
     impliesVariants: record.kconfig?.impliesExpressions || [],
-    conflicts: (record.conflicts || []).map((name) => `PACKAGE_${name}`),
+    // Conflict names are package capabilities, not necessarily concrete
+    // PACKAGE_* symbols.  Preserve the Catalog namespace; the shared engine
+    // resolves providers and the UI must never manufacture PACKAGE_libudev.
+    conflicts: [...new Set((record.conflicts || []).map((name) => String(name || '').trim()).filter(Boolean))],
     hidden: record.hidden === true,
     visible: record.visible !== false,
     userSettable: record.userSettable !== false,
@@ -34,13 +37,19 @@ function runtimeOption(record) {
 
 export function createRuntimeMenu(model) {
   const options = (model?.records || []).filter((record) => record.configSymbol).map(runtimeOption);
-  const choices = [...(model?.choices || new Map())].map(([id, symbols]) => ({
-    id,
-    prompt: id,
-    promptEn: id,
-    defaults: [],
-    symbols: [...symbols],
-  }));
+  const choices = [...(model?.choices || new Map())].map(([id, symbols]) => {
+    const detail = model?.choiceDetails?.get(id) || {};
+    const members = [...symbols];
+    return {
+      ...detail,
+      id,
+      prompt: detail.prompt || id,
+      promptEn: detail.promptEn || id,
+      defaults: Array.isArray(detail.defaults) ? [...detail.defaults] : [],
+      symbols: members,
+      members: Array.isArray(detail.members) ? [...detail.members] : members,
+    };
+  });
   return { categories: [], labels: {}, options, choices, displayLoaded: false, hiddenLoaded: false, helpLoaded: false, loadedLanguages: [] };
 }
 

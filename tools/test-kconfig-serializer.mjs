@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import * as CATALOG_ENGINE from '../site/wrt/lib/catalog-engine.js';
 import { readFrontendRuntimeSource } from './lib/frontend-source.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -22,7 +23,7 @@ function sourceRange(startName, endName) {
   return source.slice(start, end);
 }
 
-const context = { JSON, String, Error };
+const context = { JSON, String, Error, CATALOG_ENGINE };
 vm.createContext(context);
 vm.runInContext([
   sourceRange('normalizeKconfigValueByType', 'scalarKconfigOption'),
@@ -59,8 +60,19 @@ for (const invalid of ['', 'abc']) {
 assert.equal(serializeKconfigValue('', 'string'), '""');
 assert.equal(serializeKconfigValue('n', 'string'), '"n"');
 assert.equal(serializeKconfigValue('hello', 'string'), '"hello"');
-assert.equal(serializeKconfigValue('"hello"', 'string'), '"hello"');
+assert.equal(serializeKconfigValue('"hello"', 'string'), String.raw`"\"hello\""`);
 assert.equal(serializeKconfigValue('a"b\\c', 'string'), '"a\\"b\\\\c"');
+for (const [wire, semantic] of [
+  [String.raw`"a\n"`, 'an'], [String.raw`"a\\n"`, String.raw`a\n`],
+  [String.raw`"a\q"`, 'aq'], [String.raw`"a\\q"`, String.raw`a\q`],
+  ['"中文"', '中文'], ['""', ''], [String.raw`"\"quoted\""`, '"quoted"'],
+]) {
+  assert.equal(normalizeImportedKconfigValue({ value: wire }, 'string'), semantic);
+  assert.equal(normalizeImportedKconfigValue({ value: serializeKconfigValue(semantic, 'string') }, 'string'), semantic);
+}
+for (const invalid of ['a\nb', 'a\rb', 'a\0b']) {
+  assert.throws(() => serializeKconfigValue(invalid, 'string'), /Kconfig strings/);
+}
 
 // int / hex: valid values serialize; invalid/empty values are rejected.
 for (const value of ['0', '160', '-1']) {

@@ -12,7 +12,9 @@ import {
   artifactBuildRef, artifactBuildTag, buildEnvironmentIdentity, isValidBuildTag, normalizeBuildCommit,
   normalizeBuildEnvironment, normalizeBuildTag, parseBuildIssueTitleIdentity,
 } from '../site/wrt/lib/build-identity.js';
-import { createCatalogModel } from '../site/wrt/lib/catalog-engine.js';
+import {
+  createCatalogModel, REQUIRED_KCONFIG_RELATION_CAPABILITIES,
+} from '../site/wrt/lib/catalog-engine.js';
 import {
   applyProfileOverrides, createProfileBaselineStore, serializeConfigMap,
 } from '../site/wrt/lib/profile-baseline.js';
@@ -37,6 +39,23 @@ const PACKAGE_MIRROR_RULES = JSON.parse(
   readFileSync(join(ROOT, 'config', 'policies', 'package-mirrors.json'), 'utf8'));
 const SHA256_RE = /^[a-f0-9]{64}$/;
 const GIT_COMMIT_RE = /^[a-f0-9]{40}$/;
+// Schema 6 workers consume the compact relations v4 contract only.  Older
+// relation snapshots remain readable in the browser, but they do not contain
+// enough typed/conditional information to make an authoritative worker
+// decision. Keep this list in lockstep with Catalog/scripts/compact-relations.mjs.
+const CATALOG_RELATION_FIELDS = Object.freeze([
+  'symbolId', 'flags', 'typeCode', 'originCode', 'statesMask', 'choiceId', 'defaultsId',
+  'dependsVariantsId', 'selectsVariantsId', 'impliesVariantsId', 'packageDependenciesId',
+  'providesId', 'conflictsId', 'packageConflictsId', 'kconfigConflictsId', 'typedDefaultsId', 'rangesId',
+  'promptIfId', 'promptConditionsId',
+  'visibleIfId', 'menuVisibleIfId', 'directDependsId', 'inheritedDependsId', 'directVisibleIfId',
+  'inheritedVisibleIfId', 'inheritedMenuVisibleIfId', 'optionFlagsId', 'optionsId', 'definitionsId',
+  'capabilityRelationsId',
+]);
+// Keep the schema-6 Worker gate on the same contract consumed by the browser
+// evaluator.  A Catalog graph missing any typed surface remains readable in
+// the UI but is not authoritative for immutable request reconstruction.
+const CATALOG_RELATION_CAPABILITIES = REQUIRED_KCONFIG_RELATION_CAPABILITIES;
 
 function fail(msg) { console.error('Validation failed: ' + msg); process.exit(1); }
 function normalizeAudit(raw) {
@@ -166,17 +185,44 @@ function profileBaselineContract(branch) {
 
 function graphContract(branch) {
   const contract = branch?.assets?.graph;
+  const relationsSchema = contract?.relationsSchema === undefined ? 0 : Number(contract.relationsSchema);
   if (!contract || typeof contract !== 'object' ||
       !/^[A-Za-z0-9._-]+\.graph\.json\.gz$/.test(String(contract.asset || '')) ||
       !SHA256_RE.test(String(contract.hash || '').toLowerCase()) ||
-      !Number.isSafeInteger(Number(contract.bytes)) || Number(contract.bytes) <= 0) {
-    fail('The pinned Catalog index is missing a valid Kconfig graph contract');
+      !Number.isSafeInteger(Number(contract.bytes)) || Number(contract.bytes) <= 0 ||
+      relationsSchema !== 4) {
+    fail('The pinned Catalog index is missing a valid compact Kconfig relations v4 contract');
   }
   return {
     asset: String(contract.asset),
     hash: String(contract.hash).toLowerCase(),
     bytes: Number(contract.bytes),
+    ...(relationsSchema ? { relationsSchema } : {}),
   };
+}
+
+function validateCatalogRelationsContract(document, contract) {
+  const relations = document?.relations;
+  const fields = relations?.fields;
+  const capabilities = relations?.relationCapabilities;
+  if (!relations || Number(relations.schema || 0) !== 4 ||
+      !Array.isArray(fields) || fields.length !== CATALOG_RELATION_FIELDS.length ||
+      fields.some((field, index) => field !== CATALOG_RELATION_FIELDS[index])) {
+    fail(`Catalog graph ${contract.asset} does not satisfy the compact relations v4 fields contract`);
+  }
+  if (relations.relationsComplete !== true || document?.relationsComplete !== true ||
+      !Array.isArray(capabilities) || CATALOG_RELATION_CAPABILITIES.some((capability) =>
+        !capabilities.includes(capability))) {
+    fail(`Catalog graph ${contract.asset} does not declare complete typed Kconfig relation capabilities`);
+  }
+  // The graph wrapper and compact payload are two independently stamped
+  // surfaces. If the wrapper repeats capabilities, require the same complete
+  // contract instead of allowing a stale wrapper to mask a stale payload.
+  if (document?.relationCapabilities !== undefined &&
+      (!Array.isArray(document.relationCapabilities) || CATALOG_RELATION_CAPABILITIES.some((capability) =>
+        !document.relationCapabilities.includes(capability)))) {
+    fail(`Catalog graph ${contract.asset} has inconsistent relation capabilities`);
+  }
 }
 
 async function loadCatalogKconfigSymbols(catalogContract, catalogBranch) {
@@ -193,6 +239,10 @@ async function loadCatalogKconfigSymbols(catalogContract, catalogBranch) {
   if (actualCommit && actualCommit !== catalogContract.sourceCommit) {
     fail(`Catalog Kconfig graph source commit mismatch: ${actualCommit} != ${catalogContract.sourceCommit}`);
   }
+  if (contract.relationsSchema && Number(document?.relations?.schema || 0) !== contract.relationsSchema) {
+    fail(`Catalog Kconfig graph relations schema mismatch: ${document?.relations?.schema || '(missing)'} != ${contract.relationsSchema}`);
+  }
+  validateCatalogRelationsContract(document, contract);
   let model;
   try { model = createCatalogModel({ schema: 6, relations: document?.relations }); }
   catch (error) { fail(`Catalog Kconfig graph contract is invalid: ${error.message}`); }
@@ -365,6 +415,10 @@ try {
   );
 }
 catch (error) { fail(`Unable to apply Kconfig overrides: ${error.message}`); }
+// Native Profile values are authoritative, including invisible defaults and
+// omitted disabled symbols. Do not re-validate the whole baseline as a set of
+// user menu actions. Explicit override verification and the refreshed upstream
+// build-closure check retain their separate, existing enforcement boundaries.
 const baselineConfig = serializeConfigMap(baseline.values);
 const reconstructedConfig = serializeConfigMap(reconstructedValues);
 const reconstructedSha256 = sha256(reconstructedConfig);
