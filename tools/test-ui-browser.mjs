@@ -616,8 +616,18 @@ async function main() {
       await waitFor('page application ready', async () => evaluateFunction(browser, `() => {
         const form = document.getElementById('form');
         const actionbar = document.getElementById('actionbar');
-        return Boolean(window.__WEIG_UI_RUNTIME__ && form && !form.hidden && actionbar && !actionbar.hidden);
+        const menu = document.getElementById('menuconfigBox');
+        const picker = document.getElementById('targetPicker');
+        // The shell becomes visible before its native Catalog baseline loads.
+        // Testing hover/focus during that layout change races real scroll and
+        // resize events, which legitimately dismiss transient tooltips.
+        return Boolean(window.__WEIG_UI_RUNTIME__ && form && !form.hidden && actionbar && !actionbar.hidden &&
+          menu && !menu.hidden && picker?.getAttribute('aria-busy') === 'false' &&
+          document.fonts.status === 'loaded');
       }`), LOAD_TIMEOUT_MS, 200);
+      await evaluateFunction(browser, `() => new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
+      })`);
     } catch (error) {
       fail(context, 'page application did not become ready', await evaluateFunction(browser, `() => ({
         readyState: document.readyState,

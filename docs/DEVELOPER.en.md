@@ -88,9 +88,13 @@ Compatibility recommendations also call `applyUserIntent` and share the same Cat
 
 Generic mutation coverage includes bool, tristate, empty/non-empty string, literal `n`, escaping, int, hex, unknown symbols, conditional defaults, parentheses, `&&`/`||`, deferred state, and closed-world boundaries.
 
+Schema 4 compact relations preserve typed defaults, ranges, visibility, choices, select/imply relations, package capabilities, and expression ASTs through the compact encode/decode round-trip. `relationsComplete: true` is authoritative only with `relationCapabilities` containing `complete-kconfig-relations-v1`; that assertion covers the full typed relation graph. `packageClosureComplete: true` with `packageClosureCapabilities` containing `complete-package-build-closure-v1` is an independent, narrower package-build assertion and never upgrades typed relation completeness. Both are producer assertions; absent or partial data remains inconclusive.
+
+The shared runtime's lexer must match upstream: bool default `m` remains a typed source value, comments are stripped only outside quotes, and `@` outside quotes produces an ignored-character warning while ordinary AST symbols after it remain intact. Only a complete active-source proof with no unresolved dynamic preprocessing may classify a name as native undefined; an intentionally Target-filtered definition is external only with proven projection provenance, while an unproved omission remains unresolved. Unevaluated dynamic expressions keep relations incomplete. Choice `reset if` is preserved as typed data, but native mconf/nconf clears the global `S_DEF_USER` layer only during an interactive transition from a non-Y choice member to Y. Static import, Worker reconstruction, and unsupported browser reset interactions must report explicit `unsupported`/`deferred` status rather than claim that the global reset is implemented.
+
 ## 5. Compatibility schema 2/3/4/5
 
-Schemas 2–5 are accepted. Schema 2 retains the legacy rule shape; schema 3 may add `sourceCommits`, `targetScope`, and structured `failure`; schema 4 may add rule-level `buildDependency` and requires exact `sourceCommits`. Schema 5 also permits `policy: "preventive"`: `environments` independently defines wildcard applicability, `packageAvailability: "if-present"` makes an environment without the failed target not applicable, and `evidence` contains only the exact Source, Branch, commit, and references where the failure was observed. A build-dependency rule activates only for direct or trigger packages that actually exist in the current Catalog and satisfy its match mode. The shared Kconfig executor derives the minimum ordered steps that clear every currently active participant; absent participants neither fail validation nor enter the plan. Ordinary rules still support a named or standalone-wildcard Source and exact or glob Branch. The browser preserves the loaded schema and validates the index contract's schema, SHA-256, compressed bytes, JSON bytes, and rule count.
+Schemas 2–5 are accepted. Schema 2 retains the legacy rule shape; schema 3 may add `sourceCommits`, `targetScope`, and structured `failure`; schema 4 may add rule-level `buildDependency` and requires exact `sourceCommits`. Schema 5 also permits `policy: "preventive"`: `environments` independently defines wildcard applicability, `packageAvailability: "if-present"` makes an environment without the failed target not applicable, and `evidence` contains only the exact Source, Branch, commit, and references where the failure was observed. A schema-4 package build-dependency rule activates only when the exact Catalog graph proves a path from an active package root to the failed package; legacy `triggerPackages` is accepted for reading old documents but does not supply new graph triggers. The shared Kconfig executor derives the minimum ordered steps that clear every currently active participant; absent participants neither fail validation nor enter the plan. Ordinary rules still support a named or standalone-wildcard Source and exact or glob Branch. The browser preserves the loaded schema and validates the index contract's schema, SHA-256, compressed bytes, JSON bytes, and rule count.
 
 The executor stays:
 
@@ -99,6 +103,8 @@ evaluateCompatibilityRules → deriveCompatibilityPlans → applyUserIntent
 ```
 
 A recommendation may contain ordered user steps such as disabling an upstream selection before the compatibility target, plus automatic dependent invalidation/cleanup produced by the shared Kconfig runtime. Both must come from the same generic state calculation. The page only renders the plan and sends its ordered steps back through `applyUserIntent`; it never derives dependency facts itself.
+
+For schema-4 build-dependency rules, reverse Catalog indexes are candidate discovery only. The browser proves each candidate through its forward dependency, select/imply, and package-provider relations, then derives the minimum user-controlled roots plus the failed package. Unknown or ambiguous conditions, alternatives, providers, or edges are inconclusive and produce no guessed warning or action. Legacy `triggerPackages` remains readable for old data but is not a driver for new graph decisions or minimum plans.
 
 The modal renders generic text by `issue`. Applying a recommendation keeps it open; a relevant state change restores the action; force-continue requires a second confirmation view. No rule ID, package name, or conflict path belongs in `app.js`.
 
@@ -111,6 +117,8 @@ The backend accepts schema-6 `build-request.json`. The request pins Catalog iden
 Defconfig defaults off. When enabled, upstream `make defconfig` may run only after `reconstructed.config` is already determined, as optional normalization. Defconfig must not complete a missing baseline, infer user intent, or replace the pinned Catalog identity. The backend validates format, minimal Target/Profile identity, Catalog contract, firmware settings, and path safety; it does not re-decide plugin dependencies.
 
 Whether Defconfig is enabled or not, the workflow verifies only the effective Kconfig values listed in `request-overrides.json` before download and compilation. The gate does not compare the whole `.config`, read `plugins`, or check untouched baseline entries. If an explicit value changes, it stops with `configuration-override-mismatch` and preserves `config-verification.json`.
+
+Immediately before compilation, the Worker hashes the authoritative `.config`, runs `make prepare-tmpinfo V=s`, and requires the before/after hashes to match and a non-empty real `tmp/.packageinfo`. The build-closure gate then reads that metadata and the upstream package Makefiles, resolves real dependency/provider paths, and fails closed before compilation when metadata, alternatives, conditions, or paths are missing or ambiguous.
 
 ## 7. Actions identity, concurrency, retention
 
@@ -127,6 +135,8 @@ GitHub's native Run-log retention is a repository Setting rather than Workflow Y
 
 The bottom-right web **检** control opens the existing self-test immediately; its header exposes **Package compatibility probe**. Probe and Advanced menuconfig share the same live `menuValues`, and both send the clicked real Kconfig symbol directly through `setMenuValue()` / `applyMenuValue()`. The frontend never reverse-maps `PACKAGE_<name>` to `PACKAGE_luci-app-<name>`: selecting a dependency cannot select a reverse dependent, while selecting `PACKAGE_luci-app-x` may enable `PACKAGE_x` only through the upstream forward dependency relation. Probe's **Selected** summary contains only `PACKAGE_*` values that differ from the current Source/Branch/Target Kconfig baseline, so upstream defaults are hidden; it remains one line and folds overflow behind `+N`. Search rows still show the complete live Kconfig state. The permanent footer policy copy is removed and exposed through an **Info** action to the left of Preview.
 
+Keep the three package layers distinct: the upstream `.config` uses `CONFIG_PACKAGE_<name>`, the Catalog/Kconfig model uses `PACKAGE_<name>`, and the build-closure graph uses the real `<name>` from `.packageinfo` and package Makefiles. Virtual capabilities are provider names only; they do not create `CONFIG_`/`PACKAGE_` symbols or selectable package records, and an owner-provided capability does not conflict with its own owner.
+
 Probe submission uses schema 3. Advanced menuconfig's final config-generation path still presents direct changes and automatic linkage, but the Issue carries only direct `packageIntent` and compact before/after `CONFIG_PACKAGE_*=m/y` projections for every L1-L7 depth. The complete 836-entry UI state or 276-entry post-Defconfig state is not submitted. Catalog normalizes direct Roots again, and each Source/Branch Job resolves dependencies from Catalog Target/Profile selectors plus upstream Defconfig. Source/Branch/Target/Profile and coverage remain separate controls, and Catalog never maps curated application IDs back to packages through `applications.json.gz`.
 
 Catalog asset validation is implicit `L0`, not a selectable depth. Seven short buttons stay on the same row after **Probe depth**; the selected button is highlighted with a check, while full titles and explanations come from Catalog `probeUi.strings` and use the shared site tooltip. The fixed order is `L1 config-resolve`, `L2 package-compile`, `L3 rootfs-integration`, `L4 firmware-integration`, `L5 boot-smoke`, `L6 runtime-health`, and `L7 reboot-validation`. L2-L7 progressively reuse completed stages and build no comparison firmware; every depth requires upstream configuration resolution and Defconfig cannot be disabled. Automatic coverage can try valid fallback targets sequentially inside one Job. The Matrix is capped at 256 jobs. The owner uses full planned concurrency, other write collaborators are capped at three, and visitors cannot start the Matrix. Normalized evidence retains 60 days and full logs 30 days. Only package-caused failure across every legal environment is fully incompatible; evidence never edits rules automatically.
@@ -140,6 +150,9 @@ For a new plugin or rule, first reuse existing Catalog data, audit the same type
 ## 9. Test and publish
 
 ```powershell
+node tools/test-catalog-engine.mjs
+node tools/test-build-closure.mjs
+node tools/check-all.mjs
 node tools/dev-assistant.mjs prepare
 node tools/dev-assistant.mjs verify
 node tools/serve.mjs
@@ -150,6 +163,18 @@ node tools/serve.mjs
 For every channel, publish Catalog first, wait for its data branch and root-asset contracts, then publish AutoBuild, wait for CI/Pages, and online-test `index.json`, `applications.json.gz`, `compatibility.json.gz`, and browser loading. Normal code promotion is `dev → staging → main`. Catalog code and production data have separate lifecycles: Catalog `main` writes only `catalog-candidate`, and only the Catalog manual Production Gate may promote that verified snapshot to `catalog-data`. AutoBuild keeps its runtime mapping `main → catalog-data` and must never read `catalog-candidate`, so promoting Catalog code to `main` does not itself publish production user data.
 
 ## 10. Catalog selection and final configuration
+
+Prompt/menu visibility restricts interactive editing, not the validity of hidden native defaults. Absent scalar values are not enabled configuration entries. Worker reconstruction preserves the Native Profile baseline and validates explicit overrides only; it must not run interactive whole-baseline validation. The separate upstream build-closure check remains active. Browser tests wait for the Catalog baseline and fonts before measuring interactive overlays; rendering the shell alone is not a readiness signal.
+
+For a coordinated parser/runtime change, run
+`node tools/test-catalog-producer-contract.mjs --producer-root <Catalog-checkout>`.
+This explicit integration test compares actual producer relations with the
+browser decoder, including every definition variant and provenance field,
+then evaluates producer-typed scalar defaults. It is not a runtime dependency
+on another checkout and does not replace native Linux or generated-data CI.
+String values inside the editor/evaluator are semantic values: decode native
+`.config` literals once at import and encode once at export. Kconfig backslash
+escapes are not JSON escapes; build-request JSON itself still uses JSON encoding.
 
 `site/wrt/config/site.json` carries only a small `catalog.selection` policy: Source priority, development-branch priority, and preferred Target selector values; `catalog.loading` retains the existing loading-scheduling contract. Catalog remains the sole inventory of real Sources, Branches, Targets, and Profiles. A missing preferred Target must fall back to the first complete valid Catalog path. Defaults apply only to first selection or a new Source/Branch; they must never overwrite the current control, valid state, or an explicit request.
 

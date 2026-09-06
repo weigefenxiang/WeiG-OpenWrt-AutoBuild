@@ -132,7 +132,17 @@ user intent → catalog-engine dependency/select cascade → state map → Kconf
 
 Advanced menuconfig preserves parentless Catalog `path: []` records under the synthetic UI label **Root Kconfig options / 根级 Kconfig 选项**. This container is distinct from upstream **Global build settings**; removing or merging it would make top-level Kconfig records unreachable. Only the label is local UI text, while the records and their semantics remain Catalog-owned.
 
+Schema-4 compact relation assets preserve typed defaults, ranges, visibility, choices, select/imply relations, package capabilities, and expression ASTs through the compact encode/decode round-trip into the same canonical model. `relationsComplete: true` is a producer assertion only when `relationCapabilities` includes `complete-kconfig-relations-v1`; it certifies the complete typed relation graph. The independent `packageClosureComplete: true` plus `packageClosureCapabilities` entry `complete-package-build-closure-v1` certifies only the package build closure and never promotes a partial typed relation graph to complete. Missing or ambiguous evidence remains inconclusive.
+
+Schema 4 compact relation 资产会在 compact 编解码 round-trip 中保留 typed default、range、visibility、choice、select/imply 关系、软件包 capability 和表达式 AST，并回到同一 canonical model。只有生产者同时声明 `relationsComplete: true` 且 `relationCapabilities` 含 `complete-kconfig-relations-v1`，才表示完整 typed relation graph。独立的 `packageClosureComplete: true` 与 `packageClosureCapabilities` 中的 `complete-package-build-closure-v1` 只表示软件包构建闭包完整，绝不能把不完整的 typed relation graph 提升为完整；证据缺失或有歧义时保持 inconclusive。
+
+The shared runtime must preserve native Kconfig lexer boundaries: a bool default `m` is a valid typed source literal, comments are removed only outside quotes, and `@` outside quotes is ignored with a warning while ordinary AST symbols remain intact. A complete active-source proof with no unresolved dynamic preprocessing may classify a name as native undefined only when it is absent from the full parsed closure; an intentionally Target-filtered definition is external only with proven projection provenance, while an unproved omission remains unresolved. Unevaluated `$(shell,...)` and dynamic assignments keep relations incomplete. Choice `reset if` is retained as typed data, but only native mconf/nconf interactive transitions from a non-Y member to Y clear the global `S_DEF_USER` layer. Static import, serialization, Worker reconstruction, and unsupported browser reset interactions must remain explicit `unsupported`/`deferred` rather than claiming a global reset.
+
+共享 runtime 必须保留原生 Kconfig lexer 边界：bool default `m` 是合法 typed source literal；注释只在引号外删除；引号外的 `@` 被忽略并记录 warning，但普通 AST symbols 必须保留。只有没有未求值动态预处理、且完整 active-source closure 证明某名称不在完整解析集合中时，才能归类为 native undefined；明确被 Target projection 过滤且有 provenance 的定义才是 external，未证明的 omission 保持 unresolved。未求值动态赋值会使 relations 不完整。Choice `reset if` 作为 typed data 保留，但只有原生 mconf/nconf 在交互式把非 Y 成员切换为 Y 时才清空全局 `S_DEF_USER` 层；静态导入、序列化、Worker 重建及网页不支持的 reset 交互必须明确为 `unsupported`/`deferred`，不能声称已实现全局 reset。
+
 ## 5. Compatibility evidence / 兼容性证据
+
+Visibility is an interaction constraint, not a native-value validity rule. Hidden defaults remain valid; absent scalars are not treated as enabled values. Worker reconstruction preserves the Native Profile baseline, checks explicit overrides, and keeps the separate upstream package-closure boundary.
 
 `compatibility.json.gz` accepts schemas 2–5. Schema 2 keeps the legacy shape; schema 3 adds exact source-commit, target-scope, and failure evidence; schema 4 adds verified `buildDependency` data. Schema 5 can separate an explicitly reviewed global `preventive` applicability policy from exact `evidence`: wildcard environments match only when the failed package exists, while evidence continues to name only observed Source/Branch/commit identities. Rules use generic fields:
 
@@ -151,17 +161,25 @@ evaluateCompatibilityRules
 
 The browser renders data-driven wording, keeps the modal open after applying a recommendation, resets the action when the user changes a relevant state, and requires a second explicit confirmation for force-continue. The backend does not add conflict locks or feed-time package removals.
 
+For schema-4 build-dependency recommendations, reverse Catalog indexes find candidate upstream packages, but every candidate must be proved from its own forward dependency, select/imply, and package-provider relations. The graph planner then emits the minimum user-controlled roots plus the failed package; shared `applyUserIntent` performs derived cleanup. Unknown conditions, alternatives, providers, or edges are inconclusive and cannot become a guessed warning or action. Legacy `triggerPackages` is retained only as readable compatibility data; it does not drive new graph decisions or plans.
+
+对于 schema 4 的 build-dependency 建议，Catalog 反向索引只负责找上游候选，随后必须用候选自身的前向 dependency、select/imply 和 package-provider 关系逐一证明。图规划器只生成最少的用户可控根节点与失败包；共享 `applyUserIntent` 负责派生清理。条件、候选、provider 或边未知时结果为 inconclusive，不得猜测告警或动作。旧的 `triggerPackages` 只为读取旧兼容数据保留，不驱动新的图决策或计划。
+
 Compatibility evaluation is on demand: only the bottom-right **Test** control and actual schema-6 JSON generation/download evaluate the final Source/Branch/Target/Kconfig state. Page load, config import, selector changes, plugin changes, and Menuconfig edits do not evaluate the current selection or open a compatibility modal. The immutable evidence asset may be prefetched by the existing low-priority queue, but that prefetch is not an evaluation.
 
 ## 6. Build request and Actions identity / 构建请求与 Actions 身份
 
-The browser exports one schema 5 `build-request.json` with:
+The browser exports one schema 6 `build-request.json` with:
 
 - exact AutoBuild branch/full commit;
 - exact Catalog revision and source asset contract;
 - Source/Branch and Catalog build-adapter names;
-- Target/Profile build contract and full `.config`;
+- minimal Target/Profile identity and semantic overrides; the Worker reconstructs the authoritative `.config` from the exact Catalog Native Profile baseline;
 - user tag, firmware settings, Defconfig state, and forced compatibility evidence.
+
+Before compilation, the Worker hashes the authoritative `.config`, runs `make prepare-tmpinfo V=s`, and requires the before/after hashes to match and the real `tmp/.packageinfo` to be non-empty. The closure gate reads that metadata and the upstream package Makefiles, resolves real dependency/provider paths, and fails closed before compilation when metadata, alternatives, conditions, or paths are missing or ambiguous.
+
+编译前 Worker 会对权威 `.config` 做 hash，运行 `make prepare-tmpinfo V=s`，并要求前后 hash 相同且真实的 `tmp/.packageinfo` 非空。闭包门禁读取该元数据和上游软件包 Makefile，解析真实 dependency/provider 路径；元数据、候选、条件或路径缺失/有歧义时，在编译前 fail-closed。
 
 The default-branch dispatcher freezes the Issue snapshot, validates exact branch HEAD, then dispatches the worker on that exact ref. Run titles and artifacts bind to the Issue:
 
@@ -175,6 +193,10 @@ staging-260810_0857-匿名#161-BUILD-LOGS
 ## 7. Package probes / 包级探测
 
 The bottom-right web **检** control opens self-test immediately. Probe and Advanced menuconfig use the same live `menuValues` and the same `setMenuValue()` → `applyMenuValue()` → Catalog/Kconfig intent path. The clicked symbol is never reverse-mapped to a LuCI package: selecting `PACKAGE_x` changes only that symbol and its forward dependencies, while selecting `PACKAGE_luci-app-x` can enable `PACKAGE_x` only when the upstream Kconfig/package relation requires it. Probe's **Selected / 已选择** summary is a one-line diff from the current Source/Branch/Target Kconfig baseline, so upstream defaults are hidden there; overflow is folded behind `+N`. The result list still reflects the complete live Kconfig state. Permanent policy copy is removed from the workspace and opened from an **Info / 说明** action left of Preview. Submit serializes only direct `packageIntent` and compact before/after projections into the Catalog Issue state token. The complete Advanced menuconfig/Defconfig state remains local UI evidence; every Probe environment resolves dependencies again from Catalog Target/Profile selectors and upstream Defconfig. No `probe-request.json` file or second package-selection model exists.
+
+The three package layers remain distinct: the upstream `.config` spells a package as `CONFIG_PACKAGE_<name>`, the Catalog/Kconfig model uses `PACKAGE_<name>`, and the closure verifier uses the real `<name>` from `.packageinfo` and package Makefiles. Virtual capabilities are provider names only; they never synthesize a `CONFIG_`/`PACKAGE_` symbol or selectable package, and an owner-provided capability never conflicts with its own owner.
+
+三层软件包名称必须分开：上游 `.config` 使用 `CONFIG_PACKAGE_<name>`，Catalog/Kconfig 模型使用 `PACKAGE_<name>`，闭包校验器使用 `.packageinfo` 与软件包 Makefile 中的真实 `<name>`。virtual capability 只是 provider 名称，不得生成 `CONFIG_`/`PACKAGE_` 符号或可选择软件包；owner 自己提供的 capability 也不得与自身冲突。
 
 The controller consumes the schema-3 package state serialized by Advanced menuconfig, preserves Baseline, direct Intent, Final `m/y` values, and applies the five-dimensional Catalog environment scope plus coverage without mapping curated application IDs back into packages. The UI renders one Catalog-described, shared-tooltip depth interface in this fixed order: `config-resolve`, `package-compile`, `rootfs-integration`, `firmware-integration`, `boot-smoke`, `runtime-health`, `reboot-validation`. Each Matrix job:
 
@@ -192,3 +214,11 @@ The Issue carries one schema-3 compressed state token, not an uploaded request f
 Every AutoBuild change runs `node tools/dev-assistant.mjs prepare`. It canonicalizes site bytes, writes an Asia/Shanghai `VERSION`, synchronizes `site-version.json`, calculates the full-site SHA-256, and runs generic checks. `verify` is read-only.
 
 Normal promotion remains `dev → staging → main`; Catalog and AutoBuild advance independently but each AutoBuild channel reads its matching Catalog data channel. Publish Catalog before the matching AutoBuild channel whenever an asset contract changes.
+
+Focused regressions:
+
+```powershell
+node tools/test-catalog-engine.mjs
+node tools/test-build-closure.mjs
+node tools/check-all.mjs
+```

@@ -88,9 +88,13 @@ Advanced menuconfig 的 `Root Kconfig options / 根级 Kconfig 选项` 是 `path
 
 通用回归至少覆盖：bool、tristate、string empty/non-empty、literal `n`、escaping、int、hex、unknown symbol，以及默认表达式的条件、括号、`&&`/`||`、deferred 和闭世界边界。
 
+schema 4 compact relations 会在 compact 编解码 round-trip 中保留 typed default、range、visibility、choice、select/imply 关系、软件包 capability 和表达式 AST。只有 `relationsComplete: true` 且 `relationCapabilities` 含 `complete-kconfig-relations-v1`，才表示完整 typed relation graph。`packageClosureComplete: true` 与 `packageClosureCapabilities` 中的 `complete-package-build-closure-v1` 是独立且更窄的软件包构建闭包声明，绝不能提升 typed relation 的完整性。两者都只能信任生产者声明；数据缺失或不完整时保持 inconclusive。
+
+共享 runtime 的 lexer 必须与上游一致：bool default `m` 保留为 typed source value，注释只在引号外删除，引号外的 `@` 只产生 ignored-character warning 并继续构建普通 AST，`@` 后的 symbols 不能丢失。没有未求值动态预处理的完整 active-source proof 才能把名称分类为 native undefined；明确经 `parsed-target-filter` 证明的定义才是 external，未证明 omission 保持 unresolved，动态表达式未求值时 relations 必须保持 incomplete。Choice `reset if` 只在原生 mconf/nconf 把非 Y choice member 交互切换为 Y 时清除全局 `S_DEF_USER`；静态导入、Worker 重建和网页不支持的 reset 交互必须明确为 `unsupported`/`deferred`，不能宣称全局 reset 已实现。
+
 ## 5. compatibility schema 2/3/4/5
 
-规则文档接受 schema 2–5。schema 2 保留旧规则形状；schema 3 可增加 `sourceCommits`、`targetScope` 和结构化 `failure`；schema 4 可增加规则级 `buildDependency`，并要求精确 `sourceCommits`。schema 5 还允许 `policy: "preventive"`：`environments` 独立定义通配适用范围，`packageAvailability: "if-present"` 使缺少失败目标的环境直接不适用，`evidence` 则只保存真实观察到故障的精确 Source、Branch、提交和引用。构建依赖规则在当前 Catalog 中实际存在的直接包或触发包满足匹配模式时命中；共享 Kconfig 执行器会生成解除全部当前活动参与者的最少有序步骤，缺失参与者既不报错也不进入方案。普通规则的 Source 可为具体 ID 或单独的 `*`，Branch 可为精确名或 glob。浏览器必须保留实际 schema，并校验 index 合同的 schema、SHA-256、压缩字节数、JSON 字节数和规则数。
+规则文档接受 schema 2–5。schema 2 保留旧规则形状；schema 3 可增加 `sourceCommits`、`targetScope` 和结构化 `failure`；schema 4 可增加规则级 `buildDependency`，并要求精确 `sourceCommits`。schema 5 还允许 `policy: "preventive"`：`environments` 独立定义通配适用范围，`packageAvailability: "if-present"` 使缺少失败目标的环境直接不适用，`evidence` 则只保存真实观察到故障的精确 Source、Branch、提交和引用。schema 4 的软件包构建依赖规则只有在精确 Catalog 图证明“活动软件包根 → 失败包”的路径时才命中；旧 `triggerPackages` 只为读取旧文档保留，不提供新的图触发入口。共享 Kconfig 执行器会生成解除全部当前活动参与者的最少有序步骤，缺失参与者既不报错也不进入方案。普通规则的 Source 可为具体 ID 或单独的 `*`，Branch 可为精确名或 glob。浏览器必须保留实际 schema，并校验 index 合同的 schema、SHA-256、压缩字节数、JSON 字节数和规则数。
 
 执行器固定为：
 
@@ -99,6 +103,8 @@ evaluateCompatibilityRules → deriveCompatibilityPlans → applyUserIntent
 ```
 
 推荐计划可以包含“先关闭上级选择、再关闭兼容目标”的有序用户步骤，以及由共享 Kconfig runtime 自动产生的下级失效/依赖清理；两者都必须来自同一次通用状态计算。页面只负责展示并按顺序把步骤送回 `applyUserIntent`，不得自行推导依赖关系。
+
+schema 4 的 build-dependency 建议中，Catalog 反向索引只负责找候选；每个候选都必须用自身的前向 dependency、select/imply 和 package-provider 关系证明，然后才生成最少的用户可控根节点与失败包。条件、候选、provider 或边未知/有歧义时结果为 inconclusive，不得猜测告警或动作。
 
 页面文案按 `issue` 通用渲染。推荐按钮应用后弹窗保留；相关值再次变化时按钮恢复为“推荐方案”；强制继续必须进入第二确认视图。`app.js` 内不得出现规则 ID、插件名或冲突文件路径。
 
@@ -111,6 +117,8 @@ evaluateCompatibilityRules → deriveCompatibilityPlans → applyUserIntent
 Defconfig 默认关闭。开启时只能在 `reconstructed.config` 已经确定之后运行上游 `make defconfig` 做可选 normalization；Defconfig 不得补全缺失 baseline、推导用户意图或替代 Catalog 身份。后端只做格式、最小 Target/Profile 身份、Catalog 契约、固件参数和路径安全校验，不重新判断插件依赖。
 
 无论是否开启 Defconfig，下载和编译前都会只核对 `request-overrides.json` 中的有效 Kconfig 值。门禁不比较整份 `.config`、不读取 `plugins`，也不检查未被覆盖的 baseline 项；显式值被改写时以 `configuration-override-mismatch` 停止，并保存 `config-verification.json`。
+
+编译前 Worker 会对权威 `.config` 做 hash，运行 `make prepare-tmpinfo V=s`，并要求前后 hash 相同且真实的 `tmp/.packageinfo` 非空。随后闭包门禁读取该元数据和上游软件包 Makefile，解析真实 dependency/provider 路径；元数据、候选、条件或路径缺失/有歧义时，在编译前 fail-closed。
 
 ## 7. Actions 命名、并发和保留
 
@@ -127,6 +135,8 @@ GitHub Actions 原生 Run 日志的保留天数属于仓库 Settings，不由 Wo
 
 网页右下角“检”立即打开原自检界面；标题栏可进入“插件兼容探针”。Probe 与 Advanced menuconfig 直接共用同一份 `menuValues`，两边点击都只把真实 Kconfig symbol 交给 `setMenuValue()` / `applyMenuValue()`；前端不再把 `PACKAGE_<name>` 反向改写为 `PACKAGE_luci-app-<name>`。因此选择 `PACKAGE_x` 不会反选依赖它的 LuCI 应用，而选择 `PACKAGE_luci-app-x` 时，只有上游 Kconfig/package 关系声明的正向依赖才会自动启用 `PACKAGE_x` 等依赖。Probe 的“已选择”只展示相对当前 Source/Branch/Target Kconfig baseline 发生变化的 `PACKAGE_*`，上游默认启用项不计入；摘要固定一行，超出通过 `+N` 弹层查看。搜索结果本身仍显示完整实时 Kconfig 状态。底部长说明不再常驻，改为“说明”按钮，放在“预览计划”左侧并用弹层展示。
 
+三层软件包名称必须分开：上游 `.config` 使用 `CONFIG_PACKAGE_<name>`，Catalog/Kconfig 模型使用 `PACKAGE_<name>`，构建闭包图使用 `.packageinfo` 与软件包 Makefile 中的真实 `<name>`。virtual capability 只是 provider 名称，不得生成 `CONFIG_`/`PACKAGE_` 符号或可选择软件包记录；owner 自己提供的 capability 也不得与自身冲突。
+
 Probe 提交使用 schema 3：Advanced menuconfig 的最终配置生成链仍用于展示用户直接变化与自动联动，但 Issue 对 L1–L7 一律只携带直接 `packageIntent` 及由它派生的紧凑变更前/后 `CONFIG_PACKAGE_*=m/y` 投影。完整 836 项或 Defconfig 后的 276 项不进入请求；Catalog 服务端再次规范化直接 Root，每个 Source/Branch Job 再用 Catalog Target/Profile 选择器和上游 Defconfig 自动补齐依赖。Source/Branch/Target/Profile 与覆盖参数独立传递，Catalog 不通过 curated application ID 或 `applications.json.gz` 二次映射软件包。
 
 Catalog 资产契约校验是隐含 `L0`，不是用户可选深度。页面把七个短按钮固定在“探测深度”右侧同一行，当前项高亮并显示勾号；完整名称与说明由 Catalog `probeUi.strings` 提供，并通过全站共享 tooltip 展示。顺序固定为：`L1 config-resolve` 官方配置求解、`L2 package-compile` 软件包编译、`L3 rootfs-integration` 根系统集成、`L4 firmware-integration` 单次 Final 固件集成、`L5 boot-smoke` 上游 qemustart 启动自检、`L6 runtime-health` 运行健康、`L7 reboot-validation` 重启验证。L2-L7 逐级复用已完成 Stage，不构建对照固件；所有深度都必须使用上游配置解析，不能关闭 Defconfig。自动目标可在一个 Job 内顺序尝试合法后备目标。Matrix 最多 256 项；仓库所有者使用完整计划并发，其他写协作者强制最多 3，普通访客不能启动 Matrix。规范化证据保留 60 天，完整日志保留 30 天；只有所有合法环境都因软件包原因失败才能判为完全不兼容，证据只供审查，不自动修改规则。
@@ -140,6 +150,9 @@ Catalog 资产契约校验是隐含 `L0`，不是用户可选深度。页面把�
 ## 9. 测试与发布
 
 ```powershell
+node tools/test-catalog-engine.mjs
+node tools/test-build-closure.mjs
+node tools/check-all.mjs
 node tools/dev-assistant.mjs prepare
 node tools/dev-assistant.mjs verify
 node tools/serve.mjs
@@ -150,6 +163,16 @@ node tools/serve.mjs
 发布顺序：同一频道总是先推 Catalog，等待数据分支发布并验证 root asset 契约，再推 AutoBuild，等待 CI/Pages，最后在线验证 `index.json`、`applications.json.gz`、`compatibility.json.gz` 与网页实际加载。正常代码晋级为 `dev → staging → main`。Catalog 的代码生命周期与正式数据生命周期必须分离：Catalog `main` 只生成 `catalog-candidate`，只有 Catalog 的手动 Production Gate 可以把已验证候选精确晋级到 `catalog-data`；AutoBuild 的运行时映射仍保持 `main → catalog-data`，不得读取 `catalog-candidate`。因此 Catalog 代码进入 `main` 不等于正式用户数据已发布。
 
 ## 10. Catalog 选择与最终配置
+
+Prompt/menu 可见性约束交互编辑，不代表隐藏的原生默认值非法；缺失的 scalar 不作为已启用配置项检查。Worker 重建保留 Native Profile baseline，只核对显式覆盖，不得对整份 baseline 套用交互校验；独立的上游构建闭包检查仍生效。浏览器测试必须等待 Catalog baseline 和字体就绪后再测浮层，不能把页面外壳已显示当作加载完成。
+
+跨 parser/runtime 修改时执行
+`node tools/test-catalog-producer-contract.mjs --producer-root <Catalog-checkout>`。
+该显式集成测试比较真实 producer 与网页 decoder 的完整定义变体、来源及关系，
+并验证 producer typed scalar default 的求值；它不是线上跨仓库运行依赖，
+也不替代 Linux 原生解析器与完整生成 CI。编辑器/求值器保存语义字符串：
+仅在导入时解码原生 `.config` 字面量，在导出时编码一次。Kconfig 反斜杠不使用
+JSON 转义语义；构建请求 JSON 本身仍正常使用 JSON 编码。
 
 `site/wrt/config/site.json` 的 `catalog.selection` 只保存很小的选择策略：Source 优先级、开发分支优先级，以及首选 Target selector 值；`catalog.loading` 只保存现有加载调度 contract。Source/Branch/Target/Profile 的真实清单仍完全来自 Catalog；首选 Target 不存在时必须退回 Catalog 中首个完整有效路径。默认策略只用于首次选择或新 Source/Branch，绝不能覆盖当前控件、有效状态或显式请求。
 
