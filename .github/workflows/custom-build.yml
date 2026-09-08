@@ -902,6 +902,7 @@ jobs:
         run: df -hT
 
       - name: Classify artifacts and write download guide / 分类产物并生成下载说明
+        id: classify_artifacts
         if: always()
         shell: bash
         run: |
@@ -929,6 +930,13 @@ jobs:
             '若存在 00-SUMMARY.txt，请先阅读；parallel/ 是原始并行失败现场，diagnostic/ 是单线程诊断现场。' \
             '成功且未进入诊断时仅保留常规 build.log / download.log。' \
             '构建 Artifact 统一保留 60 天。' > "$LOGS/00-请先读我-README.txt"
+
+          # Preserve diagnostics even when request validation never produced
+          # an artifact identity. Do not manufacture a firmware publication.
+          if [ -z "${{ steps.req.outputs.artifact_ref }}" ]; then
+            echo "No validated artifact identity; retained logs only."
+            exit 0
+          fi
 
           node tools/artifact-publish.mjs \
             --source openwrt/bin/targets \
@@ -980,7 +988,7 @@ jobs:
 
       - name: Build standalone artifact manifest / 生成独立 Artifact 清单
         id: artifact_manifest
-        if: always()
+        if: (!cancelled()) && steps.req.outcome == 'success' && steps.classify_artifacts.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
@@ -1015,7 +1023,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS
+          name: ${{ steps.req.outputs.artifact_ref || format('request-{0}-{1}', github.run_id, github.run_attempt) }}-BUILD-LOGS
           path: artifact-staging/BUILD-LOGS/
           if-no-files-found: warn
           retention-days: 60

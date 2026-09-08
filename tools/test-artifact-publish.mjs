@@ -13,6 +13,17 @@ import {
 } from './artifact-publish.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const workflow = readFileSync(join(ROOT, '.github/workflows/custom-build.yml'), 'utf8');
+const classification = workflow.slice(workflow.indexOf('      - name: Classify artifacts'),
+  workflow.indexOf('      - name: Build standalone artifact manifest'));
+assert(classification.indexOf('cp -a failure-logs/.') < classification.indexOf('if [ -z'),
+  'failure logs must be staged before publication is skipped');
+assert.match(classification, /if \[ -z "\$\{\{ steps.req.outputs.artifact_ref \}\}" \]; then[\s\S]*?exit 0[\s\S]*?fi[\s\S]*?node tools\/artifact-publish/);
+const manifestStep = workflow.slice(workflow.indexOf('      - name: Build standalone artifact manifest'),
+  workflow.indexOf('      - name: Upload standalone bridge'));
+assert.match(manifestStep, /steps.req.outcome == 'success' && steps.classify_artifacts.outcome == 'success'/);
+assert.match(workflow, /format\('request-\{0\}-\{1\}', github.run_id, github.run_attempt\)/,
+  'early failure diagnostics need an identity independent of parsed request outputs');
 const realPolicy = readArtifactPublishPolicy(join(ROOT, '.github', 'automation-policy.json'));
 assert(realPolicy.standaloneSuffixes.includes('.img.gz'));
 assert(realPolicy.standaloneSuffixes.includes('.itb'));

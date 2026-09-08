@@ -5,6 +5,67 @@ export const CATALOG_CACHE_NAME = 'wrt-catalog-cache-v3';
 const MAX_COMPATIBILITY_JSON_BYTES = 512 * 1024;
 const MAX_APPLICATIONS_JSON_BYTES = 4 * 1024 * 1024;
 
+// Schema 4 and the schema-5 shared-table encoding keep the same record layout.
+// The index authenticates bytes; the decoded payload owns its relation schema.
+const TYPED_RELATION_FIELDS = Object.freeze([
+  'symbolId', 'flags', 'typeCode', 'originCode', 'statesMask', 'choiceId', 'defaultsId',
+  'dependsVariantsId', 'selectsVariantsId', 'impliesVariantsId', 'packageDependenciesId',
+  'providesId', 'conflictsId', 'packageConflictsId', 'kconfigConflictsId', 'typedDefaultsId', 'rangesId',
+  'promptIfId', 'promptConditionsId', 'visibleIfId', 'menuVisibleIfId', 'directDependsId',
+  'inheritedDependsId', 'directVisibleIfId', 'inheritedVisibleIfId', 'inheritedMenuVisibleIfId',
+  'optionFlagsId', 'optionsId', 'definitionsId', 'capabilityRelationsId',
+]);
+
+export function selectCatalogGraphContract(branch) {
+  const compact = Object.hasOwn(branch?.assets || {}, 'graphCompact');
+  const contract = compact ? branch.assets.graphCompact : branch?.assets?.graph;
+  const pattern = compact ? /^[A-Za-z0-9._-]+\.graph\.compact\.json\.gz$/
+    : /^[A-Za-z0-9._-]+\.graph\.json\.gz$/;
+  if (!contract || typeof contract !== 'object' || Array.isArray(contract) ||
+      !pattern.test(String(contract.asset || '')) ||
+      !/^[a-f0-9]{64}$/i.test(String(contract.hash || '')) ||
+      !Number.isSafeInteger(contract.bytes) || contract.bytes <= 0) {
+    throw new Error('Catalog index has an invalid graph asset contract');
+  }
+  if (contract.relationsSchema !== undefined &&
+      !(compact ? [5] : [3, 4]).includes(contract.relationsSchema)) {
+    throw new Error('Catalog index has an unsupported graph relations schema');
+  }
+  return { ...contract, hash: contract.hash.toLowerCase(),
+    ...(typeof contract.sha256 === 'string' ? { sha256: contract.sha256.toLowerCase() } : {}),
+    logical: compact ? 'graphCompact' : 'graph' };
+}
+
+export function validateCatalogGraphContract(document, contract, expected = {}, {
+  requiredCapabilities = null,
+} = {}) {
+  const relations = document?.relations;
+  const schema = Number(relations?.schema || 0);
+  const supported = contract.logical === 'graphCompact' ? [5] : [3, 4];
+  if (!supported.includes(schema) ||
+      (contract.relationsSchema !== undefined && contract.relationsSchema !== schema)) {
+    throw new Error('Catalog graph relations schema does not match its asset contract');
+  }
+  for (const [key, value] of Object.entries(expected)) {
+    if (value && document?.source?.[key] !== value) {
+      throw new Error(`Catalog source ${key} mismatch: ${document?.source?.[key] || '(missing)'} != ${value}`);
+    }
+  }
+  if (!requiredCapabilities) return;
+  if (![4, 5].includes(schema) || !Array.isArray(relations.fields) ||
+      relations.fields.length !== TYPED_RELATION_FIELDS.length ||
+      relations.fields.some((field, index) => field !== TYPED_RELATION_FIELDS[index])) {
+    throw new Error('Catalog graph does not satisfy the typed relations fields contract');
+  }
+  const complete = (capabilities) => Array.isArray(capabilities) &&
+    requiredCapabilities.every((capability) => capabilities.includes(capability));
+  if (relations.relationsComplete !== true || document.relationsComplete !== true ||
+      !complete(relations.relationCapabilities) ||
+      (document.relationCapabilities !== undefined && !complete(document.relationCapabilities))) {
+    throw new Error('Catalog graph does not declare consistent complete typed Kconfig relation capabilities');
+  }
+}
+
 function safeRepository(value) {
   const repository = String(value || '').trim();
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
@@ -702,7 +763,7 @@ export function createCatalogLoader({
     const split = branch.assets?.core && branch.assets?.graph;
     if (split) {
       const coreContract = branch.assets.core;
-      const graphContract = branch.assets.graphCompact || branch.assets.graph;
+      const graphContract = selectCatalogGraphContract(branch);
       const [core, graph] = await Promise.all([
         fetchAssetDocument({
           asset: coreContract.asset, contract: coreContract, index, signal, diagnostics,
@@ -717,6 +778,7 @@ export function createCatalogLoader({
         throw loaderError('Catalog split assets do not satisfy schema 6 / relations 3, 4, or 5', diagnostics);
       }
       const expectedCommit = String(branch.commit || '');
+      validateCatalogGraphContract(graph.data, graphContract, { commit: expectedCommit });
       for (const data of [core.data, graph.data]) {
         const actualCommit = String(data?.source?.commit || '');
         if (expectedCommit && actualCommit !== expectedCommit) {
