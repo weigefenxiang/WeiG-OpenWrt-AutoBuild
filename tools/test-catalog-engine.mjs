@@ -2801,6 +2801,26 @@ for (let index = 0; index < 10; index++) {
   assert(allOff.symbol === '', `theme fallback ${index}: all-explicit-n did not fail`);
 }
 const selectedThemeName = 'luci-theme-selected-anonymous';
+// Defaults for an inactive owner must not poison an unrelated selection.
+// Cover every type and both known-disabled and unresolved owner conditions.
+for (const [type, defaultValue] of [['bool', 'y'], ['tristate', 'm'], ['string', '"example"'], ['int', '"128"'], ['hex', '"0x20"']]) {
+  const guardedModel = createCatalogModel({ schema: 6, relations: { schema: 2, records: [
+    { kind: 'package', package: 'luci-theme-guarded-anonymous', configSymbol: 'PACKAGE_luci-theme-guarded-anonymous',
+      kconfigSymbol: 'PACKAGE_luci-theme-guarded-anonymous', type: 'tristate', states: ['n', 'm', 'y'] },
+    { configSymbol: 'GUARDED_DEFAULT', kconfigSymbol: 'GUARDED_DEFAULT', type, defaults: [defaultValue],
+      hidden: true, userSettable: false, kconfig: { dependsExpressions: [['UNRELATED_DRIVER']] } },
+  ], indexes: {} } });
+  for (const values of [new Map([['UNRELATED_DRIVER', 'n']]), new Map()]) {
+    const theme = resolveEffectiveTheme(guardedModel, null, values);
+    assert(theme.package === 'luci-theme-guarded-anonymous', `${type}: inactive defaults blocked theme fallback`);
+    assert(!theme.values.has('GUARDED_DEFAULT') || theme.values.get('GUARDED_DEFAULT') === 'n',
+      `${type}: inactive or unresolved owner acquired a positive/scalar default`);
+    const evaluation = evaluateCompatibilityRules(guardedModel, { schema: 2, rules: [] }, values);
+    assert(!evaluation.values.has('GUARDED_DEFAULT'), `${type}: compatibility materialized an inactive default`);
+  }
+  const enabled = evaluateCompatibilityRules(guardedModel, { schema: 2, rules: [] }, new Map([['UNRELATED_DRIVER', 'y']]));
+  assert(enabled.values.has('GUARDED_DEFAULT'), `${type}: active owner lost its default`);
+}
 const selectedThemeSymbol = `PACKAGE_${selectedThemeName}`;
 const selectorSymbol = 'ENABLE_ANONYMOUS_THEME';
 const selectedThemeModel = createCatalogModel({ schema: 5, targets: [], relations: {

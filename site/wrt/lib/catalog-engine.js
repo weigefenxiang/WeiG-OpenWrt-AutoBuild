@@ -2685,6 +2685,7 @@ function derivedDefaultState(model, record, values, options = {}) {
   const resolved = resolveKconfigDefault(record, values, options);
   if (resolved.status === 'deferred') return null;
   const dependencyMaximum = dependencyLevel(record, values, options);
+  if (dependencyMaximum === UNKNOWN) return null;
   let defaultLevel = stateLevel(resolved.value);
   if (dependencyMaximum !== UNKNOWN) defaultLevel = Math.min(defaultLevel, dependencyMaximum);
   const selectors = effectiveSelectRequirements(model, record, values, options);
@@ -3232,6 +3233,10 @@ export function resolveEffectiveTheme(model, target, inputValues = new Map(), op
     let changed = false;
     for (const record of model.records || []) {
       if (!record.configSymbol || values.has(record.configSymbol)) continue;
+      // A default is not active merely because its own `if` is true. The
+      // owning symbol's dependencies must also permit a value; in particular,
+      // do not invent scalar defaults for disabled drivers or unknown gates.
+      if (dependencyLevel(record, values, context.validationOptions) <= 0) continue;
       const resolved = resolveKconfigDefault(record, values, context.validationOptions);
       if (resolved.status !== 'resolved') continue;
       values.set(record.configSymbol, resolved.value); changed = true;
@@ -3555,6 +3560,7 @@ function materializeCompatibilityDefaults(model, inputValues, options) {
   // worklist revisits only records whose typed default expression mentions a
   // value that just became known, and naturally stops at cycles/UNKNOWN.
   for (const record of records) {
+    for (const symbol of recordForwardReferences(record)) addDependent(symbol, record);
     const defaults = Array.isArray(record.defaultsTyped) && record.defaultsTyped.length
       ? record.defaultsTyped : (record.defaults || []);
     for (const raw of defaults) {
@@ -3569,6 +3575,7 @@ function materializeCompatibilityDefaults(model, inputValues, options) {
     const record = queue.shift();
     queued.delete(record);
     if (values.has(record.configSymbol)) continue;
+    if (dependencyLevel(record, values, options) <= 0) continue;
     const resolved = resolveKconfigDefault(record, values, options);
     if (resolved.status !== 'resolved') continue;
     values.set(record.configSymbol, resolved.value);
