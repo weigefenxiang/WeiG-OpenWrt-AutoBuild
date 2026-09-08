@@ -2,6 +2,8 @@
  "version": 2,
  "language": "ru",
  "strings": {
+  "compatibility.planUnavailable": "Automatic recommendation unavailable: {reason}",
+  "compatibility.retainedDependencies": "Still required by other selections or protected; retained: {list}",
   "app.title": "Онлайн-конструктор прошивок OpenWrt",
   "app.subtitle": "Выберите пакеты, запустите облачную сборку, выпейте капучино и встречайте эпоху открытого кода",
   "app.desc": "Онлайн-конструктор прошивок OpenWrt: выберите исходники и пакеты, сборка в облаке GitHub Actions, скачивание бесплатно",

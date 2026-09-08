@@ -2,6 +2,8 @@
  "version": 2,
  "language": "vi",
  "strings": {
+  "compatibility.planUnavailable": "Automatic recommendation unavailable: {reason}",
+  "compatibility.retainedDependencies": "Still required by other selections or protected; retained: {list}",
   "app.title": "Tùy chỉnh firmware OpenWrt trực tuyến",
   "app.subtitle": "Chọn gói, để đám mây tự biên dịch, nhâm nhi cappuccino và chào đón kỷ nguyên mã nguồn mở",
   "app.desc": "Tùy chỉnh firmware OpenWrt trực tuyến: chọn mã nguồn, tích chọn plugin, biên dịch cloud bằng GitHub Actions, tải về miễn phí",

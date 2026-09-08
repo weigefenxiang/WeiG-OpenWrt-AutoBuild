@@ -2,6 +2,8 @@
  "version": 2,
  "language": "pt",
  "strings": {
+  "compatibility.planUnavailable": "Automatic recommendation unavailable: {reason}",
+  "compatibility.retainedDependencies": "Still required by other selections or protected; retained: {list}",
   "app.title": "Firmware OpenWrt personalizado online",
   "app.subtitle": "Escolha os pacotes, compile na nuvem, tome um cappuccino e celebre a era do código aberto",
   "app.desc": "Firmware OpenWrt personalizado online: escolha o código-fonte, marque os plugins, compile na nuvem com o GitHub Actions e baixe de graça",

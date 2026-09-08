@@ -1,6 +1,8 @@
 {
  "_note": "English is the canonical UI language. Keep {x} placeholders unchanged. Generated bundles are written to site/wrt/data/i18n/ by tools/gen-i18n.mjs.",
  "strings": {
+  "compatibility.planUnavailable": "Automatic recommendation unavailable: {reason}",
+  "compatibility.retainedDependencies": "Still required by other selections or protected; retained: {list}",
   "app.title": "OpenWrt Firmware Customizer",
   "app.subtitle": "Pick your packages, let the cloud build, enjoy a cappuccino, and welcome the open-source era",
   "app.desc": "Customize OpenWrt firmware online: pick a source tree, tick plugins, build on GitHub Actions, download for free",

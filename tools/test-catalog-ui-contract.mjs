@@ -170,8 +170,9 @@ expect(app.includes('const previewPlugins = previewSelection.normal.map') &&
   buildAuditContract.includes('compatibility?.forced?.length') &&
   buildAuditContract.includes('compatibility: preflight.compatibility') &&
   schema6BuildContract.includes('audit: buildAudit(preflight)') &&
-  app.includes('const compatibilitySchema = Number(evaluation.loaded.compatibility?.schema ??') &&
-  app.includes('schema: compatibilitySchema, rules: [warning.rule]'),
+  app.includes('CATALOG_ENGINE.evaluateNormalizedCompatibilityRules(') &&
+  app.includes('CATALOG_MODEL, evaluation.document, values, evaluation.context') &&
+  !app.includes('schema: compatibilitySchema, rules: [warning.rule]'),
   'build preflight must precede final schema6 selection/config/overrides/payload, import must stay modal-free, and audit must retain configuration plus compatibility');
 
 const compatibilityIdentitySource = app.match(/function compatibilityIdentityError\([\s\S]*?(?=\n\nfunction compatibilityContext)/)?.[0] || '';

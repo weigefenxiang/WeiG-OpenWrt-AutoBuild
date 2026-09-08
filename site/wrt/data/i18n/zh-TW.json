@@ -2,6 +2,8 @@
  "version": 2,
  "language": "zh-TW",
  "strings": {
+  "compatibility.planUnavailable": "無法自動推薦：{reason}",
+  "compatibility.retainedDependencies": "仍被其他選擇需要或受保護，保留：{list}",
   "app.title": "OpenWrt 韌體線上客製",
   "app.subtitle": "選好套件,雲端自動編譯,喝杯卡布奇諾，迎接開「源」盛世",
   "app.desc": "OpenWrt 韌體線上客製:選原始碼、勾套件,GitHub Actions 雲端編譯,免費自取",

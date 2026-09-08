@@ -902,11 +902,9 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
           CATALOG_ENGINE.kconfigStateConstraints(CATALOG_MODEL, row.record, values,
             evaluation.context.validationOptions)]));
         try {
-          const compatibilitySchema = Number(evaluation.loaded.compatibility?.schema ??
-            evaluation.loaded.contract?.schema ?? 0);
-          const compatibilityInvalid = CATALOG_ENGINE.evaluateCompatibilityRules(CATALOG_MODEL, {
-            schema: compatibilitySchema, rules: [warning.rule],
-          }, values, evaluation.context).warnings.length > 0;
+          const compatibilityInvalid = CATALOG_ENGINE.evaluateNormalizedCompatibilityRules(
+            CATALOG_MODEL, evaluation.document, values, evaluation.context,
+          ).warnings.some((item) => item.rule.id === warning.rule.id);
           const stateInvalid = rows.some((row) => {
             const constraints = constraintsBySymbol.get(row.record.configSymbol);
             const stateRow = constraints.states.find((item) =>
@@ -1013,6 +1011,19 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
         list: formatList(automaticChangeNames),
       }) : '';
       recommendationDetail.textContent = recommendationApplied ? t('runtime.beae674c2c45') : plans.recommended ? `${t('runtime.e7029a40a144', { value1: plans.recommended.cost })}${automaticDetail}` : t('runtime.a1add5a3f534');
+      if (!plans.recommended && plans.reason?.length) {
+        const reasons = plans.reason.map((row) => typeof row === 'string' ? row :
+          [row.source, row.reason].filter(Boolean).join(': '));
+        recommendationDetail.textContent = t('compatibility.planUnavailable', {
+          reason: displayText([...new Set(reasons)].join('; ')),
+        });
+      }
+      if (plans.recommended?.retainedDependencies?.length) {
+        recommendationDetail.textContent += ` ${t('compatibility.retainedDependencies', {
+          list: formatList(plans.recommended.retainedDependencies.map((symbol) =>
+            displayText(symbol.replace(/^PACKAGE_/, '')))),
+        })}`;
+      }
       recommendationHeader.append(recommendationTitle, recommendationDetail);
       recommendation.append(recommendationHeader, recommendationAction);
       body.appendChild(recommendation);
@@ -1027,6 +1038,7 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
         : t('runtime.5c2c197f7d61');
       recommendedButton.disabled = !plans.recommended || recommendationApplied;
       recommendedButton.onclick = () => applyAndVerify(() => {
+        for (const symbol of plans.recommended?.dependencySymbols || []) catalogDependencySymbols.add(symbol);
         for (const step of recommendationActions) {
           const value = step.value || 'n';
           if ((menuValues.get(step.symbol) ?? 'n') === value) continue;

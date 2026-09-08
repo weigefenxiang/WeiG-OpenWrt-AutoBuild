@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { readFrontendRuntimeSource } from './lib/frontend-source.mjs';
-import { createCatalogModel } from '../site/wrt/lib/catalog-engine.js';
+import { createCatalogModel, validateConfig } from '../site/wrt/lib/catalog-engine.js';
 import { createRuntimeMenu, mergeHiddenShard, mergeMenuShards } from '../site/wrt/lib/catalog-schema6.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -58,6 +58,28 @@ const modelElapsed = performance.now() - modelStart;
 assert.equal(model.records.length, 12000);
 assert.ok(model.bySymbol.has('PACKAGE_fixture-11999'));
 assert.ok(modelElapsed < 5000, `compact relation expansion took ${modelElapsed.toFixed(1)}ms`);
+
+// The former provider lookup scanned every package for every active edge.
+// Count metadata accesses, not machine-dependent timings, to catch that
+// quadratic regression on both indexed and legacy record-only snapshots.
+const providerFixture = Array.from({ length: 4000 }, (_, index) => ({
+  package: `provider-${index}`, configSymbol: `PACKAGE_provider-${index}`,
+  type: 'bool', states: ['n', 'y'], provides: [`@cap-${index}`],
+  packageInfo: { depends: [] },
+}));
+providerFixture.push({ package: 'consumer', configSymbol: 'PACKAGE_consumer', type: 'bool',
+  states: ['n', 'y'], packageInfo: { depends: [
+    { raw: '+cap-17', required: true, packages: ['cap-17'] },
+  ] } });
+const providerModel = createCatalogModel({ schema: 6, relations: { schema: 2, records: providerFixture } });
+let providerReads = 0;
+for (const record of providerModel.records) {
+  const provides = record.provides;
+  Object.defineProperty(record, 'provides', { get() { providerReads++; return provides; } });
+}
+const providerValues = new Map([['PACKAGE_consumer', 'y'], ['PACKAGE_provider-17', 'y']]);
+for (let count = 0; count < 20; count++) assert.deepEqual(validateConfig(providerModel, providerValues), []);
+assert.equal(providerReads, 0, 'provider metadata must be indexed once, not rescanned per validation');
 
 const runtime = createRuntimeMenu(model);
 const menu = mergeMenuShards({ menu: runtime }, model, {

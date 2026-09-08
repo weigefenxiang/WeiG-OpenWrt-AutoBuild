@@ -1,3 +1,5 @@
+import { decodeCompactRelationTables } from './catalog-relation-tables.js';
+
 const LEVEL = Object.freeze({ n: 0, m: 1, y: 2 });
 const STATE = Object.freeze(['n', 'm', 'y']);
 const UNKNOWN = -1;
@@ -821,6 +823,7 @@ function compactStates(mask) {
 }
 
 export function expandCompactRelations(compact) {
+  if (Number(compact?.schema) === 5) return expandCompactRelations(decodeCompactRelationTables(compact));
   const relationSchema = Number(compact?.schema || 0);
   if (![3, 4].includes(relationSchema)) throw new Error('Catalog relations schema 3 or 4 is required');
   const schema4 = relationSchema === 4;
@@ -1400,10 +1403,10 @@ function evaluateKconfigRelationCondition(relation, inputValues, options = {}) {
 export function createCatalogModel(catalog) {
   const schema = Number(catalog?.schema || 0);
   const relationsSchema = Number(catalog?.relations?.schema || 0);
-  if (!catalog || schema < 5 || ![2, 3, 4].includes(relationsSchema)) {
-    throw new Error('Catalog schema 5+ / relations schema 2, 3, or 4 is required');
+  if (!catalog || schema < 5 || ![2, 3, 4, 5].includes(relationsSchema)) {
+    throw new Error('Catalog schema 5+ / relations schema 2, 3, 4, or 5 is required');
   }
-  const relations = [3, 4].includes(relationsSchema) ? expandCompactRelations(catalog.relations) : catalog.relations;
+  const relations = [3, 4, 5].includes(relationsSchema) ? expandCompactRelations(catalog.relations) : catalog.relations;
   const packageClosure = packageClosureContract(relations);
   const records = (relations.records || []).map(normalizeRecord);
   const symbolTypes = catalogSymbolTypes(relations, records);
@@ -1441,8 +1444,57 @@ export function createCatalogModel(catalog) {
   const closedDefaultSymbols = new Set([...defaultReferences].filter((symbol) =>
     !bySymbol.has(symbol) && !deferredReferences.has(symbol) && !/^TARGET_/.test(symbol)));
   const providers = new Map();
-  for (const [name, rows] of Object.entries(relations.indexes?.providers || {})) providers.set(name, [...rows]);
+  const addProvider = (name, provider) => {
+    // Provides uses a leading @ as metadata, unlike a Depends @ condition.
+    const capability = packageCapabilityName(name).replace(/^@/, '');
+    const owner = packageCapabilityName(provider);
+    if (!capability || !byPackage.has(owner)) return;
+    const rows = providers.get(capability) || new Set();
+    rows.add(owner);
+    providers.set(capability, rows);
+  };
+  for (const [name, rows] of Object.entries(relations.indexes?.providers || {})) {
+    for (const owner of rows) addProvider(name, owner);
+  }
+  // Legacy/readable records may carry providers without an authored index.
+  // Reconstruct that index once, not once per dependency per validation pass.
+  for (const record of records) {
+    for (const value of [...(record.provides || []), ...(record.packageInfo?.provides || []),
+      ...(record.providesRelations || []), ...(record.packageInfo?.providesRelations || [])]) {
+      addProvider(typeof value === 'object' ? (value.name || value.raw || '') : value, record.package);
+    }
+  }
+  for (const [name, rows] of providers) providers.set(name, [...rows]);
+  const packageProviders = new Map([...byPackage].map(([name, record]) => [name, [record]]));
+  for (const [name, rows] of providers) {
+    packageProviders.set(name, [...new Set([
+      ...(packageProviders.get(name) || []), ...rows.map((owner) => byPackage.get(owner)),
+    ])]);
+  }
   const reverseDependencies = new Map();
+  // Derive a trusted reverse index from forward facts once per model. Old
+  // authored reverse indexes can be stale; do not rescan all records for
+  // every disabled/orphan candidate during configuration import.
+  const forwardDependents = new Map();
+  const addDependent = (target, source) => {
+    if (!target || target === source) return;
+    const rows = forwardDependents.get(target) || new Set();
+    rows.add(source); forwardDependents.set(target, rows);
+  };
+  for (const record of records) {
+    for (const reference of recordForwardReferences(record)) {
+      for (const alias of symbolAliases(reference)) {
+        if (bySymbol.has(alias)) addDependent(alias, record.configSymbol);
+      }
+    }
+    for (const dependency of record.packageInfo?.depends || []) {
+      const names = [...(dependency.packages || []), ...(dependency.targets || []).map((row) =>
+        typeof row === 'object' ? row.name || row.raw || '' : row)];
+      for (const name of names) for (const target of packageProviders.get(packageCapabilityName(name)) || []) {
+        addDependent(target.configSymbol, record.configSymbol);
+      }
+    }
+  }
   for (const [name, rows] of Object.entries(relations.indexes?.reverseDependencies || {})) reverseDependencies.set(name, [...rows]);
   const reverseKconfig = new Map();
   for (const [symbol, rows] of Object.entries(relations.indexes?.reverseKconfig || {})) reverseKconfig.set(symbol, [...rows]);
@@ -1512,6 +1564,8 @@ export function createCatalogModel(catalog) {
     bySymbol,
     byPackage,
     providers,
+    packageProviders,
+    forwardDependents,
     reverseDependencies,
     reverseKconfig,
     reverseSelects,
@@ -2034,18 +2088,8 @@ function enforceablePackage(model, name) {
 function packageProviderRecords(model, name, { excludePackage = '' } = {}) {
   const capability = packageCapabilityName(name);
   const excluded = packageCapabilityName(excludePackage);
-  const capabilityNames = (record) => [
-    ...(record?.provides || []), ...(record?.packageInfo?.provides || []),
-    ...(record?.providesRelations || []), ...(record?.packageInfo?.providesRelations || []),
-  ].map((value) => typeof value === 'object' ? (value.name || value.raw || '') : value)
-    .map(packageCapabilityName).filter(Boolean);
-  const candidates = [
-    model?.byPackage?.get(capability),
-    ...(model?.providers?.get(capability) || []).map((provider) =>
-      model?.byPackage?.get(packageCapabilityName(provider))),
-    ...(model?.records || []).filter((record) => capabilityNames(record).includes(capability)),
-  ].filter((record) => record?.package && record.package !== excluded);
-  return [...new Map(candidates.map((record) => [record.package, record])).values()];
+  const candidates = model?.packageProviders?.get(capability) || [];
+  return excluded ? candidates.filter((record) => record.package !== excluded) : candidates;
 }
 
 function packageSatisfied(model, name, values, options = {}) {
@@ -2461,18 +2505,6 @@ function symbolAliases(symbol) {
   return new Set([value, unprefixed, `CONFIG_${unprefixed}`]);
 }
 
-function recordProvidesNames(record) {
-  return new Set([
-    record?.package,
-    ...(record?.provides || []), ...(record?.packageInfo?.provides || []),
-    ...(record?.providesRelations || []), ...(record?.packageInfo?.providesRelations || []),
-  ].flatMap((value) => {
-    const name = typeof value === 'object' ? (value.name || value.raw || '') : value;
-    const normalized = packageCapabilityName(name);
-    return normalized ? [normalized] : [];
-  }));
-}
-
 function recordForwardReferences(record) {
   const symbols = new Set();
   const addExpressions = (rows) => {
@@ -2510,34 +2542,13 @@ function recordForwardReferences(record) {
   return symbols;
 }
 
-function recordForwardDependsOn(record, target) {
-  if (!record?.configSymbol || !target?.configSymbol || record.configSymbol === target.configSymbol) return false;
-  const aliases = symbolAliases(target.configSymbol);
-  if ([...recordForwardReferences(record)].some((symbol) => aliases.has(String(symbol).trim()))) return true;
-
-  if (!target.package) return false;
-  const targetNames = recordProvidesNames(target);
-  for (const dependency of record.packageInfo?.depends || []) {
-    for (const name of dependency?.packages || []) {
-      if (targetNames.has(packageCapabilityName(name))) return true;
-    }
-    for (const relation of dependency?.targets || []) {
-      const name = typeof relation === 'object' ? (relation.name || relation.raw || '') : relation;
-      if (targetNames.has(packageCapabilityName(name))) return true;
-    }
-  }
-  return false;
-}
-
 function reverseCandidates(model, record) {
   // Reverse indexes are an acceleration hint only.  Stale indexes have been
   // observed in older Catalog assets, and using one without checking the
   // dependent's forward relation can disable an unrelated enabled option or
   // keep an orphan package alive.  Prove every candidate from its own
   // dependency/select/imply/package-provider data before returning it.
-  return (model?.records || [])
-    .filter((candidate) => recordForwardDependsOn(candidate, record))
-    .map((candidate) => candidate.configSymbol);
+  return [...(model?.forwardDependents?.get(record.configSymbol) || [])];
 }
 
 function cascadeDisabled(model, values, changes, initialSymbols, options = {}) {
@@ -2596,8 +2607,13 @@ function dependencyStillRequired(model, symbol, values, options = {}) {
     const candidate = model.bySymbol.get(candidateSymbol);
     if (!candidate || !recordEnabled(candidate, values)) continue;
     if (activeSelectsSymbol(candidate, symbol, values, options)) return true;
-    const before = new Set(recordViolations(model, candidate, values, options).filter(isBlockingViolation).map(violationKey));
-    const after = recordViolations(model, candidate, testValues, options).filter(isBlockingViolation);
+    const beforeRows = recordViolations(model, candidate, values, { ...options, deferred: 'error' });
+    const afterRows = recordViolations(model, candidate, testValues, { ...options, deferred: 'error' });
+    // An unresolved surviving consumer cannot prove that this dependency is
+    // unused. Preserve it until the native condition can be evaluated.
+    if (beforeRows.some((item) => item.deferred) || afterRows.some((item) => item.deferred)) return true;
+    const before = new Set(beforeRows.filter(isBlockingViolation).map(violationKey));
+    const after = afterRows.filter(isBlockingViolation);
     if (after.some((item) => !before.has(violationKey(item)))) return true;
   }
   return false;
@@ -3148,6 +3164,10 @@ export function deriveConfigurationRepairPlan(model, inputValues, rawOptions = {
   });
   const initialViolations = validateConfig(model, initialValues, validation)
     .filter(isBlockingViolation);
+  if (!initialViolations.length) {
+    return { initialViolations, actions: [], changes: [], values: initialValues,
+      finalValues: initialValues, unresolved: [] };
+  }
   let values = new Map(initialValues);
   const actions = [];
   const changes = [];
@@ -3159,7 +3179,7 @@ export function deriveConfigurationRepairPlan(model, inputValues, rawOptions = {
     ? Math.max(1, Math.min(128, maxPassesRaw)) : 128;
 
   for (let pass = 0; pass < maxPasses && actions.length < maxActions; pass++) {
-    const blocking = validateConfig(model, values, validation).filter(isBlockingViolation)
+    const blocking = (pass === 0 ? [...initialViolations] : validateConfig(model, values, validation).filter(isBlockingViolation))
       .sort((left, right) => violationKey(left).localeCompare(violationKey(right)));
     if (!blocking.length) break;
     let progressed = false;
@@ -3430,6 +3450,8 @@ function normalizeCompatibilityBuildDependency(value, label) {
   return { package: packageName, triggerPackages, legacy: hasLegacyTriggers };
 }
 
+const NORMALIZED_COMPATIBILITY_DOCUMENTS = new WeakSet();
+
 export function normalizeCompatibilityDocument(raw) {
   if (!compatibilityObject(raw)) throw compatibilityError('compatibility document must be an object');
   compatibilityKeys(raw, COMPATIBILITY_DOCUMENT_KEYS, 'compatibility document');
@@ -3513,7 +3535,9 @@ export function normalizeCompatibilityDocument(raw) {
     }
     return normalized;
   });
-  return { schema, rules };
+  const document = { schema, rules };
+  NORMALIZED_COMPATIBILITY_DOCUMENTS.add(document);
+  return document;
 }
 
 function materializeCompatibilityDefaults(model, inputValues, options) {
@@ -3639,8 +3663,16 @@ function compatibilityNearMatch(rule, sourceId, branchName, sourceCommit, target
 }
 
 export function evaluateCompatibilityRules(model, document, inputValues, context = {}) {
+  return evaluateNormalizedCompatibilityRules(model, normalizeCompatibilityDocument(document), inputValues, context);
+}
+
+// Internal results keep derived fields that are deliberately not legal wire input.
+// Only documents produced by the strict boundary above may enter this path.
+export function evaluateNormalizedCompatibilityRules(model, normalized, inputValues, context = {}) {
   if (!model?.byPackage) throw compatibilityError('Catalog model is unavailable');
-  const normalized = normalizeCompatibilityDocument(document);
+  if (!NORMALIZED_COMPATIBILITY_DOCUMENTS.has(normalized)) {
+    throw compatibilityError('Expected a normalized compatibility document');
+  }
   const sourceId = String(context.sourceId || ''), branchName = String(context.branchName || '');
   const sourceCommit = String(context.sourceCommit || '').toLowerCase();
   const target = {
@@ -3754,7 +3786,7 @@ function compatibilityDisablePlan(model, record, inputValues, intent = {}) {
   const protectedSymbols = new Set(intent.protectedSymbols || []);
   const preferredValues = intent.preferredValues instanceof Map
     ? new Map(intent.preferredValues) : new Map(Object.entries(intent.preferredValues || {}));
-  const explicitSymbols = new Set(intent.explicitSymbols || []);
+  const explicitSymbols = new Set(intent.explicitSymbols || options.explicitSymbols || []);
   options.explicitSymbols = explicitSymbols;
 
   const visit = (candidate) => {
@@ -3964,20 +3996,7 @@ function packageGraphRecord(model, value) {
   return model?.byPackage?.get(name) || null;
 }
 
-function packageGraphTargets(model, name) {
-  const capability = packageCapabilityName(name);
-  const direct = model?.byPackage?.get(capability);
-  const providers = (model?.providers?.get(capability) || [])
-    .map((provider) => packageGraphRecord(model, provider)).filter(Boolean);
-  const capabilityNames = (record) => [
-    ...(record?.provides || []), ...(record?.packageInfo?.provides || []),
-    ...(record?.providesRelations || []), ...(record?.packageInfo?.providesRelations || []),
-  ].map((value) => typeof value === 'object' ? (value.name || value.raw || '') : value)
-    .map(packageCapabilityName).filter(Boolean);
-  const records = (model?.records || []).filter((record) => capabilityNames(record).includes(capability));
-  return [...new Map([...(direct ? [direct] : []), ...providers, ...records]
-    .map((record) => [record.package, record])).values()];
-}
+function packageGraphTargets(model, name) { return packageProviderRecords(model, name); }
 
 function activePackageTargets(model, name, values) {
   return packageGraphTargets(model, name).filter((record) => recordEnabled(record, values));
@@ -4197,7 +4216,7 @@ function expressionDependencyProof(expression, inputValues, options = {}) {
  * graph whose optional indexes are absent.  Unknown conditions or unresolved
  * providers are retained as provenance and never silently treated as an edge.
  */
-function activePackageGraph(model, values, options = {}) {
+function activePackageGraph(model, values, options = {}, includeInactive = false) {
   const graph = new Map();
   const unknown = [];
   const addUnknown = (source, reason) => unknown.push({ source, reason });
@@ -4249,7 +4268,7 @@ function activePackageGraph(model, values, options = {}) {
     if (target.package) addEdge(source, target.package);
   };
   for (const record of model?.records || []) {
-    if (!record?.package || !record.configSymbol || !recordEnabled(record, values)) continue;
+    if (!record?.package || !record.configSymbol || (!includeInactive && !recordEnabled(record, values))) continue;
     const source = record.package;
     graph.set(source, graph.get(source) || new Set());
     for (const dependency of record.packageInfo?.depends || []) {
@@ -4427,13 +4446,34 @@ function deriveGraphBuildDependencyPlans(model, inputValues, warning, intent = {
     package: record.package || packageNameFromSymbol(record.configSymbol),
     value: 'n',
   }));
+  // Discover cleanup candidates from the same resolved forward graph, never
+  // from a maintained trigger list. The normal intent engine proves whether
+  // each candidate is orphaned and preserves surviving/shared consumers.
+  // Potential forward edges also cover an already-disabled failed package.
+  // They discover cleanup candidates only, never active build triggers; all
+  // conditions/providers are still resolved against the current values.
+  const cleanupGraph = activePackageGraph(model, startingValues, options, true);
+  const descendants = new Set(targetRecords.map((record) => record.package));
+  const pending = [...descendants];
+  for (let index = 0; index < pending.length; index++) {
+    for (const target of cleanupGraph.graph.get(pending[index]) || []) {
+      if (!descendants.has(target)) { descendants.add(target); pending.push(target); }
+    }
+  }
+  const dependencySymbols = new Set(intent.dependencySymbols || []);
+  const directTargets = new Set(targetRecords.map((record) => record.configSymbol));
+  for (const name of descendants) {
+    const record = packageGraphRecord(model, name);
+    if (record && !directTargets.has(record.configSymbol)) dependencySymbols.add(record.configSymbol);
+  }
+  const cleanupIntent = { ...intent, dependencySymbols };
   let values = new Map(startingValues);
   let changes = [];
   const allSteps = [];
   for (const record of targetRecords) {
     if (normalizeValue(values.get(record.configSymbol) ?? 'n') === 'n') continue;
     let plan = null;
-    try { plan = compatibilityDisablePlan(model, record, values, intent); } catch { plan = null; }
+    try { plan = compatibilityDisablePlan(model, record, values, cleanupIntent); } catch { plan = null; }
     if (!plan) {
       return { candidates: [], recommended: null, status: 'inconclusive', reason: [`cannot-disable:${record.package}`] };
     }
@@ -4451,6 +4491,9 @@ function deriveGraphBuildDependencyPlans(model, inputValues, warning, intent = {
   const steps = [...stepBySymbol.values()];
   const candidate = compatibilityPlanCandidate(startingValues, steps, values, changes,
     failedRecord?.package || '', requiredTargets);
+  candidate.dependencySymbols = [...dependencySymbols];
+  candidate.retainedDependencies = [...dependencySymbols].filter((symbol) =>
+    stateLevel(values.get(symbol) ?? 'n') > 0);
   if (compatibilityWarningTriggered(model, { ...warning, values }, values, options)) {
     return { candidates: [], recommended: null, status: 'inconclusive', reason: ['warning-remains-active'] };
   }

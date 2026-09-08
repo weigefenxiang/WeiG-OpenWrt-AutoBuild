@@ -702,7 +702,7 @@ export function createCatalogLoader({
     const split = branch.assets?.core && branch.assets?.graph;
     if (split) {
       const coreContract = branch.assets.core;
-      const graphContract = branch.assets.graph;
+      const graphContract = branch.assets.graphCompact || branch.assets.graph;
       const [core, graph] = await Promise.all([
         fetchAssetDocument({
           asset: coreContract.asset, contract: coreContract, index, signal, diagnostics,
@@ -713,8 +713,8 @@ export function createCatalogLoader({
           preferredAssetProvider, forceRefresh, stage: 'graph',
         }),
       ]);
-      if (Number(core.data?.schema || 0) < 6 || ![3, 4].includes(Number(graph.data?.relations?.schema || 0))) {
-        throw loaderError('Catalog split assets do not satisfy schema 6 / relations 3 or 4', diagnostics);
+      if (Number(core.data?.schema || 0) < 6 || ![3, 4, 5].includes(Number(graph.data?.relations?.schema || 0))) {
+        throw loaderError('Catalog split assets do not satisfy schema 6 / relations 3, 4, or 5', diagnostics);
       }
       const expectedCommit = String(branch.commit || '');
       for (const data of [core.data, graph.data]) {

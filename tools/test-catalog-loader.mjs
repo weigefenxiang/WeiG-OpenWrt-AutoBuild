@@ -659,6 +659,29 @@ const splitCallCount = splitCalls.length;
 await splitBundle.loadShard('menu');
 assert(splitCalls.length === splitCallCount, 'loaded menu shard was not reused');
 
+// A new consumer prefers the optional compact wire asset; publishers retain
+// the original graph contract for already-deployed readers.
+splitDocuments.graphCompact = compressedDocument({
+  schema: 6, kind: 'graph', source: { repo: 'example/upstream', commit: splitCommit },
+  relations: { ...compactEmpty, schema: 5, encoding: 'interned-definitions-edge-rows-v1',
+    edgeFields: [], edges: [], definitions: { schema: 5, encoding: 'interned-relations-v1',
+      shapes: [['schema', 'definitions']], nodes: [[-1, 4], [-2], [0, 0, 1]], root: 2 } },
+});
+splitAssets.graphCompact = { asset: 'immortalwrt--openwrt-25.12.graph.compact.json.gz',
+  bytes: splitDocuments.graphCompact.bytes.length, hash: splitDocuments.graphCompact.hash };
+await splitLoader.clearCache();
+splitCalls.length = 0;
+const compactBundle = await splitLoader.fetchBundle({ sourceId: 'ImmortalWrt', branchName: 'openwrt-25.12' });
+assert(compactBundle.model.relationsSchema === 5 && compactBundle.model.relationsComplete &&
+  compactBundle.model.packageClosureComplete && splitCalls.some((url) => url.includes(splitAssets.graphCompact.asset)) &&
+  !splitCalls.some((url) => url.includes(splitAssets.graph.asset)),
+  'optional schema-5 graph must be preferred without losing independent completeness contracts');
+await splitLoader.clearCache();
+splitDocuments.graphCompact = compressedDocument({ invalid: true });
+await assertRejects(() => splitLoader.fetchBundle({ sourceId: 'ImmortalWrt', branchName: 'openwrt-25.12' }),
+  /hash|size|bytes|unavailable|failed/i,
+  'advertised compact graph corruption must not fall back to an older graph');
+
 const compatibilityDocument = {
   schema: 2,
   rules: [{

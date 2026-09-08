@@ -10,6 +10,7 @@ import {
   deriveCompatibilityPlans,
   deriveKconfigPrerequisitePlans,
   evaluateCompatibilityRules,
+  evaluateNormalizedCompatibilityRules,
   evaluateExpression,
   evaluateExpressionState,
   kconfigStateConstraints,
@@ -560,6 +561,16 @@ const graphDependencyValues = parseConfigDocument([
   'CONFIG_PACKAGE_docker=y', '# CONFIG_PACKAGE_dockerd is not set',
 ].join('\n'));
 const graphDependencyContext = { sourceId: 'Demo', branchName: 'stable', sourceCommit: 'a'.repeat(40) };
+const normalizedGraphDocument = normalizeCompatibilityDocument(graphDependencyRule);
+assert(evaluateNormalizedCompatibilityRules(graphDependencyModel, normalizedGraphDocument,
+  graphDependencyValues, graphDependencyContext).warnings.length === 1,
+  'trusted normalized rules must be reusable when refreshing a recommendation');
+expectThrow(() => evaluateCompatibilityRules(graphDependencyModel, normalizedGraphDocument,
+  graphDependencyValues, graphDependencyContext), /unsupported field.*legacy/i,
+  'internal legacy flags must remain forbidden in external wire documents');
+expectThrow(() => evaluateNormalizedCompatibilityRules(graphDependencyModel,
+  JSON.parse(JSON.stringify(normalizedGraphDocument)), graphDependencyValues, graphDependencyContext),
+  /normalized compatibility document/i, 'a serialized copy is not a trusted normalized document');
 const graphDependencyWarning = evaluateCompatibilityRules(
   graphDependencyModel, graphDependencyRule, graphDependencyValues, graphDependencyContext,
 ).warnings[0];
@@ -747,6 +758,53 @@ assert(sharedGraphWarning && sharedGraphPlan.recommended?.steps.map((step) => st
   evaluateCompatibilityRules(sharedGraphModel, sharedGraphRule, sharedGraphPlan.recommended.values,
     conditionalContext).warnings.length === 0,
   'shared package graph recommendation did not preserve the shared dependency while disabling all roots');
+
+// Fault avoidance discovers downstream orphan candidates as well as reverse
+// roots. The same algorithm applies to an arbitrary daemon/runtime chain.
+const cleanupRows = [
+  ['client-ui', ['client']], ['client', ['daemon']], ['daemon', ['runtime', 'init']],
+  ['runtime', ['executor']], ['init', []], ['executor', []], ['unrelated', []],
+].map(([name, dependencies]) => ({ kind: 'package', package: name, configSymbol: `PACKAGE_${name}`,
+  kconfigSymbol: `PACKAGE_${name}`, type: 'bool', states: ['n', 'y'],
+  packageInfo: { depends: dependencies.map((target) => ({ raw: `+${target}`, required: true, packages: [target] })) } }));
+const cleanupModel = createCatalogModel({ schema: 6, relations: { schema: 2, records: cleanupRows,
+  packageClosureComplete: true, packageClosureCapabilities: ['complete-package-build-closure-v1'],
+  indexes: {} } });
+const cleanupRule = { schema: 4, rules: [{ ...graphDependencyRule.rules[0],
+  id: 'BLD-CLEANUP', packages: ['daemon'], buildDependency: { package: 'daemon' } }] };
+const cleanupValues = new Map(cleanupRows.map((record) => [record.configSymbol, 'y']));
+const cleanupWarning = evaluateCompatibilityRules(cleanupModel, cleanupRule, cleanupValues, conditionalContext).warnings[0];
+const cleanupPlan = deriveCompatibilityPlans(cleanupModel, cleanupValues, cleanupWarning).recommended;
+assert(cleanupPlan && ['client-ui', 'client', 'daemon', 'runtime', 'init', 'executor'].every((name) =>
+  cleanupPlan.values.get(`PACKAGE_${name}`) === 'n') && cleanupPlan.values.get('PACKAGE_unrelated') === 'y',
+  'graph-derived avoidance must clear related orphans without disabling an unrelated package');
+assert(['runtime', 'init', 'executor'].every((name) => cleanupPlan.automaticChanges.some((change) =>
+  change.symbol === `PACKAGE_${name}` && change.to === 'n')), 'orphan cleanup must be reported as automatic changes');
+const protectedCleanup = deriveCompatibilityPlans(cleanupModel, cleanupValues, cleanupWarning, {
+  protectedSymbols: new Set(['PACKAGE_init']),
+}).recommended;
+assert(protectedCleanup.values.get('PACKAGE_init') === 'y' &&
+  protectedCleanup.retainedDependencies.includes('PACKAGE_init'),
+  'an independently protected dependency must be retained and reported');
+const inactiveFailedValues = new Map(cleanupValues); inactiveFailedValues.set('PACKAGE_daemon', 'n');
+const inactiveFailedWarning = evaluateCompatibilityRules(cleanupModel, cleanupRule, inactiveFailedValues, conditionalContext).warnings[0];
+const inactiveFailedPlan = deriveCompatibilityPlans(cleanupModel, inactiveFailedValues, inactiveFailedWarning).recommended;
+assert(inactiveFailedPlan && ['client-ui', 'client', 'daemon', 'runtime', 'init', 'executor'].every((name) =>
+  inactiveFailedPlan.values.get(`PACKAGE_${name}`) === 'n'),
+  'an already-disabled failed package must not hide its orphan dependency candidates');
+for (const condition of ['', 'MISSING_SHARED_CONDITION']) {
+  const sharedRows = [...cleanupRows, { kind: 'package', package: 'other-service',
+    configSymbol: 'PACKAGE_other-service', kconfigSymbol: 'PACKAGE_other-service', type: 'bool', states: ['n', 'y'],
+    packageInfo: { depends: [{ required: true, packages: ['runtime'], condition }] } }];
+  const sharedModel = createCatalogModel({ schema: 6, relations: { schema: 2, records: sharedRows,
+    packageClosureComplete: true, packageClosureCapabilities: ['complete-package-build-closure-v1'], indexes: {} } });
+  const sharedValues = new Map([...cleanupValues, ['PACKAGE_other-service', 'y']]);
+  const sharedWarning = evaluateCompatibilityRules(sharedModel, cleanupRule, sharedValues, conditionalContext).warnings[0];
+  const sharedPlan = deriveCompatibilityPlans(sharedModel, sharedValues, sharedWarning).recommended;
+  assert(sharedPlan && ['runtime', 'executor', 'other-service'].every((name) =>
+    sharedPlan.values.get(`PACKAGE_${name}`) === 'y') && sharedPlan.values.get('PACKAGE_daemon') === 'n',
+    'shared or unresolved consumers must retain dependencies without preserving the failed target');
+}
 
 // A package with no path to the failed target must not warn.  If an active
 // path is accompanied by an unresolved conditional relation, the result is

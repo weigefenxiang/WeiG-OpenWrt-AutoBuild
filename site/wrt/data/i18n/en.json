@@ -2,6 +2,8 @@
  "version": 2,
  "language": "en",
  "strings": {
+  "compatibility.planUnavailable": "Automatic recommendation unavailable: {reason}",
+  "compatibility.retainedDependencies": "Still required by other selections or protected; retained: {list}",
   "app.title": "OpenWrt Firmware Customizer",
   "app.subtitle": "Pick your packages, let the cloud build, enjoy a cappuccino, and welcome the open-source era",
   "app.desc": "Customize OpenWrt firmware online: pick a source tree, tick plugins, build on GitHub Actions, download for free",

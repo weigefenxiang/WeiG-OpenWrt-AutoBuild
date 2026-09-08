@@ -1,5 +1,7 @@
 {
  "zh-CN": {
+  "compatibility.planUnavailable": "无法自动推荐：{reason}",
+  "compatibility.retainedDependencies": "仍被其它选择需要或受保护，保留：{list}",
   "app.title": "OpenWrt 固件在线定制",
   "app.subtitle": "选好插件,云端自动编译,喝杯卡布奇诺，迎接开“源”盛世",
   "app.desc": "OpenWrt 固件在线定制:选源码、勾插件,GitHub Actions 云编译,免费自取",
@@ -564,7 +566,9 @@
   "catalog.loading": "Loading catalog…",
   "import.leaveWorkspaceConfirm": "切换 Target 会退出上传配置工作区，并改为网页新建配置。继续吗？"
  },
-"zh-TW": {
+ "zh-TW": {
+  "compatibility.planUnavailable": "無法自動推薦：{reason}",
+  "compatibility.retainedDependencies": "仍被其他選擇需要或受保護，保留：{list}",
   "app.title": "OpenWrt 韌體線上客製",
   "app.subtitle": "選好套件,雲端自動編譯,喝杯卡布奇諾，迎接開「源」盛世",
   "app.desc": "OpenWrt 韌體線上客製:選原始碼、勾套件,GitHub Actions 雲端編譯,免費自取",

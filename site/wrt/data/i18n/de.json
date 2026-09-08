@@ -2,6 +2,8 @@
  "version": 2,
  "language": "de",
  "strings": {
+  "compatibility.planUnavailable": "Automatic recommendation unavailable: {reason}",
+  "compatibility.retainedDependencies": "Still required by other selections or protected; retained: {list}",
   "app.title": "OpenWrt-Firmware online konfigurieren",
   "app.subtitle": "Pakete auswählen, in der Cloud bauen, einen Cappuccino genießen und das Open-Source-Zeitalter begrüßen",
   "app.desc": "OpenWrt-Firmware online konfigurieren: Quelle wählen, Pakete anhaken, Cloud-Build mit GitHub Actions, kostenlos abholen",

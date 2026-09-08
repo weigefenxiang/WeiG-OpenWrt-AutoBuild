@@ -12,11 +12,15 @@ const producer = async (file) => import(pathToFileURL(join(root, 'scripts', file
 const { parseKconfigTree, parseKconfigDefault } = await producer('lib.mjs');
 const { buildKconfigRelations } = await producer('kconfig-relations.mjs');
 const { compactRelations, compareRelationSemantics } = await producer('compact-relations.mjs');
+const { encodeCompactRelationTables } = await producer('relation-table-codec.mjs');
 for (const fixture of ['kconfig-compact-roundtrip', 'kconfig-undefined', 'kconfig-package-selector',
   'kconfig-capabilities', 'kconfig-dropbear', 'kconfig-semantics', 'kconfig-help-zero', 'duplicate', 'fixture']) {
   const menu = parseKconfigTree(join(root, 'tests', fixture));
   const readable = buildKconfigRelations(menu.allOptions, [], menu.choices, { parserValidation: menu.validation });
   const decoded = expandCompactRelations(compactRelations(readable));
+  const wire = encodeCompactRelationTables(compactRelations(readable));
+  const compactDecoded = expandCompactRelations(JSON.parse(JSON.stringify(wire)));
+  assert(compareRelationSemantics(readable, compactDecoded).equal, `${fixture}: schema-5 table semantic mismatch`);
   const comparison = compareRelationSemantics(readable, decoded);
   assert(comparison.equal, `${fixture}: ${JSON.stringify(comparison.differences)}`);
   const model = createCatalogModel({ schema: 6, targets: [], relations: decoded });
