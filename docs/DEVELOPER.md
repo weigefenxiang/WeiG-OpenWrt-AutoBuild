@@ -118,6 +118,8 @@ schema 4 的 build-dependency 建议中，Catalog 反向索引只负责找候选
 
 只接受 schema 6 `build-request.json`。请求锁定 Catalog 身份并只携带最小 Target/Profile 身份与 semantic overrides；Worker 从请求锁定的 exact Native Profile baseline 加上 semantic overrides 确定性重建 `reconstructed.config`，它才是最终构建语义权威。不得恢复 submitted full `.config` 第二权威、Worker 端点击重放或用户意图猜测。
 
+网页与 Worker 复用现有 Catalog loader 的 `selectCatalogGraphContract` / `validateCatalogGraphContract`。index 描述符负责认证资产，`relationsSchema` 是可选声明，不能把缺失推断为不支持；解码后校验实际 schema，有显式声明时必须一致。优先已声明的 `graphCompact`（relations 5），否则保留旧图；已声明资产损坏不得静默回退。Worker 重建仍要求 typed relations 4/5、完整字段布局及能力声明、源码 commit/repository、压缩 hash/size；提供未压缩 hash/size 时也必须核对。请求中旧单体 bundle 的 schema 字段描述另一份资产，不能混作 graph 元数据。尚无合法产物身份就校验失败时，用 run/attempt 身份保留 BUILD-LOGS，跳过固件分类/清单发布，原始失败仍保留。
+
 Defconfig 默认关闭。开启时只能在 `reconstructed.config` 已经确定之后运行上游 `make defconfig` 做可选 normalization；Defconfig 不得补全缺失 baseline、推导用户意图或替代 Catalog 身份。后端只做格式、最小 Target/Profile 身份、Catalog 契约、固件参数和路径安全校验，不重新判断插件依赖。
 
 无论是否开启 Defconfig，下载和编译前都会只核对 `request-overrides.json` 中的有效 Kconfig 值。门禁不比较整份 `.config`、不读取 `plugins`，也不检查未被覆盖的 baseline 项；显式值被改写时以 `configuration-override-mismatch` 停止，并保存 `config-verification.json`。
@@ -163,6 +165,8 @@ node tools/serve.mjs
 ```
 
 `check-all` 运行独立回归、JSON/目录 allowlist、Catalog-only 静态门禁、Actions 命名/并发/取消和 60 天保留期检查。它不维护具体机型或插件清单。
+
+`node tools/test-request-parser.mjs` 离线执行真实 Worker CLI，覆盖 index、graph、Native Profile baseline、overrides 到 `reconstructed.config` 全链；包含 relation 4/5、可选 schema 声明、完整性/身份/能力缺失拒绝及显式值保真。只读本地复验可传入一个或多个已下载请求 JSON 路径或 HTTPS 请求地址；该模式读取锁定的远端资产，不派发固件构建。网页导入与 Worker 重建必须分别验证，不能用一端成功替代另一端。Worker 修复后应刷新已部署页面，重新生成并提交请求；重跑旧的锁定请求不会自动选择新代码。
 
 Catalog 运行数据变化时，先验证并发布该快照，再推 AutoBuild，核对 CI/Pages 及网页实际使用的数据通道；纯代码变化可以复用已验证不可变快照，不能仅因代码晋级重复启动重型生成。正常代码晋级为 `fix-* → dev → staging → main`。Catalog 代码与正式数据生命周期分离：Catalog `main` 只生成 `catalog-candidate`，仅手动 Production Gate 能把已验证候选晋级到 `catalog-main`。AutoBuild 的 dev/staging/main 分别读取 `catalog-dev`/`catalog-staging`/`catalog-main`，不读取 `catalog-candidate`。fix CI 不能代替 dev 网页证据，必须现场核对部署元数据、站点身份、Catalog provenance/assetRef/complete 和交互。
 

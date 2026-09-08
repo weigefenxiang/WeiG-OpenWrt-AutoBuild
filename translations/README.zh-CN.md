@@ -75,6 +75,7 @@ staging-260810_0857-匿名#161-BUILD-LOGS
 
 ## 数据与兼容性
 
+- 网页与 Worker 共用 Catalog 图选择与校验：优先使用已声明的 schema-5 `graphCompact`，否则读取旧图。关系 schema 以解码后的资产内容为准，index 可选声明必须与其一致。Worker 重建仍要求完整 typed relations，以及精确的源码、hash、size 身份；历史配置导入继续保留。请求校验失败且尚未生成产物身份时，只保留诊断日志，不尝试发布固件。
 - 页面启动后优先下载当前 Source/Branch 的菜单和语言；精选应用、隐藏项、帮助、兼容性规则和镜像策略按 `site/wrt/config/site.json` 中 `catalog.loading` 的空闲队列顺序后台加载。
 - 精选应用名单、中文/英文介绍与跨源软件包体积都属于 Catalog。应用 ID 相同即视为同一项；体积显示三位有效数字，缺少可靠官方观测时明确显示未知。
 - `compatibility.json` 接受 schema 2–5。schema 4 可通过 `buildDependency` 将已验证的构建故障绑定到一个构建包；新图决策从精确 Catalog 图推导触发入口，旧的 `triggerPackages` 只读兼容、不再驱动新的告警或动作。schema 4 relation 资产会在 compact 编解码 round-trip 中保留 typed default、range、visibility、choice、select/imply 关系、软件包 capability 和表达式 AST。只有 `relationsComplete: true` 且 `relationCapabilities` 含 `complete-kconfig-relations-v1` 才表示完整 typed relation graph。独立的 `packageClosureComplete: true` 加上 `packageClosureCapabilities` 中的 `complete-package-build-closure-v1` 只表示软件包构建闭包完整，绝不能把不完整的 typed relation graph 提升为完整。schema 5 可把精确观测保存在 `evidence`，并让经明确审核的 `preventive` 策略仅在失败包真实存在的通配环境中适用。图证据未知或有歧义时结果为 inconclusive，网页不得猜测告警或动作。
