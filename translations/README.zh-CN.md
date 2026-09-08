@@ -86,6 +86,15 @@ staging-260810_0857-匿名#161-BUILD-LOGS
 
 ## 快速测试
 
+### 运行性能与历史配置导入
+
+- 新 Catalog 快照可声明 `graphCompact`、relation schema 5。加载器优先读取并校验不可变资产契约，用共享定义/表达式表还原图，不丢弃关系事实。旧图格式和历史 config/JSON 导入继续兼容；已声明资产校验失败时不能静默换成另一快照。
+- Provider 与依赖索引按模型缓存，compatibility 文档只在边界规范化一次，健康配置预检不再构造修复计划。构建故障清理可检查已关闭失败目标的依赖，但这些只是清理候选，不代表它们会编译该目标。仍被共享、受保护或证据未决的依赖保留并说明，不维护静态包家族名单。
+- Typed default 只有在所属符号的依赖允许时才能补入。所属依赖未启用或未知，不能凭空补出正值 bool/tristate 或 scalar，进而破坏主题等无关选择。回归覆盖 bool、tristate、string、int、hex 的未启用、未知、启用三种情况。
+- 导入本身不弹兼容性对话框；单击“检”或生成/下载构建 JSON 才进行配置预检与兼容性检查。应用推荐后，关闭已应用结果框，让本次检查继续完成；证据未决必须明确说明，不能猜一个修复方案强行点亮按钮。
+
+### 本地检查
+
 ```powershell
 node tools/test-catalog-engine.mjs
 node tools/test-build-closure.mjs

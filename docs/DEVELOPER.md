@@ -88,7 +88,11 @@ Advanced menuconfig 的 `Root Kconfig options / 根级 Kconfig 选项` 是 `path
 
 通用回归至少覆盖：bool、tristate、string empty/non-empty、literal `n`、escaping、int、hex、unknown symbol，以及默认表达式的条件、括号、`&&`/`||`、deferred 和闭世界边界。
 
-schema 4 compact relations 会在 compact 编解码 round-trip 中保留 typed default、range、visibility、choice、select/imply 关系、软件包 capability 和表达式 AST。只有 `relationsComplete: true` 且 `relationCapabilities` 含 `complete-kconfig-relations-v1`，才表示完整 typed relation graph。`packageClosureComplete: true` 与 `packageClosureCapabilities` 中的 `complete-package-build-closure-v1` 是独立且更窄的软件包构建闭包声明，绝不能提升 typed relation 的完整性。两者都只能信任生产者声明；数据缺失或不完整时保持 inconclusive。
+schema 4 compact relations 会在 compact 编解码 round-trip 中保留 typed default、range、visibility、choice、select/imply 关系、软件包 capability 和表达式 AST。可选 `graphCompact` 使用 relation schema 5（`interned-definitions-edge-rows-v1`），共享定义/表达式并保留 positional edge 身份；声明时优先读取并校验自身 hash/size/schema，未声明时继续支持旧资产，校验失败不能当作回退信号。只有 `relationsComplete: true` 且 `relationCapabilities` 含 `complete-kconfig-relations-v1`，才表示完整 typed relation graph。`packageClosureComplete: true` 与 `packageClosureCapabilities` 中的 `complete-package-build-closure-v1` 是独立且更窄的软件包构建闭包声明，绝不能提升 typed relation 的完整性。两者都只能信任生产者声明；数据缺失或不完整时保持 inconclusive。
+
+索引和已规范化文档按不可变 model/document 身份缓存。Provider 查找、前向依赖者发现复用索引，不能每个符号或候选都扫描全图；健康预检直接复用校验结果，不构造修复计划。失败包已为 N 时可以贡献正向孤儿依赖清理候选，但不能作为新触发证据；用户根操作后，共享、受保护或消费者未决的依赖必须保留。Planner 和网页应用使用同一派生依赖符号集合。回归使用匿名包图、共享/未知消费者与普通 ownership 规则，不能把包名测试样例变成生产特例。
+
+默认值激活既检查 default 自身条件，也检查所属符号的依赖。主题回退与 compatibility 默认值补齐不能为未启用或未知 owner 注入默认值；owner 引用变成已知时，依赖工作队列必须重新求值。隐藏 bool/tristate 的依赖为 UNKNOWN 时保持 deferred。五种 Kconfig 类型均覆盖 active/inactive/unknown owner，且区分原生 baseline 显式值与新推断值。历史导入迁移和按需检查不变：加载不是新增弹窗或不可变版本拒绝点。
 
 共享 runtime 的 lexer 必须与上游一致：bool default `m` 保留为 typed source value，注释只在引号外删除，引号外的 `@` 只产生 ignored-character warning 并继续构建普通 AST，`@` 后的 symbols 不能丢失。没有未求值动态预处理的完整 active-source proof 才能把名称分类为 native undefined；明确经 `parsed-target-filter` 证明的定义才是 external，未证明 omission 保持 unresolved，动态表达式未求值时 relations 必须保持 incomplete。Choice `reset if` 只在原生 mconf/nconf 把非 Y choice member 交互切换为 Y 时清除全局 `S_DEF_USER`；静态导入、Worker 重建和网页不支持的 reset 交互必须明确为 `unsupported`/`deferred`，不能宣称全局 reset 已实现。
 
@@ -160,7 +164,7 @@ node tools/serve.mjs
 
 `check-all` 运行独立回归、JSON/目录 allowlist、Catalog-only 静态门禁、Actions 命名/并发/取消和 60 天保留期检查。它不维护具体机型或插件清单。
 
-发布顺序：同一频道总是先推 Catalog，等待数据分支发布并验证 root asset 契约，再推 AutoBuild，等待 CI/Pages，最后在线验证 `index.json`、`applications.json.gz`、`compatibility.json.gz` 与网页实际加载。正常代码晋级为 `dev → staging → main`。Catalog 的代码生命周期与正式数据生命周期必须分离：Catalog `main` 只生成 `catalog-candidate`，只有 Catalog 的手动 Production Gate 可以把已验证候选精确晋级到 `catalog-data`；AutoBuild 的运行时映射仍保持 `main → catalog-data`，不得读取 `catalog-candidate`。因此 Catalog 代码进入 `main` 不等于正式用户数据已发布。
+Catalog 运行数据变化时，先验证并发布该快照，再推 AutoBuild，核对 CI/Pages 及网页实际使用的数据通道；纯代码变化可以复用已验证不可变快照，不能仅因代码晋级重复启动重型生成。正常代码晋级为 `fix-* → dev → staging → main`。Catalog 代码与正式数据生命周期分离：Catalog `main` 只生成 `catalog-candidate`，仅手动 Production Gate 能把已验证候选晋级到 `catalog-main`。AutoBuild 的 dev/staging/main 分别读取 `catalog-dev`/`catalog-staging`/`catalog-main`，不读取 `catalog-candidate`。fix CI 不能代替 dev 网页证据，必须现场核对部署元数据、站点身份、Catalog provenance/assetRef/complete 和交互。
 
 ## 10. Catalog 选择与最终配置
 

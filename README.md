@@ -84,6 +84,15 @@ The user build tag is preserved and `#161` is the original Build Issue. All down
 
 ## Tests
 
+### Runtime performance and historical imports
+
+- New Catalog snapshots may advertise `graphCompact` with relation schema 5. The loader prefers it, verifies the immutable asset contract, and decodes shared definition/expression tables without discarding graph facts. Older graph formats and historical configuration/JSON imports remain supported; an advertised asset that fails validation is not silently replaced by another snapshot.
+- Provider and dependency indexes are cached per model. Compatibility documents are normalized once at their boundary, and healthy configuration preflight avoids constructing repair plans. Build-failure cleanup may also inspect dependencies of an already-disabled failed target, but those are cleanup candidates, not evidence that they compile that target. Shared, protected, or unresolved dependencies are retained and explained; no static package-family list is maintained.
+- A typed default is materialized only when its owning symbol's dependencies permit it. Inactive or unknown owner conditions must not invent positive bool/tristate or scalar defaults and break an unrelated choice such as a theme. Tests cover bool, tristate, string, int, and hex with inactive, unknown, and active owners.
+- Import itself does not open a compatibility dialog. Use **Test** or generate/download the build JSON to run configuration preflight and compatibility checks. Apply a recommendation, close its applied-result dialog, and let the same check finish; unresolved evidence stays explicit rather than enabling a guessed repair.
+
+### Local checks
+
 ```powershell
 node tools/test-catalog-engine.mjs
 node tools/test-build-closure.mjs
