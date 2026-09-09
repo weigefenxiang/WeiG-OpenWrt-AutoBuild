@@ -11,6 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { REQUIRED_KCONFIG_RELATION_CAPABILITIES } from '../site/wrt/lib/catalog-engine.js';
 import { parseConfigMap } from '../site/wrt/lib/profile-baseline.js';
+import { classifyActivePackages } from './verify-build-closure.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const temp = mkdtempSync(join(tmpdir(), 'weig-request-parser-'));
@@ -46,9 +47,11 @@ const baseline = {
   metrics: { reconstructionMismatches: 0 },
 };
 const relations = {
-  schema: 4, fields, strings: names, types: ['', 'bool'], origins: ['', 'kconfig-only'],
-  records: names.map((name, symbolId) => fields.map(field => ({ symbolId, flags: 8, typeCode: 1,
-    originCode: 1, statesMask: 5 })[field] ?? -1)),
+  schema: 4, fields, strings: [...names, 'PACKAGE_luci-theme-fixture_FEATURE'],
+  types: ['', 'bool'], origins: ['', 'kconfig-only', 'kconfig+packageinfo'],
+  records: [...names, 'PACKAGE_luci-theme-fixture_FEATURE'].map((name, symbolId) => fields.map(field => ({
+    symbolId, flags: symbolId === 1 ? 24 : 8, typeCode: 1,
+    originCode: symbolId === 1 ? 2 : 1, statesMask: 5 })[field] ?? -1)),
   definitions: [], edges: [], indexes: {}, relationsComplete: true,
   relationCapabilities: [...REQUIRED_KCONFIG_RELATION_CAPABILITIES],
 };
@@ -85,11 +88,23 @@ return new Response(Buffer.from(files[path],'base64'));};`);
       EXPECTED_REQUEST_BRANCH: req.sourceEnv, EXPECTED_REQUEST_COMMIT: req.requestCommit,
       PROFILE_BASELINE_CONFIG_OUT: join(cwd, 'baseline.config'), RECONSTRUCTED_CONFIG_OUT: join(cwd, 'result.config'),
       REQUEST_OVERRIDES_OUT: join(cwd, 'overrides.json'), REQUEST_AUDIT_OUT: join(cwd, 'audit.json'),
+      CATALOG_SYMBOL_KINDS_OUT: join(cwd, 'symbol-kinds.json'),
       GITHUB_OUTPUT: join(cwd, 'outputs.txt') } });
   if (expectedError) {
     assert.notEqual(output.status, 0); assert.match(output.stderr, expectedError); return;
   }
   assert.equal(output.status, 0, output.stderr || output.error?.message);
+  const kinds = JSON.parse(readFileSync(join(cwd, 'symbol-kinds.json'), 'utf8'));
+  assert.equal(kinds.revision, req.catalog.revision);
+  assert.equal(kinds.sourceCommit, req.catalog.sourceCommit);
+  assert.match(kinds.graphHash, /^[a-f0-9]{64}$/);
+  if (fixtures) {
+    assert.deepEqual(kinds.nonPackageSymbols, ['PACKAGE_luci-theme-fixture_FEATURE']);
+    assert.deepEqual([...classifyActivePackages(new Map([['luci-theme-fixture', 'y'],
+      ['luci-theme-fixture_FEATURE', 'y'], ['unknown', 'y']]), kinds, req.catalog)],
+    [['luci-theme-fixture', 'y'], ['unknown', 'y']],
+    'the real Worker receipt must retain concrete packages and exclude only proven configuration options');
+  }
   const expected = parseConfigMap(readFileSync(join(cwd, 'baseline.config'), 'utf8'));
   for (const [symbol, value] of req.overrides) expected.set(symbol, value);
   const actual = parseConfigMap(readFileSync(join(cwd, 'result.config'), 'utf8'));

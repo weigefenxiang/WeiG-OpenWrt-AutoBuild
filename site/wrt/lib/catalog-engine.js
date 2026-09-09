@@ -1155,7 +1155,10 @@ function normalizeRecord(record) {
   // generic PACKAGE_/CONFIG_ fallback would manufacture a fake Probe root
   // such as CONFIG_libudev.
   const configSymbol = isVirtual ? '' : rawConfigSymbol;
-  const packageName = isVirtual ? '' : (record.package || packageNameFromSymbol(configSymbol));
+  // PACKAGE_ is also used by ordinary package configuration options. Concrete
+  // identity comes from native package metadata, never from that prefix alone.
+  const packageName = isVirtual || explicitKind === 'config' || /(?:^|-)kconfig-only$/.test(record.origin || '')
+    ? '' : (record.package || packageNameFromSymbol(configSymbol));
   const rawStates = Array.isArray(record.states) ? record.states : [];
   const type = String(record.type || (rawStates.includes('m') ? 'tristate' : rawStates.length ? 'bool' : ''))
     .toLowerCase();
@@ -1198,7 +1201,7 @@ function normalizeRecord(record) {
     ...record,
     ...(isVirtual ? { virtualName: String(record.virtualName || record.name || rawConfigSymbol || '')
       .replace(/^PACKAGE_/, '') } : {}),
-    kind: isVirtual ? 'virtual' : (record.kind || (configSymbol.startsWith('PACKAGE_') ? 'package' : 'config')),
+    kind: isVirtual ? 'virtual' : (packageName ? 'package' : 'config'),
     package: packageName,
     configSymbol,
     kconfigSymbol: isVirtual ? '' : (record.kconfigSymbol || record.symbol || ''),
@@ -1535,7 +1538,7 @@ export function createCatalogModel(catalog) {
     const detail = normalizeChoiceDetail(rawChoice, choices.get(id) || []);
     if (!detail) continue;
     choiceDetails.set(id, detail);
-    if (!choices.has(id)) choices.set(id, [...detail.members]);
+    choices.set(id, [...new Set([...(choices.get(id) || []), ...detail.members])]);
   }
   const featureSymbols = new Map();
   const targetFeatureSymbols = new Set();
@@ -1695,6 +1698,7 @@ function throwChoiceResetIntentError(choice, symbol, value, current, state, cons
 }
 
 function choiceDefaultMember(model, choice, values, options = {}) {
+  if (choice?.optional === true) return null;
   const dependency = choiceDependencyState(model, choice, values, options);
   if (dependency.status !== 'satisfied') return null;
   const defaults = Array.isArray(choice?.defaultsTyped) && choice.defaultsTyped.length
@@ -1707,9 +1711,33 @@ function choiceDefaultMember(model, choice, values, options = {}) {
     if (conditionLevel === 0) continue;
     if (conditionLevel === UNKNOWN) return null;
     const candidate = String(valueExpression).replace(/^CONFIG_/, '').trim();
-    if (members.has(candidate)) return candidate;
+    if (members.has(candidate)) {
+      const state = choiceMemberState(model, candidate, values, options);
+      if (state === UNKNOWN) return null;
+      if (state > 0) return candidate;
+    }
+  }
+  // Older snapshots sorted members alphabetically. Their membership remains
+  // readable, but is not evidence of the native first-visible fallback.
+  if (choice.memberOrder !== 'native-declaration-v1') return null;
+  for (const candidate of members) {
+    const state = choiceMemberState(model, candidate, values, options);
+    if (state === UNKNOWN) return null;
+    if (state > 0) return candidate;
   }
   return null;
+}
+
+function choiceMemberState(model, symbol, values, options = {}) {
+  const record = model.bySymbol.get(symbol);
+  if (!record) return UNKNOWN;
+  if (record.visible === false || !allowedKconfigStates(record).includes('y')) return 0;
+  const dependency = dependencyLevel(record, values, options);
+  if (dependency === 0) return 0;
+  const visibility = visibilityKconfigViolations(record, values, { ...options, deferred: 'error' });
+  if (visibility.some((row) => !row.deferred)) return 0;
+  if (dependency === UNKNOWN || visibility.some((row) => row.deferred)) return UNKNOWN;
+  return dependency;
 }
 
 export function catalogPackageOperations(target, profile) {
@@ -2335,6 +2363,12 @@ export function validateConfig(model, inputValues, rawOptions = {}) {
     const detail = model.choiceDetails?.get(choice);
     const selected = symbols.filter((symbol) => normalizeValue(values.get(symbol) ?? 'n') === 'y');
     const enabled = symbols.filter((symbol) => stateLevel(values.get(symbol) ?? 'n') > 0);
+    if (detail?.memberOrder === 'native-declaration-v1' && !detail.optional && !enabled.length &&
+        choiceDependencyState(model, detail, values, options).status === 'satisfied') {
+      const states = symbols.map((symbol) => choiceMemberState(model, symbol, values, options));
+      if (states.some((state) => state > 0)) violations.push({ code: 'choice-selection-missing',
+        choice, symbols, recommendedSymbol: choiceDefaultMember(model, detail, values, options) || '' });
+    }
     if (detail && enabled.length) {
       const dependency = choiceDependencyState(model, detail, values, options);
       if (dependency.status === 'unsatisfied') violations.push({ code: 'choice-dependency-unsatisfied',
@@ -2360,11 +2394,11 @@ export function validateConfig(model, inputValues, rawOptions = {}) {
   return violations;
 }
 
-function setValue(values, changes, symbol, value, reason, source = '') {
+function setValue(values, changes, symbol, value, reason, source = '', preserveAbsentScalar = false) {
   if (!symbol) return false;
   const next = normalizeValue(value);
   const previous = normalizeValue(values.get(symbol) ?? 'n');
-  if (previous === next) return false;
+  if (previous === next && !(preserveAbsentScalar && !values.has(symbol))) return false;
   values.set(symbol, next); changes.push({ symbol, from: previous, to: next, reason, source }); return true;
 }
 
@@ -2705,11 +2739,49 @@ function derivedDefaultState(model, record, values, options = {}) {
 
 function reconcileDerivedDefaults(model, values, changes, options = {}) {
   const records = model?.promptlessDefaultRecords || [];
+  const initialSymbols = new Set(values.keys());
   const derivedSymbols = new Set();
   const derivedReasons = new Map();
   for (let pass = 0; pass < 64; pass++) {
     const before = changes.length;
+    let invalidatedTransientDefault = false;
     const enabled = [], disabled = [];
+    const materialized = materializeKconfigDefaults(model, values, options);
+    for (const [symbol, value] of materialized) {
+      if (values.has(symbol) && values.get(symbol) === value) continue;
+      const record = model.bySymbol.get(symbol);
+      const reason = record?.choice ? 'choice-default' : 'conditional-default';
+      if (!setValue(values, changes, symbol, value, reason, '',
+        ['string', 'int', 'hex'].includes(record?.type))) continue;
+      derivedSymbols.add(symbol); derivedReasons.set(symbol, reason);
+      if (value === 'n') disabled.push(symbol); else enabled.push(symbol);
+    }
+    // Values first derived in this transaction are not user assignments. A
+    // newly selected choice member can activate selects/default conditions
+    // after the first pass; revisit those defaults before declaring a fixpoint.
+    for (const symbol of derivedSymbols) {
+      const record = model.bySymbol.get(symbol);
+      // Defaults provisionally filled before a choice/select settles are not
+      // user assignments. Do not export an inactive scalar that was absent in
+      // the input, including an empty-string substitute for native omission.
+      if (record && ['string', 'int', 'hex'].includes(record.type) && !initialSymbols.has(symbol) &&
+          dependencyLevel(record, values, options) === 0) {
+        values.delete(symbol); derivedSymbols.delete(symbol); derivedReasons.delete(symbol);
+        for (let index = changes.length - 1; index >= 0; index--) {
+          if (changes[index].symbol === symbol) changes.splice(index, 1);
+        }
+        invalidatedTransientDefault = true;
+        continue;
+      }
+      if (!record || record.choice || dependencyLevel(record, values, options) <= 0) continue;
+      const boolean = ['bool', 'tristate'].includes(record.type);
+      const resolved = boolean ? derivedDefaultState(model, record, values, options)
+        : resolveKconfigDefault(record, values, options);
+      if (!resolved || (!boolean && resolved.status !== 'resolved')) continue;
+      if (setValue(values, changes, symbol, resolved.value, resolved.reason || 'conditional-default')) {
+        if (resolved.value === 'n') disabled.push(symbol); else enabled.push(symbol);
+      }
+    }
     for (const record of records) {
       if (!record?.configSymbol || options.trustedSymbols?.has(record.configSymbol)) continue;
       const resolved = derivedDefaultState(model, record, values, options);
@@ -2721,7 +2793,7 @@ function reconcileDerivedDefaults(model, values, changes, options = {}) {
     if (disabled.length) cascadeDisabled(model, values, changes, disabled, options);
     if (enabled.length) cascadeEnabled(model, values, changes, enabled, options);
     enforceActiveReverseRelations(model, values, changes, options);
-    if (changes.length === before) return { derivedSymbols, derivedReasons };
+    if (changes.length === before && !invalidatedTransientDefault) return { derivedSymbols, derivedReasons };
   }
   throw new Error('Kconfig conditional default resolution did not converge');
 }
@@ -3545,7 +3617,7 @@ export function normalizeCompatibilityDocument(raw) {
   return document;
 }
 
-function materializeCompatibilityDefaults(model, inputValues, options) {
+function materializeKconfigDefaults(model, inputValues, options) {
   const values = new Map(valuesMap(inputValues));
   const records = (model?.records || []).filter((record) => record?.configSymbol);
   const dependents = new Map();
@@ -3590,8 +3662,7 @@ function materializeCompatibilityDefaults(model, inputValues, options) {
   // conditions are satisfied; an unresolved condition remains UNKNOWN and is
   // deliberately not guessed into a selected member.
   for (const choice of model?.choiceDetails?.values?.() || []) {
-    const members = (choice.members || []).map((symbol) => model.bySymbol.get(symbol)).filter(Boolean);
-    if (members.some((record) => stateLevel(values.get(record.configSymbol) ?? 'n') > 0)) continue;
+    if ((choice.members || []).some((symbol) => stateLevel(values.get(symbol) ?? 'n') > 0)) continue;
     const memberSymbol = choiceDefaultMember(model, choice, values, options);
     if (!memberSymbol) continue;
     const member = model.bySymbol.get(memberSymbol);
@@ -3690,7 +3761,7 @@ export function evaluateNormalizedCompatibilityRules(model, normalized, inputVal
   const options = {
     ...(context.validationOptions || {}), typedRelationsComplete: model.typedRelationsComplete === true,
   };
-  const values = materializeCompatibilityDefaults(model, inputValues, options);
+  const values = materializeKconfigDefaults(model, inputValues, options);
   const warnings = [];
   const diagnostics = [];
   for (const rule of normalized.rules) {
@@ -4599,6 +4670,7 @@ export function formatViolations(violations) {
     }
     if (item.code === 'package-conflict-deferred') return `${item.package} has an unresolved conflict provider ${item.capability}`;
     if (item.code === 'choice-conflict') return `${item.choice} enables multiple values: ${item.symbols.join(', ')}`;
+    if (item.code === 'choice-selection-missing') return `${item.choice} requires an available Kconfig choice member`;
     return item.code || 'catalog validation error';
   }).join('; ');
 }

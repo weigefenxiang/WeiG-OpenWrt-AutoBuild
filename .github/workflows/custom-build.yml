@@ -251,6 +251,7 @@ jobs:
           PROFILE_BASELINE_CONFIG_OUT: profile-baseline.config
           RECONSTRUCTED_CONFIG_OUT: reconstructed.config
           REQUEST_OVERRIDES_OUT: request-overrides.json
+          CATALOG_SYMBOL_KINDS_OUT: catalog-symbol-kinds.json
           REQUEST_AUDIT_OUT: request-audit.json
           ISSUE_TITLE: ${{ inputs.issue_title }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
@@ -498,6 +499,7 @@ jobs:
             --request-manifest "$REQUEST_MANIFEST" \
             --upstream-dir "$UPSTREAM_DIR" \
             --config "$CONFIG_PATH" \
+            --symbol-kinds catalog-symbol-kinds.json \
             --catalog-revision "$CATALOG_REVISION" \
             --source-commit "$SOURCE_COMMIT" \
             --out "$BUILD_CLOSURE_OUT"
@@ -763,7 +765,7 @@ jobs:
         run: |
           mkdir -p failure-logs
           cp download.log failure-logs/ 2>/dev/null || true
-          cp package-metadata.log build-closure-verification.json failure-logs/ 2>/dev/null || true
+          cp package-metadata.log build-closure-verification.json catalog-symbol-kinds.json failure-logs/ 2>/dev/null || true
           cp build-metadata.txt failure-logs/ 2>/dev/null || true
           cp profile-baseline.config reconstructed.config request-overrides.json config-verification.json request-audit.json package-mirror-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig.log build.config failure-logs/ 2>/dev/null || true
           cp openwrt/.config failure-logs/final.config 2>/dev/null || true

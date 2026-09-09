@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   activePackages,
+  classifyActivePackages,
   loadPackageGraph,
   parsePackageInfo,
   verifyBuildClosure,
@@ -35,6 +36,20 @@ function ruleDocument({ packageName = 'failed', triggerPackages } = {}) {
       failure: { phase: 'package-compile', cause: 'package-caused', code: 'test-failure' },
     }],
   };
+}
+
+const kinds = { schema: 1, revision: identity().revision, sourceCommit: identity().sourceCommit,
+  graphHash: 'a'.repeat(64), nonPackageSymbols: ['PACKAGE_root_FEATURE'] };
+const prefixed = new Map([['root', 'y'], ['root_FEATURE', 'y'], ['unknown', 'm']]);
+assert.deepEqual([...classifyActivePackages(prefixed, kinds, identity())], [['root', 'y'], ['unknown', 'm']],
+  'only metadata-proven configuration options are excluded; unknown package roots remain auditable');
+assert.equal(prefixed.size, 3, 'classification must not mutate the authoritative config projection');
+assert.equal(classifyActivePackages(prefixed, kinds, identity(), new Map([['root_FEATURE', {}]])).size, 3,
+  'refreshed native metadata must retain any actual package even if the Catalog calls it config-only');
+for (const change of [{ revision: '3'.repeat(40) }, { sourceCommit: '4'.repeat(40) },
+  { graphHash: '' }, { nonPackageSymbols: ['CONFIG_PACKAGE_root'] }, { schema: 2 }]) {
+  assert.throws(() => classifyActivePackages(prefixed, { ...kinds, ...change }, identity()),
+    /does not match the exact verified snapshot/);
 }
 
 function writeFixture(packageBlocks, configPackages) {
@@ -200,15 +215,13 @@ try {
   writeFileSync(join(makefileDirectory, 'package', 'failed', 'Makefile'), 'define Package/failed\nendef\n');
   writeFileSync(join(makefileDirectory, 'package', 'optional', 'Makefile'), 'define Package/optional\nendef\n');
   writeFileSync(join(makefileDirectory, '.config'), 'CONFIG_PACKAGE_root=y\n');
-  const makefileConfig = activePackages(join(makefileDirectory, '.config'));
+  assert.throws(() => loadPackageGraph(makefileDirectory, {}), /metadata is missing/,
+    'raw Makefile templates cannot substitute for native expanded package metadata');
+  mkdirSync(join(makefileDirectory, 'tmp'));
+  writeFileSync(join(makefileDirectory, 'tmp', '.packageinfo'), 'Package: root\nDepends:\n');
   const makefileGraph = loadPackageGraph(makefileDirectory, {});
-  assert.deepEqual(makefileGraph.packages.get('root')?.depends, [['middle'], ['optional']],
-    'Makefile fallback must preserve multiline DEPENDS groups');
-  result = verifyBuildClosure({
-    document: ruleDocument(), identity: identity(), graph: makefileGraph,
-    active: makefileConfig.active, configValues: makefileConfig.values,
-  });
-  assert.equal(result.result, 'fail', 'Makefile fallback must verify the real package chain');
+  assert.deepEqual([...makefileGraph.packages.keys()], ['root'],
+    'unexpanded Makefile packages must not contaminate authoritative metadata');
 } finally {
   rmSync(makefileDirectory, { recursive: true, force: true });
 }
@@ -219,10 +232,17 @@ try {
   writeFileSync(join(packageInfoDirectory, 'tmp', '.packageinfo'), [
     'Source-Makefile: package/root/Makefile',
     'Build-Depends: shared/host',
+    'Build-Depends/host: unresolved-host-tool',
+    'Build-Types: host',
     'Package: root',
     'Depends: +failed',
     'Provides: ',
     'Description: root',
+    'Package: description-is-not-a-package',
+    '@@',
+    'Config:',
+    'Package: config-is-not-a-package',
+    'Depends: $(unexpanded-config-text)',
     '@@',
     'Package: root-dev',
     'Depends: ',
@@ -243,6 +263,10 @@ try {
     'Source-Makefile identity must be retained for package records');
   assert.deepEqual(parsedPackageInfo.packages.get('root')?.depends, [['failed']],
     'host-only Build-Depends must not become a target package edge');
+  assert.deepEqual(parsedPackageInfo.packages.get('root-dev')?.depends, [],
+    'source host metadata must not leak into any binary variant');
+  assert.equal(parsedPackageInfo.packages.get('root-dev').buildFields['Build-Depends/host'], 'unresolved-host-tool');
+  assert.equal(parsedPackageInfo.packages.get('root').dependencyErrors.length, 0);
 } finally {
   rmSync(packageInfoDirectory, { recursive: true, force: true });
 }
@@ -272,6 +296,53 @@ try {
   assert.equal(result.result, 'fail', 'real target Build-Depends source edges must be part of the closure');
 } finally {
   rmSync(buildDependsDirectory, { recursive: true, force: true });
+}
+
+const streamDirectory = mkdtempSync(join(ROOT, '.tmp-build-closure-stream-'));
+try {
+  mkdirSync(join(streamDirectory, 'tmp'));
+  const metadataPath = join(streamDirectory, 'tmp', '.packageinfo');
+  writeFileSync(metadataPath, [
+    'Source-Makefile: package/consumer/Makefile',
+    'Build-Depends: helper', 'Build-Depends/host: host-tool',
+    'Package: first', 'Depends:', 'Description: first', '@@',
+    'Package: second', 'Depends:', 'Description: second', '@@',
+    'Source-Makefile: package/old-provider/Makefile',
+    'Package: provider', 'Depends: +failed', 'Provides: @old-api',
+    'Source-Makefile: package/new-provider/Makefile',
+    'Package: provider', 'Depends: +helper', 'Provides: @new-api',
+    'Source-Makefile: package/helper/Makefile', 'Package: helper', 'Depends:',
+    'Source-Makefile: package/unused/Makefile', 'Package: unused', 'Depends: $(unresolved)',
+    'Source-Makefile: package/failed/Makefile', 'Package: failed', 'Depends:',
+    'Source-Makefile: package/firmware/Makefile', 'Package: firmware/device', 'Build-Only: 1',
+    'Source-Makefile: package/api/Makefile', 'Package: api', 'Provides: @versioned-api=1.2',
+  ].join('\n'));
+  const graph = loadPackageGraph(streamDirectory, {});
+  assert.deepEqual(graph.packages.get('first').depends, [['helper']]);
+  assert.deepEqual(graph.packages.get('second').depends, [['helper']],
+    'source build dependencies apply to all binary variants, not just the first block');
+  assert.deepEqual(graph.packages.get('provider').depends, [['helper']],
+    'last native package definition replaces obsolete dependency edges');
+  assert.deepEqual([...graph.packages.get('provider').sourceNames], ['new-provider']);
+  assert.deepEqual([...graph.packages.get('provider').provides], ['new-api', 'old-api'],
+    'native provider registration remains cumulative across definition replacement');
+  assert.match(graph.metadata.sha256, /^[a-f0-9]{64}$/);
+  assert(graph.packages.has('firmware/device'), 'native build-only identities are not Kconfig package symbols');
+  assert(graph.packages.get('api').provides.has('versioned-api=1.2'),
+    'native capability registrations must not be rewritten as dependency version constraints');
+  const check = (names) => verifyBuildClosure({ document: ruleDocument(), identity: identity(),
+    graph, active: new Map(names.map((name) => [name, 'y'])), configValues: new Map() });
+  assert.equal(check(['second', 'provider']).result, 'pass',
+    'an unselected malformed dependency must not poison unrelated selected roots');
+  const unknown = check(['unused']);
+  assert.equal(unknown.result, 'inconclusive');
+  assert.deepEqual(unknown.activeGraphUnresolved[0].path, ['unused']);
+  graph.packages.get('helper').depends = [['unused']];
+  assert.equal(check(['second']).result, 'inconclusive',
+    'malformed metadata reached indirectly must still fail closed');
+  assert.equal(check(['failed']).result, 'fail', 'real failure targets must remain protected');
+} finally {
+  rmSync(streamDirectory, { recursive: true, force: true });
 }
 
 const missingIdentityDirectory = mkdtempSync(join(ROOT, '.tmp-build-closure-identity-'));

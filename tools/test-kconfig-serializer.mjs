@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import * as CATALOG_ENGINE from '../site/wrt/lib/catalog-engine.js';
+import { parseConfigMap, diffProfileBaseline, applyProfileOverrides } from '../site/wrt/lib/profile-baseline.js';
 import { readFrontendRuntimeSource } from './lib/frontend-source.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -170,5 +171,27 @@ assert.match(dependencyOutput, /^# CONFIG_AUTO_N is not set$/m,
   'automatic n dependency must replace a native y value');
 assert.doesNotMatch(dependencyOutput, /^CONFIG_UNRELATED=/m,
   'unrelated untouched symbols must not be added to the output');
+
+// Resolved defaults are effective configuration, not a compatibility-only
+// scratch copy. Untouched typed defaults must survive the schema-6 wire.
+context.catalogConditionalDefaultSymbols = new Set(['DEFAULT_CHOICE', 'DEFAULT_TEXT', 'DEFAULT_INT', 'DEFAULT_HEX']);
+for (const [symbol, type, value] of [
+  ['DEFAULT_CHOICE', 'bool', 'y'], ['DEFAULT_TEXT', 'string', 'n'],
+  ['DEFAULT_INT', 'int', '12'], ['DEFAULT_HEX', 'hex', '0x20'],
+]) {
+  context.menuOptionBySymbol.set(symbol, { symbol, type });
+  context.menuValues.set(symbol, value);
+}
+const defaultsOutput = applyMenuConfig(dependencyInput);
+assert.match(defaultsOutput, /^CONFIG_DEFAULT_CHOICE=y$/m);
+assert.match(defaultsOutput, /^CONFIG_DEFAULT_TEXT="n"$/m);
+assert.match(defaultsOutput, /^CONFIG_DEFAULT_INT=12$/m);
+assert.match(defaultsOutput, /^CONFIG_DEFAULT_HEX=0x20$/m);
+const baseline = { values: parseConfigMap(dependencyInput), protectedSymbols: new Set() };
+const allowedSymbols = new Set(context.menuOptionBySymbol.keys());
+const finalValues = parseConfigMap(defaultsOutput);
+const wire = JSON.parse(JSON.stringify(diffProfileBaseline(baseline, finalValues, { allowedSymbols })));
+assert.deepEqual(applyProfileOverrides(baseline, wire, { allowedSymbols }), finalValues,
+  'effective defaults must survive browser serialization, JSON, and Worker baseline reconstruction');
 
 console.log('Kconfig serializer hardening matrix: PASS');

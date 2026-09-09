@@ -36,6 +36,7 @@ function applyMenuConfig(text) {
     ...menuTouched, ...catalogRecommendedValues.keys(),
     ...catalogUserOverrides.keys(), ...catalogImportedSymbols,
     ...catalogDependencySymbols,
+    ...(typeof catalogConditionalDefaultSymbols === 'undefined' ? [] : catalogConditionalDefaultSymbols),
   ]);
   for (const option of menuSearchOptions) {
     if (option.visible !== false && option.userSettable !== false && !option.hidden) continue;

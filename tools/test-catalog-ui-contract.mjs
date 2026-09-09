@@ -646,7 +646,7 @@ expect(hiddenDerivedContract.includes("option.origin === 'packageinfo-only'") &&
   hiddenDerivedContract.includes('kconfigLevel(value) > 0') &&
   app.includes('if (option?.hidden) return hiddenDerivedOptionActive(option)') &&
   importedDefaultContract.includes('CATALOG_ENGINE.reconcileKconfigDerivedValues') &&
-  importedDefaultContract.includes("derivedReasons.get(symbol) === 'conditional-default'") &&
+  importedDefaultContract.includes("['conditional-default', 'choice-default'].includes(derivedReasons.get(symbol))") &&
   app.includes('reconcileImportedConditionalDefaults();') &&
   app.includes("emphasis = t('runtime.2338fb34620f')") &&
   app.includes("option.defaults?.length ? t('menu.defaults'") &&

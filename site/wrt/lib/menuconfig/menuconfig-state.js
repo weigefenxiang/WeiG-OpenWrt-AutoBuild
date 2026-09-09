@@ -481,14 +481,15 @@ function applyCatalogIntent(option, value, force = false, source = 'user') {
     for (const change of result.changes) {
       menuValues.set(change.symbol, change.to);
       const explicit = change.symbol === option.symbol;
-      const conditionalDefault = change.reason === 'conditional-default';
+      const conditionalDefault = ['conditional-default', 'choice-default'].includes(change.reason);
       const changedOption = menuOptionBySymbol.get(change.symbol);
       if (conditionalDefault) {
         menuTouched.delete(change.symbol);
         catalogImportedSymbols.delete(change.symbol);
         catalogDependencySymbols.delete(change.symbol);
-        if (change.to === 'n') catalogConditionalDefaultSymbols.delete(change.symbol);
-        else catalogConditionalDefaultSymbols.add(change.symbol);
+        if (change.to === (catalogBaselineValues.get(change.symbol) ?? 'n')) {
+          catalogConditionalDefaultSymbols.delete(change.symbol);
+        } else catalogConditionalDefaultSymbols.add(change.symbol);
       } else if (source === 'restore' && explicit) {
         if (!catalogRecommendedValues.has(change.symbol) && !catalogImportedSymbols.has(change.symbol)) {
           menuTouched.delete(change.symbol);
@@ -563,7 +564,7 @@ function reconcileImportedConditionalDefaults() {
     menuImportedNonDefault.delete(symbol);
     catalogDependencySymbols.delete(symbol);
     const baseline = catalogBaselineValues.get(symbol) ?? 'n';
-    if (value !== 'n' && value !== baseline && derivedReasons.get(symbol) === 'conditional-default') {
+    if (value !== baseline && ['conditional-default', 'choice-default'].includes(derivedReasons.get(symbol))) {
       catalogConditionalDefaultSymbols.add(symbol);
     } else {
       catalogConditionalDefaultSymbols.delete(symbol);

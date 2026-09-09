@@ -5,9 +5,9 @@
 // tool deliberately has no package-name knowledge and never edits .config.
 
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
@@ -567,6 +567,19 @@ function activePackages(configPath) {
   return { values, active };
 }
 
+export function classifyActivePackages(active, receipt, identity, nativePackages = new Map()) {
+  if (!object(receipt) || receipt.schema !== 1 || receipt.revision !== identity.revision ||
+      receipt.sourceCommit !== identity.sourceCommit || !SHA256_RE.test(text(receipt.graphHash)) ||
+      !Array.isArray(receipt.nonPackageSymbols) || receipt.nonPackageSymbols.some((symbol) =>
+        typeof symbol !== 'string' || !/^PACKAGE_[A-Za-z0-9_+@.\/-]+$/.test(symbol))) {
+    fail('Catalog symbol-kind evidence does not match the exact verified snapshot');
+  }
+  const configSymbols = new Set(receipt.nonPackageSymbols);
+  // Refreshed upstream metadata wins if a formerly config-only name now owns
+  // a concrete package. Catalog evidence must never hide a native build root.
+  return new Map([...active].filter(([name]) => nativePackages.has(name) || !configSymbols.has(`PACKAGE_${name}`)));
+}
+
 function splitDependencyTokens(value) {
   // Keep boolean parentheses intact while splitting the whitespace-separated
   // package DEPENDS syntax.  A parenthesized version constraint is discarded
@@ -698,7 +711,8 @@ function dependencyGroups(value, options = {}) {
 }
 
 function addPackage(packages, name, row = {}) {
-  const packageName = cleanDependencyToken(name);
+  const packageName = row.buildOnly && /^[A-Za-z0-9][A-Za-z0-9+_.@/-]*$/.test(text(name))
+    ? text(name) : cleanDependencyToken(name);
   if (!packageName) return null;
   let record = packages.get(packageName);
   if (!record) {
@@ -714,7 +728,9 @@ function addPackage(packages, name, row = {}) {
   for (const group of row.buildDepends || []) record.depends.push(group);
   for (const error of row.buildDepends?.errors || []) record.dependencyErrors.push({ ...error, field: 'Build-Depends' });
   for (const value of row.provides || []) {
-    const provided = cleanDependencyToken(value, { allowVirtual: true });
+    // Provides is a capability registration, not Depends/version syntax.
+    const raw = text(value).replace(/^@/, '');
+    const provided = /^[A-Za-z0-9][A-Za-z0-9+_.@/-]*(?:=[^\s]+)?$/.test(raw) ? raw : '';
     if (provided && provided !== packageName) record.provides.add(provided);
   }
   if (row.sourceMakefile) {
@@ -726,111 +742,60 @@ function addPackage(packages, name, row = {}) {
   return record;
 }
 
-function fieldsFromBlock(block) {
-  const fields = {};
-  let current = '';
-  for (const line of block.split(/\r?\n/)) {
-    const match = line.match(/^([A-Za-z][A-Za-z0-9-]*):\s*(.*)$/);
-    if (match) {
-      current = match[1];
-      fields[current] = match[2];
-    } else if (current && line.trim()) {
-      fields[current] += ` ${line.trim()}`;
-    }
-  }
-  return fields;
-}
-
 function parsePackageInfo(path) {
   const content = readFileSync(path, 'utf8');
   const packages = new Map();
-  const hasRecordMarkers = /^\s*@@\s*$/m.test(content);
-  const blocks = hasRecordMarkers
-    ? content.split(/^\s*@@\s*$/gm)
-    : content.split(/\n\s*\n/);
-  let sourceMakefile = '';
+  // Follow the native metadata stream, not blank-line or @@ record splitting.
+  // @@ terminates Description/Config bodies; one source owns multiple binary
+  // packages and its build fields apply to every one of those packages.
+  let source = { makefile: '', fields: {}, packages: [] };
+  const sources = [source];
+  let fields = null;
+  let multiline = false;
   let packageBlocks = 0;
-  for (const block of blocks) {
-    const fields = fieldsFromBlock(block);
-    sourceMakefile = text(fields['Source-Makefile']) || sourceMakefile;
-    const name = cleanDependencyToken(fields.Package);
-    if (!name) continue;
-    packageBlocks++;
-    addPackage(packages, name, {
-      depends: dependencyGroups(fields.Depends),
-      buildDepends: dependencyGroups(fields['Build-Depends'], { build: true }),
-      provides: splitDependencyTokens(fields.Provides || ''),
-      sourceMakefile,
-    });
-  }
-  return { packages, blocks: packageBlocks };
-}
-
-function walkMakefiles(directory, output = [], seen = new Set()) {
-  if (!existsSync(directory)) return output;
-  let realDirectory;
-  try { realDirectory = realpathSync(directory); } catch { return output; }
-  if (seen.has(realDirectory)) return output;
-  seen.add(realDirectory);
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const path = join(directory, entry.name);
-    const directoryEntry = entry.isDirectory() || (entry.isSymbolicLink() && (() => {
-      try { return statSync(path).isDirectory(); } catch { return false; }
-    })());
-    if (directoryEntry) {
-      if (!['.git', 'tmp', 'staging_dir', 'build_dir', 'bin', 'logs'].includes(entry.name)) {
-        walkMakefiles(path, output, seen);
-      }
-    } else if (entry.isFile() && entry.name === 'Makefile') output.push(path);
-  }
-  return output;
-}
-
-function makeAssignmentValue(body, key) {
-  const lines = String(body || '').replace(/\r\n/g, '\n').split('\n');
-  const assignment = new RegExp(`^\\s*${key}\\s*(?::=|\\?=|\\+=|=)\\s*(.*)$`);
-  const values = [];
-  let collecting = false;
-  for (const line of lines) {
-    if (!collecting) {
-      const match = line.match(assignment);
-      if (!match) continue;
-      values.push(match[1]);
-      collecting = /\\\s*$/.test(match[1]);
+  for (const line of content.split(/\r?\n/)) {
+    if (multiline) {
+      if (line.trim() === '@@') multiline = false;
       continue;
     }
-    values.push(line.trim());
-    collecting = /\\\s*$/.test(line);
+    const match = line.match(/^([A-Za-z][A-Za-z0-9_/-]*):\s*(.*)$/);
+    if (!match) continue;
+    const [, key, value] = match;
+    if (key === 'Description' || key === 'Config') { multiline = true; continue; }
+    if (key === 'Source-Makefile') {
+      source = { makefile: value.trim(), fields: {}, packages: [] };
+      sources.push(source);
+      fields = null;
+    } else if (key === 'Package') {
+      fields = { Package: value };
+      source.packages.push(fields);
+      packageBlocks++;
+    } else if (key === 'Build-Depends' || key.startsWith('Build-Depends/') || key === 'Build-Types') {
+      source.fields[key] = value;
+    } else if (fields) fields[key] = value;
   }
-  return values.join(' ').replace(/\\\s*/g, ' ').trim();
-}
-
-function parseMakefiles(upstreamDir, packages) {
-  const paths = walkMakefiles(join(upstreamDir, 'package'))
-    .concat(walkMakefiles(join(upstreamDir, 'feeds')));
-  let records = 0;
-  for (const path of paths) {
-    const content = readFileSync(path, 'utf8');
-    // A Makefile commonly defines multiple package variants.  Scope DEPENDS
-    // and PROVIDES to each Package/<name> block; assigning every Makefile
-    // dependency to every package would manufacture false closure paths.
-    const definitions = [...content.matchAll(/^define\s+Package\/([^\s/]+)\s*$([\s\S]*?)^endef\s*$/gm)];
-    for (const definition of definitions) {
-      const name = definition[1];
-      const body = definition[2] || '';
-      const depends = makeAssignmentValue(body, 'DEPENDS');
-      const provides = makeAssignmentValue(body, 'PROVIDES');
-      if (packages.has(cleanDependencyToken(name))) continue;
-      addPackage(packages, name, {
-        depends: dependencyGroups(depends),
-        buildDepends: dependencyGroups(makeAssignmentValue(body, 'PKG_BUILD_DEPENDS'), { build: true }),
-        provides: splitDependencyTokens(provides),
-        sourceMakefile: relative(upstreamDir, path).replaceAll('\\', '/'),
+  for (const owner of sources) {
+    for (const row of owner.packages) {
+      const buildOnly = row['Build-Only'] === '1';
+      const name = buildOnly && /^[A-Za-z0-9][A-Za-z0-9+_.@/-]*$/.test(text(row.Package))
+        ? text(row.Package) : cleanDependencyToken(row.Package);
+      if (!name) fail(`Invalid concrete package identity in upstream metadata: ${row.Package}`);
+      // Native last-definition-wins semantics replace dependency/source facts;
+      // provider registration remains cumulative (metadata.pm vpackage).
+      const previous = packages.get(name);
+      packages.delete(name);
+      const record = addPackage(packages, name, {
+        buildOnly,
+        depends: dependencyGroups(row.Depends),
+        buildDepends: dependencyGroups(owner.fields['Build-Depends'], { build: true }),
+        provides: splitDependencyTokens(row.Provides || ''),
+        sourceMakefile: owner.makefile,
       });
-      records++;
+      for (const capability of previous?.provides || []) record.provides.add(capability);
+      record.buildFields = { ...owner.fields };
     }
   }
-  return { files: paths.length, records };
+  return { packages, blocks: packageBlocks };
 }
 
 function loadPackageGraph(upstreamDir, args) {
@@ -843,11 +808,10 @@ function loadPackageGraph(upstreamDir, args) {
     metadata = { ...metadata, blocks: parsed.blocks };
     for (const [name, record] of parsed.packages) packages.set(name, record);
   }
-  const makefiles = parseMakefiles(upstreamDir, packages);
-  if (!metadataExists && !makefiles.records) {
+  if (!metadataExists) {
     fail(`Upstream package metadata is missing or empty: ${metadataPath}`);
   }
-  if (metadataExists && !packages.size && !makefiles.records) {
+  if (!packages.size) {
     fail(`Upstream package metadata contains no package records: ${metadataPath}`);
   }
   const providers = new Map();
@@ -861,7 +825,8 @@ function loadPackageGraph(upstreamDir, args) {
   for (const [name, rows] of providers) providers.set(name, unique(rows).sort());
   const parseErrors = [...packages.values()].flatMap((record) =>
     record.dependencyErrors.map((error) => ({ package: record.name, ...error })));
-  return { packages, providers, parseErrors, metadata: { ...metadata, makefiles, parseErrors } };
+  return { packages, providers, parseErrors, metadata: { ...metadata,
+    sha256: sha256(readFileSync(metadataPath)), parseErrors } };
 }
 
 function dependencyCandidates(group, graph) {
@@ -997,6 +962,10 @@ function unresolvedActiveDependencyGraph(graph, active, values = new Map()) {
       unresolved.push({ path: [...path, name], reason: 'active-package-metadata-missing' });
       return;
     }
+    for (const error of record.dependencyErrors || []) {
+      unresolved.push({ ...error, path: [...path, name],
+        reason: 'upstream-package-dependency-syntax-unresolved', syntaxReason: error.reason });
+    }
     for (const group of record.depends) {
       const resolved = resolveDependencyGroup(group, graph, active, values);
       if (resolved.status === 'skipped' || resolved.status === 'resolved') {
@@ -1036,12 +1005,6 @@ export function verifyBuildClosure({ document, identity, graph, active, configVa
     activeRoots: [...active.keys()].sort(),
     checks: [],
   };
-  if (graph.parseErrors?.length) {
-    output.result = 'inconclusive';
-    output.reason = 'upstream-package-dependency-syntax-unresolved';
-    output.unresolved = graph.parseErrors;
-    return output;
-  }
   const missingActiveRoots = [...active.keys()].filter((name) => !graph.packages.has(name));
   if (missingActiveRoots.length) {
     output.result = 'inconclusive';
@@ -1104,7 +1067,11 @@ export async function main(argv = process.argv.slice(2)) {
   const actualCommit = upstreamCommit(upstreamDir, args, identity);
   identity.sourceCommit = actualCommit;
   const { document, contract, provider } = await loadCompatibility(identity, args);
-  const { values, active } = activePackages(configPath);
+  const { values, active: prefixedSymbols } = activePackages(configPath);
+  const symbolKinds = args['symbol-kinds'] ? readJson(args['symbol-kinds']) : null;
+  let active = symbolKinds
+    ? classifyActivePackages(prefixedSymbols, symbolKinds, identity)
+    : prefixedSymbols;
   const catalog = { provider, ...(contract || {}), repository: identity.repository, revision: identity.revision };
   let graph;
   try {
@@ -1132,6 +1099,7 @@ export async function main(argv = process.argv.slice(2)) {
     process.exitCode = 2;
     return output;
   }
+  if (symbolKinds) active = classifyActivePackages(prefixedSymbols, symbolKinds, identity, graph.packages);
   const output = verifyBuildClosure({ document, identity, graph, active, configValues: values });
   output.catalog = catalog;
   const outPath = text(args.out || process.env.BUILD_CLOSURE_OUT);
@@ -1148,7 +1116,6 @@ export {
   dependencyGroups,
   loadPackageGraph,
   parsePackageInfo,
-  parseMakefiles,
 };
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]).replaceAll('\\', '/')).href) {
