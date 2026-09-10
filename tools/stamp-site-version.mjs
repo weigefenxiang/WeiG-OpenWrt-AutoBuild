@@ -15,6 +15,7 @@ const OUT = join(SITE, 'data', 'site-version.json');
 const ROOT_VERSION = join(ROOT, 'VERSION');
 const CHECK_ONLY = process.argv.includes('--check');
 const KEEP_VERSION = process.argv.includes('--keep-version');
+const REFRESH_CATALOG_BINDINGS = process.argv.includes('--refresh-catalog-bindings');
 const SELF_TEST = process.argv.includes('--self-test');
 const VERSION_RE = /^v\d{10}$/;
 const CATALOG_CHANNELS = ['catalog-dev', 'catalog-staging', 'catalog-main'];
@@ -191,7 +192,7 @@ if (CHECK_ONLY) {
   process.exit(1);
 }
 
-if (versionStateOk) {
+if (versionStateOk && !REFRESH_CATALOG_BINDINGS) {
   console.log(`Version inputs unchanged / 版本输入未变化: ${old.version}`);
   console.log(`Site SHA-256 unchanged / 全站 SHA-256 未变化: ${old.siteSha256}`);
   process.exit(0);

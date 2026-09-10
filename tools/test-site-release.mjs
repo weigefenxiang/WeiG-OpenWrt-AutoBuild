@@ -2,7 +2,9 @@
 // Regression matrix for deterministic full-site SHA-256 release identity.
 
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { computeSiteSha256 } from './site-release.mjs';
@@ -81,6 +83,36 @@ try {
   const secondPass = canonicalizeSiteReleaseBytes(root);
   assert.equal(secondPass.changedFiles.length, 0, 'canonicalization must be idempotent');
   assert.equal(computeSiteSha256(root).siteSha256, canonical.siteSha256, 'idempotent canonicalization must preserve the release SHA');
+
+  // A data-only Catalog promotion must be bindable without changing site code
+  // or manufacturing a new VERSION. Exercise the actual stamping entry point.
+  const project = join(root, 'stamp-project');
+  for (const directory of ['.github/workflows', 'Shell', 'config', 'site/wrt/config', 'site/wrt/data', 'tools']) {
+    mkdirSync(join(project, directory), { recursive: true });
+  }
+  for (const file of ['stamp-site-version.mjs', 'site-release.mjs', 'canonicalize-site-release.mjs', 'check-text-format.mjs']) {
+    copyFileSync(new URL(file, import.meta.url), join(project, 'tools', file));
+  }
+  writeFileSync(join(project, '.github/automation-policy.json'), '{}\n');
+  writeFileSync(join(project, 'site/wrt/config/site.json'), '{"catalog":{"repository":"example/catalog"}}\n');
+  writeFileSync(join(project, 'VERSION'), 'v2609092225\n');
+  writeFileSync(join(project, 'site/wrt/data/site-version.json'), '{"version":"v2609092225"}\n');
+  const preload = join(root, 'stamp-fetch.mjs');
+  writeFileSync(preload, `globalThis.fetch=async()=>new Response(JSON.stringify({
+    assetRef:process.env.TEST_BINDING_SHA,provenance:{codeSha:process.env.TEST_BINDING_SHA}}));`);
+  const stamp = (sha, ...flags) => execFileSync(process.execPath,
+    ['--import', pathToFileURL(preload).href, join(project, 'tools/stamp-site-version.mjs'), '--keep-version', ...flags],
+    { cwd: project, windowsHide: true, env: { ...process.env, TEST_BINDING_SHA: sha }, stdio: 'pipe' });
+  const stamped = () => JSON.parse(readFileSync(join(project, 'site/wrt/data/site-version.json'), 'utf8'));
+  stamp('a'.repeat(40));
+  const first = stamped();
+  stamp('b'.repeat(40));
+  assert.deepEqual(stamped(), first, 'ordinary unchanged stamping stays offline and idempotent');
+  stamp('b'.repeat(40), '--refresh-catalog-bindings');
+  const refreshed = stamped();
+  assert.equal(refreshed.catalogBindings['catalog-dev'].assetRef, 'b'.repeat(40));
+  for (const key of ['version', 'fingerprint', 'siteSha256']) assert.equal(refreshed[key], first[key]);
+  assert.equal(readFileSync(join(project, 'VERSION'), 'utf8'), 'v2609092225\n');
 
   console.log('site release SHA-256 + canonical release bytes matrix passed');
 } finally {
