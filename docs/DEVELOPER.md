@@ -124,7 +124,13 @@ Defconfig 默认关闭。开启时只能在 `reconstructed.config` 已经确定�
 
 无论是否开启 Defconfig，下载和编译前都会只核对 `request-overrides.json` 中的有效 Kconfig 值。门禁不比较整份 `.config`、不读取 `plugins`，也不检查未被覆盖的 baseline 项；显式值被改写时以 `configuration-override-mismatch` 停止，并保存 `config-verification.json`。
 
-编译前 Worker 会对权威 `.config` 做 hash，运行 `make prepare-tmpinfo V=s`，并要求前后 hash 相同且真实的 `tmp/.packageinfo` 非空。随后闭包门禁读取该元数据和上游软件包 Makefile，解析真实 dependency/provider 路径；元数据、候选、条件或路径缺失/有歧义时，在编译前 fail-closed。
+编译前 Worker 会对权威 `.config` 做 hash，运行 `make prepare-tmpinfo V=s`，并要求前后 hash 相同且真实的 `tmp/.packageinfo` 非空。闭包门禁只消费原生已求值元数据，不回退扫描原始 Makefile。解析器区分 Description/Config 区块和源码级字段（含 `Build-Depends/host`）；源码构建依赖应用于该源码的各二进制包，host 依赖独立处理。活动根可达路径存在未知时继续阻断，无关解析诊断不再使所有选项失败。
+
+`PACKAGE_*` 前缀不能证明真实软件包身份：上游的包配置子选项也使用该前缀。Worker 可从已验证的不可变图生成 job 内符号类型凭据，闭包门禁核对其 source/graph 身份。已证明的配置子选项不作为构建包根，但刷新后的真实原生包记录优先于旧分类。凭据不是另一份长期维护的软件包数据库。
+
+共享收敛步骤在最终序列化前补齐适用的类型化默认值和必选 choice，而非只在兼容性计算的临时状态中补齐。原生声明顺序与完整 choice 成员跨 Target 投影保留；只有顺序已证明时才允许首个可见项回退。用户显式值继续保留。新推导的 scalar 默认值在 choice/select 收敛后重新计算，owner 不再活动时删除；最终变化同时进入 `.config` 和 schema-6 overrides，历史导入兼容与 Defconfig 默认关闭的边界不变。
+
+已验证的 Catalog 纯数据晋级后，运行 `node tools/stamp-site-version.mjs --keep-version --refresh-catalog-bindings`，再运行 `node tools/dev-assistant.mjs prepare --keep-version`，显式刷新生成的通道绑定而不制造新代码版本；普通无变化生成保持幂等。部署后核对线上 `data/build-meta.json` 和 `data/site-version.json`，刷新 dev、导入历史配置、执行“检”并生成新请求。重跑旧的锁定请求仍使用旧 Worker。剩余 deferred 不算通过，配置回放也不等于固件编译成功。
 
 ## 7. Actions 命名、并发和保留
 
