@@ -17,6 +17,8 @@ An online OpenWrt customizer and GitHub Actions build tool. The browser reads So
 
 The page also imports `build-request.json`, `.config`, and `config.buildinfo`. Schema 6 builds reconstruct the authoritative configuration from the exact Catalog Native Profile baseline plus semantic user overrides. **Defconfig** is off by default and, when explicitly enabled, runs only as optional normalization after reconstruction.
 
+Configuration checks run when you choose **Test** or generate a build request, not during import. Numeric and string options use typed controls and the same Kconfig constraints as recommendations. An inactive assignment can be removed without enabling another image format; unresolved or ambiguous changes still require your decision. Apply recommendations, run Test again, and export a new request from the deployed page. Rerunning an old request keeps its old pinned Worker code.
+
 ## Cloning and project configuration
 
 Maintain two configuration sources with separate responsibilities after cloning:

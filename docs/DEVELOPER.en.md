@@ -1,5 +1,13 @@
 # Developer Guide
 
+## Typed repair and compatibility rule contracts
+
+- `bool`/`tristate` retain legal N/M/Y controls. `int`/`hex`/`string` editing, dependent invalidation and recommendations use the shared engine with type, range, visibility and dependency constraints. Present zero, empty string and literal `n` are values, not absent assignments. Nonzero dependency ceilings allow scalar values; UNKNOWN remains deferred.
+- A known inactive scalar can be removed through a recommendation without enabling its owner or changing Target/Profile or image format. An invalid active value may use its applicable typed default only if simulation reduces blocking issues without adding new ones. Application uses the same engine and rolls back on failure; do not manufacture N/M/Y controls for scalar rows.
+- Schema 6 adds nullable override values: `["SYMBOL", null]` removes that assignment from the Native Profile baseline. It is distinct from `"n"`, `"0"` and the serialized empty string `"\"\""`. Import, reconstruction and effective-config verification preserve this distinction; protected identity and unknown-symbol checks remain. Old string-valued requests remain readable. New nullable requests require the matching updated Worker; do not claim older consumers support this additive representation.
+- `buildDependency` is optional in the existing compatibility contract. Ordinary build-failure rules use the shared browser matcher for package selection and exact environment scope. Rules that declare `buildDependency` additionally use the refreshed native package graph. Malformed rules and unresolved reachable graph facts still fail closed; neither path silently rewrites user configuration.
+- Regression coverage includes anonymous scalar types/ranges/zero/empty/UNKNOWN, baseline deletion through the real Worker CLI, ordinary-rule browser/Worker parity and recommendation → second Test → export → reimport. Browser or contract success is not firmware compilation or exhaustive native `conf` parity.
+
 ## 0. Cloning and project configuration
 
 Maintain two configuration sources with separate responsibilities after cloning. Edit `site/wrt/config/site.json` for the public web site and firmware defaults, and `config/build.json` for build-side policy. Run `prepare` in the working tree, then commit both configuration sources together with the controlled output produced by `prepare`:
