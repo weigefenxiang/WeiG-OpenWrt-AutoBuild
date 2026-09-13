@@ -1,0 +1,161 @@
+{
+  "schema": 5,
+  "rules": [
+    {
+      "id": "OWN-0001",
+      "issue": "file-ownership",
+      "match": "all-installed",
+      "scope": {
+        "ImmortalWrt": [
+          "openwrt-25.12"
+        ]
+      },
+      "if": "USE_APK",
+      "packages": [
+        "luci-app-openvpn-server",
+        "openvpn-openssl"
+      ],
+      "paths": [
+        "/etc/config/openvpn"
+      ],
+      "refs": [
+        "run:31248199953",
+        "run:31382153641"
+      ]
+    },
+    {
+      "id": "BLD-0001",
+      "issue": "build-failure",
+      "match": "all-selected",
+      "scope": {
+        "ImmortalWrt": [
+          "*"
+        ],
+        "lede": [
+          "*"
+        ]
+      },
+      "packages": [
+        "oscam"
+      ],
+      "refs": [
+        "run:31319173318",
+        "run:31343335898",
+        "run:31343364994",
+        "run:31343384324",
+        "run:31343420988"
+      ],
+      "failure": {
+        "phase": "link",
+        "cause": "package-caused",
+        "code": "oscam-softcam-key-link-failure"
+      }
+    },
+    {
+      "id": "BLD-0002",
+      "issue": "build-failure",
+      "match": "all-selected",
+      "scope": {
+        "ImmortalWrt": [
+          "master"
+        ]
+      },
+      "packages": [
+        "luci-app-openvpn-server"
+      ],
+      "refs": [
+        "run:31382119111"
+      ],
+      "failure": {
+        "phase": "package-compile",
+        "cause": "package-caused",
+        "code": "openvpn-server-build-failure"
+      }
+    },
+    {
+      "id": "BLD-0003",
+      "issue": "build-failure",
+      "match": "all-selected",
+      "policy": "preventive",
+      "environments": [
+        {
+          "source": "*",
+          "branch": "*",
+          "packageAvailability": "if-present",
+          "targetScope": {}
+        }
+      ],
+      "packages": [
+        "dockerd"
+      ],
+      "buildDependency": {
+        "package": "dockerd"
+      },
+      "evidence": [
+        {
+          "source": "ImmortalWrt",
+          "branch": "openwrt-25.12",
+          "sourceCommit": "6081813a7ec91aba6555a74dc3f4d34f504f8a53",
+          "refs": [
+            "run:33091565296",
+            "run:32703315265",
+            "run:32702715228",
+            "run:32719724510",
+            "run:33229690268",
+            "run:33230123378"
+          ]
+        },
+        {
+          "source": "ImmortalWrt",
+          "branch": "openwrt-25.12",
+          "sourceCommit": "1d34e7b88708d4eeb3feabe0b2b6f835a909c9c0",
+          "refs": [
+            "run:33293241107"
+          ]
+        }
+      ],
+      "failure": {
+        "phase": "package-compile",
+        "cause": "package-caused",
+        "code": "moby-nested-executable-empty-path",
+        "observed": {
+          "package": "dockerd",
+          "version": "29.6.1"
+        }
+      }
+    },
+    {
+      "id": "BLD-0005",
+      "issue": "build-failure",
+      "match": "all-selected",
+      "scope": {
+        "lede": [
+          "master"
+        ]
+      },
+      "sourceCommits": [
+        "bb287c19dfb283c5106d568db68077c210b9abb7"
+      ],
+      "packages": [
+        "luci-app-passwall"
+      ],
+      "refs": [
+        "run:32929550697"
+      ],
+      "failure": {
+        "phase": "rootfs-install",
+        "cause": "package-caused",
+        "code": "missing-package-dependencies",
+        "observed": {
+          "missingDependencies": [
+            "ipt2socks",
+            "shadowsocks-rust-sslocal",
+            "shadowsocks-rust-ssserver",
+            "simple-obfs-client",
+            "v2ray-plugin"
+          ]
+        }
+      }
+    }
+  ]
+}

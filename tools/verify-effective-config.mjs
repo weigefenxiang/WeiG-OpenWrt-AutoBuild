@@ -27,7 +27,7 @@ export function parseOverrideDocument(input) {
     if (typeof symbol !== 'string' || !SYMBOL_RE.test(symbol)) fail(`override ${index} has an invalid symbol`);
     if (seen.has(symbol)) fail(`duplicate override symbol: ${symbol}`);
     seen.add(symbol);
-    if (typeof raw !== 'string' || !raw || /[\r\n\0]/.test(raw)) fail(`override ${symbol} has an invalid value`);
+    if (raw !== null && (typeof raw !== 'string' || !raw || /[\r\n\0]/.test(raw))) fail(`override ${symbol} has an invalid value`);
     return [symbol, raw];
   });
 }
@@ -37,7 +37,7 @@ export function verifyEffectiveConfig({ overrides, configText, stage = 'post-def
   const actualValues = parseConfigMap(configText);
   const mismatches = [];
   for (const [symbol, requestedValue] of requested) {
-    const actualValue = actualValues.get(symbol) ?? 'n';
+    const actualValue = actualValues.get(symbol) ?? (requestedValue === null ? null : 'n');
     if (actualValue !== requestedValue) {
       mismatches.push({
         symbol,

@@ -356,7 +356,11 @@ export function diffProfileBaseline(baseline, finalValues, { allowedSymbols = nu
     if (!base.has(symbol) && !allowed.has(symbol)) {
       throw new Error(`Kconfig symbol is outside the active Catalog: ${symbol}`);
     }
-    if (after == null || !String(after) || /[\r\n\0]/.test(String(after))) {
+    if (after === null) {
+      overrides.push([symbol, null]);
+      continue;
+    }
+    if (!String(after) || /[\r\n\0]/.test(String(after))) {
       throw new Error(`invalid Kconfig override for ${symbol}`);
     }
     overrides.push([symbol, String(after)]);
@@ -373,8 +377,8 @@ export function applyProfileOverrides(baseline, overrides, { allowedSymbols = nu
   for (const pair of overrides) {
     if (!Array.isArray(pair) || pair.length !== 2) throw new Error('invalid Kconfig override row');
     const symbol = String(pair[0] || '');
-    const value = String(pair[1] ?? '');
-    if (!SYMBOL_RE.test(symbol) || seen.has(symbol) || !value || /[\r\n\0]/.test(value)) {
+    const value = pair[1] === null ? null : String(pair[1] ?? '');
+    if (!SYMBOL_RE.test(symbol) || seen.has(symbol) || (value !== null && (!value || /[\r\n\0]/.test(value)))) {
       throw new Error(`invalid Kconfig override: ${symbol || '(missing)'}`);
     }
     if (baseline.protectedSymbols?.has(symbol)) throw new Error(`Target/Profile identity cannot be overridden: ${symbol}`);
@@ -382,7 +386,8 @@ export function applyProfileOverrides(baseline, overrides, { allowedSymbols = nu
       throw new Error(`Kconfig override is outside the active Catalog: ${symbol}`);
     }
     seen.add(symbol);
-    values.set(symbol, value);
+    if (value === null) values.delete(symbol);
+    else values.set(symbol, value);
   }
   return values;
 }

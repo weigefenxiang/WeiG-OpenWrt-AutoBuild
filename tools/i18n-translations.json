@@ -1,5 +1,10 @@
 {
  "zh-CN": {
+  "configuration.removeInactive": "移除未生效值",
+  "configuration.inactiveInput": "当前 Kconfig 依赖或可见性条件不允许编辑此值。",
+  "configuration.applyCustomValues": "应用自定义值",
+  "configuration.restoreTypedDefault": "建议：将 {symbol} 恢复为当前生效的 Kconfig 默认值：{value}。",
+  "configuration.removeInactiveDetail": "建议：移除 {symbol} 当前不生效的赋值；保持目标和镜像格式不变。",
   "compatibility.planUnavailable": "无法自动推荐：{reason}",
   "compatibility.retainedDependencies": "仍被其它选择需要或受保护，保留：{list}",
   "app.title": "OpenWrt 固件在线定制",
@@ -435,7 +440,7 @@
   "runtime.configurationPreflightTitle": "配置预检",
   "runtime.configurationPreflightSummary": "当前导入或编辑的配置仍有 {value1} 个 Kconfig 或软件包依赖问题。",
   "runtime.configurationPreflightRecommendation": "其中 {value1} 个受影响选择存在确定性修复。你可以应用全部推荐、自定义 N/M/Y、返回修改，或在写入审计记录后强制继续。",
-  "runtime.configurationPreflightUnavailable": "并非所有问题都有唯一修复。你可以自定义 N/M/Y、返回修改，或在写入审计记录后强制继续。",
+  "runtime.configurationPreflightUnavailable": "并非所有问题都有唯一修复。你可以按类型编辑数值或状态、返回修改，或在写入审计记录后强制继续。",
   "runtime.configurationPreflightApplyAll": "应用全部推荐",
   "runtime.configurationPreflightNoProgress": "推荐变更没有减少当前配置问题。",
   "runtime.configurationPreflightCustomInvalid": "自定义状态仍留下未解决的配置问题。",

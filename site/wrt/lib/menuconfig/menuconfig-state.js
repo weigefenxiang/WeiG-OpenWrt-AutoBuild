@@ -445,6 +445,11 @@ function catalogPreferredValues() {
 }
 function recordCatalogExplicitIntent(option, value) {
   if (!option?.symbol) return 'user';
+  if (scalarKconfigOption(option) && value === null) {
+    catalogUserOverrides.set(option.symbol, null);
+    menuTouched.add(option.symbol);
+    return 'user';
+  }
   const override = CATALOG_ENGINE?.resolveCatalogUserOverride
     ? CATALOG_ENGINE.resolveCatalogUserOverride(catalogInheritedValue(option.symbol), value)
     : (catalogInheritedValue(option.symbol) === value ? null : value);
@@ -479,7 +484,8 @@ function applyCatalogIntent(option, value, force = false, source = 'user') {
       });
     let directIntentChanged = false;
     for (const change of result.changes) {
-      menuValues.set(change.symbol, change.to);
+      if (change.remove) menuValues.delete(change.symbol);
+      else menuValues.set(change.symbol, change.to);
       const explicit = change.symbol === option.symbol;
       const conditionalDefault = ['conditional-default', 'choice-default'].includes(change.reason);
       const changedOption = menuOptionBySymbol.get(change.symbol);
@@ -550,7 +556,8 @@ function reconcileImportedConditionalDefaults(options = {}) {
   const derivedReasons = result.derivedReasons || new Map();
   for (const change of result.changes) {
     if (!menuOptionBySymbol.has(change.symbol)) continue;
-    menuValues.set(change.symbol, change.to);
+    if (change.remove) { menuValues.delete(change.symbol); menuTouched.add(change.symbol); }
+    else menuValues.set(change.symbol, change.to);
     if (options.dependencySeeds?.length && change.reason === 'dependency-unsatisfied') menuTouched.add(change.symbol);
     if (derivedSymbols.has(change.symbol)) continue;
     if (change.to === 'n') catalogDependencySymbols.delete(change.symbol);
@@ -559,7 +566,9 @@ function reconcileImportedConditionalDefaults(options = {}) {
   for (const symbol of derivedSymbols) {
     if (!menuOptionBySymbol.has(symbol)) continue;
     const value = result.values.get(symbol) ?? 'n';
-    menuValues.set(symbol, value);
+    if (!result.values.has(symbol) && scalarKconfigOption(menuOptionBySymbol.get(symbol))) {
+      menuValues.delete(symbol); menuTouched.add(symbol);
+    } else menuValues.set(symbol, value);
     catalogImportedSymbols.delete(symbol);
     menuImportedOriginal.delete(symbol);
     menuImportedNonDefault.delete(symbol);
@@ -614,28 +623,11 @@ function normalizeScalarKconfigValue(option, rawValue) {
   return normalizeKconfigValueByType(rawValue, option.type, option.symbol);
 }
 function applyScalarMenuValue(option, rawValue, source = 'user') {
-  const value = normalizeScalarKconfigValue(option, rawValue);
-  const previous = menuValues.get(option.symbol) ?? simpleKconfigDefault(option);
-  menuValues.set(option.symbol, value);
-  if (source === 'restore') {
-    if (!catalogRecommendedValues.has(option.symbol) && !catalogImportedSymbols.has(option.symbol)) {
-      menuTouched.delete(option.symbol);
-    }
-  } else {
-    menuTouched.add(option.symbol);
-  }
-  if (source === 'user') catalogUserOverrides.set(option.symbol, value);
-  else if (source === 'recommended') catalogRecommendedValues.set(option.symbol, value);
-  else if (source === 'imported') catalogImportedSymbols.add(option.symbol);
-  catalogDependencySymbols.delete(option.symbol);
-  if (previous !== value) markCatalogStateChanged();
-  return {
-    changes: previous === value ? [] : [{ symbol: option.symbol, from: previous, to: value, reason: 'scalar' }],
-    violations: [],
-  };
+  const value = rawValue === null ? null : normalizeScalarKconfigValue(option, rawValue);
+  return applyCatalogIntent(option, value, false, source);
 }
 function applyMenuValue(option, value, force = false, source = 'user') {
-  if (scalarKconfigOption(option) && option.userSettable === false && force !== true) {
+  if (scalarKconfigOption(option) && value !== null && option.userSettable === false && force !== true) {
     const error = new Error(`${option.symbol} is read-only because userSettable=false`);
     error.name = 'CatalogIntentError';
     throw error;

@@ -118,4 +118,14 @@ assert.throws(() => validateProfileBaselineDocument({
   ...document, metrics: { reconstructionMismatches: 1 },
 }), /parity/);
 
-console.log('Native Profile baseline checks passed: schema3 groups, target identity, exact delta, Catalog-authorized dynamic symbols, reconstruction, serialization, identity protection.');
+const typedBaseline = {values:new Map([['COUNT','160'], ['TEXT','""'], ['MASK','0x10']]), protectedSymbols:new Set()};
+const absent = new Map(typedBaseline.values); absent.delete('COUNT'); absent.set('MASK','0x0');
+const typedDelta = diffProfileBaseline(typedBaseline, absent);
+assert.deepEqual(typedDelta, [['COUNT',null], ['MASK','0x0']]);
+const typedRebuilt = applyProfileOverrides(typedBaseline, typedDelta);
+assert.equal(typedRebuilt.has('COUNT'), false);
+assert.equal(typedRebuilt.get('TEXT'),'""');
+assert.equal(typedRebuilt.get('MASK'),'0x0');
+assert.throws(()=>applyProfileOverrides(a, [['TARGET_PROFILE',null]]), /identity/);
+assert.throws(()=>applyProfileOverrides(a, [['UNKNOWN_OPTION',null]]), /outside/);
+console.log('Native Profile baseline checks passed, including explicit omission and typed zero/empty values.');

@@ -106,7 +106,9 @@ return new Response(Buffer.from(files[path],'base64'));};`);
     'the real Worker receipt must retain concrete packages and exclude only proven configuration options');
   }
   const expected = parseConfigMap(readFileSync(join(cwd, 'baseline.config'), 'utf8'));
-  for (const [symbol, value] of req.overrides) expected.set(symbol, value);
+  for (const [symbol, value] of req.overrides) {
+    if (value === null) expected.delete(symbol); else expected.set(symbol, value);
+  }
   const actual = parseConfigMap(readFileSync(join(cwd, 'result.config'), 'utf8'));
   assert.deepEqual([...actual].sort(), [...expected].sort(), 'reconstruction must equal exact baseline plus overrides');
   const effective = spawnSync(process.execPath, [join(root, 'tools/verify-effective-config.mjs'),
@@ -141,6 +143,7 @@ function fixturesFor({ compact = false, declareSchema = false, mutate = () => {}
   return fixtures;
 }
 try {
+  runRequest({ ...request, overrides: [['FEATURE', null]] }, { fixtures: fixturesFor() });
   const urls = process.argv.slice(2);
   if (urls.length) {
     for (const input of urls) {

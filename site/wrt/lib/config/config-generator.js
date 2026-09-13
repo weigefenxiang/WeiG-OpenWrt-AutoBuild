@@ -22,6 +22,9 @@ function serializeKconfigValue(value, type = 'unknown', symbol = 'Kconfig option
 }
 function setConfigSymbol(text, symbol, value, type = 'unknown') {
   const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (value === null) {
+    return text.replace(new RegExp(`^(?:CONFIG_${escaped}=.*|# CONFIG_${escaped} is not set)\\r?\\n?`, 'gm'), '');
+  }
   const serialized = serializeKconfigValue(value, type, symbol);
   const line = serialized === null
     ? `# CONFIG_${symbol} is not set`
@@ -50,7 +53,9 @@ function applyMenuConfig(text) {
   }
   for (const symbol of serialized) {
     const option = menuOptionBySymbol.get(symbol);
-    if (option) text = setConfigSymbol(text, symbol, String(menuValues.get(symbol) ?? 'n'), option.type);
+    if (option) text = setConfigSymbol(text, symbol,
+      !menuValues.has(symbol) && ['string', 'int', 'hex'].includes(option.type)
+        ? null : String(menuValues.get(symbol) ?? 'n'), option.type);
   }
   return text;
 }

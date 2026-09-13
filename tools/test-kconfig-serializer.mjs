@@ -10,8 +10,7 @@ import { readFrontendRuntimeSource } from './lib/frontend-source.mjs';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const source = readFrontendRuntimeSource(ROOT);
 
-assert.ok(source.includes(
-  "setConfigSymbol(text, symbol, String(menuValues.get(symbol) ?? 'n'), option.type)"),
+assert.ok(/setConfigSymbol\(text, symbol,[\s\S]{0,240}option\.type\)/.test(source),
 'Catalog option.type is not propagated into .config serialization');
 assert.ok(!source.includes("symbol === 'EXTERNAL_KERNEL_TREE'") &&
   !source.includes('symbol === "EXTERNAL_KERNEL_TREE"'),

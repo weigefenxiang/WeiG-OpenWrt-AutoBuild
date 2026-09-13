@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { normalizeCompatibilityDocument, createCatalogModel, evaluateCompatibilityRules } from '../site/wrt/lib/catalog-engine.js';
 import {
   activePackages,
   classifyActivePackages,
@@ -425,4 +426,38 @@ assert(workflow.includes("if: steps.req.outputs.use_defconfig != '1'") &&
   'defconfig-on and defconfig-off workflow paths must remain explicit');
 assert(workflow.includes('build-closure-verification.json'), 'closure evidence must be uploaded');
 
-console.log('build closure verifier checks passed: chains=1 virtual=2 conditions=3 or=3 shared=1 legacy=1 source-scope=1 packageinfo=1 build-depends=1 makefile=1 identity=1 workflow=1');
+// Frozen public Catalog fixture at 7938b3bf, not a runtime rule database.
+const published = JSON.parse(readFileSync(join(ROOT, 'tools/fixtures/compatibility-7938b3bf.json'), 'utf8'));
+normalizeCompatibilityDocument(published);
+const ordinary = { ...published, rules: published.rules.filter(row=>!row.buildDependency) };
+const packageNames = [...new Set(published.rules.flatMap(row=>row.packages))];
+const ordinaryModel = createCatalogModel({ schema: 5, targets: [], relations: { schema: 2,
+  records: packageNames.map(name=>({ kind:'package', package:name, configSymbol:`PACKAGE_${name}`,
+    type:'tristate', states:['n','m','y'] })) } });
+for (const sample of [
+  { source:'ImmortalWrt', branch:'openwrt-25.12', selected:[], fail:false },
+  { source:'ImmortalWrt', branch:'master', selected:[], fail:false },
+  { source:'OpenWrt', branch:'main', selected:['oscam'], fail:false },
+  { source:'ImmortalWrt', branch:'openwrt-25.12', selected:['luci-app-passwall'], fail:false },
+  { source:'ImmortalWrt', branch:'openwrt-25.12', selected:['oscam'], fail:true },
+  { source:'ImmortalWrt', branch:'master', selected:['luci-app-openvpn-server'], fail:true },
+  { source:'lede', branch:'master', sourceCommit:'bb287c19dfb283c5106d568db68077c210b9abb7', selected:['luci-app-passwall'], fail:true },
+]) {
+  const directory = writeFixture(packageNames.map(name=>({name})), sample.selected);
+  try {
+    const config = activePackages(join(directory, '.config'));
+    config.values.set('USE_APK', 'n');
+    const currentIdentity = { ...identity(), ...sample };
+    const worker = verifyBuildClosure({ document: published, identity:currentIdentity,
+      graph:loadPackageGraph(directory, {}), active:config.active, configValues:config.values });
+    const browser = evaluateCompatibilityRules(ordinaryModel, ordinary, config.values, {
+      sourceId:sample.source, branchName:sample.branch, sourceCommit:currentIdentity.sourceCommit,
+      validationOptions:{contextComplete:true} });
+    assert.equal(worker.result, sample.fail ? 'fail' : 'pass', JSON.stringify(sample));
+    assert.equal(browser.warnings.length > 0, sample.fail, 'ordinary Browser/Worker matching must agree');
+  } finally { rmSync(directory, {recursive:true,force:true}); }
+}
+const damagedOrdinary = { schema:5, rules:[{...ordinary.rules.find(row=>row.issue==='build-failure'), match:'unsupported'}] };
+assert.equal(runFixture([{name:'root'}], ['root'], damagedOrdinary).result, 'inconclusive',
+  'invalid rules must still fail closed');
+console.log('build closure verifier checks passed, including published ordinary/closure rule parity');

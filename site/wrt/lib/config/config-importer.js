@@ -355,14 +355,14 @@ function validateSchema6OverrideRows(overrides) {
   const seen = new Set();
   for (const pair of overrides) {
     if (!Array.isArray(pair) || pair.length !== 2 || typeof pair[0] !== 'string' ||
-        typeof pair[1] !== 'string') {
+        (pair[1] !== null && typeof pair[1] !== 'string')) {
       throw new Error('invalid Kconfig override row');
     }
     const symbol = pair[0];
     const value = pair[1];
-    if (!IMPORT_KCONFIG_SYMBOL_RE.test(symbol) || seen.has(symbol) || !value ||
+    if (!IMPORT_KCONFIG_SYMBOL_RE.test(symbol) || seen.has(symbol) || (value !== null && (!value ||
         !IMPORT_KCONFIG_VALUE_RE.test(value) ||
-        /[\r\n\0]/.test(value)) {
+        /[\r\n\0]/.test(value)))) {
       throw new Error(`invalid Kconfig override: ${symbol || '(missing)'}`);
     }
     seen.add(symbol);
@@ -503,7 +503,7 @@ function prepareSchema6SafeOverrides(overrides) {
     }
     let value;
     try {
-      value = normalizeKconfigValueByType(rawValue, option.type, symbol);
+      value = rawValue === null ? null : normalizeKconfigValueByType(rawValue, option.type, symbol);
     } catch (error) {
       throw new Error(`Invalid value for ${symbol}: ${error.message}`);
     }
@@ -650,6 +650,12 @@ function restoreSelections(config, payload) {
         if ((option.type === 'bool' || option.type === 'tristate') && !defaultValue) defaultValue = 'n';
         if (String(value) !== String(defaultValue)) menuImportedNonDefault.add(option.symbol);
       }
+    }
+    for (const [symbol, value] of payload?.schema === 6 ? payload.overrides || [] : []) {
+      if (value !== null || !menuOptionBySymbol.has(symbol)) continue;
+      menuValues.delete(symbol);
+      menuTouched.add(symbol);
+      catalogUserOverrides.set(symbol, null);
     }
     reconcileImportedConditionalDefaults();
   }

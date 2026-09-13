@@ -10,6 +10,7 @@ import { gunzipSync } from 'node:zlib';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { createCatalogModel, evaluateCompatibilityRules, normalizeCompatibilityDocument } from '../site/wrt/lib/catalog-engine.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SHA256_RE = /^[a-f0-9]{64}$/;
@@ -233,6 +234,7 @@ function validateCompatibilityDocument(document, label = 'Catalog compatibility 
   for (const [index, rule] of document.rules.entries()) {
     if (!object(rule)) fail(`${label} contains a non-object rule at index ${index}`);
   }
+  normalizeCompatibilityDocument(document);
   return document;
 }
 
@@ -448,7 +450,16 @@ function applicableRules(document, identity, availablePackages, values) {
   const rules = [];
   const skipped = [];
   const unresolved = [];
+  const directMatches = [];
   values ||= new Map();
+  const ordinaryPackages = unique((document?.rules || []).filter((rule) => !rule?.buildDependency)
+    .flatMap((rule) => Array.isArray(rule?.packages) ? rule.packages : []));
+  const ordinaryModel = createCatalogModel({ schema: 5, targets: [], relations: { schema: 2,
+    records: ordinaryPackages.filter((name) => availablePackages.has(name)).map((name) => ({
+      kind: 'package', package: name, configSymbol: `PACKAGE_${name}`,
+      type: 'tristate', states: ['n', 'm', 'y'],
+    })),
+  } });
   for (const rule of document?.rules || []) {
     if (!object(rule) || rule.issue !== 'build-failure') continue;
     if (!RULE_ID_RE.test(text(rule.id))) {
@@ -456,12 +467,19 @@ function applicableRules(document, identity, availablePackages, values) {
       continue;
     }
     if (!object(rule.buildDependency)) {
-      // Build-failure records without a concrete package describe a profile or
-      // infrastructure failure, which this package-closure gate cannot prove
-      // or disprove.  A package-caused record without its failed package is a
-      // malformed Catalog entry and must fail closed.
-      if (['package-caused', 'dependency-caused'].includes(text(rule.failure?.cause))) {
-        unresolved.push({ rule: text(rule.id), reason: 'missing-build-dependency-package' });
+      // The optional buildDependency field extends ordinary matching; it is
+      // not required by the Catalog contract. Validate through the same public
+      // boundary as the browser, then apply scope before inspecting selection.
+      try {
+        const evaluation = evaluateCompatibilityRules(ordinaryModel,
+          { schema: document.schema, rules: [rule] }, values, {
+            sourceId: identity.source, branchName: identity.branch, sourceCommit: identity.sourceCommit,
+            targetSystem: identity.target.system, targetSubtarget: identity.target.subtarget,
+            targetProfile: identity.target.profile,
+          });
+        if (evaluation.warnings.length) directMatches.push({ rule: rule.id, packages: [...rule.packages] });
+      } catch (error) {
+        unresolved.push({ rule: text(rule.id), reason: 'invalid-compatibility-rule', message: error.message });
       }
       continue;
     }
@@ -553,7 +571,7 @@ function applicableRules(document, identity, availablePackages, values) {
     packages.add(dependency);
     rules.push({ id: text(rule.id), package: dependency });
   }
-  return { packages: [...packages].sort(), rules, skipped, unresolved };
+  return { packages: [...packages].sort(), rules, skipped, unresolved, directMatches };
 }
 
 function activePackages(configPath) {
@@ -1019,6 +1037,15 @@ export function verifyBuildClosure({ document, identity, graph, active, configVa
     output.reason = 'catalog-rule-applicability-unresolved';
     return output;
   }
+  if (applicable.directMatches.length) {
+    output.result = 'fail';
+    output.reason = 'ordinary-compatibility-rule-matched';
+    output.checks = applicable.directMatches.map((row) => ({
+      rule: row.rule, target: row.packages.join(' + '), status: 'reachable',
+      paths: row.packages.map((name) => [name]),
+    }));
+    return output;
+  }
   const activeGraphUnresolved = unresolvedActiveDependencyGraph(graph, active, values || new Map());
   if (activeGraphUnresolved.length) output.activeGraphUnresolved = activeGraphUnresolved;
   for (const target of applicable.packages) {
@@ -1042,6 +1069,9 @@ function formatSummary(output) {
   const id = output.identity;
   const prefix = `${id.source}/${id.branch}@${id.sourceCommit.slice(0, 12)} target=${id.target.system || '-'}:${id.target.subtarget || '-'}:${id.target.profile || '-'}`;
   if (output.result === 'fail') {
+    if (output.reason === 'ordinary-compatibility-rule-matched') {
+      return `FAIL: selected packages match a Catalog compatibility rule (${prefix})\n${JSON.stringify(output.applicable.directMatches)}`;
+    }
     const paths = output.checks.flatMap((check) => check.paths.map((path) => `${check.target}: ${path.join(' -> ')}`));
     return `FAIL: upstream build closure reaches a Catalog failure package (${prefix})\n${paths.join('\n')}`;
   }

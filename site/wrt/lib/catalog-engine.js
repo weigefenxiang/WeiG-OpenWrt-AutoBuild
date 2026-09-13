@@ -2071,6 +2071,15 @@ export function kconfigStateConstraints(model, record = {}, inputValues = new Ma
   const visibilityViolations = visibilityKconfigViolations(canonical, values,
     { ...normalizedOptions, deferred: 'error' });
   const readOnly = canonical.userSettable === false || visibilityViolations.length > 0;
+  if (['string', 'int', 'hex'].includes(canonical.type)) {
+    return { symbol: configSymbol, type: canonical.type,
+      current: values.has(configSymbol) ? values.get(configSymbol) : null,
+      legalStates: [], selectableStates: [], states: [], selectors: [],
+      readOnly: readOnly || dependency.status === 'deferred' || maximumLevel === 0,
+      canUnset: dependency.status !== 'deferred' && maximumLevel === 0,
+      minimumLevel: 0, maximumLevel, dependencyStatus: dependency.status,
+      dependencyExpressions: dependency.requirements, visibilityViolations };
+  }
   const directlySelectable = readOnly ? [] : legalStates.filter((value) => {
     const level = stateLevel(value);
     if (level < minimumLevel) return false;
@@ -2279,7 +2288,7 @@ function recordViolations(model, record, values, rawOptions = {}) {
   const options = validationOptions(values, rawOptions);
   if (options.trustedSymbols.has(record.configSymbol)) return [];
   const violations = [];
-  const actual = stateLevel(values.get(record.configSymbol));
+  const actual = scalar ? 1 : stateLevel(values.get(record.configSymbol));
   const dependency = dependencyState(record, values, actual, options);
   if (dependency.status === 'unsatisfied') {
     // A non-zero direct dependency ceiling does not suppress a reverse
@@ -2597,6 +2606,14 @@ function cascadeDisabled(model, values, changes, initialSymbols, options = {}) {
     for (const candidateSymbol of reverseCandidates(model, record)) {
       const candidate = model.bySymbol.get(candidateSymbol);
       if (!candidate) continue;
+      if (['string', 'int', 'hex'].includes(candidate.type)) {
+        if (values.has(candidateSymbol) && dependencyLevel(candidate, values, options) === 0) {
+          changes.push({ symbol: candidateSymbol, from: values.get(candidateSymbol), to: null,
+            remove: true, reason: 'dependency-unsatisfied', source: symbol });
+          values.delete(candidateSymbol); queue.push(candidateSymbol);
+        }
+        continue;
+      }
       if (!recordEnabled(candidate, values)) {
         // A repaired/imported state may already contain a disabled intermediate
         // owner with stale enabled descendants. Continue through that bridge.
@@ -2834,12 +2851,19 @@ function reconcileNonUserSettableDependents(model, values, changes, options = {}
   for (let pass = 0; pass < 64; pass++) {
     const disabled = [];
     for (const record of model?.records || []) {
-      if (!record?.configSymbol || record.userSettable !== false || !recordEnabled(record, values) ||
+      if (!record?.configSymbol || record.userSettable !== false ||
+          (['string', 'int', 'hex'].includes(record.type) ? !values.has(record.configSymbol) : !recordEnabled(record, values)) ||
           options.trustedSymbols?.has(record.configSymbol)) continue;
       const violations = recordViolations(model, record, values, options).filter((item) =>
         isBlockingViolation(item) && (item.code === 'kconfig-dependency-unsatisfied' ||
           item.code === 'package-dependency-unsatisfied'));
       if (!violations.length) continue;
+      if (['string', 'int', 'hex'].includes(record.type)) {
+        changes.push({ symbol: record.configSymbol, from: values.get(record.configSymbol), to: null,
+          remove: true, reason: 'dependency-unsatisfied', source: '' });
+        values.delete(record.configSymbol); disabled.push(record.configSymbol);
+        continue;
+      }
       if (setValue(values, changes, record.configSymbol, 'n', 'dependency-unsatisfied',
         violations[0].dependency || '')) disabled.push(record.configSymbol);
     }
@@ -3017,6 +3041,38 @@ export function deriveKconfigPrerequisitePlans(model, inputValues, record, reque
   return { candidates: normalizedCandidates, recommended: cheapest.length === 1 ? cheapest[0] : null };
 }
 
+function applyScalarIntent(model, inputValues, record, intent) {
+  const initial = new Map(valuesMap(inputValues));
+  const options = validationOptions(initial, { ...(intent.validationOptions || {}), model,
+    typedRelationsComplete: model.typedRelationsComplete === true });
+  const constraints = kconfigStateConstraints(model, record, initial, options);
+  const remove = intent.value === null;
+  const value = remove ? null : String(intent.value ?? '');
+  if (remove ? !constraints.canUnset : constraints.readOnly || !scalarValueValid(record.type, value)) {
+    const error = new Error(`${record.configSymbol}: ${formatKconfigRequirements(constraints.dependencyExpressions) || 'value is not editable under the active Kconfig constraints'}`);
+    error.name = 'CatalogIntentError'; error.constraints = constraints;
+    throw error;
+  }
+  const values = new Map(initial), changes = [];
+  if (remove) values.delete(record.configSymbol); else values.set(record.configSymbol, value);
+  if (initial.has(record.configSymbol) !== values.has(record.configSymbol) || initial.get(record.configSymbol) !== value) {
+    changes.push({ symbol: record.configSymbol, from: initial.get(record.configSymbol) ?? null,
+      to: value, ...(remove ? { remove: true } : {}), reason: remove ? 'scalar-unset' : 'scalar' });
+  }
+  propagateKconfigChanges(model, values, changes, 0, options);
+  const derived = reconcileDerivedDefaults(model, values, changes, options);
+  const before = new Set(validateConfig(model, initial, options).filter(isBlockingViolation).map(violationKey));
+  const violations = validateConfig(model, values, options);
+  const blocking = violations.filter((row) => isBlockingViolation(row) &&
+    (row.symbol === record.configSymbol || !before.has(violationKey(row))));
+  if (blocking.length) {
+    const error = new Error(formatViolations(blocking));
+    error.name = 'CatalogIntentError'; error.violations = blocking;
+    throw error;
+  }
+  return { values, changes, ...derived, violations, diagnostics: [] };
+}
+
 export function applyUserIntent(model, inputValues, intent) {
   const initialValues = new Map(valuesMap(inputValues));
   const values = new Map(initialValues);
@@ -3025,6 +3081,7 @@ export function applyUserIntent(model, inputValues, intent) {
   const value = normalizeValue(intent?.value ?? 'n');
   const record = model.bySymbol.get(symbol);
   if (!record) throw new Error(`Catalog does not define ${symbol}`);
+  if (['string', 'int', 'hex'].includes(record.type)) return applyScalarIntent(model, inputValues, record, intent);
   const options = validationOptions(initialValues, {
     ...(intent?.validationOptions || {}), model, typedRelationsComplete: model?.typedRelationsComplete === true,
   });
@@ -3195,10 +3252,27 @@ function configurationRepairIntent(rawOptions, validation, value) {
 }
 
 function configurationRepairCandidate(model, values, violation, rawOptions, validation) {
-  if (!['kconfig-dependency-unsatisfied', 'package-dependency-unsatisfied'].includes(violation?.code)) {
+  if (!['kconfig-dependency-unsatisfied', 'package-dependency-unsatisfied',
+    'kconfig-scalar-invalid', 'kconfig-range-unsatisfied'].includes(violation?.code)) {
     return null;
   }
   const record = configurationRepairRecord(model, violation);
+  if (record && ['string', 'int', 'hex'].includes(record.type)) {
+    const constraints = kconfigStateConstraints(model, record, values, validation);
+    if (!values.has(record.configSymbol)) return null;
+    const resolved = constraints.canUnset ? { status: 'resolved', value: null }
+      : resolveKconfigDefault(record, values, validation);
+    if (resolved.status !== 'resolved') return null;
+    try {
+      const result = applyUserIntent(model, values, { symbol: record.configSymbol, value: resolved.value,
+        validationOptions: validation });
+      const before = new Set(validateConfig(model, values, validation).filter(isBlockingViolation).map(violationKey));
+      const after = validateConfig(model, result.values, validation).filter(isBlockingViolation);
+      if (after.length >= before.size || after.some((row) => !before.has(violationKey(row)))) return null;
+      return { kind: 'scalar', symbol: record.configSymbol, value: resolved.value,
+        steps: [], values: result.values, changes: result.changes };
+    } catch { return null; }
+  }
   if (!record?.configSymbol || stateLevel(values.get(record.configSymbol) ?? 'n') <= 0) return null;
   const value = configurationRepairValue(record, values);
   if (value === 'n') return null;
@@ -3298,11 +3372,13 @@ export function deriveConfigurationRepairPlan(model, inputValues, rawOptions = {
     if (!blocking.length) break;
     let progressed = false;
     for (const violation of blocking) {
-      if (!['kconfig-dependency-unsatisfied', 'package-dependency-unsatisfied'].includes(violation.code)) continue;
+      if (!['kconfig-dependency-unsatisfied', 'package-dependency-unsatisfied',
+        'kconfig-scalar-invalid', 'kconfig-range-unsatisfied'].includes(violation.code)) continue;
       const candidate = configurationRepairCandidate(model, values, violation, rawOptions, validation);
       if (!candidate) continue;
       values = new Map(candidate.values);
       actions.push({
+        kind: candidate.kind || 'intent',
         symbol: candidate.symbol,
         package: candidate.package,
         value: candidate.value,

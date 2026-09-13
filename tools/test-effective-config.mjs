@@ -101,4 +101,10 @@ try {
   rmSync(temp, { recursive: true, force: true });
 }
 
+const omitted = {schema:1,overrides:[['COUNT',null]]};
+assert.equal(verifyEffectiveConfig({overrides:omitted,configText:''}).result, 'pass');
+for(const line of ['CONFIG_COUNT=0', 'CONFIG_COUNT=160', '# CONFIG_COUNT is not set']) {
+  assert.equal(verifyEffectiveConfig({overrides:omitted,configText:line+'\n'}).result, 'failure',
+    'omission is not a numeric zero, a default, or boolean N');
+}
 console.log('effective configuration verification tests passed');

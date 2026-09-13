@@ -331,7 +331,7 @@ function configurationPreflightRows(evaluation) {
     if (violation.code === 'kconfig-dependency-unsatisfied' && violation.symbol) {
       const record = CATALOG_MODEL?.bySymbol?.get(violation.symbol);
       const value = evaluation.context?.values?.get(violation.symbol) ?? 'n';
-      const plans = record ? CATALOG_ENGINE.deriveKconfigPrerequisitePlans(
+      const plans = record && ['bool', 'tristate'].includes(record.type) ? CATALOG_ENGINE.deriveKconfigPrerequisitePlans(
         CATALOG_MODEL, evaluation.context.values, record, value, {
           explicitSymbols: catalogUserOverrides.keys(),
           validationOptions: evaluation.context.validationOptions,
@@ -353,6 +353,10 @@ function applyConfigurationRecommendation(evaluation) {
   const snapshot = snapshotCatalogUiState();
   try {
     for (const action of evaluation.actions || []) {
+      if (action.kind === 'scalar') {
+        applyMenuValue(menuOptionBySymbol.get(action.symbol), action.value, false, 'recommended');
+        continue;
+      }
       if (action.kind === 'reconcile') {
         reconcileImportedConditionalDefaults({ dependencySeeds: action.dependencySeeds });
         continue;
@@ -382,7 +386,8 @@ function applyConfigurationRecommendation(evaluation) {
 function openConfigurationPreflightModal(evaluation) {
   return new Promise((resolve) => {
     const rows = configurationPreflightRows(evaluation);
-    const custom = new Map(rows.map((row) => [row.symbol, menuValues.get(row.symbol) ?? 'n']));
+    const custom = new Map(rows.map((row) => [row.symbol, menuValues.has(row.symbol)
+      ? menuValues.get(row.symbol) : scalarKconfigOption(row.option) ? null : 'n']));
     let settled = false;
     const finish = (action) => {
       if (settled) return;
@@ -454,6 +459,25 @@ function openConfigurationPreflightModal(evaluation) {
           name.textContent = displayText(row.record.package || row.symbol);
           const stateBox = document.createElement('span');
           stateBox.className = 'catalog-conflict-state';
+          if (scalarKconfigOption(row.option)) {
+            const constraints = optionStateConstraints(row.option);
+            const input = document.createElement('input');
+            input.type = 'text'; input.inputMode = row.record.type === 'int' ? 'numeric' : 'text';
+            input.value = custom.get(row.symbol) ?? '';
+            input.readOnly = constraints.readOnly;
+            input.setAttribute('aria-label', displayText(row.symbol));
+            input.onchange = () => custom.set(row.symbol, input.value);
+            stateBox.appendChild(input);
+            if (constraints.canUnset) {
+              const unset = document.createElement('button');
+              unset.type = 'button'; unset.className = 'btn';
+              unset.textContent = t('configuration.removeInactive');
+              unset.onclick = () => { custom.set(row.symbol, null); renderChoice(); };
+              stateBox.appendChild(unset);
+            }
+            line.append(name, stateBox); customList.appendChild(line);
+            continue;
+          }
           for (const stateValue of ['n', 'm', 'y']) {
             if (row.record.type === 'bool' && stateValue === 'm') {
               const spacer = document.createElement('span');
@@ -480,6 +504,13 @@ function openConfigurationPreflightModal(evaluation) {
         ? t('runtime.configurationPreflightRecommendation', { value1: evaluation.actions.length })
         : t('runtime.configurationPreflightUnavailable');
       body.appendChild(note);
+      for (const action of evaluation.actions || []) if (action.kind === 'scalar') {
+        const detail = document.createElement('p');
+        detail.textContent = action.value === null
+          ? t('configuration.removeInactiveDetail', { symbol: displayText(action.symbol) })
+          : t('configuration.restoreTypedDefault', { symbol: displayText(action.symbol), value: action.value });
+        body.appendChild(detail);
+      }
       const warning = document.createElement('p');
       warning.className = 'catalog-conflict-warning'; body.appendChild(warning);
       const actions = document.createElement('div');
@@ -489,14 +520,19 @@ function openConfigurationPreflightModal(evaluation) {
       force.textContent = t('runtime.3ea8d64eb087'); force.onclick = renderForceConfirmation;
       const customButton = document.createElement('button');
       customButton.type = 'button'; customButton.className = 'btn compatibility-custom';
-      customButton.textContent = t('runtime.68bccc92256e'); customButton.disabled = !rows.length;
+      customButton.textContent = t('configuration.applyCustomValues'); customButton.disabled = !rows.length;
       customButton.onclick = () => {
         const snapshot = snapshotCatalogUiState();
         try {
-          for (const row of rows) if ((custom.get(row.symbol) || 'n') === 'n') {
+          for (const row of rows.filter((row) => scalarKconfigOption(row.option))) {
+            if (custom.get(row.symbol) !== (menuValues.has(row.symbol) ? menuValues.get(row.symbol) : null)) {
+              applyMenuValue(row.option, custom.get(row.symbol), false, 'user');
+            }
+          }
+          for (const row of rows.filter((row) => !scalarKconfigOption(row.option))) if ((custom.get(row.symbol) || 'n') === 'n') {
             applyCatalogIntent(row.option, 'n', false, 'user');
           }
-          let pending = rows.filter((row) => (custom.get(row.symbol) || 'n') !== 'n');
+          let pending = rows.filter((row) => !scalarKconfigOption(row.option) && (custom.get(row.symbol) || 'n') !== 'n');
           while (pending.length) {
             const deferred = [];
             let progress = false;

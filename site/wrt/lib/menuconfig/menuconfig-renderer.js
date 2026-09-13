@@ -329,10 +329,12 @@ function renderMenuOption(option) {
     input.type = 'text';
     input.inputMode = option.type === 'int' ? 'numeric' : 'text';
     input.value = option.type === 'string' ? String(value ?? '') : (value === 'n' ? '' : value);
-    input.readOnly = option.userSettable === false;
+    input.readOnly = constraints.readOnly;
+    if (constraints.canUnset && !menuValues.has(option.symbol)) input.value = '';
     if (input.readOnly) {
       input.dataset.uiTooltipTitle = displayConfigSymbol(option.symbol, { kind: 'config' });
-      input.dataset.uiTooltipEmphasis = t('runtime.cc8d0739ba58');
+      input.dataset.uiTooltipEmphasis = option.userSettable === false
+        ? t('runtime.cc8d0739ba58') : t('configuration.inactiveInput');
       input.dataset.uiTooltipBody = t('runtime.f7342b9246cb');
       input.onclick = (event) => showDatasetTooltip(input, event);
     }

@@ -382,6 +382,8 @@ function rootfsPartitionInfo() {
   if (state.device?.id !== 'catalog-target' || !MENU_CATALOG) return null;
   const option = menuOptionBySymbol.get(ROOTFS_PARTSIZE_SYMBOL);
   if (!option) return null;
+  const constraints = optionStateConstraints(option);
+  if (constraints.dependencyStatus === 'deferred' || constraints.maximumLevel === 0) return null;
   const raw = String(menuValues.get(ROOTFS_PARTSIZE_SYMBOL) ?? simpleKconfigDefault(option) ?? '').trim();
   const value = Number.parseInt(raw, 10);
   if (!Number.isFinite(value) || value <= 0) return null;
