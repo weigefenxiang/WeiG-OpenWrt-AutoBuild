@@ -87,6 +87,18 @@ assert.equal(selectorPlans.recommended?.cost, 2,
   'recommendation cost must count explicit menuconfig-style user actions only');
 assert.equal(selectorPlans.recommended?.values.get('PACKAGE_dependent-one'), 'n');
 assert.equal(selectorPlans.recommended?.values.get('PACKAGE_dependent-two'), 'n');
+const collapsedWarning = {
+  ...selectorWarning,
+  rule: { ...selectorWarning.rule, issue: 'file-ownership', match: 'all-installed',
+    packages: ['selected-core', 'selector-ui'] },
+  records: ['selected-core', 'selector-ui'].map((name) => selectorModel.byPackage.get(name)),
+};
+const collapsedPlans = deriveCompatibilityPlans(selectorModel, selectorValues, collapsedWarning, {
+  preferredValues: new Map([['PACKAGE_selected-core', 'n']]),
+});
+assert.equal(collapsedPlans.candidates.length, 1, 'equivalent final plans were mistaken for user alternatives');
+assert.deepEqual(collapsedPlans.recommended?.steps.map((step) => step.package), ['selector-ui']);
+assert.equal(collapsedPlans.recommended?.values.get('PACKAGE_dependent-one'), 'n');
 assert.ok(selectorPlans.recommended?.automaticChanges.some((change) =>
   change.symbol === 'PACKAGE_dependent-one' && change.to === 'n'),
 'automatic reverse-dependent cleanup was lost');

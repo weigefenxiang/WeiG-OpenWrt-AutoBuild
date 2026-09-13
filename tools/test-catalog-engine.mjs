@@ -1856,6 +1856,79 @@ assert(packageRepair.changes.some((change) => change.symbol === 'PACKAGE_core-se
   packageRepair.actions[0].changes.some((change) => change.symbol === 'PACKAGE_core-service'),
   'package dependency repair did not expose its automatic cascade changes');
 
+// Recommendations and direct edits must drain changes from every mutation
+// phase, including inherited preferences and orphan cleanup, not just clicks.
+const convergenceRecords = [
+  { kind: 'config', configSymbol: 'OWNER', type: 'bool', states: ['n', 'y'] },
+  { kind: 'config', configSymbol: 'ROOT', type: 'bool', states: ['n', 'y'],
+    kconfig: { selectsExpressions: [['OWNER']] } },
+  { kind: 'config', configSymbol: 'CHILD', type: 'bool', states: ['n', 'y'],
+    kconfig: { dependsExpressions: [['OWNER']] } },
+  { kind: 'config', configSymbol: 'LEAF', type: 'bool', states: ['n', 'y'],
+    kconfig: { dependsExpressions: [['CHILD']] } },
+  { kind: 'config', configSymbol: 'OTHER', type: 'bool', states: ['n', 'y'] },
+  { kind: 'config', configSymbol: 'SHARED', type: 'bool', states: ['n', 'y'],
+    kconfig: { dependsExpressions: [['OWNER || OTHER']] } },
+];
+const convergenceModel = createCatalogModel({ schema: 5, targets: [], relations: {
+  schema: 2, records: convergenceRecords, indexes: {},
+} });
+const convergenceValues = new Map(convergenceRecords.map((row) => [row.configSymbol, 'y']));
+const moduleConvergenceModel = createCatalogModel({ schema: 5, targets: [], relations: {
+  schema: 2, indexes: {}, records: convergenceRecords.map((row) =>
+    ({ ...row, type: 'tristate', states: ['n', 'm', 'y'] })),
+} });
+const moduleLowered = applyUserIntent(moduleConvergenceModel,
+  new Map([...convergenceValues, ['ROOT', 'n']]), { symbol: 'OWNER', value: 'm' });
+assert(moduleLowered.values.get('CHILD') === 'm' && moduleLowered.values.get('LEAF') === 'm',
+  'a lowered M dependency ceiling disabled tristate children instead of clamping them to M');
+for (const intentOptions of [
+  { preferredValues: new Map([['OWNER', 'n']]) },
+]) {
+  const settled = applyUserIntent(convergenceModel, convergenceValues, {
+    symbol: 'ROOT', value: 'n', ...intentOptions,
+  });
+  assert(['ROOT', 'OWNER', 'CHILD', 'LEAF'].every((symbol) => settled.values.get(symbol) === 'n') &&
+    settled.values.get('SHARED') === 'y' && !settled.violations.length,
+    'derived owner shutdown did not converge through dependent children or damaged an alternative dependency');
+  const repeated = applyUserIntent(convergenceModel, settled.values, {
+    symbol: 'ROOT', value: 'n', ...intentOptions,
+  });
+  assert(!repeated.changes.length && !repeated.violations.length,
+    'a second check changed an already settled recommendation');
+}
+const retainedOwner = applyUserIntent(convergenceModel, convergenceValues, {
+  symbol: 'ROOT', value: 'n', dependencySymbols: new Set(['OWNER']),
+});
+assert(retainedOwner.values.get('OWNER') === 'y' && retainedOwner.values.get('CHILD') === 'y',
+  'orphan pruning removed an owner still required by a surviving child');
+const choiceConvergenceModel = createCatalogModel({ schema: 5, targets: [], relations: {
+  schema: 2, indexes: { choices: { OWNER_CHOICE: ['CHOICE_A', 'CHOICE_B'] } }, records: [
+    { kind: 'config', configSymbol: 'CHOICE_A', type: 'bool', states: ['n', 'y'], choice: 'OWNER_CHOICE' },
+    { kind: 'config', configSymbol: 'CHOICE_B', type: 'bool', states: ['n', 'y'], choice: 'OWNER_CHOICE' },
+    { kind: 'config', configSymbol: 'CHOICE_CHILD', type: 'bool', states: ['n', 'y'],
+      kconfig: { dependsExpressions: [['CHOICE_A']] } },
+  ],
+} });
+const choiceConverged = applyUserIntent(choiceConvergenceModel,
+  new Map([['CHOICE_A', 'y'], ['CHOICE_B', 'n'], ['CHOICE_CHILD', 'y']]), { symbol: 'CHOICE_B', value: 'y' });
+assert(choiceConverged.values.get('CHOICE_CHILD') === 'n' && !choiceConverged.violations.length,
+  'choice replacement left stale children of the deselected member');
+const staleDescendants = new Map(convergenceValues);
+for (const symbol of ['ROOT', 'OWNER', 'CHILD']) staleDescendants.set(symbol, 'n');
+const recoveredDescendants = deriveConfigurationRepairPlan(convergenceModel, staleDescendants, {
+  disabledSymbols: ['OWNER', 'CHILD'],
+});
+assert(recoveredDescendants.actions.length === 1 && recoveredDescendants.actions[0].kind === 'reconcile' &&
+  recoveredDescendants.values.get('LEAF') === 'n' && recoveredDescendants.values.get('OWNER') === 'n' &&
+  recoveredDescendants.values.get('SHARED') === 'y' && !recoveredDescendants.unresolved.length,
+  'stale descendants of a tracked disabled owner did not receive a safe reconciliation recommendation');
+const recoveryReplay = reconcileKconfigDerivedValues(convergenceModel, staleDescendants, {
+  dependencySeeds: recoveredDescendants.actions[0].dependencySeeds,
+});
+assert(JSON.stringify([...recoveryReplay.values]) === JSON.stringify([...recoveredDescendants.values]),
+  'configuration recommendation simulation and execution diverged');
+
 // Conditional package dependencies must follow the active Kconfig condition,
 // not a package-name special case.  This mirrors the soft-float codec choice:
 // SOFT_FLOAT=N selects lame-lib, while SOFT_FLOAT=Y selects shine.

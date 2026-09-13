@@ -2596,12 +2596,41 @@ function cascadeDisabled(model, values, changes, initialSymbols, options = {}) {
     if (!record) continue;
     for (const candidateSymbol of reverseCandidates(model, record)) {
       const candidate = model.bySymbol.get(candidateSymbol);
-      if (!candidate || !recordEnabled(candidate, values)) continue;
+      if (!candidate) continue;
+      if (!recordEnabled(candidate, values)) {
+        // A repaired/imported state may already contain a disabled intermediate
+        // owner with stale enabled descendants. Continue through that bridge.
+        if (normalizeValue(values.get(candidateSymbol) ?? 'n') === 'n') queue.push(candidateSymbol);
+        continue;
+      }
       const violations = recordViolations(model, candidate, values, options).filter(isBlockingViolation);
       if (!violations.length) continue;
-      if (setValue(values, changes, candidate.configSymbol, 'n', 'dependency-unsatisfied', record.configSymbol)) queue.push(candidate.configSymbol);
+      const ceiling = violations.every((row) => row.code === 'kconfig-dependency-unsatisfied')
+        ? dependencyLevel(candidate, values, options) : 0;
+      const lowered = candidate.type === 'tristate' && ceiling === 1
+        ? stateForKconfigLevel(model, candidate, 1, values, options) : 'n';
+      if (setValue(values, changes, candidate.configSymbol, lowered, 'dependency-unsatisfied', record.configSymbol)) queue.push(candidate.configSymbol);
     }
   }
+}
+
+// Every mutation phase, not just the direct user click, invalidates dependent
+// values. Reuse the existing cascades and drain their changes to a fixed point.
+function propagateKconfigChanges(model, values, changes, start, options = {}) {
+  let cursor = start;
+  for (let pass = 0; cursor < changes.length && pass < 64; pass++) {
+    const batch = changes.slice(cursor);
+    cursor = changes.length;
+    const lowered = unique(batch.filter((change) => change.to === 'n' ||
+      stateLevel(change.to) < stateLevel(change.from) ||
+      ['string', 'int', 'hex'].includes(model.bySymbol.get(change.symbol)?.type))
+      .map((change) => change.symbol));
+    cascadeDisabled(model, values, changes, lowered, options);
+    const enabled = unique(batch.map((change) => change.symbol))
+      .filter((symbol) => model.bySymbol.has(symbol) && recordEnabled(model.bySymbol.get(symbol), values));
+    cascadeEnabled(model, values, changes, enabled, options);
+  }
+  if (cursor < changes.length) throw new Error('Kconfig change propagation did not converge');
 }
 
 function cascadeEnabled(model, values, changes, initialSymbols, options = {}) {
@@ -2659,11 +2688,13 @@ function pruneUnusedDependencies(model, values, changes, dependencySymbols, prot
   let progress = true;
   while (progress) {
     progress = false;
+    const start = changes.length;
     for (const symbol of candidates) {
       if (protectedSet.has(symbol) || normalizeValue(values.get(symbol) ?? 'n') === 'n') continue;
       if (dependencyStillRequired(model, symbol, values, options)) continue;
       if (setValue(values, changes, symbol, 'n', 'dependency-unused')) progress = true;
     }
+    propagateKconfigChanges(model, values, changes, start, options);
   }
 }
 
@@ -2828,7 +2859,9 @@ export function reconcileKconfigDerivedValues(model, inputValues, rawOptions = {
   const options = validationOptions(values, {
     ...rawOptions, model, typedRelationsComplete: model?.typedRelationsComplete === true,
   });
+  cascadeDisabled(model, values, changes, rawOptions.dependencySeeds || [], options);
   const reconciledSymbols = reconcileNonUserSettableDependents(model, values, changes, options);
+  for (const change of changes) if (change.reason === 'dependency-unsatisfied') reconciledSymbols.add(change.symbol);
   const derived = reconcileDerivedDefaults(model, values, changes, options);
   for (const symbol of reconciledSymbols) {
     derived.derivedSymbols.add(symbol);
@@ -3056,6 +3089,7 @@ export function applyUserIntent(model, inputValues, intent) {
     }
   }
   if (value === 'n') cascadeDisabled(model, values, changes, [symbol], options); else cascadeEnabled(model, values, changes, [symbol], options);
+  propagateKconfigChanges(model, values, changes, 0, options);
   if (changes.some((change) => change.to === 'n')) pruneUnusedDependencies(model, values, changes,
     intent?.dependencySymbols, intent?.protectedSymbols, options);
   enforceActiveReverseRelations(model, values, changes, options);
@@ -3064,6 +3098,7 @@ export function applyUserIntent(model, inputValues, intent) {
   let restored = true;
   for (let pass = 0; restored && pass < preferredValues.size + 1; pass++) {
     restored = false;
+    const preferredStart = changes.length;
     for (const [preferredSymbol, rawPreferred] of preferredValues) {
       if (preferredSymbol === symbol || !model.bySymbol.has(preferredSymbol)) continue;
       const preferredRecord = model.bySymbol.get(preferredSymbol);
@@ -3085,6 +3120,7 @@ export function applyUserIntent(model, inputValues, intent) {
       if (normalizeValue(values.get(preferredSymbol) ?? 'n') === effective) continue;
       if (setValue(values, changes, preferredSymbol, effective, 'preferred-intent')) restored = true;
     }
+    propagateKconfigChanges(model, values, changes, preferredStart, options);
   }
   const derivedStart = changes.length;
   let derived = reconcileDerivedDefaults(model, values, changes, options);
@@ -3194,6 +3230,9 @@ function configurationRepairCandidate(model, values, violation, rawOptions, vali
     }
   }
   if (!result?.values) return null;
+  for (const symbol of new Set([...(rawOptions.disabledSymbols || []), ...validation.explicitSymbols])) {
+    if ((values.get(symbol) ?? 'n') === 'n' && (result.values.get(symbol) ?? 'n') !== 'n') return null;
+  }
   const beforeKeys = new Set(validateConfig(model, values, validation)
     .filter(isBlockingViolation).map(violationKey));
   const finalViolations = validateConfig(model, result.values, validation)
@@ -3221,11 +3260,13 @@ function configurationRepairCandidate(model, values, violation, rawOptions, vali
 /**
  * Derive a bounded repair plan for an imported or edited configuration.
  *
- * Only two deterministic repair classes are eligible: a package dependency
+ * Deterministic repair classes include a package dependency
  * with one selectable provider (resolved by applyUserIntent's normal cascade),
  * and a Kconfig dependency with one unique minimum prerequisite plan (resolved
  * by deriveKconfigPrerequisitePlans).  Conflicts, choices, multiple providers,
  * deferred expressions, and equal-cost alternatives are never guessed at.
+ * Stale descendants of a tracked disabled owner may instead be reconciled
+ * through the existing dependency cascade without re-enabling that owner.
  * Every simulated action must remove its selected violation without adding a
  * new blocking violation; otherwise it is left in the final unresolved list.
  */
@@ -3272,7 +3313,23 @@ export function deriveConfigurationRepairPlan(model, inputValues, rawOptions = {
       progressed = true;
       break;
     }
-    if (!progressed) break;
+    if (!progressed) {
+      // Recover stale descendants of an already-disabled, explicitly tracked
+      // owner. Do not enable a rejected prerequisite or guess among providers.
+      const seeds = unique([...(rawOptions.disabledSymbols || []), ...validation.explicitSymbols])
+        .filter((symbol) => model.bySymbol.has(symbol) && normalizeValue(values.get(symbol) ?? 'n') === 'n');
+      if (!seeds.length) break;
+      const repaired = reconcileKconfigDerivedValues(model, values, { ...validation, dependencySeeds: seeds });
+      const beforeKeys = new Set(blocking.map(violationKey));
+      const remaining = repaired.violations.filter(isBlockingViolation);
+      if (remaining.length < blocking.length && remaining.every((row) => beforeKeys.has(violationKey(row)))) {
+        values = repaired.values;
+        actions.push({ kind: 'reconcile', dependencySeeds: seeds, steps: [], changes: repaired.changes });
+        changes.push(...repaired.changes);
+        continue;
+      }
+      break;
+    }
   }
   const unresolved = validateConfig(model, values, validation).filter(isBlockingViolation);
   return {
@@ -4613,9 +4670,20 @@ export function deriveCompatibilityPlans(model, inputValues, warning, intent = {
     }
   }
   candidates.sort((left, right) => left.cost - right.cost || left.package.localeCompare(right.package));
-  const minimum = candidates[0]?.cost;
-  const cheapest = candidates.filter((candidate) => candidate.cost === minimum);
-  return { candidates, recommended: cheapest.length === 1 ? cheapest[0] : null };
+  // Different warning participants can collapse to the same user operation
+  // after preferred/default values settle. That is one plan, not ambiguity.
+  const distinct = new Map();
+  for (const candidate of candidates) {
+    const key = JSON.stringify([
+      candidate.steps.map((step) => [step.symbol, step.value]),
+      candidate.changes.map((change) => [change.symbol, change.to]).sort(([a], [b]) => a.localeCompare(b)),
+    ]);
+    if (!distinct.has(key)) distinct.set(key, candidate);
+  }
+  const normalized = [...distinct.values()];
+  const minimum = normalized[0]?.cost;
+  const cheapest = normalized.filter((candidate) => candidate.cost === minimum);
+  return { candidates: normalized, recommended: cheapest.length === 1 ? cheapest[0] : null };
 }
 
 export function compatibilityAcknowledgementKey({ sha256, dataRef, sourceId, branchName, sourceCommit = '', targetKey = '', revision, ruleIds } = {}) {

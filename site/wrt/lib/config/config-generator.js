@@ -36,6 +36,11 @@ function applyMenuConfig(text) {
     ...menuTouched, ...catalogRecommendedValues.keys(),
     ...catalogUserOverrides.keys(), ...catalogImportedSymbols,
     ...catalogDependencySymbols,
+    // Restoring an imported option to its native baseline removes its user
+    // override. The old imported text must not resurrect that prior value.
+    ...(typeof importedConfigValues === 'undefined' ? [] : [...importedConfigValues]
+      .filter(([symbol, value]) => menuValues.has(symbol) && menuValues.get(symbol) !== value)
+      .map(([symbol]) => symbol)),
     ...(typeof catalogConditionalDefaultSymbols === 'undefined' ? [] : catalogConditionalDefaultSymbols),
   ]);
   for (const option of menuSearchOptions) {

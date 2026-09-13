@@ -172,6 +172,16 @@ assert.match(dependencyOutput, /^# CONFIG_AUTO_N is not set$/m,
 assert.doesNotMatch(dependencyOutput, /^CONFIG_UNRELATED=/m,
   'unrelated untouched symbols must not be added to the output');
 
+// Returning an imported Y to the native N can legitimately remove its user
+// override/touched marker. Serialization still uses the current effective
+// value, not the stale imported text; unknown symbols remain untouched.
+context.importedConfigValues = new Map([['UNRELATED', 'y'], ['UNKNOWN_VENDOR', '"keep"']]);
+context.menuValues.set('UNRELATED', 'n');
+const restoredImport = applyMenuConfig('CONFIG_UNRELATED=y\nCONFIG_UNKNOWN_VENDOR="keep"\n');
+assert.match(restoredImport, /^# CONFIG_UNRELATED is not set$/m);
+assert.match(restoredImport, /^CONFIG_UNKNOWN_VENDOR="keep"$/m);
+context.importedConfigValues.clear();
+
 // Resolved defaults are effective configuration, not a compatibility-only
 // scratch copy. Untouched typed defaults must survive the schema-6 wire.
 context.catalogConditionalDefaultSymbols = new Set(['DEFAULT_CHOICE', 'DEFAULT_TEXT', 'DEFAULT_INT', 'DEFAULT_HEX']);

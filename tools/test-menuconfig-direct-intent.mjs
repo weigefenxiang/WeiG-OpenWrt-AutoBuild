@@ -18,6 +18,9 @@ const records = [
     kconfig: { selectsExpressions: [['PACKAGE_target-plugin']] } },
   { kind: 'config', configSymbol: 'CONFLICT', kconfigSymbol: 'CONFLICT',
     type: 'bool', states: ['n', 'y'] },
+  { kind: 'config', configSymbol: 'CHILD', kconfigSymbol: 'CHILD',
+    type: 'bool', states: ['n', 'y'],
+    kconfig: { dependsExpressions: [['PACKAGE_target-plugin']] } },
   { kind: 'package', package: 'target-plugin', configSymbol: 'PACKAGE_target-plugin',
     kconfigSymbol: 'PACKAGE_target-plugin', type: 'bool', states: ['n', 'y'],
     kconfig: { dependsExpressions: [['TRIGGER && !CONFLICT']] } },
@@ -32,6 +35,7 @@ const options = records.map((record) => ({
 // Load the actual classic-script state layer with a minimal browser/runtime
 // fixture. No production bookkeeping is duplicated in the assertions below.
 const runtime = {
+  Map, Set,
   CATALOG_ENGINE,
   CATALOG_MODEL: model,
   menuValues: new Map([
@@ -94,5 +98,35 @@ assert(runtime.catalogUserOverrides.get('PACKAGE_target-plugin') === 'y' &&
   'a no-op target replay lost the direct PACKAGE Intent or dependency ownership');
 assert(runtime.catalogStateRevision === 2,
   'recording a changed direct Intent without value changes did not invalidate Catalog state');
+
+// The actual UI preference layer must propagate an inherited parent shutdown
+// before reporting success, and old stale child states need an executable
+// recommendation through the same controller (without reopening that parent).
+runtime.menuValues.set('CHILD', 'y');
+runtime.catalogUserOverrides.delete('PACKAGE_target-plugin');
+runtime.catalogDependencySymbols.add('PACKAGE_target-plugin');
+runtime.applyCatalogIntent(triggerOption, 'n', false, 'user');
+assert(runtime.menuValues.get('PACKAGE_target-plugin') === 'n' && runtime.menuValues.get('CHILD') === 'n',
+  'the actual UI preference replay left a child enabled after its parent was disabled');
+runtime.menuValues.set('CHILD', 'y');
+runtime.menuImportedOriginal = new Map();
+runtime.menuImportedNonDefault = new Set();
+runtime.MENU_CATALOG = {};
+runtime.state.device.id = 'catalog-target';
+runtime.t = key => key;
+vm.runInContext(readFileSync(new URL('../site/wrt/lib/menuconfig/compatibility-controller.js', import.meta.url), 'utf8'), runtime, {
+  filename: 'compatibility-controller.js',
+});
+runtime.renderCatalogUiAfterIntent = () => {};
+runtime.markCatalogStateChanged();
+const staleEvaluation = runtime.configurationPreflightEvaluation();
+assert(staleEvaluation.initialViolations.length === 1 &&
+  staleEvaluation.actions.some(action => action.kind === 'reconcile'),
+  'the UI preflight did not offer derived-state reconciliation for the stale child');
+runtime.applyConfigurationRecommendation(staleEvaluation);
+assert(runtime.menuValues.get('CHILD') === 'n' && runtime.menuTouched.has('CHILD') &&
+  runtime.menuValues.get('PACKAGE_target-plugin') === 'n' &&
+  runtime.configurationPreflightEvaluation().initialViolations.length === 0,
+  'the repair recommendation did not persist the disabled child or failed its second preflight');
 
 console.log('menuconfig prerequisite direct-Intent replay passed');

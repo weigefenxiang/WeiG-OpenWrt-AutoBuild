@@ -623,7 +623,7 @@ expect(setMenuValueContract.includes('applyMenuValue(option, value, false)') &&
   'Advanced menuconfig must apply the clicked Kconfig symbol directly and keep dependency direction native');
 const renderMenuOptionContract = app.match(/function renderMenuOption\(option\) \{[\s\S]*?\n\}\nfunction renderMenuLeaf/)?.[0] || '';
 const hiddenDerivedContract = app.match(/function hiddenDerivedOptionActive\(option\) \{[\s\S]*?\n\}/)?.[0] || '';
-const importedDefaultContract = app.match(/function reconcileImportedConditionalDefaults\(\) \{[\s\S]*?\n\}/)?.[0] || '';
+const importedDefaultContract = app.match(/function reconcileImportedConditionalDefaults\(options = \{\}\) \{[\s\S]*?\n\}/)?.[0] || '';
 expect(app.includes('function optionStateConstraints(option)') &&
   (app.match(/CATALOG_ENGINE\.kconfigStateConstraints/g) || []).length >= 3 &&
   renderMenuOptionContract.includes("for (const stateValue of ['n', 'm', 'y'])") &&

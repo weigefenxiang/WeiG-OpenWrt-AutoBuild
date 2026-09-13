@@ -278,6 +278,7 @@ function configurationPreflightEvaluation() {
       protectedSymbols: catalogProtectedSymbols(),
       preferredValues: catalogPreferredValues(),
       explicitSymbols: catalogUserOverrides.keys(),
+      disabledSymbols: [...menuTouched].filter((symbol) => (menuValues.get(symbol) ?? 'n') === 'n'),
       validationOptions: context.validationOptions,
     },
   );
@@ -352,6 +353,10 @@ function applyConfigurationRecommendation(evaluation) {
   const snapshot = snapshotCatalogUiState();
   try {
     for (const action of evaluation.actions || []) {
+      if (action.kind === 'reconcile') {
+        reconcileImportedConditionalDefaults({ dependencySeeds: action.dependencySeeds });
+        continue;
+      }
       for (const step of action.steps || []) {
         if ((menuValues.get(step.symbol) ?? 'n') === step.value) continue;
         applyCatalogIntent(menuOptionBySymbol.get(step.symbol) || { symbol: step.symbol },
@@ -362,7 +367,8 @@ function applyConfigurationRecommendation(evaluation) {
         action.value ?? current, false, 'recommended');
     }
     const remaining = configurationBlockingViolations();
-    if (remaining.length >= (evaluation.initialViolations || []).length) {
+    const beforeKeys = new Set((evaluation.initialViolations || []).map(configurationViolationKey));
+    if (remaining.length >= beforeKeys.size || remaining.some((row) => !beforeKeys.has(configurationViolationKey(row)))) {
       throw new Error(t('runtime.configurationPreflightNoProgress'));
     }
     renderCatalogUiAfterIntent();
@@ -710,6 +716,8 @@ async function ensureCompatibilityRules() {
       CATALOG_MODEL, warning.values, warning, {
         dependencySymbols: catalogDependencySymbols,
         protectedSymbols: catalogProtectedSymbols(),
+        preferredValues: catalogPreferredValues(),
+        explicitSymbols: new Set(catalogUserOverrides.keys()),
         validationOptions: evaluation.context.validationOptions,
       },
     );
@@ -732,7 +740,15 @@ async function ensureCompatibilityRules() {
 
 async function ensureBuildPreflight() {
   const configuration = await ensureConfigurationPreflight();
+  const accepted = new Set(configurationBlockingViolations().map(configurationViolationKey));
   const compatibility = await ensureCompatibilityRules();
+  // Compatibility actions mutate the same config. Do not let an earlier
+  // configuration acknowledgement cover new errors in the final state.
+  if (configurationBlockingViolations().some((row) => !accepted.has(configurationViolationKey(row)))) {
+    const error = new Error(t('runtime.configurationPreflightNoProgress'));
+    error.name = 'ConfigurationPreflightCancelledError';
+    throw error;
+  }
   return { configuration, compatibility };
 }
 
@@ -761,6 +777,7 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
     };
     const applyAndVerify = (applyPlan, { keepOpen = false, requiredTargets = [] } = {}) => {
       const snapshot = snapshotCatalogUiState();
+      const beforeKeys = new Set(configurationBlockingViolations().map(configurationViolationKey));
       try {
         applyPlan();
         if (!compatibilityTargetsResolved(requiredTargets)) {
@@ -768,6 +785,9 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
         }
         if (compatibilityRuleStillActive(evaluation.loaded, warning.rule.id)) {
           throw new Error(t('runtime.3e85d2e445d7'));
+        }
+        if (configurationBlockingViolations().some((row) => !beforeKeys.has(configurationViolationKey(row)))) {
+          throw new Error(t('runtime.configurationPreflightNoProgress'));
         }
         renderCatalogUiAfterIntent();
         if (!keepOpen) {

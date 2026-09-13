@@ -541,16 +541,17 @@ function applyCatalogIntent(option, value, force = false, source = 'user') {
     throw error;
   }
 }
-function reconcileImportedConditionalDefaults() {
+function reconcileImportedConditionalDefaults(options = {}) {
   if (!CATALOG_MODEL || !CATALOG_ENGINE?.reconcileKconfigDerivedValues) return;
   const context = catalogValidationContext(menuValues, 'interactive');
   const result = CATALOG_ENGINE.reconcileKconfigDerivedValues(
-    CATALOG_MODEL, context.values, context.validationOptions);
+    CATALOG_MODEL, context.values, { ...context.validationOptions, ...options });
   const derivedSymbols = result.derivedSymbols || new Set();
   const derivedReasons = result.derivedReasons || new Map();
   for (const change of result.changes) {
     if (!menuOptionBySymbol.has(change.symbol)) continue;
     menuValues.set(change.symbol, change.to);
+    if (options.dependencySeeds?.length && change.reason === 'dependency-unsatisfied') menuTouched.add(change.symbol);
     if (derivedSymbols.has(change.symbol)) continue;
     if (change.to === 'n') catalogDependencySymbols.delete(change.symbol);
     else catalogDependencySymbols.add(change.symbol);
@@ -573,6 +574,8 @@ function reconcileImportedConditionalDefaults() {
       }
     }
   }
+  if (result.changes.length) markCatalogStateChanged();
+  return result;
 }
 function normalizeKconfigValueByType(rawValue, type = 'bool', symbol = 'Kconfig option') {
   const raw = String(rawValue ?? '');
