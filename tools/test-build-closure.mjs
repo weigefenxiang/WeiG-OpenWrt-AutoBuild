@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { normalizeCompatibilityDocument, createCatalogModel, evaluateCompatibilityRules } from '../site/wrt/lib/catalog-engine.js';
 import {
   activePackages,
+  bindConditionContext,
   classifyActivePackages,
   loadPackageGraph,
   parsePackageInfo,
@@ -42,6 +43,15 @@ function ruleDocument({ packageName = 'failed', triggerPackages } = {}) {
 const kinds = { schema: 1, revision: identity().revision, sourceCommit: identity().sourceCommit,
   graphHash: 'a'.repeat(64), nonPackageSymbols: ['PACKAGE_root_FEATURE'] };
 const prefixed = new Map([['root', 'y'], ['root_FEATURE', 'y'], ['unknown', 'm']]);
+const conditionKinds = { ...kinds, conditionContext: { schema: 1,
+  symbolTypes: [['FEATURE', 'bool'], ['BACKEND', 'tristate'], ['LIMIT', 'int'], ['LABEL', 'string']],
+  undefinedSymbols: [] } };
+const conditionValues = bindConditionContext(new Map(), conditionKinds, identity());
+assert.equal(conditionValues.size, 0, 'closed-world condition evidence must not modify config assignments');
+for (const bad of [undefined, { schema: 2 }, { schema: 1, symbolTypes: [['FEATURE', 'bad']], undefinedSymbols: [] }]) {
+  assert.throws(() => bindConditionContext(new Map(), { ...kinds, conditionContext: bad }, identity()),
+    /condition evidence/);
+}
 assert.deepEqual([...classifyActivePackages(prefixed, kinds, identity())], [['root', 'y'], ['unknown', 'm']],
   'only metadata-proven configuration options are excluded; unknown package roots remain auditable');
 assert.equal(prefixed.size, 3, 'classification must not mutate the authoritative config projection');
@@ -461,3 +471,86 @@ const damagedOrdinary = { schema:5, rules:[{...ordinary.rules.find(row=>row.issu
 assert.equal(runFixture([{name:'root'}], ['root'], damagedOrdinary).result, 'inconclusive',
   'invalid rules must still fail closed');
 console.log('build closure verifier checks passed, including published ordinary/closure rule parity');
+
+// Use the real metadata parser and shared evaluator, not a mock alternate graph.
+const domainDirectory = mkdtempSync(join(ROOT, '.tmp-build-closure-domains-'));
+try {
+  mkdirSync(join(domainDirectory, 'tmp'));
+  const metadata = [
+    'Source-Makefile: package/root/Makefile', 'Build-Depends: helper-source',
+    'Package: root', 'Depends: +FEATURE:failed +BACKEND:failed',
+    'Source-Makefile: package/helper-source/Makefile',
+    'Package: helper-library', 'Depends: ', 'Package: helper-tool', 'Depends: ',
+    'Source-Makefile: package/failed/Makefile', 'Package: failed', 'Depends: ', '',
+  ].join('\n');
+  const path = join(domainDirectory, 'tmp', '.packageinfo');
+  writeFileSync(path, metadata);
+  if (process.env.NATIVE_PACKAGE_METADATA) {
+    const native = spawnSync(process.env.PERL || 'perl', [process.env.NATIVE_PACKAGE_METADATA, 'mk', path],
+      { encoding: 'utf8' });
+    assert.equal(native.status, 0, native.stderr);
+    const line = native.stdout.split(/\r?\n/).find(line => line.includes('/root/compile +='));
+    assert(line?.includes('/helper-source/compile'), 'native generator confirms the source compile edge');
+    assert(!line.includes('CONFIG_PACKAGE_helper-'), 'native build dependency is not an install-provider choice');
+    console.log('native package-metadata.pl confirms unconditional multi-output source build');
+  }
+  const checkDomain = (graph, values = conditionValues) => verifyBuildClosure({
+    document: ruleDocument(), identity: identity(), graph, active: new Map([['root', 'y']]), configValues: values });
+  const graph = loadPackageGraph(domainDirectory, {});
+  assert(!graph.providers.has('helper-source'), 'source owners must not be advertised as virtual providers');
+  assert.equal(graph.sourceTargets.get('helper-source').size, 1);
+  assert.equal(checkDomain(graph).result, 'pass', 'build a multi-output source without selecting any output for installation');
+  const requestPath = join(domainDirectory, 'request.json');
+  const configPath = join(domainDirectory, '.config');
+  const compatibilityPath = join(domainDirectory, 'compatibility.json');
+  const kindsPath = join(domainDirectory, 'kinds.json');
+  const outputPath = join(domainDirectory, 'report.json');
+  writeFileSync(requestPath, JSON.stringify({ schema: 6, source: 'Example', branch: 'main', version: 'main',
+    catalog: { repository: identity().repository, revision: identity().revision, sourceCommit: identity().sourceCommit },
+    customTarget: { system: 'x86', subtarget: '64', profileSymbol: 'DEVICE_generic', profileSelector: 'generic' } }));
+  writeFileSync(configPath, 'CONFIG_PACKAGE_root=y\n');
+  writeFileSync(compatibilityPath, JSON.stringify(ruleDocument()));
+  writeFileSync(kindsPath, JSON.stringify(conditionKinds));
+  const cli = spawnSync(process.execPath, [join(ROOT, 'tools/verify-build-closure.mjs'),
+    '--request', requestPath, '--config', configPath, '--upstream-dir', domainDirectory,
+    '--catalog-revision', identity().revision, '--source-commit', identity().sourceCommit,
+    '--upstream-commit', identity().sourceCommit, '--compatibility', compatibilityPath,
+    '--symbol-kinds', kindsPath, '--out', outputPath], { cwd: ROOT, encoding: 'utf8' });
+  assert.equal(cli.status, 0, cli.stdout + cli.stderr);
+  assert.equal(JSON.parse(readFileSync(outputPath, 'utf8')).result, 'pass', 'complete real closure CLI consumes sparse type evidence');
+  assert.equal(readFileSync(configPath, 'utf8'), 'CONFIG_PACKAGE_root=y\n', 'closure CLI never edits configuration');
+  assert.equal(checkDomain(graph, new Map()).result, 'inconclusive', 'missing evidence must not silently close the symbol universe');
+  assert.equal(checkDomain(graph, bindConditionContext(new Map([['FEATURE','y']]), conditionKinds, identity())).result,
+    'fail', 'an enabled native condition retains failure reachability');
+  assert.equal(checkDomain(graph, bindConditionContext(new Map([['BACKEND','m']]), conditionKinds, identity())).result,
+    'fail', 'module-valued build selectors are enabled');
+  const group = graph.packages.get('root').depends.find(row => row.condition === 'FEATURE');
+  for (const [expression, expected] of [['!FEATURE','fail'], ['LIMIT > 2','inconclusive'],
+    ['LABEL = "enabled"','inconclusive'], ['MISSING_FEATURE','inconclusive'], ['FEATURE & BAD','inconclusive']]) {
+    Object.defineProperty(group, 'condition', { value: expression, configurable: true });
+    assert.equal(checkDomain(graph).result, expected, expression);
+  }
+  Object.defineProperty(group, 'condition', { value: 'LIMIT > 2', configurable: true });
+  assert.equal(checkDomain(graph, bindConditionContext(new Map([['LIMIT','3']]),conditionKinds,identity())).result, 'fail');
+  writeFileSync(path, metadata.replace('Package: helper-tool\nDepends: ', 'Package: helper-tool\nDepends: +failed'));
+  assert.equal(checkDomain(loadPackageGraph(domainDirectory, {})).result, 'fail',
+    'native source compile accumulates output dependency lines; uninstalled siblings cannot hide a failed build target');
+  writeFileSync(path, metadata.replace('Build-Depends: helper-source', 'Build-Depends: missing-source'));
+  assert.equal(checkDomain(loadPackageGraph(domainDirectory, {})).result, 'inconclusive', 'unknown source is not dropped');
+  writeFileSync(path, metadata.replace('Build-Depends: helper-source', 'Build-Depends: helper-source/host'));
+  assert.equal(checkDomain(loadPackageGraph(domainDirectory, {})).result, 'pass', 'host build does not imply target installation');
+  writeFileSync(path, metadata.replace('Build-Depends: helper-source', 'Build-Depends: helper-source/unknown-type'));
+  assert.equal(checkDomain(loadPackageGraph(domainDirectory, {})).result, 'inconclusive', 'unsupported build types are not silently stripped');
+  const variants = metadata.replace('Package: helper-library\nDepends:', 'Package: helper-library\nBuild-Variant: safe\nDefault-Variant: 1\nDepends:')
+    .replace('Package: helper-tool\nDepends:', 'Package: failed\nBuild-Variant: risky\nDepends:')
+    .replace('Source-Makefile: package/failed/Makefile\nPackage: failed\nDepends: ', '');
+  writeFileSync(path, variants);
+  assert.equal(checkDomain(loadPackageGraph(domainDirectory, {})).result, 'pass', 'unselected nondefault variant is not compiled merely by sharing a source');
+  writeFileSync(path, variants.replace('Build-Variant: risky', 'Build-Variant: risky\nDefault-Variant: 1'));
+  assert.equal(checkDomain(loadPackageGraph(domainDirectory, {})).result, 'fail', 'the actual default variant remains protected');
+} finally {
+  rmSync(domainDirectory, { recursive: true, force: true });
+}
+assert(workflow.includes('gzip -n -9 -c tmp/.packageinfo') && workflow.includes('package-info.txt.gz'),
+  'exact native metadata must be preserved for offline replay');
+console.log('native source domains and sparse typed conditions passed');

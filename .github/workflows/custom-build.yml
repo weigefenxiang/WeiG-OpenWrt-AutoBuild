@@ -477,6 +477,8 @@ jobs:
             exit 1
           fi
           test -s tmp/.packageinfo
+          # Preserve the exact evaluated native stream for offline closure replay.
+          gzip -n -9 -c tmp/.packageinfo > "$GITHUB_WORKSPACE/package-info.txt.gz"
 
       - name: Verify explicit configuration overrides / 核验显式配置覆盖
         run: |
@@ -621,6 +623,8 @@ jobs:
             defconfig.diff
             defconfig.log
             package-metadata.log
+            package-info.txt.gz
+            catalog-symbol-kinds.json
             build.config
             build-metadata.txt
             request-audit.json
@@ -765,7 +769,7 @@ jobs:
         run: |
           mkdir -p failure-logs
           cp download.log failure-logs/ 2>/dev/null || true
-          cp package-metadata.log build-closure-verification.json catalog-symbol-kinds.json failure-logs/ 2>/dev/null || true
+          cp package-metadata.log package-info.txt.gz build-closure-verification.json catalog-symbol-kinds.json failure-logs/ 2>/dev/null || true
           cp build-metadata.txt failure-logs/ 2>/dev/null || true
           cp profile-baseline.config reconstructed.config request-overrides.json config-verification.json request-audit.json package-mirror-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig.log build.config failure-logs/ 2>/dev/null || true
           cp openwrt/.config failure-logs/final.config 2>/dev/null || true

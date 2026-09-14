@@ -200,7 +200,9 @@ async function loadCatalogKconfigSymbols(catalogContract, catalogBranch) {
   if (!symbols.size) fail('The Catalog Kconfig graph contains no Kconfig symbols');
   const nonPackageSymbols = model.records.filter((record) => !record.package &&
     record.configSymbol?.startsWith('PACKAGE_')).map((record) => record.configSymbol).sort();
-  return { symbols, contract, nonPackageSymbols };
+  const conditionContext = { schema: 1, symbolTypes: [...model.symbolTypes],
+    undefinedSymbols: [...model.undefinedKconfigSymbols] };
+  return { symbols, contract, nonPackageSymbols, conditionContext };
 }
 
 async function loadNativeProfileStore(catalogContract, catalogSource, catalogBranch) {
@@ -359,7 +361,7 @@ device.name = [baseline.board || 'Target', baseline.subtarget, baseline.profile]
 const rawOverrides = req.overrides;
 if (!Array.isArray(rawOverrides)) fail('Schema 6 overrides must be an array');
 if (rawOverrides.length > 50000) fail('More than 50000 Kconfig overrides are not accepted');
-const { symbols: catalogKconfigSymbols, contract: graphContract, nonPackageSymbols } =
+const { symbols: catalogKconfigSymbols, contract: graphContract, nonPackageSymbols, conditionContext } =
   await loadCatalogKconfigSymbols(catalogContract, catalogBranch);
 let reconstructedValues;
 try {
@@ -379,7 +381,7 @@ const reconstructedSha256 = sha256(reconstructedConfig);
 // input, a second package database, or an alternate configuration authority.
 if (process.env.CATALOG_SYMBOL_KINDS_OUT) writeFileSync(process.env.CATALOG_SYMBOL_KINDS_OUT,
   JSON.stringify({ schema: 1, revision: catalogContract.revision, sourceCommit: catalogContract.sourceCommit,
-    graphHash: graphContract.hash, nonPackageSymbols }) + '\n', 'utf8');
+    graphHash: graphContract.hash, nonPackageSymbols, conditionContext }) + '\n', 'utf8');
 writeFileSync(String(process.env.PROFILE_BASELINE_CONFIG_OUT || 'profile-baseline.config'), baselineConfig, 'utf8');
 writeFileSync(String(process.env.RECONSTRUCTED_CONFIG_OUT || 'reconstructed.config'), reconstructedConfig, 'utf8');
 writeFileSync(String(process.env.REQUEST_OVERRIDES_OUT || 'request-overrides.json'),

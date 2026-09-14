@@ -10,7 +10,8 @@ import { gunzipSync } from 'node:zlib';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { createCatalogModel, evaluateCompatibilityRules, normalizeCompatibilityDocument } from '../site/wrt/lib/catalog-engine.js';
+import { createCatalogModel, evaluateCompatibilityRules, normalizeCompatibilityDocument,
+  evaluateExpressionState, parseConfigDocument } from '../site/wrt/lib/catalog-engine.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SHA256_RE = /^[a-f0-9]{64}$/;
@@ -355,94 +356,37 @@ function validPreventiveEnvironment(environment) {
 }
 
 function configValues(path) {
-  const values = new Map();
-  const lines = readFileSync(path, 'utf8').replace(/\r\n/g, '\n').split('\n');
-  for (const line of lines) {
-    let match = line.match(/^CONFIG_([A-Za-z0-9_+@.-]+)=(.*)$/);
-    if (match) values.set(match[1], match[2].trim());
-    match = line.match(/^# CONFIG_([A-Za-z0-9_+@.-]+) is not set$/);
-    if (match) values.set(match[1], 'n');
-  }
-  return values;
+  return parseConfigDocument(readFileSync(path, 'utf8'));
 }
 
-function configBool(values, symbol) {
-  const key = text(symbol).replace(/^CONFIG_/, '');
-  const value = values?.get?.(key);
-  if (value === undefined) return null;
-  return value === 'y' || value === 'm' || value === '1' || value === 'yes';
+export function bindConditionContext(values, receipt, identity) {
+  classifyActivePackages(new Map(), receipt, identity);
+  const context = receipt.conditionContext;
+  const validSymbol = (symbol) => typeof symbol === 'string' && /^[A-Za-z0-9_+@./-]+$/.test(symbol);
+  if (context?.schema !== 1 || !Array.isArray(context.symbolTypes) || !context.symbolTypes.length ||
+      context.symbolTypes.some((row) => !Array.isArray(row) || row.length !== 2 || !validSymbol(row[0]) ||
+        !['bool', 'tristate', 'string', 'int', 'hex', 'unknown'].includes(row[1])) ||
+      new Set(context.symbolTypes.map(([symbol]) => symbol)).size !== context.symbolTypes.length ||
+      !Array.isArray(context.undefinedSymbols) || context.undefinedSymbols.some((row) =>
+        !Array.isArray(row) || row.length !== 2 || !validSymbol(row[0]) ||
+        row[1]?.missing !== row[0] || row[1]?.nativeType !== 'unknown' || row[1]?.booleanValue !== 'n')) {
+    fail('Catalog condition evidence is missing or invalid for the verified snapshot');
+  }
+  const symbolTypes = new Map(context.symbolTypes);
+  const closedSymbols = new Set(context.symbolTypes.filter(([, type]) =>
+    ['bool', 'tristate'].includes(type)).map(([symbol]) => symbol));
+  const result = new Map(values);
+  Object.defineProperty(result, 'conditionOptions', { value: {
+    symbolTypes, closedSymbols, undefinedSymbols: new Map(context.undefinedSymbols),
+  } });
+  return result;
 }
 
 function evaluateCondition(expression, values) {
   const source = text(expression);
   if (!source) return true;
-
-  // Conditions occur in both Catalog rules and OpenWrt package metadata.  Do
-  // not turn them into JavaScript: besides being unnecessary, doing so makes
-  // malformed Kconfig expressions surprisingly truthy/falsey.  This parser
-  // intentionally accepts the small boolean grammar used by package DEPENDS
-  // selectors (`!`, `&&`, `||`, and parentheses) and evaluates with Kleene
-  // three-valued logic so an unknown symbol remains inconclusive unless the
-  // other side of a short-circuit proves the result.
-  const tokens = [];
-  let offset = 0;
-  while (offset < source.length) {
-    const rest = source.slice(offset);
-    const whitespace = rest.match(/^\s+/);
-    if (whitespace) { offset += whitespace[0].length; continue; }
-    const operator = rest.match(/^(?:&&|\|\||!|\(|\))/);
-    if (operator) { tokens.push(operator[0]); offset += operator[0].length; continue; }
-    // OpenWrt package Kconfig symbols preserve package punctuation (most
-    // notably `-`, and occasionally `.`/`+`) after the PACKAGE_ prefix.
-    const symbol = rest.match(/^[A-Za-z_][A-Za-z0-9_+@.-]*/);
-    if (symbol) { tokens.push(symbol[0]); offset += symbol[0].length; continue; }
-    // Single '&'/'|', comparisons, quoted strings, and any other spelling
-    // are not valid selector conditions.  Treat them as unresolved rather
-    // than trying to guess what the author intended.
-    return null;
-  }
-  tokens.push('<eof>');
-  let index = 0;
-  const peek = () => tokens[index];
-  const take = () => tokens[index++];
-  const literal = (token) => {
-    if (token === 'true' || token === 'y' || token === 'm') return true;
-    if (token === 'false' || token === 'n') return false;
-    return configBool(values, token);
-  };
-  const and = (left, right) => left === false || right === false ? false
-    : left === true && right === true ? true : null;
-  const or = (left, right) => left === true || right === true ? true
-    : left === false && right === false ? false : null;
-  function parsePrimary() {
-    if (peek() === '(') {
-      take();
-      const value = parseOr();
-      if (take() !== ')') return null;
-      return value;
-    }
-    const token = take();
-    if (token === '<eof>' || token === ')' || token === '!' || token === '&&' || token === '||') {
-      return null;
-    }
-    return literal(token);
-  }
-  function parseNot() {
-    if (peek() === '!') { take(); const value = parseNot(); return value === null ? null : !value; }
-    return parsePrimary();
-  }
-  function parseAnd() {
-    let value = parseNot();
-    while (peek() === '&&') { take(); value = and(value, parseNot()); }
-    return value;
-  }
-  function parseOr() {
-    let value = parseAnd();
-    while (peek() === '||') { take(); value = or(value, parseAnd()); }
-    return value;
-  }
-  const result = parseOr();
-  return peek() === '<eof>' ? result : null;
+  const result = evaluateExpressionState(source, values, values?.conditionOptions || {});
+  return result.status === 'deferred' ? null : result.level > 0;
 }
 
 function applicableRules(document, identity, availablePackages, values) {
@@ -662,6 +606,9 @@ function parseDependencyAtom(token, { build = false } = {}) {
   if (hasCondition && !condition) return { invalid: true, raw, reason: 'empty-selector-condition' };
   const rawAlternatives = body.split(/\|+/);
   const isHostOnly = (part) => build && /\/host(?:\s*\([^)]*\))?$/.test(text(part));
+  if (build && rawAlternatives.some((part) => /\//.test(part) && !isHostOnly(part))) {
+    return { invalid: true, raw, reason: 'unsupported-source-build-type' };
+  }
   const ignored = rawAlternatives.filter(isHostOnly).length;
   const alternatives = rawAlternatives.map((part) => {
     if (build) {
@@ -724,6 +671,9 @@ function dependencyGroups(value, options = {}) {
   }
   if (joinAlternative) errors.push({ token: '||', reason: 'alternative-without-package' });
   flush();
+  if (options.build) for (const group of groups) {
+    Object.defineProperty(group, 'domain', { value: 'source-build', enumerable: false });
+  }
   Object.defineProperty(groups, 'errors', { value: errors, enumerable: false });
   return groups;
 }
@@ -811,6 +761,8 @@ function parsePackageInfo(path) {
       });
       for (const capability of previous?.provides || []) record.provides.add(capability);
       record.buildFields = { ...owner.fields };
+      record.variant = text(row['Build-Variant']);
+      record.variantDefault = Object.hasOwn(row, 'Default-Variant');
     }
   }
   return { packages, blocks: packageBlocks };
@@ -834,22 +786,51 @@ function loadPackageGraph(upstreamDir, args) {
   }
   const providers = new Map();
   for (const record of packages.values()) {
-    for (const provided of [...record.provides, ...record.sourceNames]) {
+    for (const provided of record.provides) {
       const rows = providers.get(provided) || [];
       rows.push(record.name);
       providers.set(provided, rows);
     }
   }
   for (const [name, rows] of providers) providers.set(name, unique(rows).sort());
+  // Source compile targets are not virtual runtime providers. Native
+  // package-metadata.pl emits one compile target per Source-Makefile and
+  // accumulates its outputs' dependency lines independently of installation.
+  const sources = new Map(), sourceTargets = new Map();
+  for (const record of packages.values()) {
+    for (const makefile of record.sourceMakefiles) {
+      const key = `@source/${makefile}`;
+      let source = sources.get(key);
+      if (!source) {
+        source = { name: key, produces: new Set(), makefile };
+        const sourceRecord = source;
+        Object.defineProperties(source, {
+          depends: { get: () => [...sourceRecord.produces].flatMap((name) => packages.get(name)?.depends || []) },
+          dependencyErrors: { get: () => [...sourceRecord.produces].flatMap((name) => packages.get(name)?.dependencyErrors || []) },
+        });
+        sources.set(key, source);
+      }
+      source.produces.add(record.name);
+      for (const name of record.sourceNames) {
+        const targets = sourceTargets.get(name) || new Set();
+        targets.add(key); sourceTargets.set(name, targets);
+      }
+    }
+  }
   const parseErrors = [...packages.values()].flatMap((record) =>
     record.dependencyErrors.map((error) => ({ package: record.name, ...error })));
-  return { packages, providers, parseErrors, metadata: { ...metadata,
+  return { packages, providers, sources, sourceTargets,
+    parseErrors, metadata: { ...metadata,
     sha256: sha256(readFileSync(metadataPath)), parseErrors } };
 }
 
 function dependencyCandidates(group, graph) {
   const candidates = [];
   for (const name of group) {
+    if (group.domain === 'source-build') {
+      candidates.push(...(graph.sourceTargets?.get(name) || []));
+      continue;
+    }
     if (graph.packages.has(name)) candidates.push(name);
     for (const provider of graph.providers.get(name) || []) candidates.push(provider);
   }
@@ -857,6 +838,7 @@ function dependencyCandidates(group, graph) {
 }
 
 function dependencyUnknowns(group, graph) {
+  if (group.domain === 'source-build') return group.filter((name) => !graph.sourceTargets?.get(name)?.size);
   return group.filter((name) => !graph.packages.has(name) && !(graph.providers.get(name) || []).length);
 }
 
@@ -870,6 +852,12 @@ function resolveDependencyGroup(group, graph, active, values = new Map()) {
   const unknown = dependencyUnknowns(group, graph);
   if (!candidates.length) {
     return { status: 'inconclusive', group, reason: 'dependency-package-metadata-missing', unknown };
+  }
+  if (group.domain === 'source-build') {
+    if (unknown.length || group.some((name) => graph.sourceTargets?.get(name)?.size !== 1)) {
+      return { status: 'inconclusive', candidates, unknown, group, reason: 'build-source-metadata-unresolved' };
+    }
+    return { status: 'resolved', candidates, group, selected: 'native-source-target' };
   }
   const activeCandidates = candidates.filter((candidate) => active.has(candidate));
   // An absent alternative is still meaningful: silently dropping it can turn
@@ -897,8 +885,14 @@ function resolveDependencyGroup(group, graph, active, values = new Map()) {
 
 function buildReverseCandidates(target, graph) {
   const reverse = new Map();
-  for (const record of graph.packages.values()) {
-    for (const group of record.depends) {
+  for (const record of [...graph.packages.values(), ...(graph.sources?.values() || [])]) {
+    for (const produced of record.produces || []) {
+      if (target && target !== produced) continue;
+      const rows = reverse.get(produced) || [];
+      rows.push({ package: record.name, group: [produced], candidates: [produced] });
+      reverse.set(produced, rows);
+    }
+    for (const group of compileDependencies(record, graph)) {
       const candidates = dependencyCandidates(group, graph);
       if (target && !candidates.includes(target)) continue;
       for (const candidate of target ? [target] : candidates) {
@@ -909,6 +903,26 @@ function buildReverseCandidates(target, graph) {
     }
   }
   return reverse;
+}
+
+function compileDependencies(record, graph) {
+  if (record.produces || !record.sourceMakefiles?.size || !graph.sources) return record.depends;
+  return [...record.sourceMakefiles].flatMap((makefile) =>
+    graph.sources.get(`@source/${makefile}`)?.depends || record.depends);
+}
+
+function nativeVariantSelected(name, graph, active) {
+  const record = graph.packages.get(name);
+  if (!record?.variant || active.has(name)) return true;
+  const siblings = [...(record.sourceMakefiles || [])].flatMap((makefile) =>
+    [...(graph.sources?.get(`@source/${makefile}`)?.produces || [])].map((name) => graph.packages.get(name)));
+  const selected = new Set(siblings.filter((row) => row?.variant && active.has(row.name)).map((row) => row.variant));
+  let defaultVariant;
+  for (const sibling of siblings) if (sibling?.variant && (!defaultVariant || sibling.variantDefault)) {
+    defaultVariant = sibling.variant;
+  }
+  if (!selected.size && defaultVariant) selected.add(defaultVariant);
+  return selected.has(record.variant);
 }
 
 function findPathsToTarget(target, graph, active, values = new Map()) {
@@ -931,19 +945,23 @@ function findPathsToTarget(target, graph, active, values = new Map()) {
   const unresolved = [];
   const visiting = new Set();
   function visit(name, path) {
-    if (name === target) {
+    if (name === target && nativeVariantSelected(target, graph, active)) {
       paths.push([...path, name]);
       return 'reachable';
     }
-    const record = graph.packages.get(name);
+    const record = graph.packages.get(name) || graph.sources?.get(name);
     if (!record) {
       unresolved.push({ path: [...path, name], reason: 'active-package-metadata-missing' });
       return 'inconclusive';
     }
+    if (record.produces?.has(target) && nativeVariantSelected(target, graph, active)) {
+      paths.push([...path, name, target]);
+      return 'reachable';
+    }
     if (visiting.has(name)) return 'not-reachable';
     visiting.add(name);
     let status = 'not-reachable';
-    for (const group of record.depends) {
+    for (const group of compileDependencies(record, graph)) {
       const resolved = resolveDependencyGroup(group, graph, active, values);
       if (resolved.status === 'skipped') continue;
       if (resolved.status === 'inconclusive') {
@@ -975,21 +993,25 @@ function unresolvedActiveDependencyGraph(graph, active, values = new Map()) {
   function visit(name, path) {
     if (visited.has(name)) return;
     visited.add(name);
-    const record = graph.packages.get(name);
+    const record = graph.packages.get(name) || graph.sources?.get(name);
     if (!record) {
       unresolved.push({ path: [...path, name], reason: 'active-package-metadata-missing' });
       return;
     }
-    for (const error of record.dependencyErrors || []) {
+    const sourceErrors = !record.produces && graph.sources && record.sourceMakefiles?.size
+      ? [...record.sourceMakefiles].flatMap((makefile) =>
+        graph.sources.get(`@source/${makefile}`)?.dependencyErrors || record.dependencyErrors || [])
+      : record.dependencyErrors || [];
+    for (const error of sourceErrors) {
       unresolved.push({ ...error, path: [...path, name],
         reason: 'upstream-package-dependency-syntax-unresolved', syntaxReason: error.reason });
     }
-    for (const group of record.depends) {
+    for (const group of compileDependencies(record, graph)) {
       const resolved = resolveDependencyGroup(group, graph, active, values);
       if (resolved.status === 'skipped' || resolved.status === 'resolved') {
         for (const candidate of resolved.candidates || []) visit(candidate, [...path, name]);
       } else {
-        unresolved.push({ path: [...path, name], group, reason: resolved.reason,
+        unresolved.push({ path: [...path, name], group, domain: group.domain || 'package', reason: resolved.reason,
           candidates: resolved.candidates, unknown: resolved.unknown, condition: resolved.condition });
       }
     }
@@ -1097,8 +1119,9 @@ export async function main(argv = process.argv.slice(2)) {
   const actualCommit = upstreamCommit(upstreamDir, args, identity);
   identity.sourceCommit = actualCommit;
   const { document, contract, provider } = await loadCompatibility(identity, args);
-  const { values, active: prefixedSymbols } = activePackages(configPath);
+  const { values: rawValues, active: prefixedSymbols } = activePackages(configPath);
   const symbolKinds = args['symbol-kinds'] ? readJson(args['symbol-kinds']) : null;
+  const values = symbolKinds ? bindConditionContext(rawValues, symbolKinds, identity) : rawValues;
   let active = symbolKinds
     ? classifyActivePackages(prefixedSymbols, symbolKinds, identity)
     : prefixedSymbols;

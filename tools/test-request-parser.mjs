@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { REQUIRED_KCONFIG_RELATION_CAPABILITIES } from '../site/wrt/lib/catalog-engine.js';
 import { parseConfigMap } from '../site/wrt/lib/profile-baseline.js';
-import { classifyActivePackages } from './verify-build-closure.mjs';
+import { classifyActivePackages, bindConditionContext } from './verify-build-closure.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const temp = mkdtempSync(join(tmpdir(), 'weig-request-parser-'));
@@ -95,6 +95,11 @@ return new Response(Buffer.from(files[path],'base64'));};`);
   }
   assert.equal(output.status, 0, output.stderr || output.error?.message);
   const kinds = JSON.parse(readFileSync(join(cwd, 'symbol-kinds.json'), 'utf8'));
+  assert.equal(kinds.conditionContext.schema, 1);
+  assert(kinds.conditionContext.symbolTypes.length > 0);
+  assert.equal(bindConditionContext(new Map(), kinds, {
+    revision: kinds.revision, sourceCommit: kinds.sourceCommit }).size, 0,
+    'real parser condition evidence must be consumable without changing reconstructed values');
   assert.equal(kinds.revision, req.catalog.revision);
   assert.equal(kinds.sourceCommit, req.catalog.sourceCommit);
   assert.match(kinds.graphHash, /^[a-f0-9]{64}$/);
