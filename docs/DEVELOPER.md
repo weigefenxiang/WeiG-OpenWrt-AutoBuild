@@ -1,5 +1,13 @@
 # 开发者指南
 
+## 原生构建闭包的类型边界
+
+- 复用共享 Kconfig 解析/求值器。请求解析器从已验证图生成任务内 `conditionContext`，随现有快照绑定的符号凭据传递。已知 bool/tristate 省略值按 N；未知符号、缺失 scalar 和非法表达式仍待定。不为通过检查改 `.config` 或隐式运行 Defconfig。
+- 原生源码编译目标、实体包、真实 `Provides` 分开。`Source-Makefile` 归属不是虚拟提供者；`Build-Depends` 到达源码编译目标，不要求安装任一产物包。host-only 不等于 target 安装，未支持的构建类型明确诊断，不能去掉后缀假装 target。
+- 源码编译依赖累计该源码各产物的原生依赖行；归因到失败包时遵循已选/默认 Build-Variant。真实 provider 歧义、源码元数据缺失和活动路径语法问题保持待定；真正可达失败包仍阻断并提供路径。
+- `package-info.txt.gz` 保留精确原生元数据，失败附件同时携带配置和凭据。使用这些输入重放真实闭包 CLI，不能仅以网页通过为准。`tools/test-build-closure.mjs` 覆盖匿名类型、变体及稀疏条件；设置 `NATIVE_PACKAGE_METADATA` 指向上游 `scripts/package-metadata.pl`，可另设 `PERL`，执行原生生成器对照。
+- 历史报告没有原生元数据时，只能验证条件求值等可重放部分，不能宣称完整图重放。契约测试、Pages 部署、浏览器成功不等于固件编译成功。
+
 ## 类型化修复与兼容性规则契约
 
 - `bool`/`tristate` 保留合法 N/M/Y 控件；`int`/`hex`/`string` 编辑、依赖失效与推荐统一经过共享引擎的类型、范围、可见性和依赖约束。已存在的零、空字符串和字面量 `n` 都不等于缺失赋值；非零依赖上限允许 scalar，UNKNOWN 保持待定。

@@ -1,5 +1,13 @@
 # Developer Guide
 
+## Native build-closure domains
+
+- Reuse the shared Kconfig parser/evaluator. The request parser emits job-local `conditionContext` in the existing snapshot-bound symbol-kind receipt from the verified graph. Known bool/tristate omissions are N; unknown symbols, missing scalar values and invalid expressions remain deferred. Do not rewrite `.config` or run implicit Defconfig to satisfy the check.
+- Keep native source compile targets separate from concrete packages and `Provides` registrations. A `Source-Makefile` owner is not a virtual provider. `Build-Depends` reaches the source compile target even if none of its outputs is installed; host-only edges do not imply target installation, and unsupported build types are diagnosed rather than stripped.
+- Source compile dependencies accumulate native output dependency lines. Respect selected/default build variants when attributing reachability to a failed package. Genuine provider ambiguity, missing source metadata and malformed reachable dependencies remain inconclusive; known failure reachability still blocks with a path.
+- `package-info.txt.gz` preserves the exact evaluated native stream; configuration and the receipt accompany it in failure artifacts. Replay the real closure CLI with these inputs, not only browser checks. `tools/test-build-closure.mjs` covers anonymous domains, variants and sparse conditions; set `NATIVE_PACKAGE_METADATA` to an upstream `scripts/package-metadata.pl` (and optionally `PERL`) for the native generator comparison.
+- Historical reports without native metadata can prove condition evaluation regressions but not complete graph replay. Do not equate contract tests, Pages deployment or browser success with successful firmware compilation.
+
 ## Typed repair and compatibility rule contracts
 
 - `bool`/`tristate` retain legal N/M/Y controls. `int`/`hex`/`string` editing, dependent invalidation and recommendations use the shared engine with type, range, visibility and dependency constraints. Present zero, empty string and literal `n` are values, not absent assignments. Nonzero dependency ceilings allow scalar values; UNKNOWN remains deferred.

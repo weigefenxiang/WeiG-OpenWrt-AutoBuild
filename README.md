@@ -19,6 +19,8 @@ The page also imports `build-request.json`, `.config`, and `config.buildinfo`. S
 
 Configuration checks run when you choose **Test** or generate a build request, not during import. Numeric and string options use typed controls and the same Kconfig constraints as recommendations. An inactive assignment can be removed without enabling another image format; unresolved or ambiguous changes still require your decision. Apply recommendations, run Test again, and export a new request from the deployed page. Rerunning an old request keeps its old pinned Worker code.
 
+The Worker checks build compatibility using typed conditions from the verified Catalog and refreshed native package metadata. Source build dependencies do not require installing one of that source's output packages. An inconclusive check is not a plugin compilation failure; `BUILD-LOGS` includes `package-info.txt.gz` and condition evidence for offline diagnosis.
+
 ## Cloning and project configuration
 
 Maintain two configuration sources with separate responsibilities after cloning:
