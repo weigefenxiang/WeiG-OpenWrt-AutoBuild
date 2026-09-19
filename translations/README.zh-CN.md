@@ -19,7 +19,9 @@ OpenWrt 固件在线定制与 GitHub Actions 云编译工具。网页直接读�
 
 配置检查在点击“检”或生成构建请求时进行，不在导入时弹出。数值与字符串项使用对应类型的控件，并与推荐共用同一 Kconfig 约束。失效赋值可以移除，不会为了保留容量值自动开启其它镜像格式；未知或有歧义的修改仍需用户判断。应用推荐后再次点击“检”，从已部署的新网页导出新请求；重跑旧请求仍使用其锁定的旧 Worker 代码。
 
-Worker 使用已验证 Catalog 的类型化条件和刷新的原生包元数据检查构建兼容性。源码构建依赖不要求把该源码的某个产物包选进固件。检查待定不等于插件编译失败；`BUILD-LOGS` 包含 `package-info.txt.gz` 和条件证据，供离线排查。
+Worker 通过无构建配方的 GNU Make 适配器展开上游 `.packagedeps`，检查构建兼容性；`.packageinfo` 提供实体包和源码身份，不再维护另一套推测的编译图。源码编译不要求安装产物包，多提供者均未启用时也不误报依赖未决。`BUILD-LOGS` 保存 `package-info.txt.gz`、`package-deps.mk.gz`、配置与图证据，支持离线排查。闭包检查通过不等于固件实际构建成功。
+
+大型配置导入复用当前快照的依赖索引，并在有序 Kconfig 操作之间让出页面绘制时间。统一加载提示显示进度，配置控件暂时锁定，但页面仍可滚动。必要的选择弹窗可操作，失败时恢复之前的工作区，完成或异常后自动解锁。导入仍不会自动弹出兼容性推荐。
 
 ## 克隆与项目配置
 
@@ -84,7 +86,7 @@ staging-260810_0857-匿名#161-BUILD-LOGS
 - 精选应用名单、中文/英文介绍与跨源软件包体积都属于 Catalog。应用 ID 相同即视为同一项；体积显示三位有效数字，缺少可靠官方观测时明确显示未知。
 - `compatibility.json` 接受 schema 2–5。schema 4 可通过 `buildDependency` 将已验证的构建故障绑定到一个构建包；新图决策从精确 Catalog 图推导触发入口，旧的 `triggerPackages` 只读兼容、不再驱动新的告警或动作。schema 4 relation 资产会在 compact 编解码 round-trip 中保留 typed default、range、visibility、choice、select/imply 关系、软件包 capability 和表达式 AST。只有 `relationsComplete: true` 且 `relationCapabilities` 含 `complete-kconfig-relations-v1` 才表示完整 typed relation graph。独立的 `packageClosureComplete: true` 加上 `packageClosureCapabilities` 中的 `complete-package-build-closure-v1` 只表示软件包构建闭包完整，绝不能把不完整的 typed relation graph 提升为完整。schema 5 可把精确观测保存在 `evidence`，并让经明确审核的 `preventive` 策略仅在失败包真实存在的通配环境中适用。图证据未知或有歧义时结果为 inconclusive，网页不得猜测告警或动作。
 - 构建故障建议使用精确 Catalog 图：反向索引只用于找候选，之后必须用每个候选自己的前向 dependency、select/imply 和 package-provider 关系证明。计划只包含最少的用户可控根节点和失败包；共享 Kconfig intent 负责自动清理。三层名称必须分开：上游 `.config` 使用 `CONFIG_PACKAGE_<name>`，Catalog/Kconfig 模型使用 `PACKAGE_<name>`，构建闭包使用上游 `.packageinfo` 与 Makefile 中的真实软件包名。virtual capability 只是 provider 名称，不得生成配置符号或软件包记录；提供 capability 的 owner 也不得与自己的 capability 自冲突。
-- 编译前 Worker 会对 `.config` 做 hash，运行 `make prepare-tmpinfo V=s`，并要求前后 hash 相同且真实的 `tmp/.packageinfo` 非空。随后闭包门禁读取软件包元数据和 Makefile，解析真实 dependency/provider 路径；元数据、候选、条件或路径缺失/有歧义时，在编译前 fail-closed。
+- 编译前 Worker 对 `.config` 做 hash，运行 `make prepare-tmpinfo V=s`，要求配置不变且原生 `.packageinfo` / `.packagedeps` 非空。无构建配方的 GNU Make 适配器展开已生成的依赖赋值，不加载顶层构建 Makefile，不运行 Defconfig。Target/host、已选/默认变体、同源码过滤和提供者条件保留原生语义。原生图证据或活动源码身份缺失仍待定。快照绑定的类型凭据区分包配置子选项与实体包，刷新的真实原生包记录优先。
 - 共享 runtime 保留原生 Kconfig 边界：bool default `m` 作为 typed source value 保留；注释只在引号外删除；引号外的 `@` 只作为 ignored-character warning，周围仍是普通 AST，`@` 后面的 symbols 不能丢失。没有未求值动态预处理的完整 active-source proof 才能区分 native undefined 和 Target projection omission；external symbol 类型只能来自真实解析定义及明确的 projection provenance。未求值的 `$(shell,...)` 或动态赋值会保持 relations incomplete，并延后判断。
 - Choice 的 `reset if` 会保存在 Catalog 数据中，但上游 mconf/nconf 只有在交互式地把非 Y 成员切换为 Y 时才会清空全局 `S_DEF_USER` 层。静态导入、序列化、Worker 重建和网页交互不宣称已经复现这个全局 reset；不支持或未决的 reset 交互必须明确返回 `unsupported`/`deferred`。
 - AutoBuild 不做每周数据同步；未来 Source/Branch 和 Catalog 数据分支发布后，网页自动读取，无需更新 AutoBuild 源码。

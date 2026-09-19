@@ -4,9 +4,16 @@
 
 - 复用共享 Kconfig 解析/求值器。请求解析器从已验证图生成任务内 `conditionContext`，随现有快照绑定的符号凭据传递。已知 bool/tristate 省略值按 N；未知符号、缺失 scalar 和非法表达式仍待定。不为通过检查改 `.config` 或隐式运行 Defconfig。
 - 原生源码编译目标、实体包、真实 `Provides` 分开。`Source-Makefile` 归属不是虚拟提供者；`Build-Depends` 到达源码编译目标，不要求安装任一产物包。host-only 不等于 target 安装，未支持的构建类型明确诊断，不能去掉后缀假装 target。
-- 源码编译依赖累计该源码各产物的原生依赖行；归因到失败包时遵循已选/默认 Build-Variant。真实 provider 歧义、源码元数据缺失和活动路径语法问题保持待定；真正可达失败包仍阻断并提供路径。
-- `package-info.txt.gz` 保留精确原生元数据，失败附件同时携带配置和凭据。使用这些输入重放真实闭包 CLI，不能仅以网页通过为准。`tools/test-build-closure.mjs` 覆盖匿名类型、变体及稀疏条件；设置 `NATIVE_PACKAGE_METADATA` 指向上游 `scripts/package-metadata.pl`，可另设 `PERL`，执行原生生成器对照。
+- `tools/lib/native-make-graph.mjs` 消费已经生成的 `tmp/.packagedeps` 赋值，由 GNU Make 在隔离、无构建配方的输入中展开条件，不加载构建 Makefile。旧的独立推测编译图已移除。上游先过滤同源码提供者，再统计候选；多个剩余提供者使用条件边，全部未启用就没有边；单一提供者即使未安装仍可能编译。保留已选/默认变体和 host 类型目标，原生图/源码证据缺失仍待定，故障包真实可达仍有路径并阻断。
+- `package-info.txt.gz` 和 `package-deps.mk.gz` 保存原生输入。报告记录输入哈希、展开后的根、类型化节点和变体，并绑定精确请求身份。离线 CLI 支持 `--package-info`、`--package-deps` 和可选 `--make`，需要 GNU Make。本地回归可用 `WEIG_MAKE` 指定不在 PATH 或名称不同的可执行程序。适配器不执行构建配方、Defconfig、下载或编译。
 - 历史报告没有原生元数据时，只能验证条件求值等可重放部分，不能宣称完整图重放。契约测试、Pages 部署、浏览器成功不等于固件编译成功。
+
+## 配置操作的响应性
+
+- 默认值工作队列的依赖结构按不可变 model 缓存在 WeakMap，不缓存当前求值结果。每一步仍按原顺序使用共享 Kconfig 求值器；新快照/model 使用新索引。
+- 导入迁移在操作之间让出页面绘制时间，最后统一序列化和渲染。`ui-runtime.js` 的统一操作所有权提供进度、inert 配置控件、鼠标/键盘保护和 finally 解锁，不锁页面滚动。导入、检、推荐应用、请求生成复用同一能力；必要弹窗临时只开放自身控件。
+- 失败导入无需重新联网即可恢复之前的 model、baseline、配置层和字段，旧操作不能留下半导入状态。加载仍不触发兼容性评估，检/请求生成仍是用户明确触发入口。
+- `node tools/test-ui-operation.mjs` 验证操作所有权、嵌套弹窗、异常清理和滚动按键。真实冷/热导入还需测 CPU 和最长主线程任务，对照旧版本全部符号/意图，并验证推荐、二次检及导出重导入；只有转圈动画不能证明性能优化。
 
 ## 类型化修复与兼容性规则契约
 
@@ -146,7 +153,7 @@ Defconfig 默认关闭。开启时只能在 `reconstructed.config` 已经确定�
 
 无论是否开启 Defconfig，下载和编译前都会只核对 `request-overrides.json` 中的有效 Kconfig 值。门禁不比较整份 `.config`、不读取 `plugins`，也不检查未被覆盖的 baseline 项；显式值被改写时以 `configuration-override-mismatch` 停止，并保存 `config-verification.json`。
 
-编译前 Worker 会对权威 `.config` 做 hash，运行 `make prepare-tmpinfo V=s`，并要求前后 hash 相同且真实的 `tmp/.packageinfo` 非空。闭包门禁只消费原生已求值元数据，不回退扫描原始 Makefile。解析器区分 Description/Config 区块和源码级字段（含 `Build-Depends/host`）；源码构建依赖应用于该源码的各二进制包，host 依赖独立处理。活动根可达路径存在未知时继续阻断，无关解析诊断不再使所有选项失败。
+编译前 Worker 对权威 `.config` 做 hash，运行 `make prepare-tmpinfo V=s`，要求配置不变且原生 `.packageinfo`、`.packagedeps` 非空。无构建配方的 GNU Make 适配器负责编译边求值，`.packageinfo` 负责实体包/源码身份。保留源码聚合、提供者条件、变体与 host 域，不回退扫描原始 Makefile 或猜测依赖边。原生图证据或活动路径源码身份缺失仍待定。
 
 `PACKAGE_*` 前缀不能证明真实软件包身份：上游的包配置子选项也使用该前缀。Worker 可从已验证的不可变图生成 job 内符号类型凭据，闭包门禁核对其 source/graph 身份。已证明的配置子选项不作为构建包根，但刷新后的真实原生包记录优先于旧分类。凭据不是另一份长期维护的软件包数据库。
 
