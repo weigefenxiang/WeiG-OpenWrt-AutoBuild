@@ -6,6 +6,92 @@
  */
 'use strict';
 
+// One operation owner for import, diagnostics and recommendations. Inert
+// controls prevent pointer AND keyboard activation; document scrolling is not
+// locked. Required choice dialogs opt in, never the background.
+let activeUiOperation = null;
+const operationInertRoots = new Map();
+let operationStatus = null;
+for (const type of ['click', 'pointerdown', 'keydown', 'beforeinput', 'change']) {
+  document.addEventListener(type, (event) => {
+    if (!activeUiOperation || (activeUiOperation.interacting > 0 && event.target?.closest?.('#modal'))) return;
+    if (type === 'keydown' && ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+  }, true);
+}
+function syncUiOperation() {
+  for (const [element, inert] of operationInertRoots) element.inert = inert;
+  operationInertRoots.clear();
+  const operation = activeUiOperation;
+  document.body.classList.toggle('ui-operation-busy', Boolean(operation));
+  $('app')?.setAttribute('aria-busy', String(Boolean(operation)));
+  if (operationStatus) operationStatus.hidden = !operation || operation.interacting > 0;
+  if (!operation) return;
+  for (const element of document.body.children) {
+    if (element === operationStatus || ['SCRIPT', 'STYLE', 'LINK'].includes(element.tagName) ||
+        (operation.interacting > 0 && element.id === 'modal')) continue;
+    operationInertRoots.set(element, element.inert);
+    element.inert = true;
+  }
+  operationStatus.querySelector('.operation-message').textContent = operation.message;
+}
+function createUiOperation(title) {
+  if (activeUiOperation && !activeUiOperation.interacting) throw new Error(t('busy.processing'));
+  if (!operationStatus) {
+    operationStatus = document.createElement('div');
+    operationStatus.className = 'operation-status';
+    operationStatus.id = 'operationStatus';
+    operationStatus.setAttribute('role', 'status');
+    operationStatus.setAttribute('aria-live', 'polite');
+    const spinner = document.createElement('span');
+    spinner.className = 'operation-spinner'; spinner.setAttribute('aria-hidden', 'true');
+    const copy = document.createElement('div');
+    const message = document.createElement('strong'); message.className = 'operation-message';
+    const hint = document.createElement('span'); hint.className = 'operation-hint'; hint.textContent = t('busy.scroll');
+    copy.append(message, hint); operationStatus.append(spinner, copy); document.body.append(operationStatus);
+    new MutationObserver(() => { if (activeUiOperation) syncUiOperation(); })
+      .observe(document.body, { childList: true });
+  }
+  const previous = activeUiOperation;
+  const focus = document.activeElement;
+  const operation = { message: title, interacting: 0,
+    async checkpoint(nextTitle = operation.message) {
+      if (activeUiOperation !== operation) throw new Error('Operation ownership changed');
+      operation.message = nextTitle; syncUiOperation();
+      // Yield a real frame, not merely another microtask on the blocked thread.
+      await new Promise((resolve) => {
+        const fallback = setTimeout(resolve, 50);
+        requestAnimationFrame(() => { clearTimeout(fallback); setTimeout(resolve, 0); });
+      });
+    },
+    close() {
+      if (activeUiOperation !== operation) return;
+      activeUiOperation = previous; syncUiOperation();
+      if (!previous && focus?.isConnected && !focus.closest('[inert]')) focus.focus?.({ preventScroll: true });
+    },
+  };
+  activeUiOperation = operation;
+  syncUiOperation();
+  return operation;
+}
+async function withUiOperation(title, task) {
+  const operation = createUiOperation(title);
+  try { await operation.checkpoint(); return await task(operation); }
+  finally { operation.close(); }
+}
+async function withUiOperationInteraction(task) {
+  const operation = activeUiOperation;
+  if (!operation) return task();
+  operation.interacting++; syncUiOperation();
+  try { return await task(); }
+  finally { operation.interacting--; syncUiOperation(); }
+}
+async function withUiComputation(title, task) {
+  if (!activeUiOperation || activeUiOperation.interacting) return withUiOperation(title, task);
+  await activeUiOperation.checkpoint(title);
+  return task(activeUiOperation);
+}
+
 /*
  * Viewport-safe geometry is deliberately kept in this first, classic-loaded UI
  * module.  `app.js` loads this file before the presentation adapter that owns

@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { readFrontendRuntimeSource } from './lib/frontend-source.mjs';
-import { createCatalogModel, validateConfig } from '../site/wrt/lib/catalog-engine.js';
+import { createCatalogModel, validateConfig, reconcileKconfigDerivedValues } from '../site/wrt/lib/catalog-engine.js';
 import { createRuntimeMenu, mergeHiddenShard, mergeMenuShards } from '../site/wrt/lib/catalog-schema6.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -55,6 +55,16 @@ function compactFixture(count = 12000) {
 const modelStart = performance.now();
 const model = createCatalogModel({ schema: 6, relations: compactFixture() });
 const modelElapsed = performance.now() - modelStart;
+let structuralReads = 0;
+for (const record of model.records) {
+  const direct = record.directDepends;
+  Object.defineProperty(record, 'directDepends', { get() { structuralReads++; return direct; } });
+}
+reconcileKconfigDerivedValues(model, new Map());
+const firstStructuralReads = structuralReads;
+assert.equal(firstStructuralReads, model.records.length, 'build the default worklist once');
+reconcileKconfigDerivedValues(model, new Map([['PACKAGE_fixture-00000', 'y']]));
+assert.equal(structuralReads, firstStructuralReads, 'changing configuration must not rebuild static dependency references');
 assert.equal(model.records.length, 12000);
 assert.ok(model.bySymbol.has('PACKAGE_fixture-11999'));
 assert.ok(modelElapsed < 5000, `compact relation expansion took ${modelElapsed.toFixed(1)}ms`);

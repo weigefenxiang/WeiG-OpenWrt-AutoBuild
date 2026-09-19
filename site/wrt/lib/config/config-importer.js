@@ -262,7 +262,7 @@ function renderImportedCustomPicker() {
 async function selectImportedTarget(text, fileName, payload) {
   const meta = importedConfigMeta(text, fileName, payload);
   importLogStep('target-detected', meta);
-  const selected = await chooseImportedSourceBranch(meta);
+  const selected = await withUiOperationInteraction(() => chooseImportedSourceBranch(meta));
   if (!selected) return '';
   const { source, branch } = selected;
   importLogStep('branch-selected', { source: source.id, branch: branch.branch });
@@ -512,13 +512,19 @@ function prepareSchema6SafeOverrides(overrides) {
   return { safe, skipped };
 }
 
-function applySchema6MigrationPlan(plan, { log = true } = {}) {
+async function applySchema6MigrationPlan(plan, { log = true, operation = null } = {}) {
   const appliedPlugins = [];
   const failedPlugins = [];
   const migratedOverrides = [];
   const skippedOverrides = [...(plan.skippedOverrides || [])];
   const pluginById = new Map((PLUGINS?.plugins || []).map((plugin) => [plugin.id, plugin]));
+  let completed = 0;
+  const total = (plan.actions?.length || 0) + (plan.safeOverrides?.length || 0);
+  const checkpoint = async () => {
+    if (operation) await operation.checkpoint(t('busy.progress', { current: ++completed, total }));
+  };
   for (const action of plan.actions || []) {
+    await checkpoint();
     const plugin = pluginById.get(action.pluginId);
     const option = plugin ? curatedMenuOption(plugin) : null;
     const status = plugin && typeof pluginState === 'function' ? pluginState(plugin) : '';
@@ -541,6 +547,7 @@ function applySchema6MigrationPlan(plan, { log = true } = {}) {
     }
   }
   for (const [symbol, value] of plan.safeOverrides || []) {
+    await checkpoint();
     const option = menuOptionBySymbol.get(symbol);
     if (!option) {
       skippedOverrides.push({ symbol, reason: 'symbol is not present in the current Catalog' });
@@ -601,7 +608,7 @@ function registerSchema6PluginIntents(payload) {
   }
   return migration;
 }
-function restoreSelections(config, payload) {
+async function restoreSelections(config, payload, operation = null) {
   const schema6Migration = payload?.__catalogMigration?.mode === 'cross-snapshot'
     ? payload.__catalogMigration : null;
   state.sel.clear();
@@ -672,7 +679,7 @@ function restoreSelections(config, payload) {
   }
   let appliedMigration = schema6Migration;
   if (schema6Migration) {
-    appliedMigration = applySchema6MigrationPlan(schema6Migration, { log: false });
+    appliedMigration = await applySchema6MigrationPlan(schema6Migration, { log: false, operation });
     state.importedConfig = catalogTargetConfig();
     importedConfigEntries = parseConfigEntries(state.importedConfig);
     importedConfigValues.clear();
@@ -874,11 +881,58 @@ async function reconstructSchema6Import(payload) {
   };
 }
 
+function captureImportWorkspace() {
+  const savedState = { ...state, sel: new Set(state.sel), removed: new Set(state.removed) };
+  const selection = snapshotCatalogUiState();
+  const environment = { MENU_CATALOG, CATALOG_MODEL, PLUGINS, ACTIVE_PROFILE_BASELINE,
+    PROFILE_BASELINE_STORE, profileBaselineKey, menuCatalogKey, catalogShardLoader,
+    catalogLoadMode, catalogLoadError, catalogLoadDiagnostics, catalogApplicationsDocument,
+    catalogApplicationsLoadState, catalogApplicationsError, catalogPackageSizesDocument,
+    catalogPackageSizesKey, importedTargetVerified, packageMirrorSelectionExplicit, menuExpanded, menuPath, menuParent };
+  const layers = [catalogBaselineValues, catalogBaselineOrigins, profilePackageOverrides,
+    menuImportedOriginal, importedConfigValues, importedUnknownOriginal, importedUnknownEdits]
+    .map((map) => [map, new Map(map)]);
+  const nonDefault = new Set(menuImportedNonDefault);
+  const fields = ['tagBox', 'lanipBox', 'rootpwBox'].map((id) => [id, $(id)?.value]);
+  return () => {
+    // Invalidate unfinished loaders before restoring the previous model/intent
+    // references. Never reload the old branch over the network just to undo.
+    menuCatalogSeq++;
+    menuCatalogAbortController?.abort();
+    menuCatalogPromise = catalogMenuLoadingPromise = catalogHiddenLoadingPromise = null;
+    catalogHelpLoadingPromise = catalogApplicationsPromise = catalogPackageSizesPromise = null;
+    catalogProfileBaselineLoadingPromise = null;
+    menuLoadingKey = '';
+    ({ MENU_CATALOG, CATALOG_MODEL, PLUGINS, ACTIVE_PROFILE_BASELINE,
+      PROFILE_BASELINE_STORE, profileBaselineKey, menuCatalogKey, catalogShardLoader,
+      catalogLoadMode, catalogLoadError, catalogLoadDiagnostics, catalogApplicationsDocument,
+      catalogApplicationsLoadState, catalogApplicationsError, catalogPackageSizesDocument,
+      catalogPackageSizesKey, importedTargetVerified, packageMirrorSelectionExplicit, menuExpanded, menuPath, menuParent } = environment);
+    Object.assign(state, savedState);
+    for (const [map, saved] of layers) restoreMap(map, saved);
+    restoreSet(menuImportedNonDefault, nonDefault);
+    restoreCatalogUiState(selection);
+    if (MENU_CATALOG) {
+      if (MENU_CATALOG.menu?.displayLoaded) buildMenuIndexes(MENU_CATALOG);
+      else buildMenuStartupIndexes(MENU_CATALOG);
+    }
+    renderCatalogPicker(false, { sourceId: state.source?.id, branchId: state.version?.id,
+      system: state.device?.target?.system, subtarget: state.device?.target?.subtarget,
+      profileSymbol: state.device?.target?.profileSymbol });
+    for (const [id, value] of fields) if ($(id) && value !== undefined) $(id).value = value;
+    if ($('defconfigToggle')) $('defconfigToggle').checked = state.useDefconfig;
+    renderCatalogUiAfterIntent(); renderImportedWorkspace();
+  };
+}
+
 async function importConfigFile(file) {
+  const operation = createUiOperation(t('busy.import'));
+  const rollback = captureImportWorkspace();
   const seq = ++configImportSeq;
   importingConfig = true;
   beginImportLog(file);
   try {
+    await operation.checkpoint();
     if (!file || file.size < 32 || file.size > 2 * 1024 * 1024) throw new Error(t('import.size'));
     importLogStep('file-accepted');
     let text = await file.text();
@@ -914,6 +968,7 @@ async function importConfigFile(file) {
     const configId = payload?.__restoredConfigId || await selectImportedTarget(text, file.name, payload);
     if (seq !== configImportSeq) return;
     if (!configId) {
+      rollback();
       finishImportLog('cancelled');
       return;
     }
@@ -922,7 +977,8 @@ async function importConfigFile(file) {
     importLogStep('profile-selected', { verified: importedTargetVerified, state: importStateSnapshot() });
     await ensurePackageMirrors();
     if (seq !== configImportSeq) return;
-    restoreSelections(state.importedConfig, payload);
+    await operation.checkpoint(t('busy.processing'));
+    await restoreSelections(state.importedConfig, payload, operation);
     finishImportLog('success');
     showToast(legacyJsonRecovered
       ? t('runtime.8527b3686481')
@@ -931,8 +987,13 @@ async function importConfigFile(file) {
       setTimeout(() => showToast(payload.__catalogMigration.summary, 'warning'), 0);
     }
     updateSubmitGate();
+  } catch (error) {
+    rollback();
+    finishImportLog('error', error);
+    throw error;
   } finally {
     if (seq === configImportSeq) importingConfig = false;
+    operation.close();
   }
 }
 $('importBtn').addEventListener('click', () => $('configImport').click());

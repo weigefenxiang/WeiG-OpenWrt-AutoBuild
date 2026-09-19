@@ -3750,15 +3750,19 @@ export function normalizeCompatibilityDocument(raw) {
   return document;
 }
 
-function materializeKconfigDefaults(model, inputValues, options) {
-  const values = new Map(valuesMap(inputValues));
+// Model facts are immutable for one Catalog snapshot. Cache structure only;
+// every evaluation still resolves defaults against its own current values.
+const DEFAULT_WORKLIST_INDEXES = new WeakMap();
+function defaultWorklistIndex(model) {
+  const cached = DEFAULT_WORKLIST_INDEXES.get(model);
+  if (cached) return cached;
   const records = (model?.records || []).filter((record) => record?.configSymbol);
   const dependents = new Map();
   const addDependent = (symbol, record) => {
     const key = String(symbol || '').trim();
     if (!key) return;
-    const rows = dependents.get(key) || [];
-    if (!rows.includes(record)) rows.push(record);
+    const rows = dependents.get(key) || new Set();
+    rows.add(record);
     dependents.set(key, rows);
   };
   // A bounded pass count silently misses long default chains.  A dependency
@@ -3774,10 +3778,18 @@ function materializeKconfigDefaults(model, inputValues, options) {
         ...referencedExpressionSymbols(condition)]) addDependent(symbol, record);
     }
   }
+  const index = { records, dependents };
+  if (model && typeof model === 'object') DEFAULT_WORKLIST_INDEXES.set(model, index);
+  return index;
+}
+
+function materializeKconfigDefaults(model, inputValues, options) {
+  const values = new Map(valuesMap(inputValues));
+  const { records, dependents } = defaultWorklistIndex(model);
   const queue = [...records];
   const queued = new Set(records);
-  while (queue.length) {
-    const record = queue.shift();
+  for (let cursor = 0; cursor < queue.length; cursor++) {
+    const record = queue[cursor];
     queued.delete(record);
     if (values.has(record.configSymbol)) continue;
     if (dependencyLevel(record, values, options) <= 0) continue;

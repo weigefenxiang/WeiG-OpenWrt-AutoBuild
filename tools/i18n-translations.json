@@ -1,5 +1,9 @@
 {
  "zh-CN": {
+  "busy.import": "正在加载配置…",
+  "busy.processing": "正在处理配置…",
+  "busy.progress": "正在恢复选项 {current}/{total}…",
+  "busy.scroll": "可以滚动页面，完成后配置控件会自动解锁。",
   "configuration.removeInactive": "移除未生效值",
   "configuration.inactiveInput": "当前 Kconfig 依赖或可见性条件不允许编辑此值。",
   "configuration.applyCustomValues": "应用自定义值",

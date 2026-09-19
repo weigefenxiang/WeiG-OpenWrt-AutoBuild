@@ -7,6 +7,9 @@
 'use strict';
 
 async function runSelfTest() {
+  return withUiOperation(t('st.title'), runSelfTestChecks);
+}
+async function runSelfTestChecks() {
   const viewToken = ++selfTestViewToken;
   openModal(t('st.title'));
   const probe = $('modalProbe');

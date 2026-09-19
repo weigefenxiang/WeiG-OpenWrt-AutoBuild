@@ -934,7 +934,7 @@ expect(mirrorSelection({ timezone: 'Region/Remote', currentId: 'anonymous-automa
   'anonymous-automatic', 'imported explicit mirror was overwritten by timezone defaulting');
 expect(app.includes('await ensurePackageMirrors();') &&
   app.indexOf('await ensurePackageMirrors();', app.indexOf('async function importConfigFile')) <
-    app.indexOf('restoreSelections(state.importedConfig, payload);', app.indexOf('async function importConfigFile')),
+    app.indexOf('await restoreSelections(state.importedConfig, payload, operation);', app.indexOf('async function importConfigFile')),
   'import can validate an explicit mirror before the shared mirror data arrives');
 
 const contractHead = html.match(/<div class="build-contract-head">([\s\S]*?)<\/div>/)?.[1] || '';

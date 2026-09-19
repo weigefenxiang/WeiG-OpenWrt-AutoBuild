@@ -64,7 +64,7 @@ async function mobileIssuePayload(payload) {
 }
 
 async function generateResolvedConfigText(options = {}) {
-  return generateConfigText(options);
+  return withUiComputation(t('busy.processing'), () => generateConfigText(options));
 }
 function buildRequestOverrides(configText) {
   if (!ACTIVE_PROFILE_BASELINE || !PROFILE_BASELINE_MODULE) {

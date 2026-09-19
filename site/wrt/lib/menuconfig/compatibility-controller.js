@@ -565,9 +565,9 @@ function openConfigurationPreflightModal(evaluation) {
       recommended.type = 'button'; recommended.className = 'btn btn-primary compatibility-recommended';
       recommended.textContent = t('runtime.configurationPreflightApplyAll');
       recommended.disabled = !evaluation.actions?.length;
-      recommended.onclick = () => {
+      recommended.onclick = async () => {
         try {
-          const remaining = applyConfigurationRecommendation(evaluation);
+          const remaining = await withUiComputation(t('busy.processing'), () => applyConfigurationRecommendation(evaluation));
           if (!remaining.length) finish('applied');
           else finish('recheck');
         } catch (error) {
@@ -585,9 +585,9 @@ function openConfigurationPreflightModal(evaluation) {
 
 async function ensureConfigurationPreflight() {
   while (true) {
-    const evaluation = configurationPreflightEvaluation();
+    const evaluation = await withUiComputation(t('busy.processing'), configurationPreflightEvaluation);
     if (!evaluation.initialViolations?.length) return null;
-    const action = await openConfigurationPreflightModal(evaluation);
+    const action = await withUiOperationInteraction(() => openConfigurationPreflightModal(evaluation));
     if (action === 'forced') return forcedConfigurationAudit(evaluation);
     if (action === 'applied' || action === 'recheck') continue;
     const error = new Error('Configuration preflight cancelled');
@@ -757,7 +757,7 @@ async function ensureCompatibilityRules() {
         validationOptions: evaluation.context.validationOptions,
       },
     );
-    const action = await openCompatibilityWarningModal(evaluation, warning, plans);
+    const action = await withUiOperationInteraction(() => openCompatibilityWarningModal(evaluation, warning, plans));
     if (action === 'cancel') {
       const error = new Error('Compatibility check cancelled');
       error.name = 'CompatibilityCancelledError';
@@ -811,11 +811,11 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
       settled = true;
       resolve(recommendationApplied ? 'applied' : 'cancel');
     };
-    const applyAndVerify = (applyPlan, { keepOpen = false, requiredTargets = [] } = {}) => {
+    const applyAndVerify = (applyPlan, { keepOpen = false, requiredTargets = [] } = {}) => withUiComputation(t('busy.processing'), async (operation) => {
       const snapshot = snapshotCatalogUiState();
       const beforeKeys = new Set(configurationBlockingViolations().map(configurationViolationKey));
       try {
-        applyPlan();
+        await applyPlan(operation);
         if (!compatibilityTargetsResolved(requiredTargets)) {
           throw new Error(t('runtime.3e85d2e445d7'));
         }
@@ -842,7 +842,7 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
         const warningText = $('modalBody').querySelector('.catalog-conflict-warning');
         if (warningText) warningText.textContent = displayText(String(error?.message || error).split(';')[0]);
       }
-    };
+    });
 
     const renderModalShell = (title) => {
       if ($('modal').hidden) openModal(title);
@@ -1093,9 +1093,10 @@ function openCompatibilityWarningModal(evaluation, warning, plans) {
         ? t('runtime.57518ffee317')
         : t('runtime.5c2c197f7d61');
       recommendedButton.disabled = !plans.recommended || recommendationApplied;
-      recommendedButton.onclick = () => applyAndVerify(() => {
+      recommendedButton.onclick = () => applyAndVerify(async (operation) => {
         for (const symbol of plans.recommended?.dependencySymbols || []) catalogDependencySymbols.add(symbol);
         for (const step of recommendationActions) {
+          await operation.checkpoint();
           const value = step.value || 'n';
           if ((menuValues.get(step.symbol) ?? 'n') === value) continue;
           applyCatalogIntent(menuOptionBySymbol.get(step.symbol) || { symbol: step.symbol },

@@ -202,8 +202,8 @@ function clearImportedWorkspace() {
   $('importUnknownBox').hidden = true;
   updateMenuconfigOverviewVisibility();
 }
-function resetImportedChanges() {
+async function resetImportedChanges() {
   if (!state.importedConfig) return;
-  restoreSelections(state.importedConfig, null);
+  await withUiOperation(t('busy.import'), (operation) => restoreSelections(state.importedConfig, null, operation));
   showToast(t('runtime.ad61809aa910'));
 }

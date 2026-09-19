@@ -1404,6 +1404,41 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
 .font-reset { flex: none; }
 
 .hidden-package-option { border-left: 3px solid var(--warn); }
+/* Operation feedback does not own a backdrop or lock document scrolling. */
+.operation-status {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  top: max(18px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 16px 20px;
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  color: var(--content-strong);
+  box-shadow: var(--elevation-3);
+  pointer-events: none;
+}
+.operation-status[hidden] { display: none; }
+.operation-message, .operation-hint { display: block; overflow-wrap: anywhere; }
+.operation-hint { color: var(--content-muted); font-size: var(--font-size-meta, 13px); margin-top: 4px; }
+.operation-spinner {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--accent-surface);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: operation-spin .8s linear infinite;
+}
+.ui-operation-busy { cursor: progress; }
+@keyframes operation-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .operation-spinner { animation: none; } }
 
 @media(min-width:641px) and (max-width:960px){
   .catalog-overview-row{grid-template-columns:max-content minmax(0,1fr);grid-template-rows:auto auto auto}

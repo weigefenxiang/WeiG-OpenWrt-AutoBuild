@@ -10,6 +10,7 @@ import { gunzipSync } from 'node:zlib';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { evaluateNativeMakeGraph, inspectNativeClosure } from './lib/native-make-graph.mjs';
 import { createCatalogModel, evaluateCompatibilityRules, normalizeCompatibilityDocument,
   evaluateExpressionState, parseConfigDocument } from '../site/wrt/lib/catalog-engine.js';
 
@@ -784,241 +785,13 @@ function loadPackageGraph(upstreamDir, args) {
   if (!packages.size) {
     fail(`Upstream package metadata contains no package records: ${metadataPath}`);
   }
-  const providers = new Map();
-  for (const record of packages.values()) {
-    for (const provided of record.provides) {
-      const rows = providers.get(provided) || [];
-      rows.push(record.name);
-      providers.set(provided, rows);
-    }
-  }
-  for (const [name, rows] of providers) providers.set(name, unique(rows).sort());
-  // Source compile targets are not virtual runtime providers. Native
-  // package-metadata.pl emits one compile target per Source-Makefile and
-  // accumulates its outputs' dependency lines independently of installation.
-  const sources = new Map(), sourceTargets = new Map();
-  for (const record of packages.values()) {
-    for (const makefile of record.sourceMakefiles) {
-      const key = `@source/${makefile}`;
-      let source = sources.get(key);
-      if (!source) {
-        source = { name: key, produces: new Set(), makefile };
-        const sourceRecord = source;
-        Object.defineProperties(source, {
-          depends: { get: () => [...sourceRecord.produces].flatMap((name) => packages.get(name)?.depends || []) },
-          dependencyErrors: { get: () => [...sourceRecord.produces].flatMap((name) => packages.get(name)?.dependencyErrors || []) },
-        });
-        sources.set(key, source);
-      }
-      source.produces.add(record.name);
-      for (const name of record.sourceNames) {
-        const targets = sourceTargets.get(name) || new Set();
-        targets.add(key); sourceTargets.set(name, targets);
-      }
-    }
-  }
   const parseErrors = [...packages.values()].flatMap((record) =>
     record.dependencyErrors.map((error) => ({ package: record.name, ...error })));
-  return { packages, providers, sources, sourceTargets,
+  return { packages,
     parseErrors, metadata: { ...metadata,
     sha256: sha256(readFileSync(metadataPath)), parseErrors } };
 }
 
-function dependencyCandidates(group, graph) {
-  const candidates = [];
-  for (const name of group) {
-    if (group.domain === 'source-build') {
-      candidates.push(...(graph.sourceTargets?.get(name) || []));
-      continue;
-    }
-    if (graph.packages.has(name)) candidates.push(name);
-    for (const provider of graph.providers.get(name) || []) candidates.push(provider);
-  }
-  return unique(candidates);
-}
-
-function dependencyUnknowns(group, graph) {
-  if (group.domain === 'source-build') return group.filter((name) => !graph.sourceTargets?.get(name)?.size);
-  return group.filter((name) => !graph.packages.has(name) && !(graph.providers.get(name) || []).length);
-}
-
-function resolveDependencyGroup(group, graph, active, values = new Map()) {
-  const condition = evaluateCondition(group?.condition, values);
-  if (condition === false) return { status: 'skipped', group, reason: 'dependency-selector-false' };
-  if (condition === null) {
-    return { status: 'inconclusive', group, reason: 'dependency-selector-unresolved', condition: group?.condition };
-  }
-  const candidates = dependencyCandidates(group, graph);
-  const unknown = dependencyUnknowns(group, graph);
-  if (!candidates.length) {
-    return { status: 'inconclusive', group, reason: 'dependency-package-metadata-missing', unknown };
-  }
-  if (group.domain === 'source-build') {
-    if (unknown.length || group.some((name) => graph.sourceTargets?.get(name)?.size !== 1)) {
-      return { status: 'inconclusive', candidates, unknown, group, reason: 'build-source-metadata-unresolved' };
-    }
-    return { status: 'resolved', candidates, group, selected: 'native-source-target' };
-  }
-  const activeCandidates = candidates.filter((candidate) => active.has(candidate));
-  // An absent alternative is still meaningful: silently dropping it can turn
-  // `failed||safe` into a single-provider edge when the metadata is partial.
-  // An explicitly active missing package is always inconclusive.  When a
-  // known provider is selected, missing alternatives still remain unresolved
-  // metadata: dropping them would make the result depend on a partial graph.
-  const activeUnknown = unknown.filter((name) => active.has(name));
-  if (activeUnknown.length) {
-    return { status: 'inconclusive', candidates, unknown, activeUnknown, group,
-      reason: 'active-alternative-package-metadata-missing' };
-  }
-  if (activeCandidates.length) {
-    if (unknown.length) return { status: 'inconclusive', candidates, unknown, group,
-      reason: 'alternative-package-metadata-missing' };
-    return { status: 'resolved', candidates: activeCandidates, group, selected: 'active-config' };
-  }
-  if (unknown.length) {
-    return { status: 'inconclusive', candidates, unknown, group,
-      reason: 'alternative-package-metadata-missing' };
-  }
-  if (candidates.length === 1) return { status: 'resolved', candidates, group, selected: 'single-provider' };
-  return { status: 'inconclusive', candidates, group, reason: 'or-provider-selection-unresolved' };
-}
-
-function buildReverseCandidates(target, graph) {
-  const reverse = new Map();
-  for (const record of [...graph.packages.values(), ...(graph.sources?.values() || [])]) {
-    for (const produced of record.produces || []) {
-      if (target && target !== produced) continue;
-      const rows = reverse.get(produced) || [];
-      rows.push({ package: record.name, group: [produced], candidates: [produced] });
-      reverse.set(produced, rows);
-    }
-    for (const group of compileDependencies(record, graph)) {
-      const candidates = dependencyCandidates(group, graph);
-      if (target && !candidates.includes(target)) continue;
-      for (const candidate of target ? [target] : candidates) {
-        const rows = reverse.get(candidate) || [];
-        rows.push({ package: record.name, group, candidates });
-        reverse.set(candidate, rows);
-      }
-    }
-  }
-  return reverse;
-}
-
-function compileDependencies(record, graph) {
-  if (record.produces || !record.sourceMakefiles?.size || !graph.sources) return record.depends;
-  return [...record.sourceMakefiles].flatMap((makefile) =>
-    graph.sources.get(`@source/${makefile}`)?.depends || record.depends);
-}
-
-function nativeVariantSelected(name, graph, active) {
-  const record = graph.packages.get(name);
-  if (!record?.variant || active.has(name)) return true;
-  const siblings = [...(record.sourceMakefiles || [])].flatMap((makefile) =>
-    [...(graph.sources?.get(`@source/${makefile}`)?.produces || [])].map((name) => graph.packages.get(name)));
-  const selected = new Set(siblings.filter((row) => row?.variant && active.has(row.name)).map((row) => row.variant));
-  let defaultVariant;
-  for (const sibling of siblings) if (sibling?.variant && (!defaultVariant || sibling.variantDefault)) {
-    defaultVariant = sibling.variant;
-  }
-  if (!selected.size && defaultVariant) selected.add(defaultVariant);
-  return selected.has(record.variant);
-}
-
-function findPathsToTarget(target, graph, active, values = new Map()) {
-  const reverse = buildReverseCandidates('', graph);
-  const candidates = new Set();
-  const queue = [target];
-  const seen = new Set();
-  while (queue.length) {
-    const current = queue.shift();
-    if (seen.has(current)) continue;
-    seen.add(current);
-    for (const row of reverse.get(current) || []) {
-      if (!seen.has(row.package)) queue.push(row.package);
-      if (active.has(row.package)) candidates.add(row.package);
-    }
-  }
-  for (const root of active.keys()) if (root === target) candidates.add(root);
-
-  const paths = [];
-  const unresolved = [];
-  const visiting = new Set();
-  function visit(name, path) {
-    if (name === target && nativeVariantSelected(target, graph, active)) {
-      paths.push([...path, name]);
-      return 'reachable';
-    }
-    const record = graph.packages.get(name) || graph.sources?.get(name);
-    if (!record) {
-      unresolved.push({ path: [...path, name], reason: 'active-package-metadata-missing' });
-      return 'inconclusive';
-    }
-    if (record.produces?.has(target) && nativeVariantSelected(target, graph, active)) {
-      paths.push([...path, name, target]);
-      return 'reachable';
-    }
-    if (visiting.has(name)) return 'not-reachable';
-    visiting.add(name);
-    let status = 'not-reachable';
-    for (const group of compileDependencies(record, graph)) {
-      const resolved = resolveDependencyGroup(group, graph, active, values);
-      if (resolved.status === 'skipped') continue;
-      if (resolved.status === 'inconclusive') {
-        unresolved.push({ path: [...path, name], group, reason: resolved.reason, candidates: resolved.candidates });
-        status = 'inconclusive';
-        continue;
-      }
-      for (const candidate of resolved.candidates) {
-        const child = visit(candidate, [...path, name]);
-        if (child === 'reachable') status = 'reachable';
-        else if (child === 'inconclusive' && status !== 'reachable') status = 'inconclusive';
-      }
-    }
-    visiting.delete(name);
-    return status;
-  }
-  let overall = 'not-reachable';
-  for (const root of candidates) {
-    const result = visit(root, []);
-    if (result === 'reachable') overall = 'reachable';
-    else if (result === 'inconclusive' && overall !== 'reachable') overall = 'inconclusive';
-  }
-  return { status: overall, candidates: [...candidates].sort(), paths, unresolved, reverseEdges: reverse.get(target) || [] };
-}
-
-function unresolvedActiveDependencyGraph(graph, active, values = new Map()) {
-  const unresolved = [];
-  const visited = new Set();
-  function visit(name, path) {
-    if (visited.has(name)) return;
-    visited.add(name);
-    const record = graph.packages.get(name) || graph.sources?.get(name);
-    if (!record) {
-      unresolved.push({ path: [...path, name], reason: 'active-package-metadata-missing' });
-      return;
-    }
-    const sourceErrors = !record.produces && graph.sources && record.sourceMakefiles?.size
-      ? [...record.sourceMakefiles].flatMap((makefile) =>
-        graph.sources.get(`@source/${makefile}`)?.dependencyErrors || record.dependencyErrors || [])
-      : record.dependencyErrors || [];
-    for (const error of sourceErrors) {
-      unresolved.push({ ...error, path: [...path, name],
-        reason: 'upstream-package-dependency-syntax-unresolved', syntaxReason: error.reason });
-    }
-    for (const group of compileDependencies(record, graph)) {
-      const resolved = resolveDependencyGroup(group, graph, active, values);
-      if (resolved.status === 'skipped' || resolved.status === 'resolved') {
-        for (const candidate of resolved.candidates || []) visit(candidate, [...path, name]);
-      } else {
-        unresolved.push({ path: [...path, name], group, domain: group.domain || 'package', reason: resolved.reason,
-          candidates: resolved.candidates, unknown: resolved.unknown, condition: resolved.condition });
-      }
-    }
-  }
-  for (const root of active.keys()) visit(root, []);
-  return unresolved;
-}
 
 function upstreamCommit(upstreamDir, args, identity) {
   const expected = text(args['source-commit'] || identity.sourceCommit).toLowerCase();
@@ -1068,11 +841,12 @@ export function verifyBuildClosure({ document, identity, graph, active, configVa
     }));
     return output;
   }
-  const activeGraphUnresolved = unresolvedActiveDependencyGraph(graph, active, values || new Map());
+  const nativeClosure = inspectNativeClosure(graph, active, applicable.packages);
+  const activeGraphUnresolved = nativeClosure.unresolved;
+  if (graph.native) output.nativeMake = graph.native.proof;
   if (activeGraphUnresolved.length) output.activeGraphUnresolved = activeGraphUnresolved;
-  for (const target of applicable.packages) {
-    const check = findPathsToTarget(target, graph, active, values || new Map());
-    output.checks.push({ target, ...check });
+  for (const check of nativeClosure.checks) {
+    output.checks.push(check);
     if (check.status === 'reachable') output.result = 'fail';
     else if (check.status === 'inconclusive' && output.result !== 'fail') output.result = 'inconclusive';
   }
@@ -1129,20 +903,25 @@ export async function main(argv = process.argv.slice(2)) {
   let graph;
   try {
     graph = loadPackageGraph(upstreamDir, args);
+    graph.native = evaluateNativeMakeGraph({ graph, configValues: rawValues, configPath,
+      packageDepsPath: text(args['package-deps']) || join(upstreamDir, 'tmp', '.packagedeps'),
+      ...(args.make ? { make: args.make } : {}),
+    });
   } catch (error) {
     const metadataPath = text(args['package-info']) || join(upstreamDir, 'tmp', '.packageinfo');
+    const reason = graph ? 'upstream-native-build-graph-unavailable' : 'upstream-package-metadata-unavailable';
     const output = {
       schema: 1,
       result: 'inconclusive',
-      reason: 'upstream-package-metadata-unavailable',
+      reason,
       identity,
       catalog,
       applicable: {
         packages: [], rules: [], skipped: [],
-        unresolved: [{ reason: 'upstream-package-metadata-unavailable', message: error.message }],
+        unresolved: [{ reason, message: error.message }],
       },
-      metadata: { path: metadataPath, exists: existsSync(metadataPath), blocks: 0 },
-      availablePackageCount: 0,
+      metadata: graph?.metadata || { path: metadataPath, exists: existsSync(metadataPath), blocks: 0 },
+      availablePackageCount: graph?.packages.size || 0,
       activeRoots: [...active.keys()].sort(),
       checks: [],
     };

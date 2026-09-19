@@ -77,6 +77,7 @@ const regressionTests = [
   'test-theme-bootstrap.mjs',
   'test-site-css-generator.mjs',
   'test-ui-modules.mjs',
+  'test-ui-operation.mjs',
   'test-ui-viewport-geometry.mjs',
   'test-build-identity.mjs',
   'test-build-admission.mjs',

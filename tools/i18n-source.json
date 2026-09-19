@@ -1,6 +1,10 @@
 {
  "_note": "English is the canonical UI language. Keep {x} placeholders unchanged. Generated bundles are written to site/wrt/data/i18n/ by tools/gen-i18n.mjs.",
  "strings": {
+  "busy.import": "Loading configuration…",
+  "busy.processing": "Processing configuration…",
+  "busy.progress": "Restoring selections {current}/{total}…",
+  "busy.scroll": "You can scroll. Configuration controls will unlock when this finishes.",
   "configuration.removeInactive": "Remove inactive value",
   "configuration.inactiveInput": "The current Kconfig dependency or visibility conditions do not allow editing this value.",
   "configuration.applyCustomValues": "Apply custom values",

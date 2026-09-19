@@ -2,6 +2,10 @@
  "version": 2,
  "language": "en",
  "strings": {
+  "busy.import": "Loading configuration…",
+  "busy.processing": "Processing configuration…",
+  "busy.progress": "Restoring selections {current}/{total}…",
+  "busy.scroll": "You can scroll. Configuration controls will unlock when this finishes.",
   "configuration.removeInactive": "Remove inactive value",
   "configuration.inactiveInput": "The current Kconfig dependency or visibility conditions do not allow editing this value.",
   "configuration.applyCustomValues": "Apply custom values",
