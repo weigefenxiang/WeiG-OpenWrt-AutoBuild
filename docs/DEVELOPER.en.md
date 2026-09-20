@@ -8,6 +8,23 @@
 - `package-info.txt.gz` and `package-deps.mk.gz` preserve the native inputs. The report records input hashes, evaluated roots, typed nodes and variants alongside the exact request identity. Offline CLI replay accepts `--package-info`, `--package-deps` and optional `--make`; GNU Make must be available. Local regression uses `WEIG_MAKE` when the executable is not named `make` or is outside PATH. No recipe, Defconfig, download or compilation is invoked by the adapter.
 - Historical reports without native metadata can prove condition evaluation regressions but not complete graph replay. Do not equate contract tests, Pages deployment or browser success with successful firmware compilation.
 
+## Catalog asset identity at the Worker boundary
+
+Channel publications carry `assetRef` and code provenance; immutable asset manifests
+contain the data contracts without a self-referential Git SHA. Full, root-only, and
+translation publishers must clear inherited publication fields before committing
+assets, then stamp and verify the channel wrapper. Snapshot promotion keeps the
+same assetRef and verifies manifest content, not just commit existence.
+
+The Worker reads index and compatibility bytes at the request's immutable revision.
+Unstamped historical/new manifests remain supported; an explicit conflicting
+assetRef, source commit mismatch, or incorrect compressed hash remains an error.
+`tools/test-build-closure.mjs` exercises the actual network-reader path with mocked
+transport, including Raw fallback and rejection cases, alongside the native Make
+fixture. These tests are not firmware builds. Never silently redirect a historical
+request to another snapshot; importing its configuration and generating a new
+request is the supported migration path.
+
 ## Responsive configuration operations
 
 - Default-worklist dependency structure is cached in a WeakMap per immutable model, never current resolved values. Every intent still runs the same shared Kconfig evaluation in the same order. A new snapshot/model gets a new index.

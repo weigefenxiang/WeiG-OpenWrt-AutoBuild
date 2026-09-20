@@ -79,6 +79,7 @@ The user build tag is preserved and `#161` is the original Build Issue. All down
 
 ## Data and compatibility
 
+- A Catalog channel publication points to an immutable asset commit. That commit's manifest need not carry `assetRef`; new producers keep channel provenance outside the asset manifest. An explicit conflicting identity is still rejected. Importing historical configurations remains supported, but rerunning a failed job keeps its original pinned request: reload the configuration on the updated site and generate a new request to use a repaired snapshot.
 - Browser and Worker share Catalog graph selection and validation: prefer advertised schema-5 `graphCompact`, otherwise use the legacy graph. The decoded payload owns its relation schema; an optional index declaration must agree. Worker reconstruction still requires complete typed relations and exact source/hash/size identity. Historical configuration import remains supported. If request validation fails before an artifact identity exists, the run retains diagnostic logs without attempting firmware publication.
 - The current Source/Branch menu and language load first. Applications, hidden options, help, compatibility, and mirror rules follow the idle queue in `catalog.loading` from `site/wrt/config/site.json`.
 - Curated IDs, localized descriptions, and cross-source size observations live in Catalog. Equal IDs are one application. Sizes use three significant digits; missing reliable observations remain explicitly unknown.
