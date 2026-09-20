@@ -4,8 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { activePackages, bindConditionContext, classifyActivePackages, loadPackageGraph,
-  parsePackageInfo, verifyBuildClosure } from './verify-build-closure.mjs';
+  main, parsePackageInfo, verifyBuildClosure } from './verify-build-closure.mjs';
 import { evaluateNativeMakeGraph } from './lib/native-make-graph.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -131,6 +133,49 @@ try {
   let cli = spawnSync(process.execPath, cliArgs, { encoding: 'utf8' });
   assert.equal(cli.status, 0, cli.stdout + cli.stderr);
   assert.equal(JSON.parse(readFileSync(join(directory, 'report.json'))).nativeMake.authority, 'upstream-.packagedeps/gnu-make');
+  // Exercise the actual Worker network reader, not --compatibility fixture mode.
+  // Immutable asset commits have no self-referential publication SHA; explicit
+  // stale identities must still fail before any package graph is consumed.
+  const compressed = gzipSync(Buffer.from(JSON.stringify(document)));
+  const contract = { asset: 'compatibility.json.gz', schema: document.schema, rules: document.rules.length,
+    hash: createHash('sha256').update(compressed).digest('hex'), bytes: compressed.length,
+    jsonBytes: Buffer.byteLength(JSON.stringify(document)) };
+  const assetIndex = { schema: 2, sources: [{ id: identity.source, branches: [{ id: 'main', branch: 'main',
+    commit: identity.sourceCommit }] }], assets: { compatibility: contract } };
+  const remoteArgs = cliArgs.slice(1);
+  remoteArgs.splice(remoteArgs.indexOf('--compatibility'), 2);
+  remoteArgs.push('--catalog-repository', identity.repository);
+  const savedFetch = globalThis.fetch;
+  let servedIndex = assetIndex;
+  let servedAsset = compressed;
+  let rawFallback = false;
+  const requests = [];
+  globalThis.fetch = async url => {
+    requests.push(String(url));
+    assert(String(url).includes(identity.revision), 'Worker must fetch immutable request revision, never a moving channel');
+    if (rawFallback && String(url).includes('cdn.jsdelivr.net')) return new Response('', { status: 503 });
+    return new Response(String(url).endsWith('/index.json') ? JSON.stringify(servedIndex) : servedAsset);
+  };
+  try {
+    for (const explicitIdentity of [false, true]) {
+      servedIndex = { ...assetIndex, ...(explicitIdentity ? { assetRef: identity.revision, assetRefType: 'git-commit' } : {}) };
+      assert.equal((await main(remoteArgs)).result, 'pass', 'valid new/legacy immutable manifests remain usable');
+    }
+    rawFallback = true;
+    assert.equal((await main(remoteArgs)).result, 'pass');
+    assert(requests.some(url => url.includes('raw.githubusercontent.com')));
+    rawFallback = false;
+    servedIndex = { ...assetIndex, assetRef: '3'.repeat(40) };
+    await assert.rejects(main(remoteArgs), /assetRef does not match/);
+    servedIndex = { ...assetIndex, sources: [{ id: identity.source, branches: [{ id: 'main', branch: 'main', commit: '4'.repeat(40) }] }] };
+    await assert.rejects(main(remoteArgs), /Source\/Branch commit does not match/);
+    servedIndex = assetIndex;
+    servedAsset = Buffer.from(compressed);
+    servedAsset[0] ^= 1;
+    await assert.rejects(main(remoteArgs), /SHA-256 mismatch/);
+  } finally {
+    globalThis.fetch = savedFetch;
+  }
   rmSync(depsPath);
   cli = spawnSync(process.execPath, cliArgs, { encoding: 'utf8' });
   assert.equal(cli.status, 2, 'missing native graph is inconclusive with an evidence report');
