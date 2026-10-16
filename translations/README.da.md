@@ -1,0 +1,111 @@
+# Wei.G OpenWrt – tilpas din firmware online
+
+Vælg enhed og pakker i browseren, send din anmodning via GitHub, og lad skyen bygge OpenWrt-firmwaren.
+
+<p>
+  <img src="https://img.shields.io/badge/-JavaScript-F7DF1E?logo=javascript&logoColor=black" alt="JavaScript">
+  <img src="https://img.shields.io/badge/-HTML5-E34F26?logo=html5&logoColor=white" alt="HTML5">
+  <img src="https://img.shields.io/badge/-CSS3-1572B6?logo=css3&logoColor=white" alt="CSS3">
+  <img src="https://img.shields.io/badge/-Node.js-339933?logo=nodedotjs&logoColor=white" alt="Node.js">
+  <img src="https://img.shields.io/badge/-Shell-8A2BE2?logo=gnubash&logoColor=white" alt="Shell">
+</p>
+
+**📱 Mobilvenlig · 🌙 Lyst og mørkt tema · ✅ Flere OpenWrt-baserede systemer**
+
+**[🌐 Åbn konfiguratoren](https://www.weigshare.com/wrt/) · [⬇️ Hent firmware](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
+
+**Understøttede systemer:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+
+**Sprog:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
+
+<details>
+<summary><b>🔤 Flere sprog</b></summary>
+
+<div dir="ltr">
+[Asturianu](README.ast.md) &lrm;·&lrm; [Azərbaycanca](README.az.md) &lrm;·&lrm; [Беларуская](README.be.md) &lrm;·&lrm; [Български](README.bg.md) &lrm;·&lrm; [বাংলা](README.bn.md) &lrm;·&lrm; [বাংলা (বাংলাদেশ)](README.bn-BD.md) &lrm;·&lrm; [Català](README.ca.md) &lrm;·&lrm; [Čeština](README.cs.md) &lrm;·&lrm; **Dansk** &lrm;·&lrm; [Ελληνικά](README.el.md) &lrm;·&lrm; [Suomi](README.fi.md) &lrm;·&lrm; [Filipino](README.fil.md) &lrm;·&lrm; [Gaeilge](README.ga.md) &lrm;·&lrm; [हिन्दी](README.hi.md) &lrm;·&lrm; [Magyar](README.hu.md) &lrm;·&lrm; [Bahasa Indonesia](README.id.md) &lrm;·&lrm; [Italiano](README.it.md) &lrm;·&lrm; [ქართული](README.ka.md) &lrm;·&lrm; [ລາວ](README.lo.md) &lrm;·&lrm; [Lietuvių](README.lt.md) &lrm;·&lrm; [Latviešu](README.lv.md) &lrm;·&lrm; [മലയാളം](README.ml.md) &lrm;·&lrm; [मराठी](README.mr.md) &lrm;·&lrm; [Bahasa Melayu](README.ms.md) &lrm;·&lrm; [Norsk bokmål](README.nb-NO.md) &lrm;·&lrm; [Nederlands](README.nl.md) &lrm;·&lrm; [Polski](README.pl.md) &lrm;·&lrm; [Português (Brasil)](README.pt-BR.md) &lrm;·&lrm; [Română](README.ro.md) &lrm;·&lrm; [Slovenčina](README.sk.md) &lrm;·&lrm; [Svenska](README.sv.md) &lrm;·&lrm; [தமிழ்](README.ta.md) &lrm;·&lrm; [Türkçe](README.tr.md) &lrm;·&lrm; [Українська](README.uk.md) &lrm;·&lrm; [Màaya t'aan](README.yua.md) &lrm;·&lrm; [&#x2067;العربية&#x2069;](README.ar.md) &lrm;·&lrm; [&#x2067;فارسی&#x2069;](README.fa.md) &lrm;·&lrm; [&#x2067;עברית&#x2069;](README.he.md) &lrm;·&lrm; [&#x2067;اردو&#x2069;](README.ur.md)
+</div>
+
+</details>
+
+## Forhåndsvisning af brugerfladen
+
+<p align="center">
+  <img src="../docs/images/wrt-desktop.png" alt="Wei.G OpenWrt desktop" width="78.65%"><img src="../docs/images/wrt-mobile.png" alt="Wei.G OpenWrt mobile" width="21.30%">
+</p>
+
+## Kom i gang: firmware i tre trin
+
+**📖 [Illustreret trin-for-trin-vejledning](https://weigshare.com/posts/WeiG-OpenWrt-AutoBuild-Guide/)**
+
+### 1. Vælg kildekode, enhed og pakker
+
+Åbn [**【Onlinekonfiguratoren】**](https://www.weigshare.com/wrt/) og vælg **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Markér de ønskede pakker, og tilpas eventuelt **【Advanced menuconfig】**, tidszone og tema. Via **【Indlæs konfiguration】** kan du importere `build-request.json`, `.config` eller `config.buildinfo`. Kontrollér valgene, før du fortsætter.
+
+### 2. Send byggeanmodningen via GitHub
+
+[**【Log først ind på GitHub】**](https://github.com/login). Gå tilbage til [**【Konfiguratoren】**](https://www.weigshare.com/wrt/) og vælg **【Send cloud-build】** → **【Hent anmodning og åbn GitHub】**. Browseren henter en `*.json`-fil og åbner GitHub Issue-formularen. På computeren trækker du JSON-filen til formularfeltet og klikker **【Submit new issue】**. Botten svarer med et link til byggejobbet.
+
+<details>
+<summary><strong>Vigtige oplysninger (fold ud)</strong></summary>
+
+> Brug **【Test】** i den flydende værktøjslinje nederst til højre til at tjekke konfiguration og kompatibilitet. Tjekket køres også automatisk, når anmodningen oprettes.
+>
+> Hvis der er problemer, kan du bruge den foreslåede løsning eller vælge **【Behold og fortsæt alligevel】**. Det løser ikke fejl i upstream-koden og garanterer ikke et vellykket build.
+>
+> Brug GitHub Issue-siden, som konfiguratoren selv åbner, så forudfyldte oplysninger ikke går tabt.
+>
+> At hente JSON-filen alene **starter ikke et build**. Du skal indsende Issue.
+>
+> Del aldrig rigtige adgangskoder, tokens eller andre hemmeligheder i offentlige Issues, anmodninger eller logfiler.
+
+</details>
+
+### 3. Hent firmwaren
+
+Brug linket i dit Issue eller åbn [**【Actions → Firmware Download】**](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml). Efter et vellykket build kan firmwaren hentes nederst under **【Artifacts】**. `CONFIG` indeholder opsætning, og `BUILD-LOGS` indeholder fejllogfiler; **ingen af dem er firmware, du kan flashe**. Filerne gemmes i **60 dage**.
+
+## Ofte stillede spørgsmål
+
+<details>
+<summary>Hvorfor løber RootFS tør for plads med mange pakker?</summary>
+
+Pakker og afhængigheder kan fylde mere end RootFS-partitionen. Hvis enheden tillader det, kan du finde `TARGET_ROOTFS_PARTSIZE` under **【Advanced menuconfig】** → **【Target Images】** og eksempelvis vælge 512 eller 1024 MiB. På mange fysiske routere er flash-partitionerne faste; fjern da pakker. Se [Issue #233](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/issues/233).
+
+</details>
+
+<details>
+<summary>Hvorfor stopper et build på grund af tidsgrænsen?</summary>
+
+Et Job på GitHub-hosted Runner har normalt højst seks timer. Projektet har en grænse på **350 minutter** og stopper udførelsen efter **335 minutter** for at gemme logfiler. Det er **et stop, ikke en pause, der kan genoptages**.
+
+</details>
+
+<details>
+<summary>Hvordan finder jeg årsagen til en mislykket build?</summary>
+
+Hent `BUILD-LOGS` under **【Artifacts】** og læs `00-SUMMARY.txt` først. Undersøg pladsen i RootFS, tidsgrænsen samt fejl i kildekode eller afhængigheder. Se [Issue #233](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/issues/233). Opret et **nyt Issue** efter ændringer.
+
+</details>
+
+<details>
+<summary>Kan jeg genkøre et gammelt Run med ny konfiguration?</summary>
+
+Nej. Et gammelt Run bruger fortsat den oprindelige anmodning, kode og data. Indlæs den nye opsætning i konfiguratoren, og send en ny anmodning.
+
+</details>
+
+## Udvikling og udrulning
+
+Almindelige brugere behøver hverken klone lageret eller installere Node.js. Se den engelske [udviklervejledning](../docs/DEVELOPER.md) og [arkitekturbeskrivelse](ARCHITECTURE/ARCHITECTURE.md).
+
+## Menuconfig Catalog
+
+[Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) leverer data om upstream-grene, enhedsprofiler, pakker, Kconfig-afhængigheder og kompatibilitet til både webappen og build-systemet.
+
+## Tak
+
+Tak til [OpenWrt](https://openwrt.org/), [ImmortalWrt](https://immortalwrt.org/), [Lean LEDE](https://github.com/coolsnowwolf/lede), [iStoreOS](https://github.com/istoreos/istoreos), [Lienol](https://github.com/Lienol/openwrt), [hanwckf MT798x](https://github.com/hanwckf/immortalwrt-mt798x) [og alle pakkeforfattere og bidragydere](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog).
+
+## Licens
+
+Projektet udgives under [GNU GPLv3 eller senere](../LICENSE). Ophavsret og kontakt findes i [NOTICE](../NOTICE).

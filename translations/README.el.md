@@ -1,0 +1,111 @@
+# Wei.G OpenWrt — προσαρμόστε το firmware online
+
+Επιλέξτε συσκευή και πακέτα στον browser, υποβάλετε αίτημα στο GitHub και αφήστε το cloud να μεταγλωττίσει το firmware OpenWrt.
+
+<p>
+  <img src="https://img.shields.io/badge/-JavaScript-F7DF1E?logo=javascript&logoColor=black" alt="JavaScript">
+  <img src="https://img.shields.io/badge/-HTML5-E34F26?logo=html5&logoColor=white" alt="HTML5">
+  <img src="https://img.shields.io/badge/-CSS3-1572B6?logo=css3&logoColor=white" alt="CSS3">
+  <img src="https://img.shields.io/badge/-Node.js-339933?logo=nodedotjs&logoColor=white" alt="Node.js">
+  <img src="https://img.shields.io/badge/-Shell-8A2BE2?logo=gnubash&logoColor=white" alt="Shell">
+</p>
+
+**📱 Φιλικό σε κινητά · 🌙 Φωτεινό και σκοτεινό θέμα · ✅ Πολλές εκδόσεις OpenWrt**
+
+**[🌐 Άνοιγμα εργαλείου διαμόρφωσης](https://www.weigshare.com/wrt/) · [⬇️ Λήψη firmware](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
+
+**Υποστηριζόμενες διανομές:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+
+**Γλώσσα:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
+
+<details>
+<summary><b>🔤 Περισσότερες γλώσσες</b></summary>
+
+<div dir="ltr">
+[Asturianu](README.ast.md) &lrm;·&lrm; [Azərbaycanca](README.az.md) &lrm;·&lrm; [Беларуская](README.be.md) &lrm;·&lrm; [Български](README.bg.md) &lrm;·&lrm; [বাংলা](README.bn.md) &lrm;·&lrm; [বাংলা (বাংলাদেশ)](README.bn-BD.md) &lrm;·&lrm; [Català](README.ca.md) &lrm;·&lrm; [Čeština](README.cs.md) &lrm;·&lrm; [Dansk](README.da.md) &lrm;·&lrm; **Ελληνικά** &lrm;·&lrm; [Suomi](README.fi.md) &lrm;·&lrm; [Filipino](README.fil.md) &lrm;·&lrm; [Gaeilge](README.ga.md) &lrm;·&lrm; [हिन्दी](README.hi.md) &lrm;·&lrm; [Magyar](README.hu.md) &lrm;·&lrm; [Bahasa Indonesia](README.id.md) &lrm;·&lrm; [Italiano](README.it.md) &lrm;·&lrm; [ქართული](README.ka.md) &lrm;·&lrm; [ລາວ](README.lo.md) &lrm;·&lrm; [Lietuvių](README.lt.md) &lrm;·&lrm; [Latviešu](README.lv.md) &lrm;·&lrm; [മലയാളം](README.ml.md) &lrm;·&lrm; [मराठी](README.mr.md) &lrm;·&lrm; [Bahasa Melayu](README.ms.md) &lrm;·&lrm; [Norsk bokmål](README.nb-NO.md) &lrm;·&lrm; [Nederlands](README.nl.md) &lrm;·&lrm; [Polski](README.pl.md) &lrm;·&lrm; [Português (Brasil)](README.pt-BR.md) &lrm;·&lrm; [Română](README.ro.md) &lrm;·&lrm; [Slovenčina](README.sk.md) &lrm;·&lrm; [Svenska](README.sv.md) &lrm;·&lrm; [தமிழ்](README.ta.md) &lrm;·&lrm; [Türkçe](README.tr.md) &lrm;·&lrm; [Українська](README.uk.md) &lrm;·&lrm; [Màaya t'aan](README.yua.md) &lrm;·&lrm; [&#x2067;العربية&#x2069;](README.ar.md) &lrm;·&lrm; [&#x2067;فارسی&#x2069;](README.fa.md) &lrm;·&lrm; [&#x2067;עברית&#x2069;](README.he.md) &lrm;·&lrm; [&#x2067;اردو&#x2069;](README.ur.md)
+</div>
+
+</details>
+
+## Προεπισκόπηση περιβάλλοντος
+
+<p align="center">
+  <img src="../docs/images/wrt-desktop.png" alt="Wei.G OpenWrt desktop" width="78.65%"><img src="../docs/images/wrt-mobile.png" alt="Wei.G OpenWrt mobile" width="21.30%">
+</p>
+
+## Ξεκινήστε: firmware σε τρία βήματα
+
+**📖 [Πλήρης οδηγός με εικόνες](https://weigshare.com/posts/WeiG-OpenWrt-AutoBuild-Guide/)**
+
+### 1. Επιλέξτε πηγαίο κώδικα, συσκευή και πακέτα
+
+Ανοίξτε τον [**【Online διαμορφωτή】**](https://www.weigshare.com/wrt/) και επιλέξτε **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Σημειώστε τα απαιτούμενα πακέτα και ρυθμίστε, αν χρειάζεται, **【Advanced menuconfig】**, ζώνη ώρας και θέμα. Με το **【Φόρτωση ρυθμίσεων】** εισάγετε `build-request.json`, `.config` ή `config.buildinfo`. Ελέγξτε τις επιλογές σας.
+
+### 2. Υποβάλετε αίτημα μεταγλώττισης μέσω GitHub
+
+Πρώτα [**【συνδεθείτε στο GitHub】**](https://github.com/login), επιστρέψτε στον [**【Διαμορφωτή】**](https://www.weigshare.com/wrt/) και επιλέξτε **【Υποβολή cloud build】** → **【Λήψη αιτήματος και άνοιγμα GitHub】**. Ο browser κατεβάζει ένα `*.json` και ανοίγει τη φόρμα GitHub Issue. Στον υπολογιστή σύρετε το JSON στο πεδίο αιτήματος και πατήστε **【Submit new issue】**. Το bot απαντά με σύνδεσμο προς το build.
+
+<details>
+<summary><strong>Σημαντικές σημειώσεις (ανάπτυξη)</strong></summary>
+
+> Πατήστε **【Έλεγχος】** στην αιωρούμενη γραμμή κάτω δεξιά για να δείτε προβλήματα και προτάσεις συμβατότητας. Ο έλεγχος γίνεται επίσης αυτόματα κατά τη δημιουργία αιτήματος.
+>
+> Εάν εντοπιστούν προβλήματα, εφαρμόστε τις προτάσεις ή επιλέξτε **【Διατήρηση και αναγκαστική συνέχεια】**. Αυτό δεν διορθώνει σφάλματα του αρχικού κώδικα και το build μπορεί να αποτύχει.
+>
+> Χρησιμοποιήστε τη σελίδα GitHub Issue που ανοίγει αυτόματα ο διαμορφωτής, ώστε να διατηρηθούν τα προσυμπληρωμένα στοιχεία.
+>
+> Η λήψη του JSON χωρίς υποβολή Issue **δεν ξεκινά τη μεταγλώττιση**.
+>
+> Μη δημοσιεύετε πραγματικούς κωδικούς, tokens ή άλλα μυστικά σε δημόσια Issues ή αρχεία καταγραφής.
+
+</details>
+
+### 3. Κατεβάστε το firmware
+
+Ακολουθήστε τον σύνδεσμο του Issue ή ανοίξτε το [**【Actions → Firmware Download】**](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml). Όταν ολοκληρωθεί, κατεβάστε το firmware από το **【Artifacts】**. Τα `CONFIG` και `BUILD-LOGS` περιέχουν ρυθμίσεις και διαγνωστικά αρχεία, **όχι εικόνες firmware για εγκατάσταση**. Τα αρχεία διατηρούνται για **60 ημέρες**.
+
+## Συχνές ερωτήσεις
+
+<details>
+<summary>Γιατί δεν επαρκεί το RootFS με πολλά πακέτα;</summary>
+
+Τα πακέτα και οι εξαρτήσεις τους μπορεί να ξεπεράσουν το μέγεθος του RootFS. Εφόσον υποστηρίζεται από τη συσκευή, αλλάξτε το `TARGET_ROOTFS_PARTSIZE` στο **【Advanced menuconfig】** → **【Target Images】**, για παράδειγμα σε 512 ή 1024 MiB. Σε φυσικούς δρομολογητές η κατάτμηση flash ενδέχεται να είναι σταθερή: μειώστε τα πακέτα. Δείτε [Issue #233](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/issues/233).
+
+</details>
+
+<details>
+<summary>Γιατί σταματά μια μεγάλη μεταγλώττιση;</summary>
+
+Ένα Job στο GitHub-hosted Runner περιορίζεται συνήθως σε έξι ώρες. Το έργο ορίζει **350 λεπτά** και σταματά την εκτέλεση στα **335 λεπτά** για συλλογή logs. Πρόκειται για **τερματισμό, όχι παύση για συνέχιση αργότερα**.
+
+</details>
+
+<details>
+<summary>Πώς διερευνώ ένα αποτυχημένο build;</summary>
+
+Κατεβάστε το `BUILD-LOGS` από το **【Artifacts】** και διαβάστε πρώτα το `00-SUMMARY.txt`. Ελέγξτε RootFS, χρονικό όριο και σφάλματα στον κώδικα ή στις εξαρτήσεις. Δείτε [Issue #233](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/issues/233). Μετά τις διορθώσεις δημιουργήστε **νέο Issue**.
+
+</details>
+
+<details>
+<summary>Μπορώ να ξανατρέξω παλιό Run με νέες ρυθμίσεις;</summary>
+
+Όχι. Το παλιό Run χρησιμοποιεί το αρχικό αίτημα και τις κλειδωμένες εκδόσεις κώδικα και δεδομένων. Φορτώστε τις νέες ρυθμίσεις και στείλτε νέο αίτημα.
+
+</details>
+
+## Ανάπτυξη και εγκατάσταση
+
+Δεν χρειάζεται να κάνετε clone το repository ούτε να εγκαταστήσετε Node.js για χρήση μέσω browser. Τεχνικές λεπτομέρειες στα αγγλικά: [οδηγός ανάπτυξης](../docs/DEVELOPER.md) και [αρχιτεκτονική](ARCHITECTURE/ARCHITECTURE.md).
+
+## Menuconfig Catalog
+
+Το [Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) δημοσιεύει κλάδους πηγών, προφίλ συσκευών, πακέτα, εξαρτήσεις Kconfig και δεδομένα συμβατότητας για τον ιστότοπο και το σύστημα build.
+
+## Ευχαριστίες
+
+Ευχαριστούμε [OpenWrt](https://openwrt.org/), [ImmortalWrt](https://immortalwrt.org/), [Lean LEDE](https://github.com/coolsnowwolf/lede), [iStoreOS](https://github.com/istoreos/istoreos), [Lienol](https://github.com/Lienol/openwrt), [hanwckf MT798x](https://github.com/hanwckf/immortalwrt-mt798x) [και όλους τους δημιουργούς πακέτων και συνεργάτες](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog).
+
+## Άδεια χρήσης
+
+Το έργο διατίθεται με [GNU GPLv3 ή νεότερη](../LICENSE). Πνευματικά δικαιώματα και επικοινωνία: [NOTICE](../NOTICE).
