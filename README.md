@@ -2,7 +2,7 @@
 
 An online OpenWrt customizer and GitHub Actions build tool. The browser reads Source, Branch, Target/Profile, Kconfig, curated applications, package-size observations, and compatibility rules directly from [WeiG-OpenWrt-Menuconfig-Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog). AutoBuild no longer carries a second device, seed-config, or plugin database.
 
-**Language**: English · [简体中文](translations/README.zh-CN.md)
+**Language**: English · [简中](translations/README.zh-CN.md)
 
 - Customizer: [Weige Share](https://www.weigshare.com/wrt/)
 - Build repository: [WeiG-OpenWrt-AutoBuild](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild)
@@ -139,7 +139,7 @@ Open <http://localhost:8642/> and test Source/Branch switching, Target/Profile, 
 - Every AutoBuild modification must run `prepare`, which updates `VERSION` and `site-version.json` in Asia/Shanghai time.
 - After cloning, edit `site/wrt/config/site.json` for public-site defaults and `config/build.json` for build-side settings, then run `prepare`. Do not copy Catalog Source/Branch, Target/Profile, or package facts into this repository.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) and the [Developer Guide](docs/DEVELOPER.md).
+See [Architecture](docs/ARCHITECTURE.md) and the [Developer Guide](docs/DEVELOPER.md).
 
 ## License
 
