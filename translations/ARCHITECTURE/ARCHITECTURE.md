@@ -1,11 +1,17 @@
 # Project Architecture
 
-**Languages:** **English** · [简中](../translations/ARCHITECTURE/ARCHITECTURE.zh-CN.md) · 繁中 · Русский · Español · Português · 日本語 · 한국어 · Deutsch · Français · Tiếng Việt
+**Languages:** **English** · [简中](ARCHITECTURE.zh-CN.md) · 繁中 · Русский · Español · Português · 日本語 · 한국어 · Deutsch · Français · Tiếng Việt
 
 <details>
 <summary>🌐 More languages</summary>
 
-<bdi dir="rtl">العربية</bdi> · Asturianu · Azərbaycanca · Беларуская · Български · বাংলা · বাংলা (বাংলাদেশ) · Català · Čeština · Dansk · Ελληνικά · <bdi dir="rtl">فارسی</bdi> · Suomi · Filipino · Gaeilge · <bdi dir="rtl">עברית</bdi> · हिन्दी · Magyar · Bahasa Indonesia · Italiano · ქართული · ລາວ · Lietuvių · Latviešu · മലയാളം · मराठी · Bahasa Melayu · Norsk bokmål · Nederlands · Polski · Português (Brasil) · Română · Slovenčina · Svenska · தமிழ் · Türkçe · Українська · <bdi dir="rtl">اردو</bdi> · Màaya t'aan
+<div dir="ltr">
+Asturianu · Azərbaycanca · Беларуская · Български · বাংলা · বাংলা (বাংলাদেশ) · Català · Čeština · Dansk · Ελληνικά · Suomi · Filipino · Gaeilge · हिन्दी · Magyar · Bahasa Indonesia · Italiano · ქართული · ລາວ · Lietuvių · Latviešu · മലയാളം · मराठी · Bahasa Melayu · Norsk bokmål · Nederlands · Polski · Português (Brasil) · Română · Slovenčina · Svenska · தமிழ் · Türkçe · Українська · Màaya t'aan
+</div>
+
+<div dir="rtl">
+العربية · فارسی · עברית · اردو
+</div>
 
 </details>
 
@@ -27,7 +33,7 @@ flowchart LR
 
 **AutoBuild owns the workflow.** It presents the Catalog data, applies the shared native Kconfig evaluator to explicit user choices, previews compatible recommendations, exports the build request and dispatches it to the worker. AutoBuild must not maintain a second device matrix, package database, seed-config catalog or source-specific dependency engine.
 
-**The firmware worker executes rather than second-guesses.** It validates the request and pinned inputs, reconstructs the native Profile baseline plus semantic overrides, checks effective explicit overrides, and runs upstream build commands. Browser compatibility recommendations and an explicit decision to continue with risk are not silently overruled by an extra worker-side package compatibility gate. Refer to [Runtime configuration contract](RUNTIME-CONFIG-CONTRACT.md).
+**The firmware worker executes rather than second-guesses.** It validates the request and pinned inputs, reconstructs the native Profile baseline plus semantic overrides, checks effective explicit overrides, and runs upstream build commands. Browser compatibility recommendations and an explicit decision to continue with risk are not silently overruled by an extra worker-side package compatibility gate. Refer to [Runtime configuration contract](../../docs/RUNTIME-CONFIG-CONTRACT.md).
 
 ## 2. Repository layout
 
@@ -38,13 +44,13 @@ WeiG-OpenWrt-AutoBuild/
 ├── config/build.json                build-side configuration (never deployed as web assets)
 ├── config/build.schema.json
 ├── docs/
-│   ├── ARCHITECTURE.md              this English architecture guide
 │   ├── DEVELOPER.md                 English developer guide
 │   ├── DEVELOPER.zh-CN.md           Chinese developer guide
 │   └── RUNTIME-CONFIG-CONTRACT.md   execution and configuration invariants
 ├── translations/
 │   ├── README.zh-CN.md              Chinese project README
 │   └── ARCHITECTURE/
+│       ├── ARCHITECTURE.md          this English architecture guide
 │       └── ARCHITECTURE.zh-CN.md    Chinese architecture guide
 ├── site/wrt/
 │   ├── config/site.json             public site and firmware defaults
@@ -98,7 +104,7 @@ The user selects **Source → Branch → Target System → Subtarget → Target 
 
 - Native Kconfig symbol types, defaults, visibility, choices, dependencies and `select`/`imply` behavior are evaluated through the shared Catalog model. Explicit intent is kept distinct from automatically derived effects.
 - The browser can load an existing `build-request.json`, `.config` or `config.buildinfo`, but a fresh build must be exported from the current validated selection.
-- Selecting packages or importing a configuration does not automatically open compatibility recommendations. Explicit **Test (检)** and generation of the build request run the relevant consistency and scoped compatibility preflight.
+- Selecting packages or importing a configuration does not automatically open compatibility recommendations. Explicit **Test** and generation of the build request run the relevant consistency and scoped compatibility preflight.
 - Recommendations operate on the actual current selection; the user may apply a plan or explicitly **retain and force continue**. This preserves intent, not a guarantee that upstream compilation will succeed.
 - Package-size information is an estimate tied to exact architecture and native package versions. Unknown coverage is not treated as zero. Application-count and capacity warnings are advisory, not build gates.
 
@@ -133,4 +139,4 @@ node tools/dev-assistant.mjs verify
 
 The repository's `tools/check-all.mjs` and focused regressions verify contracts. Pass results from CI and Pages prove that the code and deployment checks passed; they are not evidence that every upstream Source/Branch/plugin combination has successfully compiled a firmware image.
 
-See the [Developer Guide](DEVELOPER.md), [Runtime configuration contract](RUNTIME-CONFIG-CONTRACT.md) and [Chinese architecture guide](../translations/ARCHITECTURE/ARCHITECTURE.zh-CN.md) for further context.
+See the [Developer Guide](../../docs/DEVELOPER.md), [Runtime configuration contract](../../docs/RUNTIME-CONFIG-CONTRACT.md) and [Chinese architecture guide](ARCHITECTURE.zh-CN.md) for further context.

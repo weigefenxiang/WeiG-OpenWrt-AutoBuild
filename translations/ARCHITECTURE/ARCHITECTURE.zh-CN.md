@@ -1,11 +1,17 @@
 # 项目结构与技术架构
 
-**语言：** [English](../../docs/ARCHITECTURE.md) · **简中** · 繁中 · Русский · Español · Português · 日本語 · 한국어 · Deutsch · Français · Tiếng Việt
+**语言：** [English](ARCHITECTURE.md) · **简中** · 繁中 · Русский · Español · Português · 日本語 · 한국어 · Deutsch · Français · Tiếng Việt
 
 <details>
 <summary>🌐 更多语言</summary>
 
-<bdi dir="rtl">العربية</bdi> · Asturianu · Azərbaycanca · Беларуская · Български · বাংলা · বাংলা (বাংলাদেশ) · Català · Čeština · Dansk · Ελληνικά · <bdi dir="rtl">فارسی</bdi> · Suomi · Filipino · Gaeilge · <bdi dir="rtl">עברית</bdi> · हिन्दी · Magyar · Bahasa Indonesia · Italiano · ქართული · ລາວ · Lietuvių · Latviešu · മലയാളം · मराठी · Bahasa Melayu · Norsk bokmål · Nederlands · Polski · Português (Brasil) · Română · Slovenčina · Svenska · தமிழ் · Türkçe · Українська · <bdi dir="rtl">اردو</bdi> · Màaya t'aan
+<div dir="ltr">
+Asturianu · Azərbaycanca · Беларуская · Български · বাংলা · বাংলা (বাংলাদেশ) · Català · Čeština · Dansk · Ελληνικά · Suomi · Filipino · Gaeilge · हिन्दी · Magyar · Bahasa Indonesia · Italiano · ქართული · ລາວ · Lietuvių · Latviešu · മലയാളം · मराठी · Bahasa Melayu · Norsk bokmål · Nederlands · Polski · Português (Brasil) · Română · Slovenčina · Svenska · தமிழ் · Türkçe · Українська · Màaya t'aan
+</div>
+
+<div dir="rtl">
+العربية · فارسی · עברית · اردو
+</div>
 
 </details>
 
@@ -38,13 +44,13 @@ WeiG-OpenWrt-AutoBuild/
 ├── config/build.json                构建端配置，不部署给浏览器
 ├── config/build.schema.json
 ├── docs/
-│   ├── ARCHITECTURE.md              英文架构文档
 │   ├── DEVELOPER.md                 英文开发者指南
 │   ├── DEVELOPER.zh-CN.md           中文开发者指南
 │   └── RUNTIME-CONFIG-CONTRACT.md   配置与执行契约
 ├── translations/
 │   ├── README.zh-CN.md              中文项目介绍
 │   └── ARCHITECTURE/
+│       ├── ARCHITECTURE.md          英文架构文档
 │       └── ARCHITECTURE.zh-CN.md    本中文架构文档
 ├── site/wrt/
 │   ├── config/site.json             公开网页和固件默认配置
@@ -133,4 +139,4 @@ node tools/dev-assistant.mjs verify
 
 仓库的 `tools/check-all.mjs` 与专项回归用于核对契约。CI 与 Pages 成功，仅证明对应代码和部署门禁通过，并不意味着每一种上游 Source/Branch/插件组合都已实际编译固件。
 
-参见 [英文开发者指南](../../docs/DEVELOPER.md)、[运行配置契约](../../docs/RUNTIME-CONFIG-CONTRACT.md) 和 [英文架构文档](../../docs/ARCHITECTURE.md)。
+参见 [英文开发者指南](../../docs/DEVELOPER.md)、[运行配置契约](../../docs/RUNTIME-CONFIG-CONTRACT.md) 和 [英文架构文档](ARCHITECTURE.md)。

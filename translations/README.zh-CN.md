@@ -19,7 +19,13 @@
 <details>
 <summary><b>🌐 更多语言</b></summary>
 
-<bdi dir="rtl">العربية</bdi> · Asturianu · Azərbaycanca · Беларуская · Български · বাংলা · বাংলা (বাংলাদেশ) · Català · Čeština · Dansk · Ελληνικά · <bdi dir="rtl">فارسی</bdi> · Suomi · Filipino · Gaeilge · <bdi dir="rtl">עברית</bdi> · हिन्दी · Magyar · Bahasa Indonesia · Italiano · ქართული · ລາວ · Lietuvių · Latviešu · മലയാളം · मराठी · Bahasa Melayu · Norsk bokmål · Nederlands · Polski · Português (Brasil) · Română · Slovenčina · Svenska · தமிழ் · Türkçe · Українська · <bdi dir="rtl">اردو</bdi> · Màaya t'aan
+<div dir="ltr">
+Asturianu · Azərbaycanca · Беларуская · Български · বাংলা · বাংলা (বাংলাদেশ) · Català · Čeština · Dansk · Ελληνικά · Suomi · Filipino · Gaeilge · हिन्दी · Magyar · Bahasa Indonesia · Italiano · ქართული · ລາວ · Lietuvių · Latviešu · മലയാളം · मराठी · Bahasa Melayu · Norsk bokmål · Nederlands · Polski · Português (Brasil) · Română · Slovenčina · Svenska · தமிழ் · Türkçe · Українська · Màaya t'aan
+</div>
+
+<div dir="rtl">
+العربية · فارسی · עברית · اردو
+</div>
 
 </details>
 
