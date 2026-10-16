@@ -19,21 +19,18 @@
 <details>
 <summary><b>🌐 更多语言</b></summary>
 
-العربية · Български · বাংলা (বাংলাদেশ) · Català · Čeština · Dansk · Ελληνικά · فارسی · Suomi · Filipino · Gaeilge · עברית · हिन्दी · Magyar · Italiano · ქართული · ລາວ · Lietuvių · Latviešu · मराठी · Bahasa Melayu · Norsk · Nederlands · Polski · Português (Brasil) · Română · Slovenčina · Svenska · தமிழ் · Türkçe · Українська · Màaya t'aan
-
-> 更多语言参考 OpenWrt / ImmortalWrt 最新 LuCI 正式语言清单，并对照 LEDE 去重；实际可选语言取决于所用固件。目前 README 仅提供英文和简中，其它语言暂无翻译链接。
+العربية · Asturianu · Azərbaycanca · Беларуская · Български · বাংলা · বাংলা (বাংলাদেশ) · Català · Čeština · Dansk · Ελληνικά · فارسی · Suomi · Filipino · Gaeilge · עברית · हिन्दी · Magyar · Bahasa Indonesia · Italiano · ქართული · ລາວ · Lietuvių · Latviešu · മലയാളം · मराठी · Bahasa Melayu · Norsk bokmål · Nederlands · Polski · Português (Brasil) · Română · Slovenčina · Svenska · தமிழ் · Türkçe · Українська · اردو · Màaya t'aan
 
 </details>
 
-**支持源码：** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt)
+**支持源码：** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
 
 > 实际可选设备和插件以当前源码、分支与 Target Profile 为准。刷机前请确认设备型号、硬件版本及刷机/救援方法，并备份原有配置。
 
 ## 界面预览
 
 <p align="center">
-  <img src="../docs/images/wrt-desktop.png" alt="Wei.G OpenWrt 电脑端界面" height="320">
-  <img src="../docs/images/wrt-mobile.png" alt="Wei.G OpenWrt 手机端界面" height="320">
+  <img src="../docs/images/wrt-desktop.png" alt="Wei.G OpenWrt 电脑端界面" width="78.65%"><img src="../docs/images/wrt-mobile.png" alt="Wei.G OpenWrt 手机端界面" width="21.30%">
 </p>
 
 ## 新手使用：三步在线定制固件
@@ -52,7 +49,7 @@
 
 ### 3. 下载固件
 
-通过 Issue 中的构建链接，或 [Actions → Firmware Download / 固件下载](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml) 找到任务。成功后从底部 **Artifacts** 下载固件；`CONFIG` 为配置，`BUILD-LOGS` 为诊断日志，**不能当作固件刷入**。产物保留 **60 天**，请及时保存。
+通过 Issue 中的构建链接，或 [Actions → Firmware Download / 固件下载](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml) 找到任务。成功后从底部 **Artifacts** 下载固件；`CONFIG` 为配置，`BUILD-LOGS` 为诊断日志，**不能当作固件刷入**。固件文件保留 **60 天**，请及时下载保存。
 
 **📖 [完整图文教程](https://weigshare.com/posts/WeiG-OpenWrt-AutoBuild-Guide/)**
 
