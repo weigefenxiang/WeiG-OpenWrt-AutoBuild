@@ -16,7 +16,7 @@ Build OpenWrt firmware online: pick your device and packages, submit a request o
 
 **Supported distributions:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
 
-**Language:** **English** · [简中](translations/README.zh-CN.md) · 繁中 · Русский · Español · Português · 日本語 · 한국어 · Deutsch · Français · Tiếng Việt
+**Language:** **English** · [简中](translations/README.zh-CN.md) · [繁中](translations/README.zh-TW.md) · [Русский](translations/README.ru.md) · [Español](translations/README.es.md) · [Português](translations/README.pt.md) · [日本語](translations/README.ja.md) · [한국어](translations/README.ko.md) · [Deutsch](translations/README.de.md) · [Français](translations/README.fr.md) · [Tiếng Việt](translations/README.vi.md)
 
 <details>
 <summary><b>🔤 More languages</b></summary>
