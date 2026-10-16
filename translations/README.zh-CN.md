@@ -19,7 +19,7 @@
 <details>
 <summary><b>🌐 更多语言</b></summary>
 
-العربية · Asturianu · Azərbaycanca · Беларуская · Български · বাংলা · বাংলা (বাংলাদেশ) · Català · Čeština · Dansk · Ελληνικά · فارسی · Suomi · Filipino · Gaeilge · עברית · हिन्दी · Magyar · Bahasa Indonesia · Italiano · ქართული · ລາວ · Lietuvių · Latviešu · മലയാളം · मराठी · Bahasa Melayu · Norsk bokmål · Nederlands · Polski · Português (Brasil) · Română · Slovenčina · Svenska · தமிழ் · Türkçe · Українська · اردو · Màaya t'aan
+<bdi dir="rtl">العربية</bdi> · Asturianu · Azərbaycanca · Беларуская · Български · বাংলা · বাংলা (বাংলাদেশ) · Català · Čeština · Dansk · Ελληνικά · <bdi dir="rtl">فارسی</bdi> · Suomi · Filipino · Gaeilge · <bdi dir="rtl">עברית</bdi> · हिन्दी · Magyar · Bahasa Indonesia · Italiano · ქართული · ລາວ · Lietuvių · Latviešu · മലയാളം · मराठी · Bahasa Melayu · Norsk bokmål · Nederlands · Polski · Português (Brasil) · Română · Slovenčina · Svenska · தமிழ் · Türkçe · Українська · <bdi dir="rtl">اردو</bdi> · Màaya t'aan
 
 </details>
 
@@ -32,6 +32,8 @@
 </p>
 
 ## 新手使用：三步在线定制固件
+
+**📖 [完整图文教程](https://weigshare.com/posts/WeiG-OpenWrt-AutoBuild-Guide/)**
 
 ### 1. 选择源码、设备和插件
 
@@ -65,8 +67,6 @@
 ### 3. 下载固件
 
 通过 Issue 中的构建链接，或 [Actions → Firmware Download / 固件下载](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml) 找到任务。成功后从底部 **Artifacts** 下载固件；`CONFIG` 为配置，`BUILD-LOGS` 为诊断日志，**不能当作固件刷入**。固件文件保留 **60 天**，请及时下载保存。
-
-**📖 [完整图文教程](https://weigshare.com/posts/WeiG-OpenWrt-AutoBuild-Guide/)**
 
 ## 常见问题
 
@@ -105,7 +105,7 @@ GitHub 托管 Runner 的单个 Job 最长通常为 6 小时。本项目将固件
 
 ## 开发与部署
 
-普通用户无需克隆仓库或安装 Node.js。源码、配置和部署说明见 [开发者指南](../docs/DEVELOPER.zh-CN.md) 与 [架构说明](../ARCHITECTURE.md)。
+普通用户无需克隆仓库或安装 Node.js。源码、配置和部署说明见 [开发者指南](../docs/DEVELOPER.zh-CN.md) 与 [架构说明](ARCHITECTURE/ARCHITECTURE.zh-CN.md)。
 
 ## Menuconfig Catalog
 
@@ -113,7 +113,7 @@ GitHub 托管 Runner 的单个 Job 最长通常为 6 小时。本项目将固件
 
 ## 鸣谢
 
-感谢 [OpenWrt](https://openwrt.org/) / [ImmortalWrt](https://immortalwrt.org/) / [Lean LEDE](https://github.com/coolsnowwolf/lede) / [hanwckf MT798x](https://github.com/hanwckf/immortalwrt-mt798x) / [iStoreOS](https://github.com/istoreos/istoreos) / [Lienol](https://github.com/Lienol/openwrt) / [全部插件作者](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) 及所有开源贡献者。
+感谢 [OpenWrt](https://openwrt.org/) / [ImmortalWrt](https://immortalwrt.org/) / [Lean LEDE](https://github.com/coolsnowwolf/lede) / [iStoreOS](https://github.com/istoreos/istoreos) / [Lienol](https://github.com/Lienol/openwrt) / [hanwckf MT798x](https://github.com/hanwckf/immortalwrt-mt798x) / [全部插件作者](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) 及所有开源贡献者。
 
 ## 许可证
 
