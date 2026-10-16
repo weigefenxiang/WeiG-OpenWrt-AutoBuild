@@ -222,7 +222,8 @@ const parser = readFileSync(join(ROOT, 'tools', 'parse-request.mjs'), 'utf8');
 const requestAudit = readFileSync(join(ROOT, 'tools', 'request-audit.mjs'), 'utf8');
 const customBuildWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8');
 const automationPolicy = parsed.get('.github/automation-policy.json');
-const architecture = readFileSync(join(ROOT, 'ARCHITECTURE.md'), 'utf8');
+const architecture = readFileSync(join(ROOT, 'docs', 'ARCHITECTURE.md'), 'utf8');
+const architectureZh = readFileSync(join(ROOT, 'translations', 'ARCHITECTURE', 'ARCHITECTURE.zh-CN.md'), 'utf8');
 const developerZh = readFileSync(join(ROOT, 'docs', 'DEVELOPER.zh-CN.md'), 'utf8');
 const developerEn = readFileSync(join(ROOT, 'docs', 'DEVELOPER.md'), 'utf8');
 
@@ -231,7 +232,7 @@ const removedNames = [
   'menuconfig-index.json', 'plugins-meta.json', 'plugin-sizes.json', 'gen-seed-configs.mjs',
   'gen-plugins.mjs', 'sync-upstream.yml', 'packages.html', 'recommended-audit.json',
 ];
-const trackedText = [app, html, parser, requestAudit, architecture, developerZh, developerEn].join('\n');
+const trackedText = [app, html, parser, requestAudit, architecture, architectureZh, developerZh, developerEn].join('\n');
 const staleNames = removedNames.filter((name) => trackedText.includes(name));
 if (!staleNames.length) pass('removed device/seed/recommended assets have no live code or primary-doc references');
 else fail('zombie references', staleNames.join(','));
