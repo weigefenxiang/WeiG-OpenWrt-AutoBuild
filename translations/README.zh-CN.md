@@ -2,8 +2,6 @@
 
 在网页选择设备和插件，提交 GitHub 请求，让云端为你编译 OpenWrt 固件。
 
-**📱 手机自适应 · 🌙 明暗主题 · ✅ 支持多种 OpenWrt 系源码**
-
 <p>
   <img src="https://img.shields.io/badge/-JavaScript-F7DF1E?logo=javascript&logoColor=black" alt="JavaScript">
   <img src="https://img.shields.io/badge/-HTML5-E34F26?logo=html5&logoColor=white" alt="HTML5">
@@ -12,24 +10,22 @@
   <img src="https://img.shields.io/badge/-Shell-8A2BE2?logo=gnubash&logoColor=white" alt="Shell">
 </p>
 
-**[🌐 在线定制](https://www.weigshare.com/wrt/) · [⬇️ 固件下载 / 查看构建](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
+**📱 手机自适应 · 🌙 明暗主题 · ✅ 支持多种 OpenWrt 系源码**
+
+**[🌐 在线定制](https://www.weigshare.com/wrt/) · [⬇️ 固件下载](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
+
+**支持：** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **语言：** [English](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/blob/dev/README.md) · **简中** · 繁中 · Русский · Español · Português · 日本語 · 한국어 · Deutsch · Français · Tiếng Việt
 
 <details>
-<summary><b>🌐 更多语言</b></summary>
+<summary><b>🔤 更多语言</b></summary>
 
 <div dir="ltr">
-Asturianu · Azərbaycanca · Беларуская · Български · বাংলা · বাংলা (বাংলাদেশ) · Català · Čeština · Dansk · Ελληνικά · Suomi · Filipino · Gaeilge · हिन्दी · Magyar · Bahasa Indonesia · Italiano · ქართული · ລາວ · Lietuvių · Latviešu · മലയാളം · मराठी · Bahasa Melayu · Norsk bokmål · Nederlands · Polski · Português (Brasil) · Română · Slovenčina · Svenska · தமிழ் · Türkçe · Українська · Màaya t'aan
-</div>
-
-<div dir="rtl">
-العربية · فارسی · עברית · اردو
+Asturianu &lrm;·&lrm; Azərbaycanca &lrm;·&lrm; Беларуская &lrm;·&lrm; Български &lrm;·&lrm; বাংলা &lrm;·&lrm; বাংলা (বাংলাদেশ) &lrm;·&lrm; Català &lrm;·&lrm; Čeština &lrm;·&lrm; Dansk &lrm;·&lrm; Ελληνικά &lrm;·&lrm; Suomi &lrm;·&lrm; Filipino &lrm;·&lrm; Gaeilge &lrm;·&lrm; हिन्दी &lrm;·&lrm; Magyar &lrm;·&lrm; Bahasa Indonesia &lrm;·&lrm; Italiano &lrm;·&lrm; ქართული &lrm;·&lrm; ລາວ &lrm;·&lrm; Lietuvių &lrm;·&lrm; Latviešu &lrm;·&lrm; മലയാളം &lrm;·&lrm; मराठी &lrm;·&lrm; Bahasa Melayu &lrm;·&lrm; Norsk bokmål &lrm;·&lrm; Nederlands &lrm;·&lrm; Polski &lrm;·&lrm; Português (Brasil) &lrm;·&lrm; Română &lrm;·&lrm; Slovenčina &lrm;·&lrm; Svenska &lrm;·&lrm; தமிழ் &lrm;·&lrm; Türkçe &lrm;·&lrm; Українська &lrm;·&lrm; Màaya t'aan &lrm;·&lrm; &#x2067;العربية&#x2069; &lrm;·&lrm; &#x2067;فارسی&#x2069; &lrm;·&lrm; &#x2067;עברית&#x2069; &lrm;·&lrm; &#x2067;اردو&#x2069;
 </div>
 
 </details>
-
-**支持源码：** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
 
 ## 界面预览
 
