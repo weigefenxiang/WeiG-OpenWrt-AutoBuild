@@ -71,6 +71,33 @@
 ## 常见问题
 
 <details>
+<summary>为什么插件过多时会出现 RootFS 容量不足？</summary>
+
+插件及依赖可能使固件超过 RootFS 容量。对于支持调整分区容量的设备，可在 **【Advanced menuconfig】** → **【Target Images】** 中查找 `TARGET_ROOTFS_PARTSIZE`，按实际需要调整，例如 512 或 1024 MiB。
+
+部分硬路由受闪存容量、分区布局或上游配置限制，无法修改该参数。这时应减少插件，不应照搬 x86 的容量设置。更多案例参见 [Issue #233](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/issues/233)。
+
+</details>
+
+<details>
+<summary>为什么编译时间过长会导致失败？</summary>
+
+GitHub 托管 Runner 的单个 Job 最长通常为 6 小时。本项目将固件构建 Job 限制为 **350 min（5 小时 50 分钟）**，并设置 **335 min** 编译与诊断执行截止时间，尽量预留日志及证据收集时间。
+
+超过执行时间预算会停止编译，不会暂停并保存进度供下次恢复。插件过多或 Node.js、Rust 等大型依赖都可能增加耗时，可适当精简软件后重新提交。
+
+</details>
+
+<details>
+<summary>编译失败后怎么排查？</summary>
+
+进入构建 Run 底部的 **【Artifacts】**，下载 `BUILD-LOGS`，先看 `00-SUMMARY.txt`，再根据日志确认原因。RootFS 容量不足时，应在设备支持的前提下增加容量或减少插件；超时时精简耗时软件；上游源码故障或依赖冲突需按实际错误处理。
+
+可参考 [常见构建失败记录 #233](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/issues/233)。修改配置后重新创建 Issue，不要重跑旧 Run 来验证新配置。
+
+</details>
+
+<details>
 <summary>修改旧配置后，应该重跑旧 Run 吗？</summary>
 
 不要用旧 Run 验证新配置。请在当前网页重新加载、检查、导出请求并创建新 Issue；旧 Run 重跑仍使用原请求锁定的代码和数据。
