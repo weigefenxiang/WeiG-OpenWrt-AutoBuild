@@ -35,14 +35,26 @@
 
 ### 1. 选择源码、设备和插件
 
-打开 [在线定制页面](https://www.weigshare.com/wrt/)，按 **Source → Branch → Target System → Subtarget → Target Profile** 选择构建目标，在「② 勾选插件」选择功能，并按需调整 Advanced menuconfig、时区、主题等选项。
+打开 [**【在线定制页面】**](https://www.weigshare.com/wrt/)，按 **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】** 选择构建目标，在 **【② 勾选插件】** 选择功能，并按需调整 **【Advanced menuconfig】**、时区、主题等选项。
 
-已有配置可点击 **「加载配置」**，导入 `build-request.json`、`.config` 或 `config.buildinfo`，确认源码、设备和插件后继续。可提前点击 **「检」** 查看配置问题和兼容性建议，也可以不手动检查；点击 **「下载请求并打开 GitHub」** 时，系统会自动执行配置与兼容性预检。发现问题会提示原因和修复建议，也可以选择 **「保留并强制继续」**。强制继续不代表问题已解决；如果上游源码 Bug 尚未修复，编译仍有很大概率失败。
+已有配置可点击 **【加载配置】**，导入 `build-request.json`、`.config` 或 `config.buildinfo`，确认源码、设备和插件后继续。
 
 ### 2. 提交 GitHub 云编译
 
-先登录 **[GitHub](https://github.com/)**，再回到在线定制页面依次点击 **「提交云编译」** → **「下载请求并打开 GitHub」**。网页会下载 `build-request.json` 并打开 GitHub Issue 页面；上传刚下载的请求文件，点击 **「Submit new issue」** 完成提交。机器人会在 Issue 回复构建任务链接；**只下载请求文件、不提交 Issue 不会开始编译**。
+提前登录 [**【GitHub】**](https://github.com/login)，再返回 [**【在线定制页面】**](https://www.weigshare.com/wrt/)，依次点击 **【提交云编译】** → **【下载请求并打开 GitHub】**。
 
+网页会下载 `*.json` 请求文件，并自动打开 GitHub Issue 页面。桌面端可将下载的 JSON 文件直接拖入 Issue 的构建请求输入框，然后点击 **【Submit new issue】** 完成提交。
+
+提交成功后，机器人会在 Issue 中回复构建任务链接。
+
+> **提示：** 可以提前点击 **【检】** 查看配置问题和兼容性建议，也可以跳过手动检查。点击 **【下载请求并打开 GitHub】** 时，系统会自动执行配置与兼容性预检。
+>
+> 如果发现问题，系统会显示原因和修复建议，也可以选择 **【保留并强制继续】**。强制继续不代表问题已解决；如果上游源码 Bug 尚未修复，编译仍有很大概率失败。
+>
+> 请使用网页自动打开的 GitHub Issue 页面，避免丢失预填的请求信息而导致提交失败。
+>
+> 仅下载 JSON 请求文件、不提交 Issue，不会开始云编译。
+>
 > 请勿向公开 Issue、构建请求或日志上传真实密码、令牌等敏感信息。
 
 ### 3. 下载固件
