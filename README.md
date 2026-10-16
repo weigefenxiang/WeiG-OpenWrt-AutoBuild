@@ -139,7 +139,7 @@ Open <http://localhost:8642/> and test Source/Branch switching, Target/Profile, 
 - Every AutoBuild modification must run `prepare`, which updates `VERSION` and `site-version.json` in Asia/Shanghai time.
 - After cloning, edit `site/wrt/config/site.json` for public-site defaults and `config/build.json` for build-side settings, then run `prepare`. Do not copy Catalog Source/Branch, Target/Profile, or package facts into this repository.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) and the [Developer Guide](docs/DEVELOPER.en.md).
+See [ARCHITECTURE.md](ARCHITECTURE.md) and the [Developer Guide](docs/DEVELOPER.md).
 
 ## License
 
