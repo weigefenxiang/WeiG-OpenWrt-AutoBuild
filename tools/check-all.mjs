@@ -223,8 +223,8 @@ const requestAudit = readFileSync(join(ROOT, 'tools', 'request-audit.mjs'), 'utf
 const customBuildWorkflow = readFileSync(join(ROOT, '.github', 'workflows', 'custom-build.yml'), 'utf8');
 const automationPolicy = parsed.get('.github/automation-policy.json');
 const architecture = readFileSync(join(ROOT, 'ARCHITECTURE.md'), 'utf8');
-const developerZh = readFileSync(join(ROOT, 'docs', 'DEVELOPER.md'), 'utf8');
-const developerEn = readFileSync(join(ROOT, 'docs', 'DEVELOPER.en.md'), 'utf8');
+const developerZh = readFileSync(join(ROOT, 'docs', 'DEVELOPER.zh-CN.md'), 'utf8');
+const developerEn = readFileSync(join(ROOT, 'docs', 'DEVELOPER.md'), 'utf8');
 
 const removedNames = [
   'devices.json', 'config-manifest.json', 'minimum-boot.json', 'source-build-requirements.json',
