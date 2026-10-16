@@ -12,8 +12,6 @@
   <img src="https://img.shields.io/badge/-Shell-8A2BE2?logo=gnubash&logoColor=white" alt="Shell">
 </p>
 
-[![GitHub Actions](https://img.shields.io/badge/Build-GitHub%20Actions-2088FF)](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](../LICENSE)
-
 **[🌐 在线定制](https://www.weigshare.com/wrt/) · [⬇️ 固件下载 / 查看构建](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
 **语言：** [English](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/blob/dev/README.md) · **简中** · 繁中 · Русский · Español · Português · 日本語 · 한국어 · Deutsch · Français · Tiếng Việt
@@ -21,9 +19,9 @@
 <details>
 <summary><b>🌐 更多语言</b></summary>
 
-العربية · Asturianu · Azərbaycanca · Беларуская · Български · বাংলা · বাংলা (বাংলাদেশ) · Català · Čeština · Dansk · Ελληνικά · فارسی · Suomi · Filipino · Gaeilge · עברית · हिन्दी · Magyar · Bahasa Indonesia · Italiano · ქართული · ລາວ · Lietuvių · Latviešu · മലയാളം · मराठी · Bahasa Melayu · Norsk bokmål · Nederlands · Polski · Português (Brasil) · Română · Slovenčina · Svenska · தமிழ் · Türkçe · Українська · اردو · Màaya t'aan
+العربية · Български · বাংলা (বাংলাদেশ) · Català · Čeština · Dansk · Ελληνικά · فارسی · Suomi · Filipino · Gaeilge · עברית · हिन्दी · Magyar · Italiano · ქართული · ລາວ · Lietuvių · Latviešu · मराठी · Bahasa Melayu · Norsk · Nederlands · Polski · Português (Brasil) · Română · Slovenčina · Svenska · தமிழ் · Türkçe · Українська · Màaya t'aan
 
-> 语言列表参考 OpenWrt / ImmortalWrt / LEDE 的 LuCI 翻译支持；目前 README 仅提供英文和简中，其它语言暂未提供翻译链接。
+> 更多语言参考 OpenWrt / ImmortalWrt 最新 LuCI 正式语言清单，并对照 LEDE 去重；实际可选语言取决于所用固件。目前 README 仅提供英文和简中，其它语言暂无翻译链接。
 
 </details>
 
@@ -56,20 +54,9 @@
 
 通过 Issue 中的构建链接，或 [Actions → Firmware Download / 固件下载](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml) 找到任务。成功后从底部 **Artifacts** 下载固件；`CONFIG` 为配置，`BUILD-LOGS` 为诊断日志，**不能当作固件刷入**。产物保留 **60 天**，请及时保存。
 
-**📖 [完整图文教程（简中）](https://weigshare.com/zh-CN/posts/WeiG-OpenWrt-AutoBuild-Guide/)**
+**📖 [完整图文教程](https://weigshare.com/posts/WeiG-OpenWrt-AutoBuild-Guide/)**
+
 ## 常见问题
-
-<details>
-<summary>找不到我的设备或插件？</summary>
-
-可用项取决于源码、版本和设备。确认完整型号与所选版本；不要用近似型号替代。没有提供的插件不能保证强行启用后能编译。
-</details>
-
-<details>
-<summary>为什么没有显示插件大小？</summary>
-
-不是所有源、版本和架构都提供可靠的安装大小。页面会区分加载中、加载失败和缺少匹配数据；失败时可以重试。没有大小不影响查看已启用插件清单，也不会凭空显示 0 B。
-</details>
 
 <details>
 <summary>修改旧配置后，应该重跑旧 Run 吗？</summary>
@@ -87,7 +74,7 @@
 
 ## 鸣谢
 
-感谢 [OpenWrt](https://openwrt.org/) / [ImmortalWrt](https://immortalwrt.org/) / [Lean LEDE](https://github.com/coolsnowwolf/lede) / [hanwckf MT798x](https://github.com/hanwckf/immortalwrt-mt798x) / [iStoreOS](https://github.com/istoreos/istoreos) / [Lienol](https://github.com/Lienol/openwrt) / [LuCI](https://github.com/openwrt/luci) / [全部插件作者](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) 及所有开源贡献者。
+感谢 [OpenWrt](https://openwrt.org/) / [ImmortalWrt](https://immortalwrt.org/) / [Lean LEDE](https://github.com/coolsnowwolf/lede) / [hanwckf MT798x](https://github.com/hanwckf/immortalwrt-mt798x) / [iStoreOS](https://github.com/istoreos/istoreos) / [Lienol](https://github.com/Lienol/openwrt) / [全部插件作者](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) 及所有开源贡献者。
 
 ## 许可证
 
