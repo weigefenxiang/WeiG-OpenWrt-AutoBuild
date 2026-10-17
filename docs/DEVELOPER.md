@@ -332,3 +332,4 @@ Size loading exposes idle/loading/ready/unavailable/error states. Missing exact 
   successful command summaries are omitted; full logs are retained.
 
 Catalog index, freshness HEAD, core, graph and shard requests share a 60-second per-provider deadline covering headers and body. A provider timeout enters the existing fallback chain; a user/selection abort stops it. Immutable identity and byte/hash validation remain mandatory.
+The build request parser imports the same download budget instead of maintaining a shorter, independent limit. A transport timeout is not a package compatibility finding.

@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { validateCatalogProvenance } from '../site/wrt/lib/catalog-loader.js';
+import { CATALOG_PROVIDER_TIMEOUT_MS, validateCatalogProvenance } from '../site/wrt/lib/catalog-loader.js';
 
 const root = path.resolve(import.meta.dirname, '..');
 const text = fs.readFileSync(path.join(root, 'site/wrt/lib/catalog-loader.js'), 'utf8');
+assert.equal(CATALOG_PROVIDER_TIMEOUT_MS, 60_000);
+assert.match(fs.readFileSync(path.join(root, 'tools/parse-request.mjs'), 'utf8'),
+  /AbortSignal\.timeout\(CATALOG_PROVIDER_TIMEOUT_MS\)/,
+  'Worker and browser must share the provider download budget');
 assert.match(text, /async function fetchCore\(/, 'Catalog loader must expose a core-only fetch path');
 assert.match(text, /return \{ fetchIndex, fetchCore, fetchBundle, fetchCompatibility, fetchApplications, clearCache/,
   'fetchCore must be part of the existing loader capability, not a second fetcher');

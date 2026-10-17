@@ -15,7 +15,7 @@ import {
 import {
   createCatalogModel, REQUIRED_KCONFIG_RELATION_CAPABILITIES,
 } from '../site/wrt/lib/catalog-engine.js';
-import { selectCatalogGraphContract, validateCatalogGraphContract } from '../site/wrt/lib/catalog-loader.js';
+import { CATALOG_PROVIDER_TIMEOUT_MS, selectCatalogGraphContract, validateCatalogGraphContract } from '../site/wrt/lib/catalog-loader.js';
 import {
   applyProfileOverrides, createProfileBaselineStore, serializeConfigMap,
 } from '../site/wrt/lib/profile-baseline.js';
@@ -82,7 +82,7 @@ async function fetchCatalogResource(revision, path, { binary = false } = {}) {
   const errors = [];
   for (const url of urls) {
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      const response = await fetch(url, { signal: AbortSignal.timeout(CATALOG_PROVIDER_TIMEOUT_MS) });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return binary ? Buffer.from(await response.arrayBuffer()) : await response.json();
     } catch (error) {

@@ -2,6 +2,7 @@ const MIN_INDEX_SCHEMA = 2;
 const MIN_CATALOG_SCHEMA = 5;
 const MIN_RELATIONS_SCHEMA = 2;
 export const CATALOG_CACHE_NAME = 'wrt-catalog-cache-v3';
+export const CATALOG_PROVIDER_TIMEOUT_MS = 60_000;
 const MAX_COMPATIBILITY_JSON_BYTES = 512 * 1024;
 const MAX_APPLICATIONS_JSON_BYTES = 4 * 1024 * 1024;
 
@@ -471,7 +472,7 @@ export function createCatalogLoader({
   subtle = globalThis.crypto?.subtle,
   Decompression = globalThis.DecompressionStream,
   now = () => Date.now(),
-  providerTimeoutMs = 60_000,
+  providerTimeoutMs = CATALOG_PROVIDER_TIMEOUT_MS,
 } = {}) {
   if (!Number.isSafeInteger(providerTimeoutMs) || providerTimeoutMs <= 0) throw new Error('Invalid Catalog provider timeout');
   const exactDataRef = safeCatalogDataRef(dataRef);
