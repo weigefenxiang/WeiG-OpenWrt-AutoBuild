@@ -32,7 +32,7 @@ fi
 awk '
   function rendered_command_noise(text, lower_text) {
     lower_text = tolower(text)
-    return lower_text ~ /(^|[;&|[:space:]])(echo|printf)[[:space:]].*(error:|fatal error:|failed to build|build failed|out of space|no space left on device|trying to overwrite)/
+    return lower_text ~ /(^|[;&|[:space:]])(echo|printf)[[:space:]].*(error:|fatal error:|failed to build|build failed|out of space|no space left on device|trying to overwrite|too big|too large|does not fit|disk quota exceeded|cannot allocate memory|oom-kill)/
   }
   {
     lower = tolower($0)

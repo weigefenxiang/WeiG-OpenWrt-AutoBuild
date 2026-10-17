@@ -53,6 +53,19 @@ function expectPackageArchive(stageDir, stage, snapshotResult) {
 }
 
 runBash(['-n', toBashPath(helper)]);
+const workflowLines = workflow.split('\n');
+for (let index = 0; index < workflowLines.length; index++) {
+  if (workflowLines[index] !== '        run: |') continue;
+  const body = [];
+  for (index++; index < workflowLines.length; index++) {
+    const line = workflowLines[index];
+    if (line.trim() && !line.startsWith('          ')) { index--; break; }
+    body.push(line.slice(10));
+  }
+  const script = body.join('\n').replace(/\$\{\{[\s\S]*?\}\}/g, 'fixture');
+  const syntax = spawnSync('bash', ['-n'], { cwd: ROOT, encoding: 'utf8', input: script });
+  expect(syntax.status === 0, 'workflow Bash syntax: ' + syntax.stderr);
+}
 
 // Keep Bash-facing fixture paths relative to the repository. This avoids passing
 // Windows drive-letter paths (for example D:\\...) across the Node -> Git Bash
@@ -132,10 +145,7 @@ expect(workflow.includes('LIMIT=$(( REMAINING < 180 * 60 ? REMAINING : 180 * 60 
 expect(workflow.includes('timeout --kill-after=30s "${LIMIT}s"'), 'retry must be stopped before evidence reserve is exhausted');
 expect(workflow.includes('335 * 60') && workflow.includes('timeout --kill-after=30s "${REMAINING}s"'), 'parallel compile must reserve time for evidence/artifacts');
 expect(workflow.includes("if: always() && (failure() || cancelled() || steps.compile.outcome == 'failure')"), 'BUILD-LOGS must also be collected on interruption and recovered compile failure');
-expect(workflow.includes("steps.compile.outcome == 'cancelled'") && workflow.includes('FINAL_RESULT="INTERRUPTED"'), 'interrupted builds must preserve detailed evidence and distinguish cancellation');
-expect(workflow.includes('single-thread retry did not run') && workflow.includes('FINAL_RESULT="EXECUTION TIMEOUT"'), 'never claim an unexecuted retry failed, or attribute timeout to a package');
-expect(workflow.includes('FINAL_RESULT="RECOVERED"'), 'summary must distinguish recovered builds');
-expect(workflow.includes('DIAGNOSTIC_RESULT="TIMEOUT"'), 'summary must distinguish diagnostic timeout');
+expect(workflow.includes("steps.compile.outcome == 'cancelled'") && workflow.includes('node tools/build-result.mjs'), 'interrupted builds must preserve normalized execution evidence');
 expect(workflow.includes('request branch') && workflow.includes('workflow branch'), 'summary/metadata must expose request and workflow identities');
 expect(workflow.includes('parallel/') && workflow.includes('diagnostic/'), 'summary must point to separated stage directories');
 expect(!workflow.includes('tar czf "$LOGS/package-logs.tar.gz" -C openwrt logs'), 'artifact classifier must not overwrite stage-specific package-log archives');

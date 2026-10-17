@@ -8,7 +8,21 @@
     "internalRawBridgeDays": 1,
     "standaloneSuffixes": [
       ".img.gz",
-      ".itb"
+      ".img",
+      ".itb",
+      ".bin",
+      ".trx",
+      ".chk",
+      ".ubi",
+      ".ubifs",
+      ".tar",
+      ".tar.gz",
+      ".qcow2",
+      ".vdi",
+      ".vmdk",
+      ".vhdx",
+      ".iso",
+      ".squashfs"
     ]
   },
   "catalogProbe": {

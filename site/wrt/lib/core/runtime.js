@@ -83,7 +83,6 @@ const state = {
   owner: localStorage.getItem('wrt_owner') || '',
   lanip: localStorage.getItem('wrt_lanip') || '192.168.1.1',   // 后台登录地址,默认 192.168.1.1 / admin LAN IP, defaults to 192.168.1.1
   rootpw: '',
-  rootpwAuto: false,
   timezone: '',
   theme: '@base',
   useDefconfig: false,

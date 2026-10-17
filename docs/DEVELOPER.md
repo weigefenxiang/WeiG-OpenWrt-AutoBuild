@@ -6,7 +6,7 @@
 
 - Catalog owns Source/Branch discovery. `versionFamily` declares the prefix, numeric component count and width; patch/experimental branches are excluded. Numeric `version` sorting and upstream `defaultBranch` selection are independent, without browser Source-name exceptions.
 - Validate index/core and establish Target/Profile first; paint selectors while keeping loading status. Fetch graph and Native Profile baselines in parallel from the same immutable manifest. Runtime editing/submission stays unavailable until ready; Source/Branch changes cancel old work. Reuse verified core data and shard promises, isolate cancellation signals, and reject stale model/baseline updates.
-- Optional `ui.applicationCountAdvisory` counts distinct concrete applications explicitly selected/imported as final Y above the Native baseline: 7–10 yellow and 11+ red by default. Exclude builtins, M and automatic dependencies. This is advice, not a size estimate or gate; never change RootFS automatically. Existing complete-size 50%/80% guidance, historical imports and old site configurations remain supported.
+- Optional `ui.applicationCountAdvisory` counts distinct concrete applications explicitly selected/imported as final Y above the Native baseline: 7–10 yellow and 11+ red by default. Exclude builtins, M and automatic dependencies. This is advice, not a size estimate or gate; never change RootFS automatically. Installed-size estimation is retired; historical imports and old site configurations remain supported.
 - New sources require native Catalog generation and exact feeds/Profile/relations validation before promotion and web binding. No second Kconfig resolver or new Worker gate is introduced; local tests do not prove every firmware build succeeds.
 
 ## Recommendation identity, official sizes and submission layout
@@ -14,7 +14,7 @@
 - Equivalent plans retain all `resolvedPackages` so preferred cancellation identities survive deduplication. Reuse `deriveCompatibilityPlans` / `applyUserIntent` for simulation, application and verification; no hardcoded browser package rules.
 - Direct plugin/Menuconfig edits use a 150ms debounced nonmodal hint over cached graph/current state; discard stale key/revision callbacks. Imports stay nonmodal. Test/request generation retain full preflight and recommendations.
 - Intersect official OPKG/APK architectures with native Targets and accept only matching native package versions. Independent positional gzip `packageSizes:<arch>` assets load lazily for the active architecture, with negative-coverage caching and stale-response protection. Keep legacy `packageSizes` readers; no second size database or precomputed closure.
-- Hide unknown-size labels/columns without removing selected plugins, states or cancellation. Yellow 50% / red 80% RootFS advice requires installed-byte coverage for every final-Y package, not partial observations; no new Worker gate.
+- Installed-package-size collection and estimation are retired; retain RootFS Kconfig capacity, application count advice and selected/inherited Y/M states.
 - Submission actions always occupy three full-width rows: request, import, .config download. Desktop buttons sit right of their copy; narrow screens place them below. Short screens scroll internally. Only the workflow display name changes to `Firmware Download / 固件下载`, not its filename/routing ID.
 
 ## Worker execution and offline diagnostics
@@ -314,3 +314,19 @@ Curated checkboxes have one visual contract: enabled and unchecked is white, ena
 The bottom bar separates effective Y/M applications from explicit selections. Imported/inherited applications also appear in the drawer without adding user overrides. Inherited items open the existing Advanced editor; restoring intent redraws from effective state. Installation estimates still include only final-Y concrete packages, never M.
 
 Size loading exposes idle/loading/ready/unavailable/error states. Missing exact coverage may be cached; transport/validation errors must not become negative coverage. Retry only on explicit user action or a new import, using forceRefresh on the same Catalog shard loader, without render-triggered retry loops. Existing import logs record status, architecture, shard and asset identity. Optional sizes never block import; unavailable data retains RootFS and the list with an explicit status, not a fake zero or percentage.
+## Execution results, passwords and firmware artifacts
+
+- The build password policy defaults to empty; explicit passwords take precedence.
+  Shell/set-root-password.sh generates zzzz-weig-password after upstream numeric/zzz
+  first-boot defaults. The old 99-init-password override is retired. Empty passwords
+  still require safe network exposure; script-order tests are not device boot tests.
+- tools/build-result.mjs shares normalized evidence between the Run and Issue reply.
+  An independent notify job reads GitHub annotations to distinguish the configured
+  350-minute job limit, the hosted 6-hour ceiling, manual cancellation and an original
+  compile failure. RootFS, device image limits and runner disk/memory are separate
+  findings, never package compatibility rules.
+- tools/artifact-publish.mjs prefers upstream profiles.json and uses centralized
+  suffix policy for older sources. One actual file manifest drives independent
+  artifacts and the name/use/size/SHA-256 download guide. RootFS archives, bare
+  partitions and kernel/boot components are not complete disk firmware. Routine
+  successful command summaries are omitted; full logs are retained.

@@ -238,7 +238,9 @@ jobs:
           echo "Exact checkout verified."
           # Reserve 15 minutes for evidence/artifacts before the 350-minute
           # job deadline. No package admission or configuration changes.
-          echo "BUILD_EXECUTION_DEADLINE=$(( $(date +%s) + 335 * 60 ))" >> "$GITHUB_ENV"
+          BUILD_BUDGET=$(( 335 * 60 ))
+          echo "BUILD_EXECUTION_BUDGET_SECONDS=$BUILD_BUDGET" >> "$GITHUB_ENV"
+          echo "BUILD_EXECUTION_DEADLINE=$(( $(date +%s) + BUILD_BUDGET ))" >> "$GITHUB_ENV"
 
       - name: Read Issue attachment or mobile request / 读取附件或手机请求
         env:
@@ -345,8 +347,9 @@ jobs:
             echo "- 请求提交 / request commit: \`${REQUEST_COMMIT:-unknown}\`"
             echo "- Workflow 分支 / workflow branch: \`${GITHUB_REF_NAME:-unknown}\`"
             echo "- Workflow 提交 / workflow commit: \`${GITHUB_SHA}\`"
-            echo "- 上游源码 / upstream: \`$(git log -1 --format='%h %ad' --date=short)\` (${{ steps.req.outputs.repo }} @ ${{ steps.req.outputs.branch }})"
+            echo "- 上游源码 / upstream: \`$(git log -1 --format='%h %ad' --date=short)\` (${{ steps.req.outputs.repo }})"
             echo "- Catalog: \`${{ steps.req.outputs.catalog_revision }}\` · \`${{ steps.req.outputs.catalog_asset }}\`"
+            echo "- 构建组合 / build environment: ${{ steps.req.outputs.branch }}"
             echo "- 参数 / inputs: \`${{ steps.req.outputs.device }} · ${{ steps.req.outputs.source }} · ${{ steps.req.outputs.version }} · ${{ steps.req.outputs.variant }}\`"
             echo "- 插件 / plugins: \`${{ steps.req.outputs.plugins }}\`"
             echo "- 标识 / tag: \`${{ steps.req.outputs.tag }}\`"
@@ -400,44 +403,7 @@ jobs:
           PASSWORD_MODE: ${{ steps.req.outputs.password_mode }}
           DEFAULT_ROOT_PASSWORD: ${{ secrets.DEFAULT_ROOT_PASSWORD }}
         run: |
-          set -euo pipefail
-          RPW="$REQUEST_ROOT_PASSWORD"
-          if [ -z "$RPW" ]; then
-            case "$PASSWORD_MODE" in
-              empty)
-                RPW='@empty'
-                ;;
-              secret)
-                if [ -z "$DEFAULT_ROOT_PASSWORD" ]; then
-                  echo "::error::DEFAULT_ROOT_PASSWORD is required by the project password policy."
-                  exit 1
-                fi
-                RPW="$DEFAULT_ROOT_PASSWORD"
-                ;;
-              *)
-                echo "::error::Invalid project password mode."
-                exit 1
-                ;;
-            esac
-          fi
-          if [ "$RPW" != '@empty' ]; then
-            echo "::add-mask::$RPW"
-          fi
-          mkdir -p openwrt/files/etc/uci-defaults
-          if [ "$RPW" = "@empty" ]; then
-            printf '#!/bin/sh\npasswd -d root\nexit 0\n' > openwrt/files/etc/uci-defaults/99-init-password
-          else
-            ROOT_HASH="$(printf '%s' "$RPW" | openssl passwd -6 -stdin)"
-            case "$ROOT_HASH" in
-              '$6$'*) ;;
-              *) echo "::error::Unable to derive the root password hash."; exit 1 ;;
-            esac
-            echo "::add-mask::$ROOT_HASH"
-            printf '%s\n' '#!/bin/sh' "sed -i 's|^root:[^:]*:|root:${ROOT_HASH}:|' /etc/shadow" 'exit 0' > openwrt/files/etc/uci-defaults/99-init-password
-          fi
-          chmod +x openwrt/files/etc/uci-defaults/99-init-password
-          echo "Initial password script created / 初始密码脚本已创建"
-          unset DEFAULT_ROOT_PASSWORD REQUEST_ROOT_PASSWORD PASSWORD_MODE RPW ROOT_HASH
+          bash Shell/set-root-password.sh openwrt
 
       - name: Prepare authoritative .config / 准备权威配置
         run: |
@@ -612,14 +578,7 @@ jobs:
           DOWNLOAD_RC=${PIPESTATUS[0]}
           set -e
           echo "Download exit code / 下载退出码: $DOWNLOAD_RC"
-          {
-            echo "### 📥 Download stage / 下载阶段"
-            echo ""
-            echo "- jobs: \`$JOBS\`"
-            echo "- exit code: \`$DOWNLOAD_RC\`"
-            echo "- Actions displays the live command output and saves it to \`download.log\`. / Actions 实时显示原始输出，并保存到 \`download.log\`。"
-            echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
+
           if [ "$DOWNLOAD_RC" -ne 0 ]; then
             echo "::warning::Some dependencies failed to download; compilation will continue. Full details are in download.log. / 部分依赖下载失败，将继续编译；完整信息已写入 download.log。"
           fi
@@ -650,15 +609,7 @@ jobs:
           RC=${PIPESTATUS[0]}
           echo "exit_code=$RC" >> "$GITHUB_OUTPUT"
           set -e
-          {
-            echo "### 🛠️ Compile / 编译"
-            echo ""
-            echo "- jobs: \`$JOBS\`"
-            echo "- command: \`make -j$JOBS BUILD_LOG=1\`"
-            echo "- exit code: \`$RC\`"
-            echo "- Actions displays the live command output and saves it to \`build.log\`. / Actions 实时显示原始输出，并保存到 \`build.log\`。"
-            echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
+
           if [ "$RC" -eq 124 ]; then
             echo "::warning::Compilation reached the execution deadline; no retry will start. / 编译已达到执行时间上限，不再启动重试。"
           elif [ "$RC" -ne 0 ]; then
@@ -773,145 +724,26 @@ jobs:
           cp profile-baseline.config reconstructed.config request-overrides.json config-verification.json request-audit.json package-mirror-report.json pre-defconfig.config defconfig.config defconfig.diff defconfig.log build.config failure-logs/ 2>/dev/null || true
           cp openwrt/.config failure-logs/final.config 2>/dev/null || true
 
-          PARALLEL_OUTCOME="${{ steps.compile.outcome }}"
-          PARALLEL_EXIT="${{ steps.compile.outputs.exit_code }}"
-          DIAGNOSTIC_OUTCOME="${{ steps.diagnose.outcome }}"
-          DIAGNOSTIC_EXIT="${{ steps.diagnose.outputs.exit_code }}"
-          PARALLEL_RESULT="NOT STARTED"
-          DIAGNOSTIC_RESULT="NOT RUN"
-          FINAL_RESULT="BUILD FAILED"
-          CONFIG_RESULT="$(node -p 'try { JSON.parse(require("fs").readFileSync("failure-logs/config-verification.json", "utf8")).result || "NOT RUN" } catch { "NOT RUN" }')"
-          CONFIG_CODE="$(node -p 'try { JSON.parse(require("fs").readFileSync("failure-logs/config-verification.json", "utf8")).code || "none" } catch { "none" }')"
-          if [ "$PARALLEL_OUTCOME" = "success" ]; then
-            PARALLEL_RESULT="SUCCEEDED"
-            FINAL_RESULT="FAILED AFTER COMPILE"
-          elif [ "$PARALLEL_OUTCOME" = "failure" ]; then
-            PARALLEL_RESULT="FAILED"
-            if [ "$PARALLEL_EXIT" = "124" ]; then
-              PARALLEL_RESULT="TIMEOUT"
-              if [ "${{ steps.compile.outputs.command_started }}" = "false" ]; then
-                PARALLEL_RESULT="NOT STARTED (TIME BUDGET EXHAUSTED)"
-              fi
-              FINAL_RESULT="EXECUTION TIMEOUT"
-            fi
-            if [ "$DIAGNOSTIC_EXIT" = "0" ]; then
-              DIAGNOSTIC_RESULT="SUCCEEDED"
-              FINAL_RESULT="RECOVERED"
-            elif [ "$DIAGNOSTIC_EXIT" = "124" ]; then
-              DIAGNOSTIC_RESULT="TIMEOUT"
-              if [ "${{ steps.diagnose.outputs.command_started }}" = "false" ]; then
-                DIAGNOSTIC_RESULT="NOT RUN (TIME BUDGET EXHAUSTED)"
-              fi
-              FINAL_RESULT="EXECUTION TIMEOUT"
-            elif [ -n "$DIAGNOSTIC_EXIT" ]; then
-              DIAGNOSTIC_RESULT="FAILED"
-            elif [ "$DIAGNOSTIC_OUTCOME" = "failure" ]; then
-              DIAGNOSTIC_RESULT="FAILED"
-            elif [ "$DIAGNOSTIC_OUTCOME" = "cancelled" ]; then
-              DIAGNOSTIC_RESULT="CANCELLED"
-              FINAL_RESULT="INTERRUPTED"
-            fi
-          elif [ "$PARALLEL_OUTCOME" = "cancelled" ]; then
-            PARALLEL_RESULT="CANCELLED"
-            FINAL_RESULT="INTERRUPTED"
-          fi
-
-          ROOTFS_PARTSIZE="$(sed -n 's/^CONFIG_TARGET_ROOTFS_PARTSIZE=//p' failure-logs/final.config 2>/dev/null | tail -n 1 | tr -d '\r')"
-          ROOTFS_TOO_SMALL=false
-          if grep -Eqi 'ext4_allocate[^:]*:.*out of space|failed to allocate [0-9]+ blocks, out of space' \
-            failure-logs/parallel/build.log failure-logs/diagnostic/build.log 2>/dev/null; then
-            ROOTFS_TOO_SMALL=true
-          fi
-
-          {
-            echo "===================== BUILD DIAGNOSTICS / 构建诊断 ====================="
-            echo "Test version / 测试版本: $(tr -d '\r\n' < VERSION)"
-            echo "Device / 机型: ${{ steps.req.outputs.device }}"
-            echo "Source / 源码: ${{ steps.req.outputs.source }} @ ${{ steps.req.outputs.branch }}"
-            echo "Version / 版本: ${{ steps.req.outputs.version }}   Variant / 变体: ${{ steps.req.outputs.variant }}"
-            echo "Request branch / 请求分支: ${{ steps.req.outputs.source_env || 'main' }}"
-            echo "Request commit / 请求提交: ${{ steps.req.outputs.request_commit || 'unknown' }}"
-            echo "Workflow branch / Workflow 分支: ${GITHUB_REF_NAME:-unknown}"
-            echo "Workflow commit / Workflow 提交: ${GITHUB_SHA}"
-            echo "Page version / 网页版本: ${{ steps.req.outputs.page_version }}"
-            echo "Packages / 插件: ${{ steps.req.outputs.plugins }}"
-            echo "Tag / 标识: ${{ steps.req.outputs.tag }}   Run / 构建: ${{ github.run_id }}"
-            echo "This build / 本次构建: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            echo ""
-            echo "-------- STAGE RESULTS / 阶段结果 --------"
-            echo "Configuration overrides"
-            echo "  result : $CONFIG_RESULT"
-            echo "  code   : $CONFIG_CODE"
-            echo "Parallel compile"
-            echo "  result : $PARALLEL_RESULT"
-            echo "  exit   : ${PARALLEL_EXIT:-n/a}"
-            echo "  logs   : $([ -d failure-logs/parallel ] && echo 'parallel/' || echo 'n/a')"
-            echo "Diagnostic retry"
-            echo "  command: make -j1 V=s BUILD_LOG=1"
-            echo "  limit  : 180 minutes"
-            echo "  result : $DIAGNOSTIC_RESULT"
-            echo "  exit   : ${DIAGNOSTIC_EXIT:-n/a}"
-            echo "  logs   : $([ -d failure-logs/diagnostic ] && echo 'diagnostic/' || echo 'n/a')"
-            echo "Final result"
-            echo "  $FINAL_RESULT"
-            if [ "$ROOTFS_TOO_SMALL" = "true" ]; then
-              echo ""
-              echo "-------- ROOTFS CAPACITY / RootFS 容量 --------"
-              echo "RootFS image is too small."
-              echo "Project / 项目: Root filesystem partition size (in MiB)"
-              if [ -n "$ROOTFS_PARTSIZE" ]; then
-                echo "Current value / 当前值: $ROOTFS_PARTSIZE MiB"
-              else
-                echo "Current value / 当前值: unknown"
-              fi
-              echo "Path / 路径: Target Images → TARGET_ROOTFS_PARTSIZE"
-              echo "Please increase TARGET_ROOTFS_PARTSIZE and rebuild."
-            fi
-            echo ""
-            echo "-------- COLLECTED LOGS / 已收集日志 --------"
-            for stage in parallel diagnostic; do
-              if [ -d "failure-logs/$stage" ]; then
-                echo "[$stage/]"
-                for name in build.log errors.txt last-targets.txt tail.txt package-logs.tar.gz evidence.txt; do
-                  [ -f "failure-logs/$stage/$name" ] && echo "- $stage/$name"
-                done
-              fi
-            done
-            echo ""
-            echo "-------- SEARCH KEYWORDS / 定位关键字 --------"
-            for stage in parallel diagnostic; do
-              [ -s "failure-logs/$stage/errors.txt" ] || continue
-              echo "[$stage/errors.txt]"
-              tail -n 40 "failure-logs/$stage/errors.txt"
-            done
-            echo ""
-            echo "-------- LAST FAILING TARGETS / 最后出错的目标 --------"
-            for stage in parallel diagnostic; do
-              [ -s "failure-logs/$stage/last-targets.txt" ] || continue
-              echo "[$stage/last-targets.txt]"
-              tail -n 20 "failure-logs/$stage/last-targets.txt"
-            done
-            echo ""
-            echo "Full logs are in parallel/ and diagnostic/; evidence from the two stages is kept separate. / 完整日志见 parallel/ 与 diagnostic/；两阶段证据互不覆盖。"
-          } > failure-logs/00-SUMMARY.txt
-          cat failure-logs/00-SUMMARY.txt >> "$GITHUB_STEP_SUMMARY" || true
-
-          {
-            echo ''
-            echo '## 📥 How to get full logs / 完整日志取件'
-            echo ''
-            echo '| Step / 步骤 | Action / 操作 |'
-            echo '| --- | --- |'
-            echo '| 1 | Open this run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} / 打开本次构建页面 |'
-            echo '| 2 | Scroll to the **Artifacts** section at the very bottom / 拉到页面最底部 **Artifacts** 区 |'
-            echo '| 3 | Download and unzip `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS` / 下载并解压 `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS` |'
-            echo '| 4 | Read `00-SUMMARY.txt` first; use `parallel/` for the original parallel failure and `diagnostic/` for the single-thread retry / 先看 `00-SUMMARY.txt`；并行现场看 `parallel/`，单线程诊断看 `diagnostic/` |'
-            echo '| 5 | Per stage, read `errors.txt` → `last-targets.txt` → `tail.txt` → `build.log` → `package-logs.tar.gz` (if present) / 每阶段依次查看这些文件（如有） |'
-            echo ''
-            echo '> ⏳ Build artifacts are kept for 60 days; submit a new build after expiry. / 构建 Artifact 统一保留 60 天，过期需重新提交构建。'
-          } >> "$GITHUB_STEP_SUMMARY" || true
           ls -lh failure-logs
-          echo "📤 artifact:${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS — parallel/ contains the original parallel workspace; diagnostic/ contains the single-thread diagnosis. / parallel/ 保存原始并行现场，diagnostic/ 保存单线程诊断现场。"
+
+      - name: Normalize build execution evidence / 汇总构建执行证据
+        if: always()
+        env:
+          COMPILE_OUTCOME: ${{ steps.compile.outcome }}
+          COMPILE_EXIT: ${{ steps.compile.outputs.exit_code }}
+          DIAGNOSTIC_OUTCOME: ${{ steps.diagnose.outcome }}
+          DIAGNOSTIC_EXIT: ${{ steps.diagnose.outputs.exit_code }}
+          ARTIFACT_REF: ${{ steps.req.outputs.artifact_ref }}
+        run: node tools/build-result.mjs failure-logs
+
+      - name: Upload normalized build result / 上传精简构建结果
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.req.outputs.artifact_ref || format('request-{0}-{1}', github.run_id, github.run_attempt) }}-BUILD-RESULT
+          path: failure-logs/build-result.json
+          retention-days: 60
+          if-no-files-found: warn
 
       - name: Collect menuconfig M packages / 收集 menuconfig 的 M 软件包
         if: success()
@@ -937,7 +769,8 @@ jobs:
           cp download.log build-metadata.txt firmware-settings.txt "$LOGS/" 2>/dev/null || true
           if [ -d failure-logs ]; then
             cp -a failure-logs/. "$LOGS/"
-          else
+          fi
+          if [ ! -f "$LOGS/parallel/build.log" ]; then
             cp build.log "$LOGS/" 2>/dev/null || true
           fi
           printf '%s\n' \
@@ -983,28 +816,6 @@ jobs:
             '配置为独立发布的固件文件不会放在本目录；其余文件保留在这里。' \
             '首次刷机与升级包取决于具体机型和闪存布局，请先核对上游说明。' > "$FIRMWARE/00-请先读我-README.txt"
 
-          {
-            echo ''
-            echo '## 📦 Firmware download guide / 固件下载与安装选择'
-            echo ''
-            echo '> [!IMPORTANT]'
-            echo "> Standalone suffixes / 独立发布后缀: \`$STANDALONE_SUFFIXES\`. The $STANDALONE_COUNT matching files become separate Artifacts; add a suffix by changing the automation policy."
-            echo "> Files matching the configured suffix policy are uploaded one by one without changing this Workflow. / 命中配置后缀策略的文件会逐个上传，无需修改此 Workflow。"
-            echo ''
-            echo '| Artifact | Contents / 内容 |'
-            echo '| --- | --- |'
-            echo '| 📦 `${{ steps.req.outputs.artifact_ref }}-<standalone file>` | Firmware matching a standalone suffix; one file becomes one Artifact. / 命中独立发布后缀的固件；一个文件对应一个 Artifact。 |'
-            echo '| 📁 `${{ steps.req.outputs.artifact_ref }}-FIRMWARE-OTHER` | Remaining firmware files, manifest, buildinfo, and common checksums. / 其余固件文件、manifest、buildinfo 与通用校验和。 |'
-            echo '| ⚙️ `${{ steps.req.outputs.artifact_ref }}-CONFIG` | Submitted configuration, effective build configuration, and build metadata. / 用户提交配置、实际开编配置和构建元数据。 |'
-            echo '| 🧾 `${{ steps.req.outputs.artifact_ref }}-BUILD-LOGS` | Complete download/compile logs; retained for 60 days. / 完整下载/编译日志；保留 60 天。 |'
-            echo '| 🧩 `${{ steps.req.outputs.artifact_ref }}-OPTIONAL-PACKAGES` | Packages selected as M in menuconfig: built but not embedded in the firmware. / menuconfig 选为 M：已编译但未写入固件的软件包。 |'
-            echo ''
-            echo '> [!WARNING]'
-            echo '> `sysupgrade` is not a universal updater. Do not flash when the model, current firmware, or partition layout is uncertain. / `sysupgrade` 不是通用更新包。不确定机型、当前固件或布局时不要刷。'
-            echo ''
-            echo '- Firmware, configuration, build metadata, and complete logs are retained for **60 days**. / 固件、配置、构建信息与完整日志统一保留 **60 天**。'
-            echo ''
-          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build standalone artifact manifest / 生成独立 Artifact 清单
         id: artifact_manifest
@@ -1106,9 +917,34 @@ jobs:
   notify:
     name: Final result / 最终结果
     needs: [admission, build, publish-standalone, cleanup-standalone-bridge]
-    if: always() && needs.build.outputs.build_ref != ''
+    if: always() && needs.admission.result == 'success' && (needs.build.outputs.build_ref != '' || needs.build.result == 'cancelled')
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      issues: write
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Locate execution evidence / 查找执行证据
+        id: evidence
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const name = ${{ toJSON(needs.build.outputs.artifact_ref) }} + '-BUILD-RESULT';
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+              ...context.repo, run_id: context.runId, per_page: 100,
+            });
+            core.setOutput('available', artifacts.some(item => item.name === name && !item.expired));
+      - name: Download execution evidence / 下载执行证据
+        if: steps.evidence.outputs.available == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.artifact_ref }}-BUILD-RESULT
+          path: build-result
       - name: Comment final result / 回评最终结果
         uses: actions/github-script@v8
         env:
@@ -1119,22 +955,6 @@ jobs:
           REQUESTER: ${{ inputs.requester }}
         with:
           script: |
-            const ok = process.env.BUILD_RESULT === 'success' && process.env.PUBLISH_RESULT === 'success';
-            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const ref = process.env.ARTIFACT_REF;
-            const body = ok
-              ? `@${process.env.REQUESTER}\n\n✅ Build and standalone firmware publication completed.\n\nDownload: ${url}\n\n- Firmware matching the configured standalone suffix policy is uploaded as one Artifact per file: \`${ref}-<standalone file>\`.\n- \`${ref}-CONFIG\`, \`${ref}-BUILD-LOGS\`, \`${ref}-OPTIONAL-PACKAGES\`, and \`${ref}-FIRMWARE-OTHER\` contain categorized supporting files; an Artifact may be absent when it has no content.\n\nFor the first flash, use \`factory\` in most cases. Use \`sysupgrade\` only when the current firmware and partition layout are compatible.\n\n中文说明：构建和固件发布全部完成。首次刷机通常选 \`factory\`；\`sysupgrade\` 只用于当前固件与闪存布局兼容的升级。`
-              : `@${process.env.REQUESTER}\n\n❌ Build or standalone firmware publication failed.\n\nBuild: ${process.env.BUILD_RESULT}; standalone publication: ${process.env.PUBLISH_RESULT}\n\nOpen this Actions Run and inspect \`${ref}-CONFIG\` and \`${ref}-BUILD-LOGS\`: ${url}\n\n中文说明：构建或独立固件发布失败，请打开本次 Actions 查看配置和完整日志。`;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: Number(process.env.ISSUE_NUMBER),
-              body,
-            });
-            await github.rest.issues.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: Number(process.env.ISSUE_NUMBER),
-              state: 'closed',
-              state_reason: ok ? 'completed' : 'not_planned',
-            });
+            const { pathToFileURL } = require('node:url');
+            const module = await import(pathToFileURL(process.env.GITHUB_WORKSPACE + '/tools/build-result.mjs').href);
+            await module.publishBuildResult({ github, context });

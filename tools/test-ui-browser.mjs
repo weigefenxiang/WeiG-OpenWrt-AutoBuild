@@ -1284,7 +1284,7 @@ async function main() {
       forkAndPassword.guideLinks.every(url=>url===EXPECTED_GUIDE_URL), context,
       'Fork links, emphasis, workflow label, tutorial links or size retirement regressed', forkAndPassword);
     for (const login of forkAndPassword.login) {
-      expect((login.id === 'lede' ? /password/.test(login.empty) : /none|无/.test(login.empty)) &&
+      expect(/none|无/.test(login.empty) &&
         /none|无/.test(login.cleared) && !/Test1234/.test(login.custom), context,
         'source default, explicit clearing or custom password display is wrong', login);
     }

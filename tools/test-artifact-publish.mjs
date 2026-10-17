@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
+  artifactRole,
+  renderArtifactGuide,
   isStandaloneArtifact,
   normalizeStandaloneSuffixes,
   readArtifactPublishPolicy,
@@ -28,6 +31,13 @@ const realPolicy = readArtifactPublishPolicy(join(ROOT, '.github', 'automation-p
 assert(realPolicy.standaloneSuffixes.includes('.img.gz'));
 assert(realPolicy.standaloneSuffixes.includes('.itb'));
 
+assert.equal(artifactRole('generic-rootfs.tar.gz'), 'rootfs-archive');
+assert.equal(artifactRole('generic-targz-rootfs.tar.gz'), 'rootfs-archive');
+assert.equal(artifactRole('generic-kernel.bin'), 'component');
+assert.equal(artifactRole('generic-combined-efi.img.gz'), 'disk-image');
+assert.equal(artifactRole('generic-combined.qcow2'), 'virtual-disk');
+assert.equal(artifactRole('router-sysupgrade.bin'), 'sysupgrade');
+assert(realPolicy.standaloneSuffixes.includes('.tar.gz') && realPolicy.standaloneSuffixes.includes('.bin'));
 const policy = { standaloneSuffixes: ['.img.gz', '.itb'] };
 assert.equal(isStandaloneArtifact('router.img.gz', policy.standaloneSuffixes), true);
 assert.equal(isStandaloneArtifact('recovery.itb', policy.standaloneSuffixes), true);
@@ -64,10 +74,26 @@ try {
   assert(!plan.other.some((row) => row.name.endsWith('.ipk')),
     'nested target package directories must remain outside firmware artifact publication');
   assert.equal(plan.hasStandalone, true);
+  assert.match(renderArtifactGuide(plan), /非完整固件|不是完整固件/);
+  assert(plan.standalone.every(row => /^[a-f0-9]{64}$/.test(row.sha256) && row.bytes > 0));
   assert.equal(plan.matrix.length, 3);
   assert(existsSync(join(staging, 'STANDALONE', 'dev-build#1-router-squashfs-sysupgrade.itb')));
   assert(existsSync(join(staging, 'FIRMWARE-OTHER', 'dev-build#1-router.buildinfo')));
 
+  const vendor = 'vendor-special-image.vendor';
+  writeFileSync(join(targetA, vendor), 'vendor image');
+  const digest = createHash('sha256').update('vendor image').digest('hex');
+  const metadata = { profiles: { demo: { images: [{ name: vendor, type: 'factory', sha256: digest }] } } };
+  const metadataPath = join(targetA, 'profiles.json');
+  writeFileSync(metadataPath, JSON.stringify(metadata));
+  const metadataPlan = stageArtifacts({ sourceDir: source, stagingDir: join(temp, 'metadata'), artifactRef: 'meta', policy });
+  assert.equal(metadataPlan.standalone.find(row => row.name === 'meta-' + vendor).role, 'factory',
+    'upstream manifest must select new formats even without a suffix rule');
+  metadata.profiles.demo.images[0].sha256 = '0'.repeat(64);
+  writeFileSync(metadataPath, JSON.stringify(metadata));
+  assert.throws(() => stageArtifacts({ sourceDir: source, stagingDir: join(temp, 'corrupt'), artifactRef: 'meta', policy }), /checksum mismatch/);
+  metadata.profiles.demo.images[0].sha256 = digest;
+  writeFileSync(metadataPath, JSON.stringify(metadata));
   const expanded = stageArtifacts({
     sourceDir: source,
     stagingDir: join(temp, 'staging-expanded'),

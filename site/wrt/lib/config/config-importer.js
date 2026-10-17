@@ -727,7 +727,6 @@ async function restoreSelections(config, payload, operation = null) {
     if (LANIP_RE.test(String(payload.lanip || ''))) $('lanipBox').value = state.lanip = payload.lanip;
     if (payload.rootpw === '@empty' || /^[A-Za-z0-9@#%^&*_+=.,:!?-]{4,32}$/.test(String(payload.rootpw || ''))) {
       $('rootpwBox').value = state.rootpw = payload.rootpw;
-      state.rootpwAuto = false;
     }
     const fw = payload.firmware || {};
     const zone = TIMEZONES.zones.find((item) => item.zonename === fw.zonename) ||

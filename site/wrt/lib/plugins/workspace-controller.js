@@ -218,16 +218,6 @@ function initDeviceFold() {
 }
 
 function applySourceDefaults() {
-  const box = $('rootpwBox');
-  if (state.source.id === 'lede') {
-    if (!box.value || state.rootpwAuto) {
-      box.value = state.rootpw = '@empty';
-      state.rootpwAuto = true;
-    }
-  } else if (state.rootpwAuto) {
-    box.value = state.rootpw = '';
-    state.rootpwAuto = false;
-  }
   renderFirmwareSettings();
   updateLoginInfo();
 }
@@ -315,7 +305,6 @@ function renderModes() {
   });
   // 初始密码:可选;@empty 表示清空该源自带的初始密码;不持久化(是密码) / optional initial password; @empty blanks a shipped password; never persisted
   $('rootpwBox').addEventListener('input', () => {
-    state.rootpwAuto = false;
     const v = $('rootpwBox').value.trim();
     if (v === '' || v === '@empty' || /^[A-Za-z0-9@#%^&*_+=.,:!?-]{4,32}$/.test(v)) state.rootpw = v;
     updateLoginInfo();
@@ -575,7 +564,7 @@ function updateLoginInfo() {
   box.textContent = '';
   const pwKey = state.rootpw === '@empty' ? 'login.pw.none'
     : state.rootpw ? 'login.pw.set'
-    : state.source.loginPw ? 'login.pw.' + state.source.loginPw : 'login.pw.none';
+    : 'login.pw.none';
   const pwText = t(pwKey);
   //  作密码占位,模板任意语言通用 /  marks the password slot, language-agnostic
   const parts = t('login.info', { pw: '' }).split('');

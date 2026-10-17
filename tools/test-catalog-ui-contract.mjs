@@ -300,11 +300,9 @@ expect(compatibilityController.includes('function configurationViolationKey(item
   'forced configuration audit dropped package-conflict package/provider/capability identity');
 
 expect(app.includes('function applySourceDefaults() {') &&
-  app.includes("if (state.source.id === 'lede') {") &&
-  app.includes('} else if (state.rootpwAuto) {') &&
-  !app.includes("previousSource.id === 'lede'") &&
-  !app.includes('applySourceDefaults(previousSource)'),
-  'source-derived LEDE initial-password default can leak across Source changes');
+  !app.includes("if (state.source.id === 'lede') {") &&
+  !app.includes("loginPw: source.id === 'lede'"),
+  'initial password must use one project policy, not a hardcoded Source override');
 
 expect(app.includes('useDefconfig: false,') &&
   app.includes("if ($('defconfigLabel')) $('defconfigLabel').textContent = 'D';") &&

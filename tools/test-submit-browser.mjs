@@ -27,15 +27,16 @@ try {
     state.source?.id === source && catalogLoadMode === 'idle' && ACTIVE_PROFILE_BASELINE &&
     !document.getElementById('submitBtn').disabled && document.getElementById('targetPicker')?.getAttribute('aria-busy') === 'false'`, [source]), 120000);
   await waitFor('initial Source controls', () => evaluate(`() => document.getElementById('targetSource')?.options.length > 0`), 60000);
-  for (const source of sources) {
+  for (const sourceCase of sources) {
+    const [source, requestedBranch = ''] = sourceCase.split('@');
     // Each Source's Native export is independent of another Source's imported
     // user intent. Cross-Source migration is a different configuration test.
     if (requests.length) {
       await evaluate(`() => { localStorage.clear(); return true; }`);
-      await browser.connection.command('Page.navigate', { url: preview.url + '&sourceCase=' + source });
+      await browser.connection.command('Page.navigate', { url: preview.url + '&sourceCase=' + encodeURIComponent(sourceCase) });
       await waitFor('fresh document ' + source, () => evaluate(`(source) =>
         new URL(location.href).searchParams.get('sourceCase') === source &&
-        document.getElementById('targetSource')?.options.length > 0`, [source]), 60000);
+        document.getElementById('targetSource')?.options.length > 0`, [sourceCase]), 60000);
     }
     await evaluate(`(source) => {
       closeModal();
@@ -45,6 +46,17 @@ try {
       return true;
     }`, [source]);
     await ready(source);
+    if (requestedBranch) {
+      await evaluate(`branch => {
+        const option = selectedCatalogSource().branches.find(row => row.branch === branch);
+        if (!option) throw Error('Missing Catalog environment: ' + branch);
+        const select = document.getElementById('targetBranch');
+        select.value = option.id; select.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      }`, [requestedBranch]);
+      await waitFor('complete environment ' + sourceCase, () => evaluate(`branch => MENU_CATALOG?.source.branch === branch && catalogLoadMode === 'idle'`, [requestedBranch]), 120000);
+      await ready(source);
+    }
     if (stagedCompatibility) await evaluate(`document => {
       const fetch = CATALOG_LOADER.fetchCompatibility.bind(CATALOG_LOADER);
       CATALOG_LOADER.fetchCompatibility = async (...args) => ({ ...(await fetch(...args)), compatibility: document });

@@ -6,7 +6,7 @@
 
 - Source/Branch 事实由 Catalog 配置与发现模块维护；`versionFamily` 描述前缀、数字段数和宽度，排除补丁/实验分支。数值倒序使用分支 `version`，默认选择独立使用上游 `defaultBranch`，网页不按 Source 名称特判。
 - 先验证 index/core 并建立 Target/Profile，渲染选择器且保持加载提示；再并行获取同一 immutable manifest 的 graph 与 Native Profile baseline。运行数据未就绪时 Target 编辑与提交不可用，Source/Branch 可切换并取消旧任务。共享加载器复用已验证 core 和 shard Promise；取消信号互相隔离，旧响应不得覆盖新模型或 baseline。
-- `ui.applicationCountAdvisory` 是非阻断体验策略：相对原生 baseline 新增、用户显式选择或导入且最终为 Y 的真实应用去重统计，默认 7–10 黄、11 以上红；不计内置、M、自动依赖，不当作大小估计，不自动改 RootFS。完整安装大小可用时，原有 50%/80% 容量建议独立保留；历史导入与旧 site config 兼容。
+- `ui.applicationCountAdvisory` 是非阻断体验策略：相对原生 baseline 新增、用户显式选择或导入且最终为 Y 的真实应用去重统计，默认 7–10 黄、11 以上红；不计内置、M、自动依赖，不当作大小估计，不自动改 RootFS。插件安装大小估算链已退休；历史导入与旧 site config 兼容。
 - 新源必须完成 Catalog 原生生成、exact feeds/Profile 和关系校验，才能晋级并绑定网页。增加 Source 不增加 Worker 门禁或另一套 Kconfig 算法；本地测试通过不等于任意固件编译成功。
 
 ## 推荐身份、官方大小观测与提交布局
@@ -145,9 +145,9 @@ node tools/prepare-web-deployment.mjs --commit <40位SHA> --branch <dev或main>
 
 可选应用由当前分支的原生软件包元数据与 LuCI Kconfig 选项决定。全局应用元数据只补充人工审阅的名称、介绍、分组，不决定可用性。`PACKAGE_` 前缀不能证明是软件包：应用卡片、探针 Root、容量统计共用 Catalog model 的真实包索引；配置子选项保留在 Advanced menuconfig。Target 可见性复用现有 Kconfig 求值器；分组缺少翻译时显示上游原名，不暴露内部翻译键。
 
-RootFS 统计使用 Catalog 的分支包大小观测，必须匹配当前 Source/Branch/commit 与 `TARGET_ARCH_PACKAGES`，只累加 installed bytes，不以下载压缩包大小或跨源估值替代。自选计显式 `y` 且最终仍为 `y` 的真实包；总计计最终全部 `y` 的真实包及依赖，每包一次。`m` 与配置子选项不计入 RootFS。没有匹配的安装大小数据就隐藏估值；部分缺失则明确标注未知，不能当作 0。占 RootFS 50%/80% 时显示黄/红色文字提示，可编辑时才提供现有容量编辑入口。这是安装大小提示，不是压缩镜像预测或构建门禁。
+RootFS 仅展示当前有效 Kconfig 分区容量与非阻断应用数量建议。插件安装大小采集、加载、估算、未知数及百分比提示已退休，不再维护平行容量数据库。
 
-Advanced 的菜单说明由 Catalog 每日翻译任务维护。翻译器按数据分支 `index.json` 精确枚举旧单体和 schema 6 `menu:<lang>` 分片，只稀疏读取这些文件，并同步两类资产；不得扫描或改写 `core/graph/applications/compatibility`。默认上海时间 04:37、每次 5 批。未来 Source/Branch 经 index 自动进入翻译，不在 Workflow 写版本清单。
+Advanced 的菜单说明由 Catalog 每日翻译任务维护。翻译器按数据分支 `index.json` 精确枚举旧单体和 schema 6 `menu:<lang>` 分片，只稀疏读取这些文件，现代快照只更新语言分片，旧单体仅兼容保留；不得扫描或改写 `core/graph/applications/compatibility`。默认上海时间 04:37、每次 5 批。未来 Source/Branch 经 index 自动进入翻译，不在 Workflow 写版本清单。
 
 兼容性 `if-present` 针对完整规则：缺少任一参与包时，`all-*` 规则整体不适用，不能弱化为单包规则。schema 6 的 `preferredDisable` 仍须经共享 planner 验证；无法执行时说明原因，不自动转而取消另一参与包。历史 schema 5 投影继续可读，但不携带新推荐偏好。
 
@@ -295,3 +295,14 @@ Advanced 标题按钮、程序定位和搜索框共用一个异步展开协调�
 Worker 按构建请求中的不可变 revision 读取重建所需资产，不读取 compatibility 审查选择。历史及新生成的无发布身份清单均可读取；显式 assetRef 冲突、源码提交不一致或压缩资产哈希错误仍须拒绝。`tools/test-request-parser.mjs` 覆盖真实重建入口；`tools/test-build-closure.mjs` 仅保留离线证据读取与原生 Make 回归，并确认固件工作流不调用审查工具。测试通过不等于固件编译成功。
 
 旧任务重跑仍使用原请求中的旧快照，不能偷偷替换。应在更新后的网页重新导入历史配置，检查后生成新请求，继续保留历史配置导入兼容性。
+## 构建结果、密码与固件产物
+
+- 初始密码按根构建策略处理，当前默认 empty；显式密码优先。Shell/set-root-password.sh
+  生成 zzzz-weig-password，排在上游数字及 zzz 首次启动脚本之后；旧 99-init-password 已退休。
+  空密码仍需注意 LAN/WAN 暴露风险。此为脚本顺序回归，不代替真机启动验收。
+- tools/build-result.mjs 汇总真实阶段证据，Run 最终结果和 Issue 回评共用；独立 notify job
+  读取 GitHub 注解，区别项目 350 分钟限制、6h 平台上限、普通取消与前置编译失败。
+  RootFS、机型镜像上限、Runner 磁盘/内存分别报告，不进入 compatibility.json。
+- tools/artifact-publish.mjs 优先消费上游 profiles.json，旧源复用集中后缀策略；
+  下载说明从同一实际文件清单生成，列出用途、大小与 SHA-256。RootFS 压缩包、裸根分区、
+  内核/引导组件不是完整整盘固件。普通成功步骤不再重复写下载/编译命令摘要，完整日志仍保留。

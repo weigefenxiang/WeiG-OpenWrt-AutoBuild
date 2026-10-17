@@ -388,9 +388,10 @@ function currentCatalogContract() {
   };
 }
 function catalogBranchLabel(branch) {
-  if (branch.state === 'stale') return `⚠ ${branch.branch} · stale`;
-  if (branch.state === 'unavailable') return `✕ ${branch.branch} · unavailable`;
-  return branch.branch;
+  const label = branch.displayName || branch.branch;
+  if (branch.state === 'stale') return `⚠ ${label} · stale`;
+  if (branch.state === 'unavailable') return `✕ ${label} · unavailable`;
+  return label;
 }
 function showCatalogStatus(branch, catalog = MENU_CATALOG) {
   const status = $('menuconfigStatus');
@@ -1311,10 +1312,10 @@ function catalogSourceObject(source, branch) {
   const legacy = source.legacy || MENU_CATALOG?.source?.legacy;
   return {
     id: source.id, label: source.label || source.id, repo: source.repo,
-    append: true, loginPw: source.id === 'lede' ? 'password' : undefined,
+    append: true,
     diy1: 'diy-generic.sh', diy2: 'diy2-generic.sh',
     versions: [{
-      id: branch.id, label: branch.branch + (legacy ? ' (Legacy)' : ''),
+      id: branch.id, label: (branch.displayName || branch.branch) + (legacy ? ' (Legacy)' : ''),
       branch: branch.branch, note: legacy ? 'Legacy source' : '',
     }],
     variants: [],

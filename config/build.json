@@ -1,6 +1,6 @@
 {
   "password": {
-    "mode": "prompt"
+    "mode": "empty"
   },
   "jobs": {
     "compile": "auto",
