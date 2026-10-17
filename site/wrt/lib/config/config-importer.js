@@ -725,9 +725,10 @@ async function restoreSelections(config, payload, operation = null) {
   if (payload) {
     if (payload.tag) $('tagBox').value = BUILD_IDENTITY_MODULE.normalizeBuildTag(payload.tag);
     if (LANIP_RE.test(String(payload.lanip || ''))) $('lanipBox').value = state.lanip = payload.lanip;
-    if (payload.rootpw === '@empty' || /^[A-Za-z0-9@#%^&*_+=.,:!?-]{4,32}$/.test(String(payload.rootpw || ''))) {
-      $('rootpwBox').value = state.rootpw = payload.rootpw;
-    }
+    // Absent/blank is also meaningful: preserve upstream, not the startup default.
+    const password = String(payload.rootpw || '');
+    $('rootpwBox').value = state.rootpw = password === '@empty' || /^[A-Za-z0-9@#%^&*_+=.,:!?-]{4,32}$/.test(password)
+      ? password : '';
     const fw = payload.firmware || {};
     const zone = TIMEZONES.zones.find((item) => item.zonename === fw.zonename) ||
       TIMEZONES.zones.find((item) => item.zonename === fw.timezone) ||

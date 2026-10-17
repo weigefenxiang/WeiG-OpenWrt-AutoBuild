@@ -49,6 +49,8 @@ async function applyProjectCustomization() {
   if (!storedPreference('wrt_lanip') && LANIP_RE.test(String(firmware.lanIp || ''))) {
     state.lanip = String(firmware.lanIp);
   }
+  // Startup-only, visible intent. Source changes/imports never reapply it.
+  state.rootpw = firmware.clearInitialPassword === true ? '@empty' : '';
   if (Object.hasOwn(NTP_PRESETS, firmware.ntp?.preset)) state.ntp = firmware.ntp.preset;
   if (typeof firmware.theme === 'string' && /^luci-theme-[A-Za-z0-9._+-]{1,48}$/.test(firmware.theme)) {
     state.theme = firmware.theme;
@@ -168,6 +170,7 @@ async function init() {
     resetPluginWorkspace(PLUGINS);
     renderDevices();
     renderModes();
+    initFeedbackControls();
     $('fwThemeBox')?.addEventListener('change', () => { firmwareThemeExplicit = true; });
     renderFirmwareSettings();
     initDeviceFold();

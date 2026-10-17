@@ -51,6 +51,7 @@
     "applicationCountAdvisory": { "warningAbove": 6, "dangerAbove": 10 }
   },
   "firmware": {
+    "clearInitialPassword": true,
     "lanIp": "192.168.1.1",
     "timezone": {
       "zonename": "Asia/Shanghai",

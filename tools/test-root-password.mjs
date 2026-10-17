@@ -1,19 +1,23 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 const root = resolve(import.meta.dirname, '..');
 const fixture = mkdtempSync(join(root, '.tmp-password-'));
 const rel = file => relative(root, file).replaceAll('\\', '/');
 try {
-  const run = (password, mode = 'empty') => {
-    const result = spawnSync('bash', ['Shell/set-root-password.sh', rel(fixture)], { cwd: root, encoding: 'utf8',
+  let execution = 0;
+  const run = (password, mode = 'prompt') => {
+    const tree = join(fixture, String(++execution));
+    const result = spawnSync('bash', ['Shell/set-root-password.sh', rel(tree)], { cwd: root, encoding: 'utf8',
       env: { ...process.env, REQUEST_ROOT_PASSWORD: password, PASSWORD_MODE: mode } });
     assert.equal(result.status, 0, result.stderr);
-    return readFileSync(join(fixture, 'files/etc/uci-defaults/zzzz-weig-password'), 'utf8');
+    const generated = join(tree, 'files/etc/uci-defaults/zzzz-weig-password');
+    return existsSync(generated) ? readFileSync(generated, 'utf8') : null;
   };
-  for (const password of ['', '@empty']) {
-    const text = run(password); assert.match(text, /root::/); assert.doesNotMatch(text, /passwd -d/);
+  assert.equal(run(''), null, 'blank preserves upstream: no override is generated');
+  for (const [password, mode] of [['', 'empty'], ['@empty', 'prompt']]) {
+    const text = run(password, mode); assert.match(text, /root::/); assert.doesNotMatch(text, /passwd -d/);
   }
   const secret = run('Test1234'); assert.match(secret, /root:\$6\$/); assert(!secret.includes('Test1234'));
   // Execute the generated override against a fixture after representative upstream
@@ -29,6 +33,7 @@ try {
   const workflow = readFileSync(join(root, '.github/workflows/custom-build.yml'), 'utf8');
   assert.match(workflow, /bash Shell\/set-root-password.sh openwrt/);
   assert(!workflow.includes('99-init-password'), 'old competing override must be retired');
-  assert.equal(JSON.parse(readFileSync(join(root, 'config/build.json'))).password.mode, 'empty');
+  assert.equal(JSON.parse(readFileSync(join(root, 'config/build.json'))).password.mode, 'prompt');
+  assert.equal(JSON.parse(readFileSync(join(root, 'site/wrt/config/site.json'))).firmware.clearInitialPassword, true);
 } finally { rmSync(fixture, { recursive: true, force: true }); }
 console.log('Late root password override tests passed.');

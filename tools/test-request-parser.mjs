@@ -95,6 +95,10 @@ return new Response(Buffer.from(files[path],'base64'));};`);
     assert.notEqual(output.status, 0); assert.match(output.stderr, expectedError); return;
   }
   assert.equal(output.status, 0, output.stderr || output.error?.message);
+  const outputs = readFileSync(join(cwd, 'outputs.txt'), 'utf8');
+  assert.match(outputs, /^password_mode=prompt$/m);
+  assert.match(outputs, new RegExp('^rootpw=' + (req.rootpw || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'm'),
+    'the Worker must not invent a password when the request omits it');
   const kinds = JSON.parse(readFileSync(join(cwd, 'symbol-kinds.json'), 'utf8'));
   assert.equal(kinds.conditionContext.schema, 1);
   assert(kinds.conditionContext.symbolTypes.length > 0);
@@ -174,6 +178,9 @@ try {
   }
   runRequest({ ...request, firmware: { ...request.firmware, themeMode: 'broken' } },
     { fixtures: fixturesFor(), expectedError: /theme mode is invalid/ });
+  for (const rootpw of ['', '@empty', 'Temporary1234']) {
+    runRequest({ ...request, rootpw }, { fixtures: fixturesFor() });
+  }
   runRequest(request, { fixtures: fixturesFor({ mutate: ({ index }) => {
     const buildInputs = { schema: 1, sourceCommit: commit, feeds: [{ name: 'packages',
       method: 'src-git', options: [], url: 'https://example.invalid/packages.git', commit: 'd'.repeat(40) }] };

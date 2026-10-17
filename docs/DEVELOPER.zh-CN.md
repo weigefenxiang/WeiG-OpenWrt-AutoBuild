@@ -297,7 +297,10 @@ Worker 按构建请求中的不可变 revision 读取重建所需资产，不读
 旧任务重跑仍使用原请求中的旧快照，不能偷偷替换。应在更新后的网页重新导入历史配置，检查后生成新请求，继续保留历史配置导入兼容性。
 ## 构建结果、密码与固件产物
 
-- 初始密码按根构建策略处理，当前默认 empty；显式密码优先。Shell/set-root-password.sh
+- 构建密码策略默认 prompt：请求未填写密码时保留上游，不生成密码覆盖。
+  网页公开设置 firmware.clearInitialPassword=true 仅在启动时预填 @empty；这是可见、可删除的明确请求，
+  不是 Worker 的默认清空策略。删除后保留源码默认，填写其它值则明确覆盖；切源不补回，
+  导入未携带 rootpw 的请求恢复为空。Shell/set-root-password.sh
   生成 zzzz-weig-password，排在上游数字及 zzz 首次启动脚本之后；旧 99-init-password 已退休。
   空密码仍需注意 LAN/WAN 暴露风险。此为脚本顺序回归，不代替真机启动验收。
 - tools/build-result.mjs 汇总真实阶段证据，Run 最终结果和 Issue 回评共用；独立 notify job

@@ -23,6 +23,14 @@ if (typeof document !== 'undefined') {
 }
 
 const REQUEST_ID_RE = /^\d{6}_\d{4}$/;
+export const ISSUE_URL_LIMIT = 6000;
+export function isValidGithubOwner(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(value) && !value.includes('--');
+}
+export function githubIssueUrl(repository, parameters = {}) {
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new Error('Invalid issue repository');
+  return `https://github.com/${repository}/issues/new?${new URLSearchParams(parameters)}`;
+}
 const BRANCH_RE = /^[A-Za-z0-9._/-]{1,160}$/;
 const DISPLAY_RE = /^[A-Za-z0-9._-]{1,160}$/;
 export const BUILD_TAG_MAX_CODE_POINTS = 160;

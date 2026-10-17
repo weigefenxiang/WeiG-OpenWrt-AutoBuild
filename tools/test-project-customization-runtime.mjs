@@ -148,13 +148,14 @@ assert.equal(resolveInitialTimezone({
   offsets: { 'Unknown/Zone': '+09:00', 'Asia/Shanghai': '+08:00', 'Etc/GMT': '+00:00' },
 }), 'Etc/GMT', 'Etc/GMT must be the final named timezone fallback');
 assert.match(workflow, /DEFAULT_ROOT_PASSWORD: \$\{\{ secrets\.DEFAULT_ROOT_PASSWORD \}\}/);
-assert.match(workflow, /::add-mask::\$RPW/);
-assert.match(workflow, /printf '%s' "\$RPW" \| openssl passwd -6 -stdin/,
+const passwordScript = readFileSync(join(ROOT, 'Shell', 'set-root-password.sh'), 'utf8');
+assert.match(workflow, /bash Shell\/set-root-password.sh openwrt/);
+assert.match(passwordScript, /::add-mask::%s/);
+assert.match(passwordScript, /printf '%s' "\$password" \| openssl passwd -6 -stdin/,
   'passwords must be hashed from stdin on the runner');
-assert.match(workflow, /ROOT_HASH/);
-assert.match(workflow, /sed -i 's\|\^root:\[\^:\]\*:\|root:\$\{ROOT_HASH\}:\|'/,
+assert.match(passwordScript, /sed -i 's\|\^root:\[\^:\]\*:\|root:\$\{hash\}:\|'/,
   'the generated init script must only contain a hash');
-assert.doesNotMatch(workflow, /printf[^\n]*\$RPW[^\n]*passwd root/,
+assert.doesNotMatch(passwordScript, /printf[^\n]*\$password[^\n]*passwd root/,
   'the generated init script must not format the plaintext password');
 assert.match(workflow, /steps\.req\.outputs\.compile_jobs/);
 assert.match(workflow, /steps\.req\.outputs\.download_jobs/);

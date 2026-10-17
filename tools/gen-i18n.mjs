@@ -7,6 +7,7 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { feedbackIssueForm } from '../site/wrt/lib/feedback.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = JSON.parse(readFileSync(join(ROOT, 'tools', 'i18n-source.json'), 'utf8'));
@@ -351,6 +352,10 @@ for (const language of ACTIVE_LANGS) {
     JSON.stringify({ version: 2, language: language.id, strings: languageStrings }, null, 1) + '\n');
 }
 rmSync(join(ROOT, 'site', 'wrt', 'data', 'i18n.json'), { force: true });
+for (const language of ['en', 'zh-CN']) {
+  writeFileSync(join(ROOT, '.github', 'ISSUE_TEMPLATE', `feedback.${language}.yml`),
+    feedbackIssueForm(key => strings[key]?.[language] || strings[key]?.[SOURCE_LANGUAGE] || key));
+}
 
 
 console.log(`data/i18n: ${keys.length} 词条 × ${LANGS.length} 语言`);

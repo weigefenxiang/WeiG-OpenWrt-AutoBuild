@@ -304,6 +304,7 @@ function renderModes() {
     else { $('lanipBox').value = state.lanip = '192.168.1.1'; safeSet('wrt_lanip', state.lanip); showToast(t('lanip.invalid')); }
   });
   // 初始密码:可选;@empty 表示清空该源自带的初始密码;不持久化(是密码) / optional initial password; @empty blanks a shipped password; never persisted
+  $('rootpwBox').value = state.rootpw;
   $('rootpwBox').addEventListener('input', () => {
     const v = $('rootpwBox').value.trim();
     if (v === '' || v === '@empty' || /^[A-Za-z0-9@#%^&*_+=.,:!?-]{4,32}$/.test(v)) state.rootpw = v;
@@ -564,7 +565,8 @@ function updateLoginInfo() {
   box.textContent = '';
   const pwKey = state.rootpw === '@empty' ? 'login.pw.none'
     : state.rootpw ? 'login.pw.set'
-    : 'login.pw.none';
+    : 'login.pw.source';
+  document.querySelector('.rootpw-warning strong').hidden = !state.rootpw || state.rootpw === '@empty';
   const pwText = t(pwKey);
   //  作密码占位,模板任意语言通用 /  marks the password slot, language-agnostic
   const parts = t('login.info', { pw: '' }).split('');

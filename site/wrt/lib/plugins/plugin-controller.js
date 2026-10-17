@@ -27,10 +27,15 @@ function pluginState(p) {
   return 'ok';
 }
 function catalogPluginAvailability(option) {
-  if (!option || !catalogPackageRecordForSymbol(option.symbol)) return 'unavailable';
+  return catalogPluginRestriction(option) ? 'unavailable' : 'ok';
+}
+function catalogPluginRestriction(option) {
+  if (!option || !catalogPackageRecordForSymbol(option.symbol)) return 'missing';
   const constraints = optionStateConstraints(option);
-  return optionVisible(option) && !constraints.readOnly &&
-    (constraints.selectableStates.includes('y') || constraints.current !== 'n') ? 'ok' : 'unavailable';
+  if (constraints.readOnly) return 'readonly';
+  if (!optionVisible(option)) return 'hidden';
+  if (!constraints.selectableStates.includes('y') && constraints.current === 'n') return 'dependency';
+  return '';
 }
 const byId = (id) => PLUGINS.plugins.find((x) => x.id === id);
 
@@ -41,16 +46,18 @@ function searchHay(p) {
 }
 
 function renderCatalogApplicationsState(box) {
-  if (PLUGINS.plugins.length) return false;
-  const failed = catalogApplicationsLoadState === 'error';
-  const empty = catalogApplicationsLoadState === 'ready';
+  if (MENU_CATALOG?.applications?.rows && PLUGINS.plugins.length) return false;
+  const branchFailed = catalogLoadMode === 'error';
+  const failed = branchFailed || catalogApplicationsLoadState === 'error';
+  const error = String(branchFailed ? catalogLoadError : catalogApplicationsError);
+  const empty = catalogApplicationsLoadState === 'ready' && Boolean(MENU_CATALOG?.applications?.rows);
   const row = document.createElement(failed ? 'button' : 'div');
   row.className = 'catalog-applications-state';
   row.dataset.state = failed ? 'error' : (empty ? 'empty' : 'loading');
   if (failed) {
     row.type = 'button';
-    bindUiTooltipContent(row, { body: displayText(catalogApplicationsError) });
-    row.addEventListener('click', () => requestCatalogApplications(true));
+    bindUiTooltipContent(row, { body: displayText(error) });
+    row.addEventListener('click', () => branchFailed ? retryCatalogLoad() : requestCatalogApplications(true));
   } else {
     row.setAttribute('role', 'status');
     row.setAttribute('aria-live', 'polite');
@@ -62,8 +69,7 @@ function renderCatalogApplicationsState(box) {
     row.appendChild(spinner);
   }
   const message = document.createElement('span');
-  const detail = catalogApplicationsError.length > 160
-    ? `${catalogApplicationsError.slice(0, 157)}…` : catalogApplicationsError;
+  const detail = error.length > 160 ? `${error.slice(0, 157)}…` : error;
   message.textContent = failed
     ? t('runtime.63941ac41ca8', { value1: detail })
     : empty
@@ -328,7 +334,8 @@ function renderPlugin(p) {
   }
   const detail = (st === 'loading' ? t('runtime.eb7b1b411bf8')
     : st === 'builtin' ? t('plugin.builtin')
-    : st === 'unavailable' ? t('plugin.unavailable')
+    : st === 'unavailable' ? t(catalogOption || p.catalogOnly
+      ? 'plugin.restriction.' + (catalogPluginRestriction(catalogOption) || 'readonly') : 'plugin.unavailable')
     : pDesc(p)) + (catalogOrigin && catalogOrigin.kind !== 'inactive'
       ? `\n${t('runtime.463daf3dbfcf')}: ${catalogOrigin.label}` : '') +
     (p.warn ? '\n' + t(p.warn) : '');

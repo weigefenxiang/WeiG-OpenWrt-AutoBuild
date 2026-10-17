@@ -40,6 +40,7 @@ const expectedModules = [
   'lib/config/config-generator.js',
   'lib/config/config-importer.js',
   'lib/build/build-controller.js',
+  'lib/diagnostics/feedback-controller.js',
   'lib/diagnostics/package-probe-controller.js',
   'lib/diagnostics/self-test.js',
   'lib/core/bootstrap.js',

@@ -289,6 +289,8 @@
     const position = () => {
       raf = 0;
       if (!open || !anchor.isConnected || !layer.isConnected) return;
+      const scrollTop = layer.scrollTop;
+      const scrollLeft = layer.scrollLeft;
       const rect = anchor.getBoundingClientRect();
       const boundary = resolveBoundary();
       const header = document.querySelector('.site-header');
@@ -341,8 +343,14 @@
       layer.style.top = `${Math.round(result.top)}px`;
       layer.style.bottom = 'auto';
       layer.dataset.placement = result.placement;
+      // Intrinsic measurement must not destroy the user's reading position.
+      layer.scrollTop = scrollTop;
+      layer.scrollLeft = scrollLeft;
     };
-    const schedulePosition = () => {
+    const schedulePosition = (event) => {
+      // Internal scrolling does not move the anchor. Re-measuring it would
+      // remove max-height, reset scrollTop and schedule another scroll frame.
+      if (event?.type === 'scroll' && event.target instanceof Node && layer.contains(event.target)) return;
       if (!open || raf) return;
       raf = requestAnimationFrame(position);
     };

@@ -875,7 +875,8 @@ expect(html.includes('id="pluginStep"') && app.includes('function initCatalogApp
   applicationsLoader.includes('if (catalogApplicationsDocument && !forceRefresh) return catalogApplicationsDocument'),
   'curated applications do not share one demand/idle promise and document cache');
 expect(app.includes("catalogApplicationsLoadState = 'error'") &&
-  app.includes("row.addEventListener('click', () => requestCatalogApplications(true))") &&
+  app.includes("row.addEventListener('click', () => branchFailed ? retryCatalogLoad() : requestCatalogApplications(true))") &&
+  app.includes("const branchFailed = catalogLoadMode === 'error'") &&
   css.includes('.catalog-applications-state[data-state=error]') &&
   css.includes('.catalog-applications-spinner'),
   'curated applications loading/error/retry state is missing');

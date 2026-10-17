@@ -199,19 +199,8 @@ function catalogApplicationsPluginData(document, catalog = MENU_CATALOG) {
     for (const group of [...used].sort((a, b) => a.localeCompare(b))) if (!groups.includes(group)) groups.push(group);
     return { groups, plugins };
   }
-  return {
-    groups: [...(document?.groups || [])],
-    plugins: (document?.items || []).map((item) => ({
-      id: item.id,
-      pkg: item.package,
-      group: item.group,
-      hot: item.hot === true,
-      name: item.titleZh || item.titleEn || item.id,
-      desc: item.usageZh || item.usageEn || '',
-      nameI18n: { en: item.titleEn || item.id, 'zh-CN': item.titleZh || '', ...(item.titleI18n || {}) },
-      descI18n: { en: item.usageEn || '', 'zh-CN': item.usageZh || '', ...(item.usageI18n || {}) },
-    })),
-  };
+  // Root metadata is a naming dictionary, never evidence of availability.
+  return { groups: [], plugins: [] };
 }
 function refreshCatalogBranchApplications() {
   if (!MENU_CATALOG?.applications?.rows) return false;
@@ -599,6 +588,7 @@ function setCatalogLoadState(mode, error = '', diagnostics = []) {
   renderCatalogLoadState();
   renderCatalogLocatorResults();
   updateSubmitGate();
+  if (mode !== 'idle') renderGroups();
 }
 async function copyCatalogDiagnostics() {
   const text = catalogDiagnosticsText();
@@ -1132,13 +1122,13 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
   menuCatalogAbortController = abortController;
   menuLoadingKey = key;
   const seq = ++menuCatalogSeq;
-  setCatalogLoadState('loading');
   MENU_CATALOG = null;
   menuCatalogKey = '';
   CATALOG_MODEL = null;
   catalogShardLoader = null;
   PROFILE_BASELINE_STORE = null;
   ACTIVE_PROFILE_BASELINE = null;
+  setCatalogLoadState('loading');
   $('menuconfigStatus').className = 'hint';
   $('menuconfigStatus').textContent = t('catalog.loading');
   menuCatalogPromise = (async () => {

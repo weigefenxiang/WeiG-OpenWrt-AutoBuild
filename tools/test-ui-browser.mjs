@@ -1083,7 +1083,7 @@ async function main() {
       };
     }`);
     const heights = (visualContract?.boxes || []).map((box) => Number(box.height));
-    expect(visualContract?.actionCount === 3 && heights.every((height) => height >= 43) &&
+    expect(visualContract?.actionCount === 4 && heights.every((height) => height >= 43) &&
       Math.max(...heights) - Math.min(...heights) <= 1,
     context, 'header actions do not share one 44px control height', visualContract);
     expect(visualContract?.colorScheme === context.theme, context,
@@ -1099,6 +1099,15 @@ async function main() {
     // blog triggers in sequence so hover, focus, content replacement and
     // re-anchoring all use the same viewport-safe geometry contract.
     await exerciseHeaderTooltips(context);
+    const nativeLinks = await evaluateFunction(browser, `() =>
+      [...document.querySelectorAll('.header-actions a')].map(link => {
+        const target = link.querySelector('svg, img') || link;
+        const event = new MouseEvent('contextmenu', { bubbles:true, cancelable:true, button:2 });
+        target.dispatchEvent(event);
+        return { href:link.href, prevented:event.defaultPrevented };
+      })`);
+    expect(nativeLinks.length === 2 && nativeLinks.every(link => !link.prevented && /^https:/.test(link.href)),
+      context, 'native link context menu must not be intercepted by tooltip pinning', nativeLinks);
 
     // The dock may start collapsed or return to gear-only after Escape. Open
     // the shared dock panel whenever a test needs one of its child controls.
@@ -1107,18 +1116,30 @@ async function main() {
     await click('#langSel');
     await waitVisible('#languagePanel', context);
     await assertInside('#languagePanel', context, { actionbarSafe: true });
-    const languageMenu = await evaluateFunction(browser, `() => {
+    const languageMenu = await evaluateFunction(browser, `async () => {
       const panel = document.getElementById('languagePanel');
       const button = document.getElementById('langSel');
       const viewport = readViewportRect();
       const r = panel.getBoundingClientRect();
       const common = panel.querySelectorAll('[role=option]').length;
+      const scrollAndWait = async () => {
+        panel.scrollTop = Math.min(150, panel.scrollHeight-panel.clientHeight);
+        const before = panel.scrollTop;
+        await new Promise(resolve=>setTimeout(resolve,150));
+        const after = panel.scrollTop;
+        window.dispatchEvent(new Event('resize'));
+        await new Promise(resolve=>setTimeout(resolve,100));
+        return {before,after,resized:panel.scrollTop};
+      };
+      const commonScroll = await scrollAndWait();
       document.getElementById('languageMore').click();
+      await new Promise(resolve=>setTimeout(resolve,100));
       const all = panel.querySelectorAll('[role=option]').length;
+      const allScroll = await scrollAndWait();
       const search = document.getElementById('languageSearch');
       search.value = '日本'; search.dispatchEvent(new Event('input'));
       const filtered = [...panel.querySelectorAll('[role=option]')].map(node => node.dataset.language);
-      return { common, all, filtered, width:r.width, height:r.height, viewport,
+      return { common, all, filtered, commonScroll, allScroll, width:r.width, height:r.height, viewport,
         triggerWidth:button.getBoundingClientRect().width,
         pending:I18N.languages.filter(entry => entry.pending).length };
     }`);
@@ -1127,6 +1148,10 @@ async function main() {
       languageMenu.width <= languageMenu.viewport.width / 2 + 1 &&
       languageMenu.height <= languageMenu.viewport.height / 2 + 1, context,
       'compact searchable language directory or half-viewport bounds regressed', languageMenu);
+    for (const scroll of [languageMenu.commonScroll,languageMenu.allScroll]) {
+      expect(scroll.before > 0 && scroll.before === scroll.after && scroll.after === scroll.resized,
+        context, 'internal scrolling or remeasurement resets a language reading position', scroll);
+    }
     await resetFloatingState();
     await click('#langSel');
     await waitVisible('#languagePanel', context);
@@ -1258,6 +1283,7 @@ async function main() {
       const officialStyle = label && {bg:getComputedStyle(label).backgroundColor,color:getComputedStyle(label).color};
       owner.value = 'https://github.com/not-a-username'; owner.dispatchEvent(new Event('input'));
       const invalidLinks = [...document.querySelectorAll('#selfHint a')].map(node => node.href);
+      const invalidGreen = Boolean(document.querySelector('#selfHint .workflow-enable-label'));
       owner.value = priorOwner; owner.dispatchEvent(new Event('input'));
       const previous = {source:state.source,password:state.rootpw};
       const sources = ['OpenWrt','ImmortalWrt','lede','iStoreOS','Lienol','hanwckf'];
@@ -1272,22 +1298,43 @@ async function main() {
         return {id,empty,cleared,custom};
       });
       state.source=previous.source;state.rootpw=previous.password;updateLoginInfo();
-      return {links,emphasis,officialStyle,invalidLinks,login,
+      return {links,emphasis,officialStyle,invalidLinks,invalidGreen,login,
         sizingRequests:performance.getEntriesByType('resource').filter(row=>/package-sizes/.test(row.name)).length,
         guideLinks:[...document.querySelectorAll('.blog-link')].map(node=>node.href)};
     }`);
     expect(forkAndPassword.links.includes('https://github.com/levenwindy/WeiG-OpenWrt-AutoBuild/settings') &&
       forkAndPassword.links.includes('https://github.com/levenwindy/WeiG-OpenWrt-AutoBuild/actions') &&
-      forkAndPassword.invalidLinks.length === 2 && forkAndPassword.emphasis.includes('Issues') &&
+      forkAndPassword.invalidLinks.length === 2 && !forkAndPassword.invalidGreen && forkAndPassword.emphasis.includes('Issues') &&
       forkAndPassword.emphasis.includes('Features') && forkAndPassword.officialStyle.color === 'rgb(255, 255, 255)' &&
       forkAndPassword.sizingRequests === 0 &&
       forkAndPassword.guideLinks.every(url=>url===EXPECTED_GUIDE_URL), context,
       'Fork links, emphasis, workflow label, tutorial links or size retirement regressed', forkAndPassword);
     for (const login of forkAndPassword.login) {
-      expect(/none|无/.test(login.empty) &&
+      expect(/source default|源码默认/.test(login.empty) &&
         /none|无/.test(login.cleared) && !/Test1234/.test(login.custom), context,
         'source default, explicit clearing or custom password display is wrong', login);
     }
+
+    await resetFloatingState();
+    await click('#feedbackBtn');
+    await waitVisible('#feedbackForm', context);
+    await evaluateFunction(browser, `() => document.getElementById('feedbackGithub').scrollIntoView({block:'nearest'})`);
+    await assertInside('#feedbackGithub', context, {within:'.modal'});
+    const feedback = await evaluateFunction(browser, `() => {
+      const description=document.getElementById('feedback-description');
+      const required=description.required;
+      description.value='Example interaction failure';description.dispatchEvent(new Event('input',{bubbles:true}));
+      const url=new URL(document.getElementById('feedbackGithub').href);
+      return {required,url:url.href,title:url.searchParams.get('title'),body:url.searchParams.get('body'),
+        report:document.getElementById('feedbackReport').value,
+        interfaceOptions:document.getElementById('feedback-interface').options.length,
+        fieldHeights:[...document.querySelectorAll('.feedback-field input,.feedback-field select')].map(el=>el.getBoundingClientRect().height)};
+    }`);
+    expect(feedback.required && feedback.title.startsWith('[feedback]') && !feedback.title.startsWith('[build]') &&
+      feedback.interfaceOptions===4 && feedback.fieldHeights.every(height=>height>=43) && feedback.body===feedback.report && feedback.report.includes('Example interaction failure') &&
+      feedback.report.includes('Target Profile') && feedback.url.startsWith('https://github.com/'+SITE_CONFIG.project.repository+'/issues/new?'),
+      context, 'feedback fields, context or non-build Issue destination regressed', feedback);
+    await click('#modalClose');
 
 
     // Open only the confirmation surface: never click a request/download action.

@@ -173,7 +173,7 @@ function renderForkHint() {
   if (!hint || !PROJECT) return;
   hint.textContent = '';
   const owner = String(state.owner || '').trim();
-  const validOwner = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(owner);
+  const validOwner = BUILD_IDENTITY_MODULE.isValidGithubOwner(owner);
   const base = validOwner ? 'https://github.com/' + owner + '/' + REPO_NAME : '';
   const mkA = (href, text) => {
     const node = document.createElement(href ? 'a' : 'strong');
@@ -188,9 +188,8 @@ function renderForkHint() {
     issues: () => mkA('', 'Issues'),
     features: () => mkA('', 'Features'),
     enable: () => {
-      const node = document.createElement('span');
-      node.className = 'workflow-enable-label';
-      node.textContent = t('mode.self.enableLabel');
+      const node = mkA(base ? base + '/actions' : '', t('mode.self.enableLabel'));
+      if (base) node.className = 'workflow-enable-label';
       return node;
     },
   };
@@ -241,6 +240,7 @@ function renderLangSel() {
   const render = () => {
     const needle = search.value.trim().toLocaleLowerCase();
     list.textContent = '';
+    panel.scrollTop = 0;
     search.placeholder = t('lang.search');
     more.textContent = t(showMore ? 'lang.less' : 'lang.more');
     more.hidden = Boolean(needle);

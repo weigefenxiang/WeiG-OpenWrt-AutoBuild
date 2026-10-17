@@ -177,6 +177,16 @@ browser zoom.
   with eleven existing languages and thirty-nine pending entries under More.
   Pending entries explicitly use English; startup loads only the effective
   language bundle, whose missing strings are resolved by the generator.
+- Scrolling within a floating layer never schedules anchor positioning. Intrinsic
+  remeasurement preserves its scroll offsets; search/More intentionally reset the
+  language list, while viewport changes retain the reading position. Links with
+  tooltips keep native context menus; only non-navigation targets use right-click pinning.
+- Feedback sits immediately before Guide in the header and reuses the modal shell,
+  responsive fields and current language bundle. Its browser and generated GitHub
+  forms share one field definition. Environment capture is whitelisted and locally
+  previewed; navigation never auto-submits an Issue or starts a build. Long reports
+  use explicit copy/paste rather than silently dropping content. New native forms
+  become available only after normal default-branch promotion.
 - Cloud submission uses the shared wide modal at up to 960px: a responsive
   summary above three full-width action rows (request, import, config download).
   Each row has naturally sized copy on the left and its button on the right;

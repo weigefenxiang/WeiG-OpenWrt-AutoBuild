@@ -19,7 +19,8 @@ const SELECTOR_KEYS = ['system', 'subtarget', 'profile'];
 const LOADING_KEYS = ['startup', 'idle', 'startupConcurrency', 'idleConcurrency', 'idleDelayMs'];
 const UI_REQUIRED_KEYS = ['defaultLanguage', 'colorMode'];
 const UI_KEYS = [...UI_REQUIRED_KEYS, 'applicationCountAdvisory'];
-const FIRMWARE_KEYS = ['lanIp', 'timezone', 'theme', 'ntp', 'packageMirror'];
+const FIRMWARE_REQUIRED_KEYS = ['lanIp', 'timezone', 'theme', 'ntp', 'packageMirror'];
+const FIRMWARE_KEYS = [...FIRMWARE_REQUIRED_KEYS, 'clearInitialPassword'];
 const TIMEZONE_KEYS = ['zonename', 'timezone'];
 const NTP_KEYS = ['preset', 'servers'];
 const BUILD_KEYS = ['defaultTag'];
@@ -214,7 +215,10 @@ function validateUi(value, errors) {
 function validateFirmware(value, errors) {
   const path = 'site.firmware';
   if (!isRecord(value)) { errors.push(`${path}: must be an object`); return; }
-  addUnknownAndMissing(value, path, FIRMWARE_KEYS, errors);
+  addUnknownAndMissing(value, path, FIRMWARE_KEYS, errors, FIRMWARE_REQUIRED_KEYS);
+  if (Object.hasOwn(value, 'clearInitialPassword') && typeof value.clearInitialPassword !== 'boolean') {
+    errors.push(`${path}.clearInitialPassword: must be a boolean`);
+  }
   validatePrivateIpv4(value.lanIp, `${path}.lanIp`, errors);
 
   const timezone = value.timezone;

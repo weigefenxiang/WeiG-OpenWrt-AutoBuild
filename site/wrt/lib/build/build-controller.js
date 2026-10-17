@@ -9,18 +9,17 @@
 /* ============ Submit a cloud build ============ */
 function targetRepo() {
   if (state.mode === 'self') {
-    const owner = state.owner.replace(/[^A-Za-z0-9-]/g, '');
-    return owner ? owner + '/' + REPO_NAME : null;
+    const owner = state.owner.trim();
+    return BUILD_IDENTITY_MODULE.isValidGithubOwner(owner) ? owner + '/' + REPO_NAME : null;
   }
   return OFFICIAL_REPO;
 }
 
-const MOBILE_ISSUE_URL_LIMIT = 6000;
 const mobileIssueClient = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
 function issueSubmitUrl(repo, title, body = '') {
   const params = new URLSearchParams({ template: 'custom-build.yml', title });
   if (body) params.set('body', body);
-  return 'https://github.com/' + repo + '/issues/new?' + params;
+  return BUILD_IDENTITY_MODULE.githubIssueUrl(repo, params);
 }
 function selectedFirmwareOption(id) {
   const option = $(id)?.selectedOptions?.[0];
@@ -65,7 +64,7 @@ async function mobileIssuePayload(payload) {
   let binary = '';
   for (let i = 0; i < zipped.length; i += 0x4000) binary += String.fromCharCode(...zipped.subarray(i, i + 0x4000));
   const body = '<!-- WEIG_BUILD_REQUEST_GZIP_BASE64\n' + btoa(binary) + '\n-->';
-  if (encodeURIComponent(body).length > MOBILE_ISSUE_URL_LIMIT) {
+  if (encodeURIComponent(body).length > BUILD_IDENTITY_MODULE.ISSUE_URL_LIMIT) {
     throw new Error('The mobile request is too large; use a browser to upload the JSON file you just downloaded');
   }
   return body;

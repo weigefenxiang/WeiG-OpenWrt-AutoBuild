@@ -316,7 +316,11 @@ The bottom bar separates effective Y/M applications from explicit selections. Im
 Size loading exposes idle/loading/ready/unavailable/error states. Missing exact coverage may be cached; transport/validation errors must not become negative coverage. Retry only on explicit user action or a new import, using forceRefresh on the same Catalog shard loader, without render-triggered retry loops. Existing import logs record status, architecture, shard and asset identity. Optional sizes never block import; unavailable data retains RootFS and the list with an explicit status, not a fake zero or percentage.
 ## Execution results, passwords and firmware artifacts
 
-- The build password policy defaults to empty; explicit passwords take precedence.
+- The build password policy defaults to prompt: an absent/blank request preserves upstream credentials.
+  The public site option firmware.clearInitialPassword=true prefills @empty once on startup;
+  this is visible, editable request intent, not a Worker fallback. Deleting it preserves the
+  source default, while an explicit custom value overrides it. Never refill it on a source
+  change; importing a request without rootpw restores the blank/preserve intent.
   Shell/set-root-password.sh generates zzzz-weig-password after upstream numeric/zzz
   first-boot defaults. The old 99-init-password override is retired. Empty passwords
   still require safe network exposure; script-order tests are not device boot tests.
