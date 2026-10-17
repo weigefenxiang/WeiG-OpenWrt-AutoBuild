@@ -890,8 +890,8 @@ function captureImportWorkspace() {
   const environment = { MENU_CATALOG, CATALOG_MODEL, PLUGINS, ACTIVE_PROFILE_BASELINE,
     PROFILE_BASELINE_STORE, profileBaselineKey, menuCatalogKey, catalogShardLoader,
     catalogLoadMode, catalogLoadError, catalogLoadDiagnostics, catalogApplicationsDocument,
-    catalogApplicationsLoadState, catalogApplicationsError, catalogPackageSizesDocument,
-    catalogPackageSizesKey, importedTargetVerified, packageMirrorSelectionExplicit, menuExpanded, menuPath, menuParent };
+    catalogApplicationsLoadState, catalogApplicationsError,
+    importedTargetVerified, packageMirrorSelectionExplicit, menuExpanded, menuPath, menuParent };
   const layers = [catalogBaselineValues, catalogBaselineOrigins, profilePackageOverrides,
     menuImportedOriginal, importedConfigValues, importedUnknownOriginal, importedUnknownEdits]
     .map((map) => [map, new Map(map)]);
@@ -903,14 +903,14 @@ function captureImportWorkspace() {
     menuCatalogSeq++;
     menuCatalogAbortController?.abort();
     menuCatalogPromise = catalogMenuLoadingPromise = catalogHiddenLoadingPromise = null;
-    catalogHelpLoadingPromise = catalogApplicationsPromise = catalogPackageSizesPromise = null;
+    catalogHelpLoadingPromise = catalogApplicationsPromise = null;
     catalogProfileBaselineLoadingPromise = null;
     menuLoadingKey = '';
     ({ MENU_CATALOG, CATALOG_MODEL, PLUGINS, ACTIVE_PROFILE_BASELINE,
       PROFILE_BASELINE_STORE, profileBaselineKey, menuCatalogKey, catalogShardLoader,
       catalogLoadMode, catalogLoadError, catalogLoadDiagnostics, catalogApplicationsDocument,
-      catalogApplicationsLoadState, catalogApplicationsError, catalogPackageSizesDocument,
-      catalogPackageSizesKey, importedTargetVerified, packageMirrorSelectionExplicit, menuExpanded, menuPath, menuParent } = environment);
+      catalogApplicationsLoadState, catalogApplicationsError,
+      importedTargetVerified, packageMirrorSelectionExplicit, menuExpanded, menuPath, menuParent } = environment);
     Object.assign(state, savedState);
     for (const [map, saved] of layers) restoreMap(map, saved);
     restoreSet(menuImportedNonDefault, nonDefault);
@@ -982,11 +982,6 @@ async function importConfigFile(file) {
     if (seq !== configImportSeq) return;
     await operation.checkpoint(t('busy.processing'));
     await restoreSelections(state.importedConfig, payload, operation);
-    // Optional observations must not block importing an otherwise valid
-    // configuration. A new import may retry a prior failed size request once.
-    void ensureCatalogPackageSizes(catalogPackageSizesStatus.state === 'error');
-    importLogStep('package-sizes-after-import', { ...catalogPackageSizesStatus,
-      assetRef: MENU_INDEX?.assetRef || '' });
     finishImportLog('success');
     showToast(legacyJsonRecovered
       ? t('runtime.8527b3686481')

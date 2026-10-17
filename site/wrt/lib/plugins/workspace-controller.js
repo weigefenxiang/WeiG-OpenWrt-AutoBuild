@@ -305,6 +305,7 @@ function renderModes() {
   $('ownerBox').addEventListener('input', () => {
     state.owner = $('ownerBox').value.trim();
     safeSet('wrt_owner', state.owner);
+    renderForkHint();
   });
   $('lanipBox').value = state.lanip;
   $('lanipBox').addEventListener('change', () => {
@@ -574,7 +575,7 @@ function updateLoginInfo() {
   box.textContent = '';
   const pwKey = state.rootpw === '@empty' ? 'login.pw.none'
     : state.rootpw ? 'login.pw.set'
-    : state.source.loginPw ? 'login.pw.' + state.source.loginPw : 'login.pw.native';
+    : state.source.loginPw ? 'login.pw.' + state.source.loginPw : 'login.pw.none';
   const pwText = t(pwKey);
   //  作密码占位,模板任意语言通用 /  marks the password slot, language-agnostic
   const parts = t('login.info', { pw: '' }).split('');

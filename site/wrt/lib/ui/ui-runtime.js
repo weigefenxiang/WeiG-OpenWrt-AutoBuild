@@ -169,15 +169,15 @@ function calculateFloatingGeometry({
   let top = Math.max(viewport.top + safeMargin, owner.top + safeMargin);
   let right = Math.min(viewport.right - safeMargin, owner.right - safeMargin);
   let bottom = Math.min(viewport.bottom - safeMargin, owner.bottom - safeMargin);
+  // A wholly offscreen owner has no usable intersection. The viewport is
+  // still authoritative; a midpoint outside it cannot be a safe fallback.
   if (right < left) {
-    const middle = (left + right) / 2;
-    left = middle;
-    right = middle;
+    left = viewport.left + safeMargin;
+    right = viewport.right - safeMargin;
   }
   if (bottom < top) {
-    const middle = (top + bottom) / 2;
-    top = middle;
-    bottom = middle;
+    top = viewport.top + safeMargin;
+    bottom = viewport.bottom - safeMargin;
   }
 
   // Full-width sticky regions (header/actionbar) split the usable vertical
@@ -735,41 +735,6 @@ function renderCatalogBuildInfo() {
   renderBuildInfoSha('buildInfoCatalogData', MENU_INDEX?.assetRef);
 }
 
-function positionBuildInfoPanel(trigger, card) {
-  if (!trigger || !card) return;
-  const viewport = readViewportRect();
-  const triggerRect = trigger.getBoundingClientRect();
-  const cardRect = card.getBoundingClientRect();
-  const header = document.querySelector('.site-header');
-  const actionbar = $('actionbar');
-  const avoidRects = [header, actionbar]
-    .filter((element) => element && !element.hidden)
-    .map((element) => element.getBoundingClientRect());
-  const geometry = calculateFloatingGeometry({
-    anchorRect: triggerRect,
-    layerRect: { width: cardRect.width || 480, height: cardRect.height || 420 },
-    viewportRect: viewport,
-    avoidRects,
-    margin: 8,
-    gap: 9,
-    maxWidth: 480,
-    preferredHeight: cardRect.height || 420,
-    minHeight: 1,
-    placements: ['above', 'below'],
-    align: 'center',
-  });
-  const anchor = Math.max(18, Math.min(geometry.width - 18,
-    triggerRect.left + (triggerRect.width / 2) - geometry.left));
-  card.style.left = `${Math.round(geometry.left)}px`;
-  card.style.top = `${Math.round(geometry.top)}px`;
-  card.style.width = `${Math.max(1, Math.round(geometry.width))}px`;
-  card.style.maxWidth = `${Math.max(1, Math.round(geometry.maxWidth))}px`;
-  card.style.maxHeight = `${Math.max(1, Math.round(geometry.maxHeight))}px`;
-  card.style.overflowY = 'auto';
-  card.dataset.placement = geometry.placement;
-  card.style.setProperty('--build-info-anchor-x', `${Math.round(anchor)}px`);
-}
-
 const BUILD_INFO_INTERACTIVE_SELECTOR = [
   'a[href]', 'button', 'input', 'select', 'textarea', 'label', 'summary',
   '[contenteditable="true"]', '[role="button"]', '[role="checkbox"]', '[role="radio"]',
@@ -787,24 +752,15 @@ function renderBuildInfo() {
   const panel = $('buildInfo');
   const card = $('buildInfoCard');
   const closeButton = $('buildInfoClose');
-  // The actionbar uses backdrop-filter for its glass treatment.  Chromium
-  // treats that ancestor as a containing block for fixed descendants, which
-  // would make the card coordinates relative to the sticky bar instead of
-  // the visual viewport.  Keep the semantic ownership in #buildInfo while
-  // the card is open, but portal the actual layer to body.
-  const cardOriginParent = card.parentNode;
-  const cardOriginNextSibling = card.nextSibling;
-  const portalBuildInfoCard = () => {
-    if (card.parentNode !== document.body) document.body.appendChild(card);
-    card.classList.add('build-info-card-portal');
+  const syncOpen = (open) => {
+    panel.classList.toggle('is-open', open);
+    trigger.setAttribute('aria-expanded', String(open));
   };
-  const restoreBuildInfoCard = () => {
-    if (cardOriginParent?.isConnected && card.parentNode !== cardOriginParent) {
-      cardOriginParent.insertBefore(card,
-        cardOriginNextSibling?.parentNode === cardOriginParent ? cardOriginNextSibling : null);
-    }
-    card.classList.remove('build-info-card-portal');
-  };
+  const floating = globalThis.createFloatingLayerController(trigger, card, {
+    preset: 'bounded-card', placements: ['above', 'below'], align: 'center',
+    shouldDismissOutside: buildInfoInteractiveTarget,
+    onDismiss: () => syncOpen(false),
+  });
   trigger.textContent = shortSiteVersion(state.siteVersion);
   document.querySelectorAll('.site-version-value').forEach((node) => { node.textContent = state.siteVersion; });
   const meta = state.buildMeta;
@@ -812,11 +768,8 @@ function renderBuildInfo() {
   renderCatalogBuildInfo();
   $('buildInfoBuilt').textContent = formatBuildTime(meta?.builtAt);
   const setOpen = (open) => {
-    if (open) portalBuildInfoCard();
-    panel.classList.toggle('is-open', open);
-    trigger.setAttribute('aria-expanded', String(open));
-    if (open) requestAnimationFrame(() => positionBuildInfoPanel(trigger, card));
-    else restoreBuildInfoCard();
+    syncOpen(open);
+    if (open) floating?.open(); else floating?.close();
   };
   trigger.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -826,28 +779,13 @@ function renderBuildInfo() {
     event.stopPropagation();
     setOpen(false);
   });
-  document.addEventListener('click', (event) => {
-    if (!panel.classList.contains('is-open') || panel.contains(event.target) || card.contains(event.target)) return;
-    if (buildInfoInteractiveTarget(event.target)) setOpen(false);
-  });
   document.addEventListener('dblclick', (event) => {
     if (panel.classList.contains('is-open') && !panel.contains(event.target) && !card.contains(event.target)) setOpen(false);
   });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') setOpen(false);
   });
-  window.addEventListener('resize', () => {
-    if (panel.classList.contains('is-open')) positionBuildInfoPanel(trigger, card);
-  });
-  globalThis.visualViewport?.addEventListener('resize', () => {
-    if (panel.classList.contains('is-open')) positionBuildInfoPanel(trigger, card);
-  }, { passive: true });
-  globalThis.visualViewport?.addEventListener('scroll', () => {
-    if (panel.classList.contains('is-open')) positionBuildInfoPanel(trigger, card);
-  }, { passive: true });
-  window.addEventListener('scroll', () => {
-    if (panel.classList.contains('is-open')) positionBuildInfoPanel(trigger, card);
-  }, { passive: true, capture: true });
+
 }
 
 let lastFocus = null;

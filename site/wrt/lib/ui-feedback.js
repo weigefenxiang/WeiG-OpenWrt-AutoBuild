@@ -175,9 +175,10 @@
   const FLOATING_PRESETS = Object.freeze({
     dropdown: Object.freeze({ fitContent: true }),
     'wide-filter': Object.freeze({
-      fitContent: false, minWidth: 520, maxWidth: 760,
-      preferredHeight: (viewport) => Math.round(viewport.height * .78),
+      fitContent: true, minWidth: 0, maxWidthRatio: .5, maxHeightRatio: .5, boundary: false,
+      placements: ['below', 'above', 'left', 'right'],
     }),
+    'bounded-card': Object.freeze({ fitContent: true, maxWidthRatio: .5, maxHeightRatio: .5, boundary: false }),
     'dock-panel': Object.freeze({
       fitContent: false, minWidth: 220, maxWidth: 320,
       preferredHeight: (viewport) => Math.min(420, Math.round(viewport.height * .72)),
@@ -256,7 +257,9 @@
       else delete layer.dataset.floatingState;
     };
     const resolveBoundary = () => {
-      let boundary = options.boundary;
+      let boundary = options.boundary ?? presetConfig.boundary;
+      // Ownership controls dismissal; viewport-bound panels may cross a section edge.
+      if (boundary === false) return null;
       if (typeof boundary === 'function') boundary = boundary(anchor, layer);
       if (typeof boundary === 'string') boundary = anchor.closest(boundary) || document.querySelector(boundary);
       if (boundary instanceof Element) return boundary;
@@ -298,20 +301,32 @@
       layer.style.position = 'fixed';
       layer.style.boxSizing = 'border-box';
       layer.style.zIndex = String(Number(options.zIndex) || 70);
-      const naturalWidth = naturalLayerWidth();
       const viewport = geometry.readViewportRect();
+      const widthRatio = Number(options.maxWidthRatio ?? presetConfig.maxWidthRatio) || 1;
+      const heightRatio = Number(options.maxHeightRatio ?? presetConfig.maxHeightRatio) || 1;
+      const widthCap = Math.max(1, Math.min(maxWidth || viewport.width, viewport.width * widthRatio));
+      const heightCap = Math.max(1, Math.floor(viewport.height * heightRatio));
+      const naturalWidth = naturalLayerWidth();
+      if (fitContent) {
+        // Measure content at its final width, not at last frame's scroll cap.
+        layer.style.width = `${Math.min(widthCap, naturalWidth || widthCap)}px`;
+        layer.style.maxWidth = `${widthCap}px`;
+        layer.style.maxHeight = 'none';
+      }
       const layerRect = layer.getBoundingClientRect();
+      const contentHeight = Math.ceil(layer.scrollHeight + layer.offsetHeight - layer.clientHeight);
       const result = geometry.calculateFloatingGeometry({
         anchorRect: rect,
-        layerRect: { width: Math.max(naturalWidth, layerRect.width), height: layerRect.height },
+        layerRect: { width: Math.min(widthCap, Math.max(naturalWidth, layerRect.width)),
+          height: Math.min(heightCap, fitContent ? contentHeight : layerRect.height) },
         viewportRect: viewport,
         boundaryRect: boundary?.getBoundingClientRect?.() || null,
         avoidRects,
         margin,
         gap,
         minWidth: Math.max(minWidth, naturalWidth),
-        maxWidth,
-        preferredHeight: resolvePreferredHeight(viewport),
+        maxWidth: widthCap,
+        preferredHeight: fitContent ? Math.min(contentHeight, heightCap) : resolvePreferredHeight(viewport),
         minHeight: 1,
         placements,
         align,
@@ -321,7 +336,7 @@
       layer.style.width = `${Math.max(1, Math.round(result.width))}px`;
       layer.style.minWidth = '0';
       layer.style.maxWidth = `${Math.max(1, Math.round(result.maxWidth))}px`;
-      layer.style.maxHeight = `${Math.max(1, Math.round(result.maxHeight))}px`;
+      layer.style.maxHeight = `${Math.max(1, Math.min(heightCap, Math.floor(result.maxHeight)))}px`;
       layer.style.overflowY = 'auto';
       layer.style.top = `${Math.round(result.top)}px`;
       layer.style.bottom = 'auto';
@@ -406,6 +421,7 @@
     };
     const outsidePointerDown = (event) => {
       if (anchor.contains(event.target) || layer.contains(event.target)) return;
+      if (options.shouldDismissOutside && !options.shouldDismissOutside(event.target)) return;
       dismiss();
     };
     const controller = {

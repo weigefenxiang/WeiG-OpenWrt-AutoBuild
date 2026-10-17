@@ -29,6 +29,284 @@ const LANGS = [
   { id: 'vi', name: 'Vietnamese', native: 'Tiếng Việt' },
 ];
 
+// Pending entries expose the language directory without claiming translated UI.
+LANGS.push(...[
+  {
+    "id": "ar",
+    "name": "Arabic",
+    "native": "العربية",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "ast",
+    "name": "Asturian",
+    "native": "Asturianu",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "az",
+    "name": "Azerbaijani",
+    "native": "Azərbaycan dili",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "be",
+    "name": "Belarusian",
+    "native": "Беларуская",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "bg",
+    "name": "Bulgarian",
+    "native": "Български",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "bn",
+    "name": "Bangla",
+    "native": "বাংলা",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "bn-BD",
+    "name": "Bangla (Bangladesh)",
+    "native": "বাংলা (বাংলাদেশ)",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "ca",
+    "name": "Catalan",
+    "native": "Català",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "cs",
+    "name": "Czech",
+    "native": "Čeština",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "da",
+    "name": "Danish",
+    "native": "Dansk",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "el",
+    "name": "Greek",
+    "native": "Ελληνικά",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "fa",
+    "name": "Persian",
+    "native": "فارسی",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "fi",
+    "name": "Finnish",
+    "native": "Suomi",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "fil",
+    "name": "Filipino",
+    "native": "Filipino",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "ga",
+    "name": "Irish",
+    "native": "Gaeilge",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "he",
+    "name": "Hebrew",
+    "native": "עברית",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "hi",
+    "name": "Hindi",
+    "native": "हिन्दी",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "hu",
+    "name": "Hungarian",
+    "native": "Magyar",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "id",
+    "name": "Indonesian",
+    "native": "Bahasa Indonesia",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "it",
+    "name": "Italian",
+    "native": "Italiano",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "ka",
+    "name": "Georgian",
+    "native": "ქართული",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "lo",
+    "name": "Lao",
+    "native": "ລາວ",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "lt",
+    "name": "Lithuanian",
+    "native": "Lietuvių",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "lv",
+    "name": "Latvian",
+    "native": "Latviešu",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "ml",
+    "name": "Malayalam",
+    "native": "മലയാളം",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "mr",
+    "name": "Marathi",
+    "native": "मराठी",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "ms",
+    "name": "Malay",
+    "native": "Bahasa Melayu",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "nb-NO",
+    "name": "Norwegian Bokmål (Norway)",
+    "native": "Norsk bokmål",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "nl",
+    "name": "Dutch",
+    "native": "Nederlands",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "pl",
+    "name": "Polish",
+    "native": "Polski",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "pt-BR",
+    "name": "Brazilian Portuguese",
+    "native": "Português (Brasil)",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "ro",
+    "name": "Romanian",
+    "native": "Română",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "sk",
+    "name": "Slovak",
+    "native": "Slovenčina",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "sv",
+    "name": "Swedish",
+    "native": "Svenska",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "ta",
+    "name": "Tamil",
+    "native": "தமிழ்",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "tr",
+    "name": "Turkish",
+    "native": "Türkçe",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "uk",
+    "name": "Ukrainian",
+    "native": "Українська",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "ur",
+    "name": "Urdu",
+    "native": "اردو",
+    "pending": true,
+    "bundle": "en"
+  },
+  {
+    "id": "yua",
+    "name": "yua",
+    "native": "Maaya t'aan",
+    "pending": true,
+    "bundle": "en"
+  }
+]);
+const ACTIVE_LANGS = LANGS.filter((language) => !language.pending);
+
 const keys = Object.keys(SRC.strings);
 const strings = {};
 const warnings = [];
@@ -39,7 +317,7 @@ for (const k of keys) {
   const english = SRC.strings[k];
   strings[k] = { [SOURCE_LANGUAGE]: english };
   const want = (english.match(PH) || []).sort().join(',');
-  for (const l of LANGS) {
+  for (const l of ACTIVE_LANGS) {
     if (l.id === SOURCE_LANGUAGE) continue;
     const v = TR[l.id] && TR[l.id][k];
     if (v === undefined || v === '') {
@@ -65,7 +343,7 @@ const outputDirectory = join(ROOT, 'site', 'wrt', 'data', 'i18n');
 mkdirSync(outputDirectory, { recursive: true });
 writeFileSync(join(outputDirectory, 'index.json'),
   JSON.stringify({ version: 2, fallback: SOURCE_LANGUAGE, source: SOURCE_LANGUAGE, languages: LANGS }, null, 1) + '\n');
-for (const language of LANGS) {
+for (const language of ACTIVE_LANGS) {
   const languageStrings = Object.fromEntries(keys.map((key) => [key,
     strings[key][language.id] || strings[key][SOURCE_LANGUAGE],
   ]));
@@ -76,7 +354,7 @@ rmSync(join(ROOT, 'site', 'wrt', 'data', 'i18n.json'), { force: true });
 
 
 console.log(`data/i18n: ${keys.length} 词条 × ${LANGS.length} 语言`);
-for (const l of LANGS) {
+for (const l of ACTIVE_LANGS) {
   const n = keys.filter((k) => strings[k][l.id]).length;
   console.log(`  ${l.id.padEnd(6)} ${n}/${keys.length}` + (n < keys.length ? ' (缺的运行时回退英文)' : ''));
 }

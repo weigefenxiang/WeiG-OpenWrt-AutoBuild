@@ -333,9 +333,7 @@ function renderPlugin(p) {
       ? `\n${t('runtime.463daf3dbfcf')}: ${catalogOrigin.label}` : '') +
     (p.warn ? '\n' + t(p.warn) : '');
   const pkg = p.pkgs?.[state.source.id] || p.pkg || p.catalogCandidates?.[0] || p.id;
-  const size = Number.isSafeInteger(p.sizeBytes) && p.sizeBytes >= 0
-    ? t('drawer.size', { n: fmtSize(p.sizeBytes) }) : '';
-  const tooltipBody = displayText(detail) + '\n' + displayText(pkg) + (size ? ' · ' + size : '');
+  const tooltipBody = displayText(detail) + '\n' + displayText(pkg);
   const tooltip = { title: pName(p), body: tooltipBody, key: `plugin:${p.id}`,
     action: catalogOption ? {
       label: t(st === 'unavailable' ? 'dependency.reason' : 'dependency.toggle'),
@@ -473,70 +471,6 @@ function rootfsPartitionInfo() {
   const path = (option.path || []).map(menuPathLabel).filter(Boolean);
   return { option, value, project: displayText(option.promptEn || option.prompt || 'Root filesystem partition size (in MiB)'), path };
 }
-function packageSizeEstimate() {
-  if (state.device?.id !== 'catalog-target' || !MENU_CATALOG || !catalogPackageSizesDocument) return null;
-  const sizes = catalogObservedPackageSizes();
-  if (![...sizes.values()].some((row) => Number.isSafeInteger(row.installedBytes))) return null;
-  const values = catalogEngineValues();
-  const direct = new Set();
-  for (const [symbol, value] of catalogUserOverrides) {
-    const record = catalogPackageRecordForSymbol(symbol);
-    if (record && value === 'y' && values.get(symbol) === 'y') direct.add(record.package);
-  }
-  const total = new Set();
-  for (const [symbol, value] of values) {
-    const record = catalogPackageRecordForSymbol(symbol);
-    if (record && value === 'y') total.add(record.package);
-  }
-  const summarize = (names) => {
-    let knownBytes = 0;
-    let unknown = 0;
-    for (const name of names) {
-      const row = sizes.get(name);
-      const value = row?.installedBytes;
-      if (Number.isSafeInteger(value) && value >= 0) knownBytes += value;
-      else unknown++;
-    }
-    return { packages: names.size, knownBytes, unknown };
-  };
-  const summary = { direct: summarize(direct), total: summarize(total) };
-  return summary.total.packages > 0 && summary.total.unknown === summary.total.packages ? null : summary;
-}
-function packageSizeCapacityStatus(summary, capacityMiB) {
-  const bytes = summary?.total?.knownBytes;
-  if (!Number.isFinite(bytes) || summary.total.unknown > 0 || !Number.isFinite(capacityMiB) || capacityMiB <= 0) return null;
-  const percent = bytes / (capacityMiB * 1024 * 1024) * 100;
-  return { percent: Math.round(percent), level: percent >= 80 ? 'danger' : percent >= 50 ? 'warning' : '',
-    partial: summary.total.unknown > 0 };
-}
-function packageSizeSummaryValue(summary, formatted) {
-  if (!summary?.packages || !summary.unknown) return formatted;
-  if (summary.unknown >= summary.packages) {
-    return t('size.summary.unknown', { unknown: summary.unknown });
-  }
-  return t('size.summary.withUnknown', { size: formatted, unknown: summary.unknown });
-}
-function packageSizeEstimateText(summary) {
-  if (!summary) return '';
-  const formatted = {
-    direct: fmtSize(summary.direct.knownBytes),
-    total: fmtSize(summary.total.knownBytes),
-  };
-  return t('size.summary.short', {
-    direct: packageSizeSummaryValue(summary.direct, formatted.direct),
-    total: packageSizeSummaryValue(summary.total, formatted.total),
-  });
-}
-function packageSizeEstimateTooltip(summary) {
-  if (!summary) return '';
-  const architecture = String(catalogPackageSizesDocument?.observation?.architecture || '').trim() ||
-    t('catalog.unknown');
-  return [
-    t('size.summary.direct', { size: fmtSize(summary.direct.knownBytes), unknown: summary.direct.unknown }),
-    t('size.summary.total', { size: fmtSize(summary.total.knownBytes), unknown: summary.total.unknown }),
-    t('size.summary.metric', { architecture }),
-  ].join('\n');
-}
 function focusMenuconfigSymbol(symbol) {
   return (async () => {
     if (!await setMenuconfigExpanded(true)) throw new Error('Catalog menu could not be expanded');
@@ -615,7 +549,6 @@ function openRootfsCapacityGuidance() {
 }
 
 function updateStats() {
-  void ensureCatalogPackageSizes();
   const sel = effectiveSelection();
   const n = effectiveEnabledPlugins().length;
   $('selCount').textContent = state.device?.id === 'catalog-target'
@@ -628,49 +561,12 @@ function updateStats() {
     bindUiTooltipContent($('selCount'), { body: t('bar.applicationCountRisk') });
   } else bindUiTooltipContent($('selCount'), { body: t('bar.selected.title') });
   const rootfs = rootfsPartitionInfo();
-  const packageSizes = packageSizeEstimate();
-  const sizeState = state.device?.id === 'catalog-target' ? catalogPackageSizesStatus.state : 'unavailable';
-  const sizeMessage = t(sizeState === 'loading' || sizeState === 'idle' ? 'size.summary.loading'
-    : sizeState === 'error' ? 'size.summary.error'
-      : sizeState === 'ready' ? 'size.summary.noSelectedCoverage' : 'size.summary.unavailable');
-  const sizeRetry = $('sizeRetryBtn');
-  sizeRetry.hidden = sizeState !== 'error';
-  const sizeTooltip = packageSizes ? packageSizeEstimateTooltip(packageSizes)
-    : [sizeMessage, catalogPackageSizesStatus.architecture || '', catalogPackageSizesStatus.reason || ''].filter(Boolean).join('\n');
   const capText = $('capText');
-  const capacity = packageSizeCapacityStatus(packageSizes, rootfs?.value);
-  capText.classList.toggle('capacity-warning', capacity?.level === 'warning');
-  capText.classList.toggle('capacity-danger', capacity?.level === 'danger');
-  if (rootfs) {
-    $('capBox').hidden = true;
-    capText.disabled = false;
-    capText.classList.add('rootfs-capacity');
-    capText.textContent = packageSizes
-      ? `${rootfs.value} MiB · ${packageSizeEstimateText(packageSizes)}`
-      : `${rootfs.value} MiB · ${sizeMessage}`;
-    if (capacity?.level) capText.textContent += ' · ' + t('size.capacity.short', {
-      percent: `${capacity.partial ? '≥' : ''}${capacity.percent}`,
-    });
-    bindUiTooltipContent(capText, { body: [
-      t('runtime.2b2a5917809a'),
-      sizeTooltip,
-      capacity?.level ? t(capacity.partial ? 'size.capacity.partial' : 'size.capacity.warning', { percent: capacity.percent }) : '',
-    ].filter(Boolean).join('\n') });
-  } else if (packageSizes) {
-    $('capBox').hidden = true;
-    capText.disabled = false;
-    capText.classList.remove('rootfs-capacity');
-    capText.textContent = packageSizeEstimateText(packageSizes);
-    bindUiTooltipContent(capText, { body: packageSizeEstimateTooltip(packageSizes) });
-  } else {
-    $('capBox').hidden = true;
-    capText.disabled = true;
-    capText.classList.remove('rootfs-capacity');
-    $('capFill').style.width = '0';
-    $('capFill').className = 'cap-fill';
-    capText.textContent = sizeMessage;
-    bindUiTooltipContent(capText, { body: sizeTooltip });
-  }
+  capText.hidden = !rootfs;
+  capText.disabled = !rootfs;
+  capText.classList.toggle('rootfs-capacity', Boolean(rootfs));
+  capText.textContent = rootfs ? `${rootfs.value} MiB` : '';
+  if (rootfs) bindUiTooltipContent(capText, { body: t('runtime.2b2a5917809a') });
   updateGroupBadges();
   renderBuildContract();
 }
@@ -711,11 +607,6 @@ function openSelectedDrawer() {
       f.textContent = kind === 'force' ? t('adv.forced') : t('adv.removed');
       name.appendChild(f);
     }
-    const sz = Number.isSafeInteger(p.sizeBytes) && p.sizeBytes >= 0 ? document.createElement('span') : null;
-    if (sz) {
-      sz.className = 'sel-size';
-      sz.textContent = t('drawer.size', { n: fmtSize(p.sizeBytes) });
-    }
     const rm = document.createElement('button');
     rm.type = 'button';
     rm.className = 'sel-rm';
@@ -738,7 +629,7 @@ function openSelectedDrawer() {
       // Reconcile the drawer from the same effective state as the counter.
       openSelectedDrawer();
     });
-    row.appendChild(name); if (sz) row.appendChild(sz); row.appendChild(rm);
+    row.append(name, rm);
     list.appendChild(row);
   }
   mb.appendChild(list);
@@ -751,6 +642,5 @@ function openSelectedDrawer() {
   }
 }
 $('selCount').addEventListener('click', openSelectedDrawer);
-$('sizeRetryBtn').addEventListener('click', () => { void ensureCatalogPackageSizes(true); });
 
 /* ============ 生成 .config / Generate the .config ============ */

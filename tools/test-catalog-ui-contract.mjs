@@ -72,8 +72,8 @@ expect(html.includes('if (optional && response.status === 404) return null') &&
   'deployment metadata network/parse failures can silently fall back to the main Catalog channel');
 
 const buildInfoContract = app.match(/function renderCatalogBuildInfo\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
-expect(html.includes('<dt>Web Version</dt>') &&
-  html.includes('<dt>Web Commit</dt>') &&
+expect(html.includes('data-i18n="buildInfo.webVersion">Web Version</dt>') &&
+  html.includes('data-i18n="buildInfo.webCommit">Web Commit</dt>') &&
   html.includes('id="buildInfoCatalogCode"') &&
   html.includes('id="buildInfoCatalogData"') &&
   buildInfoContract.includes("renderBuildInfoSha('buildInfoCatalogCode', MENU_INDEX?.provenance?.codeSha)") &&
@@ -83,27 +83,17 @@ expect(html.includes('<dt>Web Version</dt>') &&
 
 const buildInfoUiContract = app.match(/function renderBuildInfo\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
 expect(app.includes('button.textContent = sha;') && !app.includes('sha.slice(0, 12)') &&
-  app.includes('function positionBuildInfoPanel(trigger, card)') &&
-  buildInfoUiContract.includes("document.addEventListener('click'") &&
-  buildInfoUiContract.includes("if (!panel.classList.contains('is-open') || panel.contains(event.target) || card.contains(event.target)) return;") &&
-  buildInfoUiContract.includes('if (buildInfoInteractiveTarget(event.target)) setOpen(false);') &&
-  buildInfoUiContract.includes("document.addEventListener('dblclick'") &&
-  app.includes('const BUILD_INFO_INTERACTIVE_SELECTOR = [') &&
-  app.includes("'a[href]', 'button', 'input', 'select', 'textarea', 'label', 'summary'") &&
-  app.includes("'[role=\"button\"]', '[role=\"checkbox\"]', '[role=\"radio\"]'") &&
-  app.includes("'[tabindex]:not([tabindex=\"-1\"])'") &&
-  html.includes('id="buildInfoClose"') && html.includes('data-i18n-aria="btn.close"') &&
-  buildInfoUiContract.includes("const closeButton = $('buildInfoClose')") &&
-  buildInfoUiContract.includes("closeButton.addEventListener('click', (event) => {") &&
-  buildInfoUiContract.includes("event.stopPropagation();\n    setOpen(false);") &&
-  buildInfoUiContract.includes('portalBuildInfoCard();') &&
-  buildInfoUiContract.includes('restoreBuildInfoCard();') &&
-  feedbackCss.includes('.build-info-card-portal') &&
-  css.includes('.build-info-head') && css.includes('.build-info-close') &&
-  css.includes('.build-info.is-open .build-info-card') && !css.includes('.build-info:hover .build-info-card') &&
-  css.includes('width: min(480px, calc(100vw - 32px))') && css.includes('text-overflow: ellipsis') &&
-  html.indexOf('id="siteVersion"') < html.indexOf('id="importBtn"') && html.indexOf('id="importBtn"') < html.indexOf('id="submitBtn"'),
-  'Build Information anchoring, interactive auto-close, full-width SHA display, or footer order regressed');
+  !app.includes('function positionBuildInfoPanel(') &&
+  buildInfoUiContract.includes("globalThis.createFloatingLayerController(trigger, card") &&
+  buildInfoUiContract.includes("preset: 'bounded-card'") &&
+  buildInfoUiContract.includes('shouldDismissOutside: buildInfoInteractiveTarget') &&
+  buildInfoUiContract.includes('onDismiss: () => syncOpen(false)') &&
+  buildInfoUiContract.includes("closeButton.addEventListener('click'") &&
+  html.includes('data-i18n-aria="buildInfo.title" hidden') &&
+  css.includes('.build-info-card.ui-floating-layer') && !css.includes('.build-info-card::after {') &&
+  html.indexOf('id="siteVersion"') < html.indexOf('id="importBtn"') &&
+  html.indexOf('id="importBtn"') < html.indexOf('id="submitBtn"'),
+  'Build Information must share bounded geometry, truly hide when closed and expose copyable full identities');
 const refreshMenuIndexContract = app.match(/async function refreshMenuIndex\(\) \{[\s\S]*?\n\}\nfunction selectedCatalogSource/)?.[0] || '';
 const renderDevicesContract = app.match(/function renderDevices\(\) \{[\s\S]*?\n\}\n\nfunction updateDeviceSummary/)?.[0] || '';
 expect(refreshMenuIndexContract.includes("error?.name !== 'AbortError'") &&
@@ -136,27 +126,12 @@ expect(html.includes('id="catalogLoadReasonTitle"') && html.includes('id="catalo
   css.includes('grid-template-areas:"summary" "diagnostics" "actions"'),
   'Catalog failure summary, safe GitHub status link, copied reason, or mobile layout regressed');
 expect(html.includes('data-i18n="btn.import.short"') && html.includes('data-i18n="btn.submit.short"') &&
-  css.includes('.actionbar-row { flex-wrap: nowrap; gap: 5px; padding: 6px 8px; }') &&
-  css.includes('.action-label-full { display: none; }') && css.includes('.action-label-short { display: inline; }') &&
-  app.includes('const rootfs = rootfsPartitionInfo();') &&
-  app.includes('const packageSizes = packageSizeEstimate();') &&
-  app.includes('rootfs.value} MiB') && app.includes('packageSizeEstimateText(packageSizes)') &&
-  app.includes('packageSizeEstimateTooltip(packageSizes)') &&
-  app.includes('function packageSizeEstimate()') &&
-  app.includes('const summary = { direct: summarize(direct), total: summarize(total) };') &&
-  app.includes('direct: fmtSize(summary.direct.knownBytes)') &&
-  app.includes('total: fmtSize(summary.total.knownBytes)') &&
+  app.includes('const rootfs = rootfsPartitionInfo();') && app.includes('rootfs.value} MiB') &&
   app.includes('function validateCatalogBranchApplications(catalog)') &&
-  app.includes('function catalogPackageSizeMap(document = catalogPackageSizesDocument)') &&
-  app.includes('function validateCatalogPackageSizes(document, catalog = MENU_CATALOG)') &&
-  app.includes('async function ensureCatalogPackageSizes(retry = false)') &&
-  app.includes('loader(logical, { forceRefresh: retry })') &&
-  html.includes('id="sizeRetryBtn"') && app.includes("setCatalogPackageSizesStatus(key, 'error'") &&
-  app.includes("kind !== 'branch-applications'") &&
-  css.includes('.cap-info.rootfs-capacity::before{content:"RootFS "}') &&
-  css.includes('.cap-info.rootfs-capacity::before { content: ""; }'),
-  'mobile one-line action bar labels, RootFS capacity, or Catalog direct/total package-size contracts regressed');
-
+  !app.includes('ensureCatalogPackageSizes') && !app.includes('packageSizeEstimate') &&
+  !html.includes('id="sizeRetryBtn"') && !html.includes('id="capFill"') &&
+  css.includes('.cap-info.rootfs-capacity::before{content:"RootFS "}'),
+  'RootFS settings and branch applications must remain without retired package estimates');
 expect(html.includes('id="selfTestBtn"') &&
   html.includes('data-i18n="btn.selfTest.short"') &&
   html.includes('data-i18n-title="btn.selfTest.title"') &&

@@ -194,38 +194,6 @@ async function init() {
   }
 }
 
-function renderLangSel() {
-  const sel = $('langSel');
-  sel.textContent = '';
-  for (const l of I18N.languages) {
-    const o = document.createElement('option');
-    o.value = l.id;
-    o.dataset.fullName = l.native || l.name;
-    o.textContent = LANG_SHORT[l.id] || l.id.slice(0, 2).toUpperCase();
-    if (l.id === state.lang) o.selected = true;
-    sel.appendChild(o);
-  }
-  const setNames = (full) => {
-    for (const option of sel.options) {
-      option.textContent = full ? option.dataset.fullName :
-        (LANG_SHORT[option.value] || option.value.slice(0, 2).toUpperCase());
-    }
-  };
-  sel.onpointerdown = () => setNames(true);
-  sel.onfocus = () => setNames(true);
-  sel.onblur = () => setNames(false);
-  sel.onchange = async () => {
-    await ensureI18nLanguage(sel.value);
-    state.lang = sel.value;
-    safeSet('wrt_lang', state.lang);
-    if (MENU_CATALOG?.menu?.displayLoaded) {
-      await ensureCatalogMenuLanguage(state.lang).catch((error) => console.warn('[Catalog language shard]', error));
-    }
-    applyI18n();
-    setTimeout(() => setNames(false), 0);
-  };
-}
-
 function resetPluginWorkspace(data) {
   PLUGINS = data;
   state.sel.clear();

@@ -93,7 +93,7 @@ try {
     console.log(`[submit-browser] testing ${source}/${settings.branch}: ${settings.theme}`);
     if (['iStoreOS', 'Lienol'].includes(source)) {
       assert.deepEqual(settings.mirrors, ['source-default']);
-      assert.match(settings.login, /default|默认/);
+      assert.match(settings.login, /none|无/);
     }
     const before = new Set(readdirSync(directory));
     // Real user gesture for the request action; no external submission occurs.

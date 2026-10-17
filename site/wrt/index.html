@@ -127,7 +127,7 @@ html[data-theme="dark"] { background: #11151c; color: #e6eaf0; }
 <div class="side-dock" id="sideDock">
   <button class="icon-btn dock-toggle" id="dockToggle" type="button" aria-label="toggle dock" aria-expanded="true">⚙</button>
   <div class="dock-items">
-    <select id="langSel" class="lang-sel" aria-label="Language" data-i18n-aria="lang.label"></select>
+    <button type="button" id="langSel" class="lang-sel" aria-label="Language" aria-haspopup="listbox" aria-expanded="false" aria-controls="languagePanel">EN</button>
     <button class="icon-btn dock-selftest" id="selfTestBtn" type="button" data-i18n="btn.selfTest.short" data-i18n-title="btn.selfTest.title" data-i18n-aria="btn.selfTest.title">Test</button>
     <button class="icon-btn" id="densityBtn" type="button" data-i18n-title="font.label" data-i18n-aria="font.label" aria-haspopup="dialog" aria-expanded="false" aria-controls="fontPanel">Aa</button>
     <button class="icon-btn" id="themeBtn" type="button" aria-label="Theme">◐</button>
@@ -222,7 +222,7 @@ html[data-theme="dark"] { background: #11151c; color: #e6eaf0; }
             <div class="menuconfig-filter-control">
               <button class="menuconfig-filter-trigger" id="menuconfigFilterTrigger" type="button"
                 aria-controls="menuconfigFilterMenu" aria-expanded="false" data-floating-dropdown
-                data-floating-preset="wide-filter" data-floating-min-width="520" data-floating-max-width="760">
+                data-floating-preset="wide-filter">
                 <span id="menuconfigFilterSummary">Filter</span>
                 <span class="menuconfig-filter-chevron" aria-hidden="true">⌄</span>
               </button>
@@ -388,6 +388,11 @@ html[data-theme="dark"] { background: #11151c; color: #e6eaf0; }
     </section>
   </div>
 </main>
+<div id="languagePanel" class="language-panel" hidden>
+  <input type="search" id="languageSearch" autocomplete="off" spellcheck="false" data-i18n-ph="lang.search" data-i18n-aria="lang.search">
+  <div id="languageList" class="language-list" role="listbox" data-i18n-aria="lang.label"></div>
+  <button type="button" id="languageMore" class="language-more"></button>
+</div>
 <div class="ui-tooltip" id="uiTooltip" role="tooltip" hidden>
   <strong class="ui-tooltip-title" id="uiTooltipTitle" hidden></strong>
   <div class="ui-tooltip-emphasis" id="uiTooltipEmphasis" hidden></div>
@@ -398,23 +403,21 @@ html[data-theme="dark"] { background: #11151c; color: #e6eaf0; }
   <div class="wrap actionbar-row">
     <div class="stats">
       <button type="button" class="link-btn" id="selCount" data-i18n-title="bar.selected.title"></button>
-      <div class="cap" id="capBox" data-i18n-title="bar.capacity.title"><div class="cap-fill" id="capFill"></div></div>
       <button type="button" class="cap-text cap-info" id="capText" disabled></button>
-      <button type="button" class="link-btn" id="sizeRetryBtn" data-i18n="size.summary.retry" hidden></button>
     </div>
     <div class="site-version-action build-info" id="buildInfo">
       <button type="button" class="site-version" id="siteVersion" aria-expanded="false" aria-controls="buildInfoCard">--------</button>
-      <div class="build-info-card" id="buildInfoCard" role="dialog" aria-label="Build Information">
+      <div class="build-info-card" id="buildInfoCard" role="dialog" aria-label="Build Information" data-i18n-aria="buildInfo.title" hidden>
         <div class="build-info-head">
-          <div class="build-info-title">Build Information</div>
+          <div class="build-info-title" data-i18n="buildInfo.title">Build Information</div>
           <button type="button" class="icon-btn build-info-close" id="buildInfoClose" data-i18n-aria="btn.close">✕</button>
         </div>
         <dl>
-          <div><dt>Web Version</dt><dd class="site-version-value">v----------</dd></div>
-          <div><dt>Web Commit</dt><dd><button type="button" class="build-info-commit" id="buildInfoCommit" aria-label="Commit">—</button></dd></div>
-          <div><dt>Catalog Code</dt><dd><button type="button" class="build-info-commit" id="buildInfoCatalogCode" aria-label="Catalog code commit">—</button></dd></div>
-          <div><dt>Catalog Data</dt><dd><button type="button" class="build-info-commit" id="buildInfoCatalogData" aria-label="Catalog data revision">—</button></dd></div>
-          <div><dt>Built</dt><dd id="buildInfoBuilt">—</dd></div>
+          <div><dt data-i18n="buildInfo.webVersion">Web Version</dt><dd class="site-version-value">v----------</dd></div>
+          <div><dt data-i18n="buildInfo.webCommit">Web Commit</dt><dd><button type="button" class="build-info-commit" id="buildInfoCommit" aria-label="Commit">—</button></dd></div>
+          <div><dt data-i18n="buildInfo.catalogCode">Catalog Code</dt><dd><button type="button" class="build-info-commit" id="buildInfoCatalogCode" aria-label="Catalog code commit">—</button></dd></div>
+          <div><dt data-i18n="buildInfo.catalogData">Catalog Data</dt><dd><button type="button" class="build-info-commit" id="buildInfoCatalogData" aria-label="Catalog data revision">—</button></dd></div>
+          <div><dt data-i18n="buildInfo.built">Built</dt><dd id="buildInfoBuilt">—</dd></div>
         </dl>
       </div>
     </div>
@@ -431,16 +434,21 @@ html[data-theme="dark"] { background: #11151c; color: #e6eaf0; }
   <p><span data-i18n="footer.thanksLabel">Acknowledgements:</span>
      <a href="https://openwrt.org/" target="_blank" rel="noopener">OpenWrt</a> /
      <a href="https://immortalwrt.org/" target="_blank" rel="noopener">ImmortalWrt</a> /
-     <a href="https://github.com/coolsnowwolf/lede" target="_blank" rel="noopener">Lean</a> /
+     <a href="https://github.com/coolsnowwolf/lede" target="_blank" rel="noopener">Lean LEDE</a> /
+     <a href="https://github.com/istoreos/istoreos" target="_blank" rel="noopener">iStoreOS</a> /
+     <a href="https://github.com/Lienol/openwrt" target="_blank" rel="noopener">Lienol</a> /
+     <a href="https://github.com/hanwckf/immortalwrt-mt798x" target="_blank" rel="noopener">hanwckf MT798x</a> /
      <a data-project-catalog-link target="_blank" rel="noopener" data-i18n="footer.pluginAuthors">all plugin authors</a>
+     <span data-i18n="footer.contributors">and all open-source contributors.</span>
   </p>
-  <p><span data-i18n="footer.actionsPrefix">Firmware is on the</span>
-     <a id="actionsLink" data-project-actions-link target="_blank" rel="noopener">Actions</a>
-     <span data-i18n="footer.note">page, named by the build tag. Download the artifact at the bottom. This site is static and open source, has no backend, and collects no information.</span>
-  </p>
-  <p><a id="footRepo" data-project-repository-link target="_blank" rel="noopener">GitHub</a> ·
-     <a class="blog-link" data-project-blog-label data-project-blog-link target="_blank" rel="noopener">Blog</a> ·
-     <a data-project-catalog-link target="_blank" rel="noopener">Menuconfig Catalog</a></p>
+  <div class="footer-bottom">
+    <p class="footer-links"><a id="footRepo" data-project-repository-link target="_blank" rel="noopener">GitHub</a> ·
+       <a class="blog-link" data-project-blog-label data-project-blog-link target="_blank" rel="noopener">Blog</a> ·
+       <a data-project-catalog-link target="_blank" rel="noopener">Menuconfig Catalog</a></p>
+    <p class="footer-note"><span data-i18n="footer.actionsPrefix">Firmware is on the</span>
+       <a id="actionsLink" data-project-actions-link target="_blank" rel="noopener">Actions</a>
+       <span data-i18n="footer.note">page, named by the build tag. Download the artifact at the bottom. This site is static and open source, has no backend, and collects no information.</span></p>
+  </div>
 </footer>
 
 <div class="modal-mask" id="modal" hidden>

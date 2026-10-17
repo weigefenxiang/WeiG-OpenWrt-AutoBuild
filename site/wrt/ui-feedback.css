@@ -53,19 +53,6 @@
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
-/* Build Information is portaled out of the filtered sticky actionbar while
-   open, so its fixed coordinates remain relative to the visual viewport. */
-.build-info-card-portal {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transform: none;
-}
-.build-info-card[data-placement="below"]::after {
-  top: -7px; right: auto; bottom: auto;
-  transform: rotate(225deg);
-}
-
 @media (max-width: 860px) {
   .toast {
     right: max(12px, env(safe-area-inset-right));

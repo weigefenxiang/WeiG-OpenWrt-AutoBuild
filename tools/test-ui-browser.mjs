@@ -1086,7 +1086,7 @@ async function main() {
       Math.max(...heights) - Math.min(...heights) <= 1,
     context, 'header actions do not share one 44px control height', visualContract);
     expect(visualContract?.colorScheme === context.theme, context,
-      'native selects do not follow the active color scheme', visualContract);
+      'language control does not follow the active color scheme', visualContract);
     expect(visualContract?.starfield === true && visualContract?.bodyAnimation === 'none', context,
       'page starfield is missing or uses continuous body animation', visualContract);
 
@@ -1099,6 +1099,52 @@ async function main() {
     // the shared dock panel whenever a test needs one of its child controls.
     await ensureDockControlsVisible(context);
     await assertInside('#sideDock', context, { actionbarSafe: true });
+    await click('#langSel');
+    await waitVisible('#languagePanel', context);
+    await assertInside('#languagePanel', context, { actionbarSafe: true });
+    const languageMenu = await evaluateFunction(browser, `() => {
+      const panel = document.getElementById('languagePanel');
+      const button = document.getElementById('langSel');
+      const viewport = readViewportRect();
+      const r = panel.getBoundingClientRect();
+      const common = panel.querySelectorAll('[role=option]').length;
+      document.getElementById('languageMore').click();
+      const all = panel.querySelectorAll('[role=option]').length;
+      const search = document.getElementById('languageSearch');
+      search.value = '日本'; search.dispatchEvent(new Event('input'));
+      const filtered = [...panel.querySelectorAll('[role=option]')].map(node => node.dataset.language);
+      return { common, all, filtered, width:r.width, height:r.height, viewport,
+        triggerWidth:button.getBoundingClientRect().width,
+        pending:I18N.languages.filter(entry => entry.pending).length };
+    }`);
+    expect(languageMenu.common === 11 && languageMenu.all === 50 && languageMenu.pending === 39 &&
+      languageMenu.filtered.join(',') === 'ja' && languageMenu.triggerWidth <= 45 &&
+      languageMenu.width <= languageMenu.viewport.width / 2 + 1 &&
+      languageMenu.height <= languageMenu.viewport.height / 2 + 1, context,
+      'compact searchable language directory or half-viewport bounds regressed', languageMenu);
+    await resetFloatingState();
+    await click('#langSel');
+    await waitVisible('#languagePanel', context);
+    await click('#langSel');
+    await waitFor('language trigger close state', () => evaluateFunction(browser, `() =>
+      document.getElementById('languagePanel').hidden &&
+      document.getElementById('langSel').getAttribute('aria-expanded') === 'false'`), 3_000, 40);
+    if (viewport.width === 1366 || viewport.width === 390) {
+      const locales = await evaluateFunction(browser, `async () => {
+        const previous = I18N.selectedLanguage || state.lang;
+        await selectUiLanguage('en');
+        const en=document.querySelector('.build-info-title').textContent;
+        await selectUiLanguage('zh-CN');
+        const zh=document.querySelector('.build-info-title').textContent;
+        await selectUiLanguage('nl');
+        const pending=state.lang;
+        await selectUiLanguage(previous);
+        return {en,zh,pending};
+      }`);
+      expect(locales.en === 'Build Information' && locales.zh === '构建信息' &&
+        locales.pending === 'en', context, 'English/Chinese UI or pending-language fallback regressed', locales);
+    }
+    await ensureDockControlsVisible(context);
     await exerciseDockTooltips(context);
     await exerciseLongTooltip(context);
     await exerciseTooltipDelayAndNaturalWidth(context);
@@ -1162,6 +1208,17 @@ async function main() {
     }, 3_000, 80);
     await waitVisible('#buildInfoCard', context);
     await assertInside('#buildInfoCard', context, { actionbarSafe: true });
+    const infoGeometry = await evaluateFunction(browser, `() => {
+      const card = document.getElementById('buildInfoCard');
+      const rect = card.getBoundingClientRect(), viewport = readViewportRect();
+      return {width:rect.width,height:rect.height,viewport,
+        scroll:card.scrollHeight,client:card.clientHeight};
+    }`);
+    expect(infoGeometry.width <= infoGeometry.viewport.width / 2 + 1 &&
+      infoGeometry.height <= infoGeometry.viewport.height / 2 + 1, context,
+      'Build Information exceeds half the visual viewport', infoGeometry);
+    if (viewport.width >= 1366) expect(infoGeometry.scroll <= infoGeometry.client + 1,
+      context, 'Build Information has an unnecessary scrollbar with enough space', infoGeometry);
     await click('#buildInfoClose');
     await resetFloatingState();
 
@@ -1186,6 +1243,47 @@ async function main() {
       forkGuide[1]?.href === EXPECTED_GUIDE_URL &&
       forkGuide.every(link => link.target === '_blank' && link.rel.includes('noopener')),
     context, 'Fork hint destinations or safe link attributes regressed', forkGuide);
+
+    const forkAndPassword = await evaluateFunction(browser, `() => {
+      const owner = document.getElementById('ownerBox'), priorOwner = owner.value;
+      owner.value = 'levenwindy'; owner.dispatchEvent(new Event('input'));
+      const links = [...document.querySelectorAll('#selfHint a')].map(node => node.href);
+      const emphasis = [...document.querySelectorAll('#selfHint strong')].map(node => node.textContent);
+      const label = document.querySelector('#selfHint .workflow-enable-label');
+      const officialStyle = label && {bg:getComputedStyle(label).backgroundColor,color:getComputedStyle(label).color};
+      owner.value = 'https://github.com/not-a-username'; owner.dispatchEvent(new Event('input'));
+      const invalidLinks = [...document.querySelectorAll('#selfHint a')].map(node => node.href);
+      owner.value = priorOwner; owner.dispatchEvent(new Event('input'));
+      const previous = {source:state.source,password:state.rootpw};
+      const sources = ['OpenWrt','ImmortalWrt','lede','iStoreOS','Lienol','hanwckf'];
+      const login = sources.map(id => {
+        state.source = catalogSourceObject({id}, {id:'test',branch:'test'});
+        state.rootpw = ''; updateLoginInfo();
+        const empty = document.getElementById('loginInfo').textContent;
+        state.rootpw = '@empty'; updateLoginInfo();
+        const cleared = document.getElementById('loginInfo').textContent;
+        state.rootpw = 'Test1234'; updateLoginInfo();
+        const custom = document.getElementById('loginInfo').textContent;
+        return {id,empty,cleared,custom};
+      });
+      state.source=previous.source;state.rootpw=previous.password;updateLoginInfo();
+      return {links,emphasis,officialStyle,invalidLinks,login,
+        sizingRequests:performance.getEntriesByType('resource').filter(row=>/package-sizes/.test(row.name)).length,
+        guideLinks:[...document.querySelectorAll('.blog-link')].map(node=>node.href)};
+    }`);
+    expect(forkAndPassword.links.includes('https://github.com/levenwindy/WeiG-OpenWrt-AutoBuild/settings') &&
+      forkAndPassword.links.includes('https://github.com/levenwindy/WeiG-OpenWrt-AutoBuild/actions') &&
+      forkAndPassword.invalidLinks.length === 2 && forkAndPassword.emphasis.includes('Issues') &&
+      forkAndPassword.emphasis.includes('Features') && forkAndPassword.officialStyle.color === 'rgb(255, 255, 255)' &&
+      forkAndPassword.sizingRequests === 0 &&
+      forkAndPassword.guideLinks.every(url=>url===EXPECTED_GUIDE_URL), context,
+      'Fork links, emphasis, workflow label, tutorial links or size retirement regressed', forkAndPassword);
+    for (const login of forkAndPassword.login) {
+      expect((login.id === 'lede' ? /password/.test(login.empty) : /none|无/.test(login.empty)) &&
+        /none|无/.test(login.cleared) && !/Test1234/.test(login.custom), context,
+        'source default, explicit clearing or custom password display is wrong', login);
+    }
+
 
     // Open only the confirmation surface: never click a request/download action.
     await click('#submitBtn');
@@ -1216,6 +1314,20 @@ async function main() {
       })`);
       expect(expanded.bodyHidden === false && expanded.expanded === 'true', context,
         'Advanced menuconfig did not expand', expanded);
+      await pointerClick('#menuconfigFilterTrigger');
+      await waitVisible('#menuconfigFilterMenu', context);
+      await assertInside('#menuconfigFilterMenu', context, {actionbarSafe:true});
+      const filterGeometry = await evaluateFunction(browser, `() => {
+        const element = document.getElementById('menuconfigFilterMenu');
+        const r=element.getBoundingClientRect(),viewport=readViewportRect();
+        return {width:r.width,height:r.height,scroll:element.scrollHeight,client:element.clientHeight,viewport};
+      }`);
+      expect(filterGeometry.width <= filterGeometry.viewport.width/2+1 &&
+        filterGeometry.height <= filterGeometry.viewport.height/2+1, context,
+        'filter exceeds half the viewport',filterGeometry);
+      if(viewport.width>=1366) expect(filterGeometry.scroll <= filterGeometry.client+1,
+        context,'filter has an unnecessary scrollbar on a wide viewport',filterGeometry);
+      await resetFloatingState();
       await click('#menuconfigToggle');
     }
 

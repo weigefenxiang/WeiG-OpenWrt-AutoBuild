@@ -56,23 +56,6 @@ assert.match(moduleSources['site/wrt/lib/package-probe-v3-ui.js'], /JSON\.string
   'Probe request preview must retain the machine-facing request contract');
 
 const pluginController = moduleSources['site/wrt/lib/plugins/plugin-controller.js'];
-assert.match(pluginController, /function packageSizeSummaryValue\(summary, formatted\)/,
-  'package-size summaries must have a shared unknown-aware formatter');
-const helperSource = pluginController.match(/(function packageSizeSummaryValue\(summary, formatted\) \{[\s\S]*?\n\})/)?.[1];
-assert.ok(helperSource, 'package-size summary helper source must be extractable');
-const summaryValue = Function('t', `${helperSource}\nreturn packageSizeSummaryValue;`)((key, params) =>
-  key === 'size.summary.unknown' ? `${params.unknown} unknown` : `${params.size} + ${params.unknown} unknown`);
-assert.equal(summaryValue({ packages: 3, knownBytes: 0, unknown: 3 }, '0 B'), '3 unknown',
-  'all-unknown package selections must not be rendered as 0 B');
-assert.equal(summaryValue({ packages: 3, knownBytes: 1024, unknown: 1 }, '1 KiB'), '1 KiB + 1 unknown',
-  'mixed package selections must expose known size and unknown count');
-assert.equal(summaryValue({ packages: 0, knownBytes: 0, unknown: 0 }, '0 B'), '0 B',
-  'an empty selection may remain zero');
-assert.match(pluginController, /const summary = \{ direct: summarize\(direct\), total: summarize\(total\) \};/,
-  'package-size aggregation must retain separate direct and total sets');
-assert.match(pluginController, /const sizes = catalogObservedPackageSizes\(\);/,
-  'package-size aggregation must use the active shard only');
-
 const extract = (source, name) => source.match(new RegExp(`(function ${name}\\([^]*?\\n\\})`))?.[1];
 const stateSource = read('site/wrt/lib/menuconfig/menuconfig-state.js');
 const catalogSource = moduleSources['site/wrt/lib/catalog/catalog-controller.js'];
@@ -112,120 +95,6 @@ assert.equal(advisoryContext.applicationCountAdvisory().count, 11,
   'deduplicate concrete imports, inherit null override, exclude baseline/M/N/automatic dependencies');
 advisoryContext.ACTIVE_PROFILE_BASELINE = null;
 assert.equal(advisoryContext.applicationCountAdvisory(), null, 'no guess without Native baseline');
-const records = ['app', 'lib', 'module', 'archive-only'].map((name) => ({ package: name, configSymbol: `PACKAGE_${name}` }));
-const model = { bySymbol: new Map(records.map((r) => [r.configSymbol, r])), byPackage: new Map(records.map((r) => [r.package, r])) };
-model.bySymbol.set('PACKAGE_app_INCLUDE_data', { configSymbol: 'PACKAGE_app_INCLUDE_data', type: 'bool' });
-const values = new Map([['TARGET_ARCH_PACKAGES', 'test_arch'], ['PACKAGE_app', 'y'], ['PACKAGE_lib', 'y'],
-  ['PACKAGE_module', 'm'], ['PACKAGE_app_INCLUDE_data', 'y'], ['PACKAGE_archive-only', 'y']]);
-const sizeContext = { state: { device: { id: 'catalog-target' } },
-  catalogPackageSizeMaps: new WeakMap(),
-  MENU_CATALOG: { source: { id: 'test', branch: 'stable', commit: 'a' } },
-  CATALOG_MODEL: model, CATALOG_ENGINE: { decodeKconfigString: (s) => s.replace(/^"|"$/g, '') },
-  catalogEngineValues: () => values,
-  catalogUserOverrides: new Map([['PACKAGE_app', 'y'], ['PACKAGE_module', 'm'], ['PACKAGE_app_INCLUDE_data', 'y']]),
-  catalogPackageSizesDocument: { source: { id: 'test', branch: 'stable', commit: 'a' },
-    observation: { architecture: 'test_arch' }, rows: [['app', 10, 60], ['lib', 5, 25], ['module', 100, 1000], ['archive-only', 9000, null]] },
-};
-vm.createContext(sizeContext);
-vm.runInContext([
-  extract(stateSource, 'catalogConflictRecordForPackage'), extract(stateSource, 'catalogPackageRecordForSymbol'),
-  extract(catalogSource, 'catalogPackageSizeMap'), extract(catalogSource, 'catalogObservedPackageSizes'),
-  extract(pluginController, 'packageSizeEstimate'), extract(pluginController, 'packageSizeCapacityStatus'),
-].join('\n'), sizeContext);
-assert.equal(sizeContext.catalogPackageRecordForSymbol('PACKAGE_app_INCLUDE_data'), null);
-let estimated = sizeContext.packageSizeEstimate();
-assert.equal(estimated.direct.packages, 1);
-assert.equal(estimated.direct.knownBytes, 60);
-assert.equal(estimated.total.packages, 3);
-assert.equal(estimated.total.knownBytes, 85);
-assert.equal(estimated.total.unknown, 1, 'archive size is not installed size');
-values.set('TARGET_ARCH_PACKAGES', 'other_arch');
-assert.equal(sizeContext.packageSizeEstimate(), null, 'do not borrow another architecture');
-values.set('TARGET_ARCH_PACKAGES', 'test_arch');
-sizeContext.catalogPackageSizesDocument.source.commit = 'b';
-assert.equal(sizeContext.packageSizeEstimate(), null, 'do not borrow another snapshot');
-sizeContext.catalogPackageSizesDocument.source.commit = 'a';
-sizeContext.catalogPackageSizesDocument = { ...sizeContext.catalogPackageSizesDocument, rows: [['app', 1, null]] };
-assert.equal(sizeContext.packageSizeEstimate(), null, 'hide unavailable installed-size estimates');
-for (const [percent, level] of [[49, ''], [50, 'warning'], [79, 'warning'], [80, 'danger'], [101, 'danger']]) {
-  const report = sizeContext.packageSizeCapacityStatus({ total: { knownBytes: percent * 1024 * 1024, unknown: 0 } }, 100);
-  assert.equal(report.level, level); assert.equal(report.partial, false);
-}
-assert.equal(sizeContext.packageSizeCapacityStatus({ total: { knownBytes: 90 * 1024 * 1024, unknown: 1 } }, 100), null,
-  'incomplete coverage must not produce a complete capacity percentage');
-assert.equal(sizeContext.packageSizeCapacityStatus(null, 160), null);
-
-// The selected architecture is fetched once, unavailable shards are not
-// downloaded, and a late response may never overwrite a new target's display.
-let architecture = 'arch_a';
-let finishA;
-const requests = [];
-const loaded = arch => ({ schema: 1, kind: 'package-sizes', encoding: 'positional-rows-v1',
-  fields: ['package', 'archiveBytes', 'installedBytes'], source: { id: 'test', branch: 'stable', commit: 'a' },
-  observation: { architecture: arch }, rows: [['app', 10, 60]] });
-const loaderContext = {
-  console, catalogPackageSizeMaps: new WeakMap(),
-  menuCatalogKey: 'test/stable/a', MENU_CATALOG: { source: loaded('').source, splitAssets: true },
-  CATALOG_ENGINE: { decodeKconfigString: value => value.replace(/^"|"$/g, '') },
-  catalogEngineValues: () => new Map([['TARGET_ARCH_PACKAGES', architecture]]),
-  selectedCatalogSource: () => ({}), selectedCatalogBranch: () => ({ assets: {
-    'packageSizes:arch_a': { asset: 'a.gz', architecture: 'arch_a', installedItems: 1 },
-    'packageSizes:arch_b': { asset: 'b.gz', architecture: 'arch_b', installedItems: 1 },
-    'packageSizes:empty': { asset: 'empty.gz', architecture: 'empty', installedItems: 0 },
-  } }),
-  catalogPackageSizesDocument: null, catalogPackageSizesKey: '', catalogPackageSizesPromise: null,
-  catalogPackageSizesPromiseKey: '', catalogPackageSizesStatus: { key: '', state: 'idle' },
-  MENU_INDEX: { assetRef: 'snapshot-a' }, importLogStep: () => {}, updateStats: () => {},
-  refreshCatalogBranchApplications: () => {},
-  catalogShardLoader: async logical => {
-    requests.push(logical);
-    return logical.endsWith('arch_a') ? new Promise(resolve => { finishA = resolve; }) : loaded('arch_b');
-  },
-};
-vm.createContext(loaderContext);
-vm.runInContext(['catalogPackageSizeMap', 'validateCatalogPackageSizes', 'setCatalogPackageSizesStatus', 'ensureCatalogPackageSizes']
-  .map(name => extract(catalogSource, name)).join('\n'), loaderContext);
-const pendingA = loaderContext.ensureCatalogPackageSizes();
-const pendingAgain = loaderContext.ensureCatalogPackageSizes();
-architecture = 'arch_b';
-await loaderContext.ensureCatalogPackageSizes();
-finishA(loaded('arch_a'));
-await Promise.all([pendingA, pendingAgain]);
-assert.equal(loaderContext.catalogPackageSizesDocument.observation.architecture, 'arch_b');
-assert.deepEqual(requests, ['packageSizes:arch_a', 'packageSizes:arch_b']);
-await loaderContext.ensureCatalogPackageSizes();
-assert.equal(requests.length, 2, 'immutable shard results are reused');
-architecture = 'empty';
-await loaderContext.ensureCatalogPackageSizes();
-assert.equal(loaderContext.catalogPackageSizesDocument, null);
-assert.equal(requests.length, 2, 'zero installed-size coverage must not download a shard');
-architecture = 'unpublished';
-await loaderContext.ensureCatalogPackageSizes();
-assert.equal(requests.length, 2, 'unpublished architectures must not borrow a default shard');
-assert.equal(loaderContext.catalogPackageSizesStatus.state, 'unavailable');
-architecture = 'arch_a';
-loaderContext.catalogPackageSizesKey = '';
-let retries = 0;
-loaderContext.catalogShardLoader = async () => {
-  retries++;
-  if (retries === 1) throw new Error('temporary transport failure');
-  return loaded('arch_a');
-};
-await loaderContext.ensureCatalogPackageSizes();
-assert.equal(loaderContext.catalogPackageSizesStatus.state, 'error');
-assert.equal(loaderContext.catalogPackageSizesKey, '', 'a failure must not be cached as negative coverage');
-await loaderContext.ensureCatalogPackageSizes();
-assert.equal(retries, 1, 'ordinary UI renders must not create a retry storm');
-await loaderContext.ensureCatalogPackageSizes(true);
-assert.equal(retries, 2, 'an explicit retry can recover for the same target');
-assert.equal(loaderContext.catalogPackageSizesStatus.state, 'ready');
-assert.equal(loaderContext.catalogPackageSizesDocument.observation.architecture, 'arch_a');
-loaderContext.MENU_CATALOG.splitAssets = false;
-await loaderContext.ensureCatalogPackageSizes();
-assert.equal(loaderContext.catalogPackageSizesStatus.state, 'unavailable',
-  'legacy documents without optional size contracts must not display endless loading');
-assert.equal(loaderContext.catalogPackageSizesDocument, null);
-
 // Imported and inherited Y/M applications remain visible without inventing
 // direct user overrides. N is excluded; module packages still do not add size.
 const enabledContext = { state: { device: { id: 'catalog-target' } }, MENU_CATALOG: {},
@@ -238,23 +107,42 @@ vm.runInContext(extract(pluginController, 'effectiveEnabledPlugins'), enabledCon
 assert.deepEqual([...enabledContext.effectiveEnabledPlugins()].map(p => p.id), ['imported', 'baseline', 'module']);
 assert.match(pluginController, /updateStats\(\);\s*\/\/ Restoring intent[\s\S]*?openSelectedDrawer\(\);/,
   'restoring a default-Y selection must redraw, not remove a still-enabled plugin');
-assert.match(read('site/wrt/lib/config/config-importer.js'), /ensureCatalogPackageSizes\(catalogPackageSizesStatus\.state === 'error'\)/,
-  'imports retry a prior failed observation without blocking on optional data');
 
 const sourceJson = JSON.parse(read('tools/i18n-source.json'));
 const translationJson = JSON.parse(read('tools/i18n-translations.json'));
-for (const key of ['size.summary.unknown', 'size.summary.withUnknown', 'size.summary.loading',
-  'size.summary.error', 'size.summary.retry', 'size.summary.noSelectedCoverage', 'bar.selectionSummary', 'drawer.effective', 'drawer.edit']) {
+for (const key of ['bar.selectionSummary', 'drawer.effective', 'drawer.edit', 'lang.search', 'mode.self.steps']) {
   assert.equal(typeof sourceJson.strings?.[key], 'string', `${key} must exist in the English source catalog`);
   assert.equal(typeof translationJson['zh-CN']?.[key], 'string', `${key} must exist in the Chinese translation catalog`);
 }
 const manifest = JSON.parse(read('site/wrt/data/i18n/index.json'));
-for (const language of manifest.languages) {
+assert.equal(manifest.languages.length, 50);
+assert.equal(manifest.languages.filter((language) => language.pending).length, 39);
+for (const language of manifest.languages.filter((entry) => !entry.pending)) {
   const document = JSON.parse(read(`site/wrt/data/i18n/${language.id}.json`));
-  assert.equal(typeof document.strings['size.summary.unknown'], 'string',
-    `${language.id} generated catalog must contain the unknown-size label`);
-  assert.equal(typeof document.strings['size.summary.withUnknown'], 'string',
-    `${language.id} generated catalog must contain the mixed-size label`);
+  assert.equal(Object.keys(document.strings).length, Object.keys(sourceJson.strings).length);
+  assert(!Object.keys(document.strings).some((key) => key.startsWith('size.summary.')));
 }
-
-console.log('display privacy and package-size contracts: ok');
+for (const source of [pluginController, catalogSource, read('site/wrt/lib/config/config-importer.js')]) {
+  assert.doesNotMatch(source, /ensureCatalogPackageSizes|packageSizeEstimate|catalogObservedPackageSizes/,
+    'retired package sizing must have no active caller');
+}
+for (const [browserLanguage, expected] of [['zh-CN', 'zh-CN'], ['en-US', 'en'], ['xx-ZZ', 'en'], ['nl', 'en']]) {
+  const requests = [];
+  const localization = {
+    state: { lang: '' }, navigator: { languages: [browserLanguage] }, FALLBACK: 'en', SOURCE_LANG: 'en',
+    I18N: null, console,
+    loadJson: async (path) => {
+      requests.push(path);
+      if (path === 'i18n/index.json') return manifest;
+      const id = path.match(/i18n\/(.+)\.json/)[1];
+      return JSON.parse(read(`site/wrt/data/i18n/${id}.json`));
+    },
+  };
+  vm.createContext(localization);
+  vm.runInContext(i18nSource, localization);
+  await localization.initializeI18n();
+  assert.deepEqual(requests, ['i18n/index.json', `i18n/${expected}.json`],
+    'startup must load exactly one effective language bundle');
+  assert.equal(localization.state.lang, expected);
+}
+console.log('display privacy, size retirement, count advice and locale loading: ok');

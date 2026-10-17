@@ -139,42 +139,6 @@ async function fetchCatalogIndex(signal, forceRefresh = false) {
   index.catalogProvider = remote.provider;
   return { data: index, url: remote.url, provider: remote.provider, diagnostics: remote.diagnostics };
 }
-const catalogPackageSizeMaps = new WeakMap();
-function catalogPackageSizeMap(document = catalogPackageSizesDocument) {
-  if (document && catalogPackageSizeMaps.has(document)) return catalogPackageSizeMaps.get(document);
-  const map = new Map();
-  for (const row of document?.rows || []) {
-    if (!Array.isArray(row) || !/^[A-Za-z0-9][A-Za-z0-9_.+@-]{0,127}$/.test(String(row[0] || ''))) continue;
-    const archiveBytes = row[1];
-    const installedBytes = row[2] == null ? null : row[2];
-    if (!Number.isSafeInteger(archiveBytes) || archiveBytes < 0 ||
-        (installedBytes != null && (!Number.isSafeInteger(installedBytes) || installedBytes < 0))) continue;
-    map.set(row[0], { archiveBytes, installedBytes });
-  }
-  if (document) catalogPackageSizeMaps.set(document, map);
-  return map;
-}
-function validateCatalogPackageSizes(document, catalog = MENU_CATALOG) {
-  const expectedSource = catalog?.source || {};
-  if (!document || Number(document.schema) !== 1 || document.kind !== 'package-sizes' ||
-      document.encoding !== 'positional-rows-v1' ||
-      JSON.stringify(document.fields) !== JSON.stringify(['package', 'archiveBytes', 'installedBytes']) ||
-      !Array.isArray(document.rows) || document.source?.id !== expectedSource.id ||
-      document.source?.branch !== expectedSource.branch || document.source?.commit !== expectedSource.commit ||
-      catalogPackageSizeMap(document).size !== document.rows.length) {
-    throw new Error('Catalog package-size shard does not match the active Source / Branch');
-  }
-  return document;
-}
-function catalogObservedPackageSizes() {
-  const document = catalogPackageSizesDocument;
-  const source = MENU_CATALOG?.source;
-  const architecture = CATALOG_ENGINE.decodeKconfigString(String(catalogEngineValues().get('TARGET_ARCH_PACKAGES') || ''));
-  if (!source || !architecture || document?.source?.id !== source.id ||
-      document.source.branch !== source.branch || document.source.commit !== source.commit ||
-      document.observation?.architecture !== architecture) return new Map();
-  return catalogPackageSizeMap(document);
-}
 function validateCatalogBranchApplications(catalog) {
   const required = Array.isArray(catalog?.capabilities) &&
     catalog.capabilities.includes('branch-applications-v1');
@@ -206,7 +170,6 @@ function validateCatalogBranchApplications(catalog) {
 }
 function catalogApplicationsPluginData(document, catalog = MENU_CATALOG) {
   const metadata = new Map((document?.items || []).map((item) => [item.package, item]));
-  const sizes = catalogObservedPackageSizes();
   const branchRows = catalog?.applications?.kind === 'branch-applications' &&
     catalog.applications?.encoding === 'positional-rows-v1' &&
     JSON.stringify(catalog.applications?.fields) === JSON.stringify(['symbol', 'package', 'group', 'hot'])
@@ -215,7 +178,6 @@ function catalogApplicationsPluginData(document, catalog = MENU_CATALOG) {
     const curatedGroups = new Set(document?.groups || []);
     const plugins = branchRows.map(([symbol, packageName, group, hot]) => {
       const item = metadata.get(packageName) || {};
-      const observed = sizes.get(packageName);
       return {
         id: packageName.slice('luci-app-'.length),
         pkg: packageName,
@@ -225,9 +187,6 @@ function catalogApplicationsPluginData(document, catalog = MENU_CATALOG) {
         // known authored groups; older unmapped paths share the Other group.
         group: curatedGroups.has(group) ? group : 'Other',
         hot: hot === 1 || item.hot === true,
-        archiveBytes: observed?.archiveBytes ?? null,
-        installedBytes: observed?.installedBytes ?? null,
-        sizeBytes: observed?.installedBytes ?? null,
         name: item.titleZh || item.titleEn || packageName,
         desc: item.usageZh || item.usageEn || '',
         nameI18n: { en: item.titleEn || packageName, 'zh-CN': item.titleZh || '', ...(item.titleI18n || {}) },
@@ -247,7 +206,6 @@ function catalogApplicationsPluginData(document, catalog = MENU_CATALOG) {
       pkg: item.package,
       group: item.group,
       hot: item.hot === true,
-      sizeBytes: sizes.get(item.package)?.installedBytes ?? null,
       name: item.titleZh || item.titleEn || item.id,
       desc: item.usageZh || item.usageEn || '',
       nameI18n: { en: item.titleEn || item.id, 'zh-CN': item.titleZh || '', ...(item.titleI18n || {}) },
@@ -262,86 +220,6 @@ function refreshCatalogBranchApplications() {
   updateStats();
   return true;
 }
-function setCatalogPackageSizesStatus(key, state, detail = {}) {
-  catalogPackageSizesStatus = { key, state, ...detail };
-  importLogStep('package-sizes', {
-    ...catalogPackageSizesStatus,
-    assetRef: MENU_INDEX?.assetRef || '',
-    source: MENU_CATALOG?.source?.id || '',
-    branch: MENU_CATALOG?.source?.branch || '',
-  });
-}
-async function ensureCatalogPackageSizes(retry = false) {
-  const catalogKey = menuCatalogKey;
-  if (!MENU_CATALOG?.splitAssets || !catalogShardLoader || !catalogKey) {
-    if (MENU_CATALOG && !MENU_CATALOG.splitAssets && catalogPackageSizesStatus.state !== 'unavailable') {
-      catalogPackageSizesDocument = null;
-      catalogPackageSizesKey = '';
-      setCatalogPackageSizesStatus(catalogKey, 'unavailable', { reason: 'size-contract-unavailable' });
-    }
-    return null;
-  }
-  const architecture = CATALOG_ENGINE.decodeKconfigString(String(catalogEngineValues().get('TARGET_ARCH_PACKAGES') || ''));
-  const assets = selectedCatalogBranch(selectedCatalogSource())?.assets || {};
-  const logical = assets[`packageSizes:${architecture}`] ? `packageSizes:${architecture}` : 'packageSizes';
-  const contract = assets[logical];
-  const key = `${catalogKey}:${architecture}`;
-  if (catalogPackageSizesKey === key) return catalogPackageSizesDocument;
-  // A transport/validation failure is retryable, not negative coverage. Do
-  // not turn repeated UI renders into an unbounded background retry loop.
-  if (!retry && catalogPackageSizesStatus.key === key && catalogPackageSizesStatus.state === 'error') return null;
-  if (!architecture || !contract?.asset || (contract.architecture && contract.architecture !== architecture) || contract.installedItems === 0) {
-    catalogPackageSizesDocument = null;
-    catalogPackageSizesKey = key;
-    setCatalogPackageSizesStatus(key, 'unavailable', { architecture, logical,
-      reason: !architecture ? 'native-architecture-unavailable' : !contract?.asset ? 'architecture-not-published'
-        : contract.architecture && contract.architecture !== architecture ? 'architecture-mismatch'
-          : contract.reason || 'no-matching-installed-size-observations' });
-    refreshCatalogBranchApplications();
-    return null;
-  }
-  if (catalogPackageSizesPromise && catalogPackageSizesPromiseKey === key) return catalogPackageSizesPromise;
-  const catalog = MENU_CATALOG;
-  const loader = catalogShardLoader;
-  const invalidateDisplay = catalogPackageSizesDocument != null;
-  catalogPackageSizesDocument = null;
-  setCatalogPackageSizesStatus(key, 'loading', { architecture, logical, asset: contract.asset });
-  const run = (async () => {
-    try {
-      const document = validateCatalogPackageSizes(await loader(logical, { forceRefresh: retry }), catalog);
-      if (MENU_CATALOG !== catalog || menuCatalogKey !== catalogKey ||
-          CATALOG_ENGINE.decodeKconfigString(String(catalogEngineValues().get('TARGET_ARCH_PACKAGES') || '')) !== architecture) return null;
-      catalogPackageSizesDocument = document;
-      catalogPackageSizesKey = key;
-      setCatalogPackageSizesStatus(key, 'ready', { architecture, logical, asset: contract.asset,
-        items: document.rows.length });
-      refreshCatalogBranchApplications();
-      return document;
-    } catch (error) {
-      console.warn('[Catalog package sizes]', error);
-      if (MENU_CATALOG === catalog && menuCatalogKey === catalogKey &&
-          CATALOG_ENGINE.decodeKconfigString(String(catalogEngineValues().get('TARGET_ARCH_PACKAGES') || '')) === architecture) {
-        catalogPackageSizesDocument = null;
-        catalogPackageSizesKey = '';
-        setCatalogPackageSizesStatus(key, 'error', { architecture, logical, asset: contract.asset,
-          reason: String(error.message || error).slice(0, 500) });
-        refreshCatalogBranchApplications();
-      }
-      return null;
-    }
-  })();
-  const settled = run.finally(() => {
-    if (catalogPackageSizesPromise === settled) {
-      catalogPackageSizesPromise = null;
-      catalogPackageSizesPromiseKey = '';
-    }
-  });
-  catalogPackageSizesPromise = settled;
-  catalogPackageSizesPromiseKey = key;
-  if (invalidateDisplay) refreshCatalogBranchApplications();
-  else updateStats();
-  return settled;
-}
 async function ensureCatalogApplications(forceRefresh = false) {
   if (catalogApplicationsPromise) return catalogApplicationsPromise;
   if (catalogApplicationsDocument && !forceRefresh) return catalogApplicationsDocument;
@@ -353,7 +231,6 @@ async function ensureCatalogApplications(forceRefresh = false) {
       const result = await CATALOG_LOADER.fetchApplications({ forceRefresh });
       catalogApplicationsDocument = result.applications;
       catalogApplicationsLoadState = 'ready';
-      await ensureCatalogPackageSizes();
       resetPluginWorkspace(catalogApplicationsPluginData(result.applications));
       reconcileCatalogReadyState();
       return result.applications;
@@ -1304,9 +1181,6 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
     if (catalog.splitAssets) catalog.menu = CATALOG_SCHEMA6_MODULE.createRuntimeMenu(CATALOG_MODEL);
     MENU_CATALOG = catalog;
     menuCatalogKey = key;
-    catalogPackageSizesDocument = null;
-    catalogPackageSizesKey = '';
-    catalogPackageSizesStatus = { key: '', state: 'idle', reason: '' };
     if (catalog.splitAssets) buildMenuStartupIndexes(catalog);
     else buildMenuIndexes(catalog);
     resetCatalogSelectionLayers();
@@ -1322,7 +1196,6 @@ async function loadCatalog(source, branch, applyDefault = true, requested = null
       await applyCatalogTarget();
     }
     ensureCatalogMenuLoaded(false).catch((error) => console.warn('[Catalog menu prefetch]', error));
-    if (catalogApplicationsDocument) ensureCatalogPackageSizes();
     scheduleCatalogIdlePrefetch();
     return catalog;
   })().catch((error) => {

@@ -168,21 +168,25 @@ browser zoom.
   floating dock must have a bounded height and an internal scroll path when
   content exceeds the dynamic viewport. The dock itself remains overflow-safe;
   only its expanded item list may scroll on a short viewport.
-- The wide filter preset may use up to 760px and 78dvh on desktop, then falls
-  back to a single-column, viewport-width panel on narrow screens.
+- Build Information, the filter and language menus share content-first floating
+  geometry. Width and height are capped at half the visual viewport; smaller
+  content has no artificial height or scrollbar. Oversized content scrolls.
+  Closed layers are truly hidden and cannot extend the document. Avoid
+  decorative pseudo-elements protruding into a scrolling surface.
+- The language trigger stays compact. Its searchable menu opens leftwards,
+  with eleven existing languages and thirty-nine pending entries under More.
+  Pending entries explicitly use English; startup loads only the effective
+  language bundle, whose missing strings are resolved by the generator.
 - Cloud submission uses the shared wide modal at up to 960px: a responsive
   summary above three full-width action rows (request, import, config download).
   Each row has naturally sized copy on the left and its button on the right;
   narrow screens move the button below. The header stays outside the scrollable body;
   every action remains reachable without page zoom or horizontal scrolling.
-- RootFS size advisories reuse warning/danger tokens at 50%/80% estimated
-  installed-package occupancy only when every final-Y observation exists.
-  Partial coverage must not produce a capacity percentage. Unknown-size columns
-  disappear, but selected plugins and removal controls stay available.
-- The selection counter distinguishes effective applications from explicit
-  selections. Size loading, unavailable coverage and failures have visible
-  states; retry is a standard action-bar button. Narrow bars wrap readable
-  labels while keeping load/submit actions reachable.
+- Package-size collection and estimates are retired. Keep the RootFS partition
+  control, effective/direct application counts and nonblocking count advice;
+  never present software counts as measured occupancy or a build gate.
+- The footer has acknowledgements above a wrapping row of project links and
+  right-aligned download/privacy copy. It adds no artificial document tail.
 - Use `:focus-visible`, keyboard Escape handling supplied by the runtime,
   focus restoration, readable labels, and reduced-motion behavior.
 - Maintain readable contrast in both themes and under increased contrast mode.

@@ -197,10 +197,10 @@ run('package mirror public projection matches its canonical policy', process.exe
   [join(ROOT, 'tools', 'gen-package-mirrors.mjs'), '--check']);
 
 const i18n = parsed.get('site/wrt/data/i18n/index.json');
-const i18nDocuments = (i18n?.languages || []).map((language) =>
+const i18nDocuments = (i18n?.languages || []).filter((language) => !language.pending).map((language) =>
   parsed.get(`site/wrt/data/i18n/${language.id}.json`));
 const i18nKeys = Object.keys(i18nDocuments[0]?.strings || {});
-if (i18n?.version === 2 && i18n.languages?.length === 11 && i18nDocuments.every((document) =>
+if (i18n?.version === 2 && i18n.languages?.length === 50 && i18nDocuments.length === 11 && i18nDocuments.every((document) =>
   document?.version === 2 && i18n.languages.some((language) => language.id === document.language) &&
   Object.keys(document.strings || {}).length === i18nKeys.length &&
   i18nKeys.every((key) => String(document.strings[key] || '').length))) {

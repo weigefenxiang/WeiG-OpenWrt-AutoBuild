@@ -119,3 +119,27 @@ assert.ok(owner.top >= 88 && owner.top + owner.height <= 392,
   'owner boundary must constrain vertical geometry');
 
 console.log('viewport geometry contracts passed');
+
+for (const owner of [
+  {left:0,top:2000,right:1000,bottom:2400},
+  {left:0,top:-2400,right:1000,bottom:-2000},
+  {left:2000,top:0,right:2400,bottom:600},
+]) {
+  const result=geometry.calculateFloatingGeometry({
+    anchorRect:{left:400,top:300,right:500,bottom:340}, layerRect:{width:200,height:150},
+    viewportRect:viewport,boundaryRect:owner,preferredHeight:150,
+    avoidRects:[{left:0,top:520,right:1000,bottom:600}],
+  });
+  assert(result.left >= 0 && result.top >= 0 &&
+    result.left+result.width <= viewport.right && result.top+result.height <= 520,
+    'an offscreen owner must not send a floating layer outside the viewport/actionbar');
+}
+
+const sideFit = geometry.calculateFloatingGeometry({
+  anchorRect:{left:900,top:300,right:970,bottom:340}, layerRect:{width:300,height:350},
+  viewportRect:{left:0,top:0,right:1200,bottom:768}, preferredHeight:350,
+  avoidRects:[{left:0,top:0,right:1200,bottom:90},{left:0,top:680,right:1200,bottom:768}],
+  placements:['below','above','left','right'],
+});
+assert.equal(sideFit.placement,'left','a content-first panel must use a full-height side when neither vertical side fits');
+assert.equal(sideFit.height,350,'side placement must preserve the natural content height when space exists');

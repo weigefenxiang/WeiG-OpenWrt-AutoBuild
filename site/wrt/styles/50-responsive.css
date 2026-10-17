@@ -18,7 +18,7 @@
   .build-contract-toggle{flex:1 1 100%;width:100%;min-width:0}
 .build-contract-controls .defconfig-switch,.build-contract-controls .menuconfig-filter-control{width:100%;min-width:0;max-width:100%;min-height:36px}
   .menuconfig-filter-trigger{width:100%;max-width:100%;min-height:40px;white-space:normal}
-  .menuconfig-filter-menu{grid-template-columns:minmax(0,1fr);width:min(760px,calc(100vw - 2 * var(--viewport-gutter)));width:min(760px,calc(100dvw - 2 * var(--viewport-gutter)));max-width:calc(100vw - 2 * var(--viewport-gutter));max-width:calc(100dvw - 2 * var(--viewport-gutter));max-height:min(78vh,680px);max-height:min(78dvh,680px);font-size:16px}
+  .menuconfig-filter-menu{grid-template-columns:minmax(0,1fr);width:max-content;max-width:50vw;max-width:50dvw;max-height:50vh;max-height:50dvh;font-size:16px}
   .menuconfig-header{grid-template-columns:minmax(0,1fr);align-items:stretch}
   .menuconfig-overview-row{grid-template-columns:minmax(0,1fr)}
   .menuconfig-selected-toggle{width:100%;min-width:0}
@@ -166,7 +166,7 @@
 @media (max-height: 650px) {
   .modal-mask { align-items: flex-start; }
   .modal { max-height: calc(100vh - 2 * var(--viewport-gutter)); max-height: calc(100dvh - 2 * var(--viewport-gutter)); }
-  .build-info-card { max-height: calc(100vh - 2 * var(--viewport-gutter)); max-height: calc(100dvh - 2 * var(--viewport-gutter)); }
+  .build-info-card { max-width:50dvw; max-height:50dvh; }
   .side-dock { max-block-size: none; }
   .side-dock:not(.collapsed) .dock-items {
     max-block-size: calc(100vh - var(--overlay-clearance) - var(--viewport-gutter));

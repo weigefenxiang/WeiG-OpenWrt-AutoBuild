@@ -27,7 +27,8 @@ function t(key, params) {
   return s;
 }
 async function ensureI18nLanguage(language) {
-  const id = I18N.languages.some((entry) => entry.id === language) ? language : I18N.fallback;
+  const entry = I18N.languages.find((item) => item.id === language);
+  const id = entry?.bundle || entry?.id || I18N.fallback;
   if (I18N.loaded.has(id)) return;
   const document = await loadJson(`i18n/${id}.json`);
   if (document.version !== 2 || document.language !== id || !document.strings) {
@@ -44,8 +45,15 @@ async function initializeI18n() {
     throw new Error('Invalid localization manifest');
   }
   I18N = { ...manifest, strings: {}, loaded: new Set() };
-  state.lang = pickLang();
-  await Promise.all([...new Set([I18N.source, I18N.fallback, state.lang])].map(ensureI18nLanguage));
+  const requested = pickLang();
+  I18N.selectedLanguage = requested;
+  state.lang = I18N.languages.find((entry) => entry.id === requested)?.bundle || requested;
+  try { await ensureI18nLanguage(state.lang); }
+  catch (error) {
+    if (state.lang === FALLBACK) throw error;
+    state.lang = FALLBACK;
+    await ensureI18nLanguage(FALLBACK);
+  }
 }
 const formatList = (values) => values.join(t('format.listSeparator'));
 const formatSemicolonList = (values) => values.join(t('format.semicolonSeparator'));
@@ -60,21 +68,6 @@ function pName(p) {
 function pDesc(p) {
   const value = p.descI18n?.[state.lang] || p.descI18n?.[FALLBACK] || p.desc || '';
   return displayText(value);
-}
-
-/* V8c:体积人性化显示,输入单位为 MB / V8c: human-readable size, input value in MB */
-function fmtSize(bytes) {
-  const value = Math.max(0, Number(bytes) || 0);
-  const format = (number, unit) => {
-    if (!number) return `0 ${unit}`;
-    const exponent = Math.floor(Math.log10(Math.abs(number)));
-    const decimals = exponent >= 0 ? Math.max(0, 2 - exponent) : Math.min(3, 2 - exponent);
-    return `${number.toFixed(decimals)} ${unit}`;
-  };
-  if (value >= 1024 ** 3) return format(value / 1024 ** 3, 'GiB');
-  if (value >= 1024 ** 2) return format(value / 1024 ** 2, 'MiB');
-  if (value >= 1024) return format(value / 1024, 'KiB');
-  return format(value, 'B');
 }
 
 function configuredProjectText(value, fallback) {
@@ -157,19 +150,8 @@ function applyI18n() {
   }
   renderCatalogLoadState();
   bindUiTooltipContent($('advLabel'), { body: t('adv.title') });
-  // Fork 提示内嵌两个链接,不能整段 textContent,需拆分文案后用 DOM 节点拼装 / The fork hint embeds two links, so the text is split and assembled from DOM nodes instead of one textContent
-  const hint = $('selfHint');
-  hint.textContent = '';
-  const parts = t('mode.self.hint').split(t('mode.self.fork'));
-  const mkA = (href, text) => { const a = document.createElement('a'); a.href = href; a.target = '_blank'; a.rel = 'noopener'; a.textContent = text; return a; };
-  if (parts.length === 2) {
-    hint.appendChild(document.createTextNode(parts[0]));
-    hint.appendChild(mkA('https://github.com/' + OFFICIAL_REPO + '/fork', t('mode.self.fork')));
-    hint.appendChild(document.createTextNode(parts[1] + ' '));
-  } else {
-    hint.appendChild(document.createTextNode(t('mode.self.hint') + ' '));
-  }
-  if (PROJECT?.links?.guide) hint.appendChild(mkA(PROJECT.links.guide, t('mode.self.tutorial')));
+  renderForkHint();
+  refreshLanguageControl();
   PAGE_SHELL_CONTROLLER?.refreshThemeControl();
   if (PLUGINS) {
     renderDevices();
@@ -183,6 +165,142 @@ function applyI18n() {
   if ($('deviceFold')) $('deviceFold').textContent = t($('devicePicker').hidden ? 'fold.show' : 'fold.hide');
   updateDeviceSummary();
   renderFirmwareSettings();
+}
+
+/* Fork navigation uses text tokens, never translated HTML or unvalidated URLs. */
+function renderForkHint() {
+  const hint = $('selfHint');
+  if (!hint || !PROJECT) return;
+  hint.textContent = '';
+  const owner = String(state.owner || '').trim();
+  const validOwner = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(owner);
+  const base = validOwner ? 'https://github.com/' + owner + '/' + REPO_NAME : '';
+  const mkA = (href, text) => {
+    const node = document.createElement(href ? 'a' : 'strong');
+    if (href) { node.href = href; node.target = '_blank'; node.rel = 'noopener'; }
+    node.textContent = text;
+    return node;
+  };
+  const tokens = {
+    fork: () => mkA('https://github.com/' + OFFICIAL_REPO + '/fork', t('mode.self.fork')),
+    settings: () => mkA(base ? base + '/settings' : '', 'Settings'),
+    actions: () => mkA(base ? base + '/actions' : '', 'Actions'),
+    issues: () => mkA('', 'Issues'),
+    features: () => mkA('', 'Features'),
+    enable: () => {
+      const node = document.createElement('span');
+      node.className = 'workflow-enable-label';
+      node.textContent = t('mode.self.enableLabel');
+      return node;
+    },
+  };
+  const template = t('mode.self.steps');
+  let offset = 0;
+  for (const match of template.matchAll(/\{(\w+)\}/g)) {
+    hint.append(document.createTextNode(template.slice(offset, match.index)));
+    hint.append(tokens[match[1]]?.() || document.createTextNode(match[0]));
+    offset = match.index + match[0].length;
+  }
+  hint.append(document.createTextNode(template.slice(offset) + ' '));
+  if (PROJECT?.links?.guide) hint.appendChild(mkA(PROJECT.links.guide, t('mode.self.tutorial')));
+}
+
+let languageFloatingController = null;
+function refreshLanguageControl() {
+  const button = $('langSel');
+  if (!button || !I18N) return;
+  const id = I18N.selectedLanguage || state.lang;
+  const entry = I18N.languages.find((item) => item.id === id);
+  button.textContent = LANG_SHORT[id] || id.split('-')[0].toUpperCase();
+  button.setAttribute('aria-label', t('lang.label') + ': ' + (entry?.native || id));
+}
+async function selectUiLanguage(id) {
+  const entry = I18N.languages.find((item) => item.id === id);
+  if (!entry) return;
+  await ensureI18nLanguage(id);
+  I18N.selectedLanguage = id;
+  state.lang = entry.bundle || id;
+  safeSet('wrt_lang', id);
+  if (MENU_CATALOG?.menu?.displayLoaded) {
+    await ensureCatalogMenuLanguage(state.lang).catch((error) => console.warn('[Catalog language shard]', error));
+  }
+  applyI18n();
+}
+function renderLangSel() {
+  const button = $('langSel');
+  const panel = $('languagePanel');
+  const search = $('languageSearch');
+  const list = $('languageList');
+  const more = $('languageMore');
+  let showMore = false;
+  let switching = false;
+  const close = () => {
+    languageFloatingController?.close();
+    button.setAttribute('aria-expanded', 'false');
+  };
+  const render = () => {
+    const needle = search.value.trim().toLocaleLowerCase();
+    list.textContent = '';
+    search.placeholder = t('lang.search');
+    more.textContent = t(showMore ? 'lang.less' : 'lang.more');
+    more.hidden = Boolean(needle);
+    const entries = I18N.languages.filter((entry) =>
+      (needle || showMore || !entry.pending) &&
+      (!needle || [entry.id, entry.native, entry.name].join(' ').toLocaleLowerCase().includes(needle)));
+    for (const entry of entries) {
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.className = 'language-option';
+      option.dataset.language = entry.id;
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', String(entry.id === (I18N.selectedLanguage || state.lang)));
+      option.textContent = entry.native || entry.name;
+      if (entry.pending) {
+        const note = document.createElement('small');
+        note.textContent = t('lang.englishFallback');
+        option.append(note);
+      }
+      option.onclick = async () => {
+        if (switching) return;
+        switching = true;
+        panel.setAttribute('aria-busy', 'true');
+        try { await selectUiLanguage(entry.id); close(); button.focus(); }
+        catch (error) { showToast(error.message); }
+        finally { switching = false; panel.removeAttribute('aria-busy'); }
+      };
+      list.append(option);
+    }
+    if (!entries.length) {
+      const empty = document.createElement('p');
+      empty.textContent = t('lang.noResults');
+      list.append(empty);
+    }
+    languageFloatingController?.update();
+  };
+  languageFloatingController = globalThis.createFloatingLayerController(button, panel, {
+    preset: 'bounded-card', minWidth: 0, placements: ['left', 'above', 'below', 'right'], align: 'end',
+    onDismiss: () => button.setAttribute('aria-expanded', 'false'),
+  });
+  search.addEventListener('input', render);
+  more.onclick = () => { showMore = !showMore; render(); };
+  panel.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    const options = [...list.querySelectorAll('[role=option]')];
+    if (!options.length) return;
+    const index = options.indexOf(document.activeElement);
+    const next = event.key === 'ArrowDown' ? (index + 1) % options.length
+      : (index <= 0 ? options.length : index) - 1;
+    event.preventDefault(); options[next].focus();
+  });
+  button.onclick = (event) => {
+    event.stopPropagation();
+    if (languageFloatingController?.isOpen) { close(); return; }
+    search.value = ''; showMore = false; render();
+    languageFloatingController?.open();
+    button.setAttribute('aria-expanded', 'true');
+    search.focus();
+  };
+  refreshLanguageControl();
 }
 
 /* ============ 中文敏感词处理,仅中文界面生效,其他语言不改 / Sensitive-word masking, applied to the Chinese UI only ============ */
