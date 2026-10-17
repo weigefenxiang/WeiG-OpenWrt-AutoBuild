@@ -471,7 +471,9 @@ export function createCatalogLoader({
   subtle = globalThis.crypto?.subtle,
   Decompression = globalThis.DecompressionStream,
   now = () => Date.now(),
+  providerTimeoutMs = 60_000,
 } = {}) {
+  if (!Number.isSafeInteger(providerTimeoutMs) || providerTimeoutMs <= 0) throw new Error('Invalid Catalog provider timeout');
   const exactDataRef = safeCatalogDataRef(dataRef);
   const binding = normalizeExpectedBinding(expectedBinding, exactDataRef, repository);
   const providerMap = providers(repository, exactDataRef);
@@ -489,6 +491,23 @@ export function createCatalogLoader({
   const coreMemory = new Map();
   const corePromises = new Map();
 
+  // Bound headers and body together, then let the existing provider loop fall back.
+  // A selection's cancellation remains distinct from an individual provider timeout.
+  async function requestDocument(url, options, consume) {
+    options.signal?.throwIfAborted();
+    const deadline = AbortSignal.timeout(providerTimeoutMs);
+    const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+    try {
+      const response = await fetchImpl(url, { ...options, signal });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await consume(response);
+    } catch (error) {
+      options.signal?.throwIfAborted();
+      if (deadline.aborted) throw new Error(`Catalog provider timed out after ${providerTimeoutMs}ms`);
+      throw error;
+    }
+  }
+
   async function fetchIndex({ signal, forceRefresh = false, diagnostics = [] } = {}) {
     signal?.throwIfAborted();
     if (!forceRefresh && indexPromise && indexPromiseSignal === signal) return indexPromise;
@@ -505,11 +524,9 @@ export function createCatalogLoader({
         const provider = providerMap[id];
         const url = provider.indexUrl(now());
         try {
-          const response = await fetchImpl(url, {
+          const text = await requestDocument(url, {
             cache: 'no-store', signal, ...(provider.headers ? { headers: provider.headers } : {}),
-          });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const text = await response.text();
+          }, response => response.text());
           const index = validateIndex(JSON.parse(text), exactDataRef, repository);
           const result = { index, provider: id, url };
           if (id === 'jsdelivr' && !forceRefresh && binding) {
@@ -521,11 +538,10 @@ export function createCatalogLoader({
             }
             try {
               const headUrl = providerMap['github-api'].indexHeadUrl();
-              const head = await fetchImpl(headUrl, {
+              const head = await requestDocument(headUrl, {
                 method: 'HEAD', cache: 'no-store', signal,
                 headers: providerMap['github-api'].headers,
-              });
-              if (!head.ok) throw new Error(`HTTP ${head.status}`);
+              }, response => response);
               const etag = String(head.headers.get('etag') || '').replace(/^W\//, '').replaceAll('"', '').trim().toLowerCase();
               if (!/^[a-f0-9]{40}$/.test(etag)) throw new Error('GitHub index blob identity is unavailable');
               const candidateBlob = await gitBlobSha1(text, subtle);
@@ -538,7 +554,7 @@ export function createCatalogLoader({
               diagnostic(diagnostics, 'index-freshness', 'github-api', true,
                 `branch blob ${etag.slice(0, 8)} matches jsDelivr`, headUrl);
             } catch (error) {
-              if (error?.name === 'AbortError') throw error;
+              if (signal?.aborted || error?.name === 'AbortError') throw error;
               diagnostic(diagnostics, 'index-freshness', 'github-api', false, error.message,
                 providerMap['github-api'].indexHeadUrl());
               unverifiedJsdelivr = result;
@@ -551,7 +567,7 @@ export function createCatalogLoader({
             `schema ${index.schema}; assetRef ${index.assetRef.slice(0, 8)}`, url);
           return { ...result, diagnostics };
         } catch (error) {
-          if (error?.name === 'AbortError') throw error;
+          if (signal?.aborted || error?.name === 'AbortError') throw error;
           diagnostic(diagnostics, 'index', id, false, error.message, url);
           errors.push(`${id}: ${error.message}`);
         }
@@ -637,17 +653,15 @@ export function createCatalogLoader({
       const provider = providerMap[id];
       const url = provider.assetUrl(safeAsset, ref, index);
       try {
-        const response = await fetchImpl(url, {
+        const buffer = await requestDocument(url, {
           cache: 'no-store', signal, ...(provider.headers ? { headers: provider.headers } : {}),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const buffer = await response.arrayBuffer();
+        }, response => response.arrayBuffer());
         const data = await readDocumentBuffer(buffer, contract, subtle, Decompression);
         await writeCache(safeAsset, contract, buffer);
         diagnostic(diagnostics, stage, id, true, `bytes ${buffer.byteLength}; schema ${data?.schema || '-'}`, url);
         return { data, buffer, provider: id, url };
       } catch (error) {
-        if (error?.name === 'AbortError') throw error;
+        if (signal?.aborted || error?.name === 'AbortError') throw error;
         diagnostic(diagnostics, stage, id, false, error.message, url);
         errors.push(`${id}: ${error.message}`);
       }

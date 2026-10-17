@@ -1060,4 +1060,49 @@ for (const mutate of [
     'rules or JSON-byte contract mismatch was accepted');
 }
 
+
+// A stalled provider must release the fallback chain, including stalls after
+// headers. Caller cancellation must never be mistaken for provider failure.
+const stall = signal => new Promise((resolve, reject) => {
+  const guard = setTimeout(() => reject(new Error('fixture request was not aborted')), 1000);
+  signal.addEventListener('abort', () => { clearTimeout(guard); reject(signal.reason); }, { once: true });
+});
+for (const stalledStage of ['index', 'asset-headers', 'asset-body']) {
+  const calls = [];
+  const bounded = createCatalogLoader({
+    repository: 'owner/catalog', engine: { createCatalogModel }, cacheStorage: fakeCaches(), subtle: null,
+    providerTimeoutMs: 10,
+    fetchImpl: async (url, options) => {
+      calls.push(url);
+      const cdn = url.includes('cdn.jsdelivr.net'), isIndex = url.includes('index.json');
+      if (cdn && ((stalledStage === 'index' && isIndex) ||
+          (stalledStage === 'asset-headers' && !isIndex))) return stall(options.signal);
+      if (cdn && stalledStage === 'asset-body' && !isIndex) {
+        return { ok: true, arrayBuffer: () => stall(options.signal) };
+      }
+      return new Response(isIndex ? JSON.stringify(compatibilityIndex) : compatibilityPayload.bytes);
+    },
+  });
+  const result = await bounded.fetchCompatibility({ preferredAssetProvider: 'jsdelivr' });
+  assert(result.compatibility.rules.length === compatibilityDocument.rules.length, stalledStage);
+  assert(calls.some(url => url.includes('raw.githubusercontent.com')), stalledStage + ': no fallback');
+  assert(result.diagnostics.some(row => row.ok === false && /timed out/.test(row.detail)),
+    stalledStage + ': timeout evidence missing');
+}
+for (const reason of [undefined, new Error('user requested cancellation')]) {
+  const controller = new AbortController();
+  let requests = 0;
+  const cancelled = createCatalogLoader({
+    repository: 'owner/catalog', cacheStorage: fakeCaches(), providerTimeoutMs: 1000,
+    fetchImpl: async (url, options) => {
+      requests += 1;
+      setTimeout(() => controller.abort(reason), 1);
+      return stall(options.signal);
+    },
+  });
+  await assertRejects(() => cancelled.fetchIndex({ signal: controller.signal }),
+    /aborted|user requested cancellation/i, 'caller cancellation lost');
+  assert(requests === 1, 'caller cancellation must not start a fallback request');
+}
+
 console.log('Catalog loader tests passed / Catalog 加载器测试通过');

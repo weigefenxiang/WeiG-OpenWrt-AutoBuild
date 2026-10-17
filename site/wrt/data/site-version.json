@@ -1,15 +1,15 @@
 {
   "version": "v2610172003",
   "timezone": "Asia/Shanghai",
-  "fingerprint": "7edd161bc59b5c7eea435f39243683120d7fabaeb9de81659131882938c399d7",
-  "siteSha256": "3ea87b541afca68c48ebfe1938b1a0158379a14e215f259b5a509bbe8feaa81a",
+  "fingerprint": "ebd4574d86d0d460e32e6854be5697fff2bdc4a3fa50c2f75ad9e12d8f184c05",
+  "siteSha256": "21df997d77eaaaf637ce961baba4a59e2705b0e46341e0f8b88ee6c4a9e4767e",
   "hashAlgorithm": "sha256",
   "catalogBindings": {
     "catalog-dev": {
       "channel": "catalog-dev",
       "repository": "weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog",
-      "codeSha": "01514f21bb1065d030b155cc6400cc4c1f3a976c",
-      "assetRef": "68a1d1ff42ac943d19f47dc2a3cb287230a64b99"
+      "codeSha": "3900775b4e23cad82f0842557186a14ce95c9b65",
+      "assetRef": "8520a6dcb3bf499f5a73cf06e45c02f1b91a07f0"
     },
     "catalog-staging": {
       "channel": "catalog-staging",

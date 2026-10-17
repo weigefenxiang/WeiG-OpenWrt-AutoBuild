@@ -25,7 +25,16 @@ try {
   const evaluate = (fn, args = []) => evaluateFunction(browser, fn, args);
   const ready = source => waitFor('complete Native workspace ' + source, () => evaluate(`(source) =>
     state.source?.id === source && catalogLoadMode === 'idle' && ACTIVE_PROFILE_BASELINE &&
-    !document.getElementById('submitBtn').disabled && document.getElementById('targetPicker')?.getAttribute('aria-busy') === 'false'`, [source]), 120000);
+    !document.getElementById('submitBtn').disabled && document.getElementById('targetPicker')?.getAttribute('aria-busy') === 'false'`, [source]), 120000).catch(async error => {
+    const diagnostic = await evaluate(`() => ({ source: state.source?.id, branch: state.version?.branch,
+      mode: catalogLoadMode, catalog: MENU_CATALOG?.source, baseline: Boolean(ACTIVE_PROFILE_BASELINE),
+      status: document.getElementById('menuconfigStatus')?.textContent,
+      loading: document.getElementById('loading')?.textContent,
+      pickerBusy: document.getElementById('targetPicker')?.getAttribute('aria-busy'),
+      resources: performance.getEntriesByType('resource').filter(row => /index.json|json.gz/.test(row.name))
+        .slice(-15).map(row => ({ url: row.name, duration: Math.round(row.duration), status: row.responseStatus })) })`);
+    throw Error(error.message + '\\n' + JSON.stringify(diagnostic));
+  });
   await waitFor('initial Source controls', () => evaluate(`() => document.getElementById('targetSource')?.options.length > 0`), 60000);
   for (const sourceCase of sources) {
     const [source, requestedBranch = ''] = sourceCase.split('@');
@@ -103,9 +112,9 @@ try {
     const shot = await browser.connection.command('Page.captureScreenshot', { format: 'png' });
     writeFileSync(join(directory, source + '-confirmation.png'), Buffer.from(shot.data, 'base64'));
     console.log(`[submit-browser] testing ${source}/${settings.branch}: ${settings.theme}`);
+    assert.match(settings.login, /none|无/, sourceCase + ': blank project password must be shown as none');
     if (['iStoreOS', 'Lienol'].includes(source)) {
       assert.deepEqual(settings.mirrors, ['source-default']);
-      assert.match(settings.login, /none|无/);
     }
     const before = new Set(readdirSync(directory));
     // Real user gesture for the request action; no external submission occurs.
