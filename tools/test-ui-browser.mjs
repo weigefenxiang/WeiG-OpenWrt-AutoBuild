@@ -1070,13 +1070,14 @@ async function main() {
         return { height: rect.height, width: rect.width, display: getComputedStyle(element).display };
       });
       const lang = document.getElementById('langSel');
-      const option = lang?.options?.[0];
       return {
         actionCount: actions.length,
         boxes,
         colorScheme: lang ? getComputedStyle(lang).colorScheme : '',
-        optionColor: option ? getComputedStyle(option).color : '',
-        optionBackground: option ? getComputedStyle(option).backgroundColor : '',
+        loadedUiBundles: [...I18N.loaded],
+        effectiveLanguage: state.lang,
+        uiBundleRequests: performance.getEntriesByType('resource').map(row => new URL(row.name).pathname)
+          .filter(path => path.includes('/data/i18n/') && !path.endsWith('/index.json')),
         starfield: getComputedStyle(document.body).backgroundImage.includes('radial-gradient'),
         bodyAnimation: getComputedStyle(document.body).animationName,
       };
@@ -1087,6 +1088,10 @@ async function main() {
     context, 'header actions do not share one 44px control height', visualContract);
     expect(visualContract?.colorScheme === context.theme, context,
       'language control does not follow the active color scheme', visualContract);
+    expect(visualContract.loadedUiBundles?.length === 1 &&
+      visualContract.loadedUiBundles[0] === visualContract.effectiveLanguage &&
+      visualContract.uiBundleRequests?.length === 1, context,
+      'startup must load exactly one effective UI language bundle', visualContract);
     expect(visualContract?.starfield === true && visualContract?.bodyAnimation === 'none', context,
       'page starfield is missing or uses continuous body animation', visualContract);
 

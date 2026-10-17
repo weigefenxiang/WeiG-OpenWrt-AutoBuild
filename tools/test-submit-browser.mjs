@@ -138,7 +138,27 @@ try {
     }`, [payload, requestPath.split(/[\\/]/).at(-1)]);
     await ready(source);
     assert.equal(await evaluate(`() => configFirmwareSettings(buildFinalConfigText()).themeMode`), payload.firmware.themeMode);
+    let historicalReview = null;
     if (source === 'iStoreOS') {
+      // Live source inputs can advance. Require the shared evaluator to either
+      // match this historical fact or explain its exact scope mismatch.
+      historicalReview = await evaluate(`async () => {
+        const snapshot = snapshotCatalogUiState();
+        try {
+          const option = menuOptionBySymbol.get('PACKAGE_luci-app-baidupcs-web');
+          if (!option) throw Error('Missing real absent-provider regression option');
+          applyCatalogIntent(option, 'y', false, 'user');
+          const evaluation = await loadCompatibilityEvaluation();
+          return { matched: evaluation.warnings.some(row => row.rule.id === 'BLD-0015'),
+            nearMatch: evaluation.diagnostics.find(row => row.ruleId === 'BLD-0015') };
+        } finally { restoreCatalogUiState(snapshot); renderCatalogUiAfterIntent(); }
+      }`);
+      assert(historicalReview.matched || historicalReview.nearMatch?.mismatches?.length > 0,
+        'historical review must match or have a precise Catalog scope-mismatch diagnostic');
+      if (!historicalReview.matched) console.log('[submit-browser] historical BLD-0015 is outside current exact inputs: ' +
+        historicalReview.nearMatch.mismatches.join(', '));
+    }
+    if (historicalReview?.matched) {
       const reviewDirectory = mkdtempSync(join(directory, 'review-'));
       await browser.connection.command('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: reviewDirectory });
       const reviewBefore = new Set(readdirSync(reviewDirectory));

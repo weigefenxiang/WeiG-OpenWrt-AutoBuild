@@ -32,7 +32,7 @@
 .site-version:hover, .site-version:focus-visible { background: var(--card2); color: var(--text); outline: none; }
 .build-info-card {
   position: fixed; left: 8px; top: 8px; z-index: var(--z-floating); width: max-content; max-width: 50dvw;
-  max-height: 50dvh;
+  max-height: 50vh;
   max-height: 50dvh;
   overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable;
   border: 1px solid var(--surface-overlay-border); border-radius: 14px;

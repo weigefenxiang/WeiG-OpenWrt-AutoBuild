@@ -109,7 +109,6 @@
   .actionbar-row { flex-wrap: nowrap; gap: 5px; padding: 6px 8px; }
   .stats { width: auto; flex: 1 1 auto; min-width: 0; justify-content: flex-start; gap: 4px; font-size: 12px; flex-wrap: wrap; white-space: normal; }
   .stats .link-btn { margin-right: 0; padding: 3px 0; font-size: 12px; flex: 0 1 auto; white-space: normal; text-align: left; }
-  .cap { width: 32px; }
   .cap-text { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
   .cap-info.rootfs-capacity::before { content: ""; }
   .site-version-action { order: 0; margin-left: 0; align-self: center; flex: none; }
