@@ -13,6 +13,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const directory = mkdtempSync(join(tmpdir(), 'weig-submit-browser-'));
 const sources = process.argv.slice(2).length ? process.argv.slice(2) : ['iStoreOS', 'Lienol', 'OpenWrt', 'ImmortalWrt', 'lede', 'hanwckf'];
 const explicitTheme = process.env.WEIG_SUBMIT_THEME === 'explicit';
+const passwordIntent = process.env.WEIG_SUBMIT_PASSWORD_INTENT || 'clear';
+assert(['clear', 'preserve'].includes(passwordIntent), 'password intent must be clear or preserve');
 const stagedCompatibility = process.env.WEIG_COMPATIBILITY_FILE
   ? JSON.parse(readFileSync(process.env.WEIG_COMPATIBILITY_FILE, 'utf8')) : null;
 const preview = await startPreview();
@@ -85,7 +87,7 @@ try {
       return true;
     }`);
     await ready(source);
-    const settings = await evaluate(`(explicitTheme) => {
+    const settings = await evaluate(`(explicitTheme, passwordIntent) => {
       state.timezone = 'Asia/Singapore'; renderFirmwareSettings();
       setFirmwareTheme('@base');
       if (explicitTheme) {
@@ -99,20 +101,23 @@ try {
         const element = document.getElementById(id); element.value = value;
         element.dispatchEvent(new Event('change', { bubbles: true }));
       }
-      const password = document.getElementById('rootpwBox'); password.value = '';
+      const password = document.getElementById('rootpwBox');
+      if (password.value !== '@empty') throw Error('Startup must visibly prefill the clear intent');
+      password.value = passwordIntent === 'preserve' ? '' : '@empty';
       password.dispatchEvent(new Event('input', { bubbles: true }));
       const mirrors = [...document.getElementById('packageMirrorBox').options].map(option => option.value);
       document.getElementById('submitBtn').click();
       return { mirrors, source: state.source.id, branch: state.version.branch,
         theme: state.theme, mode: state.mode, methodCount: document.querySelectorAll('#modalBody .method-card').length,
         login: document.getElementById('loginInfo').textContent };
-    }`, [explicitTheme]);
+    }`, [explicitTheme, passwordIntent]);
     assert(settings.mirrors.includes('source-default'), JSON.stringify(settings));
     assert.equal(settings.methodCount, 3, JSON.stringify(settings));
     const shot = await browser.connection.command('Page.captureScreenshot', { format: 'png' });
     writeFileSync(join(directory, source + '-confirmation.png'), Buffer.from(shot.data, 'base64'));
     console.log(`[submit-browser] testing ${source}/${settings.branch}: ${settings.theme}`);
-    assert.match(settings.login, /none|无/, sourceCase + ': blank project password must be shown as none');
+    assert.match(settings.login, passwordIntent === 'clear' ? /none|无/ : /source default|源码默认/,
+      sourceCase + ': visible password intent must match its effective display');
     if (['iStoreOS', 'Lienol'].includes(source)) {
       assert.deepEqual(settings.mirrors, ['source-default']);
     }
@@ -138,7 +143,8 @@ try {
     assert.equal(payload.lanip, '10.20.30.1'); assert.equal(payload.firmware.ntp, 'cloudflare');
     assert.equal(payload.firmware.timezone, 'Asia/Singapore'); assert.equal(payload.firmware.packageMirror, 'source-default');
     assert.equal(payload.firmware.themeMode, settings.theme === '@base' ? 'inherit' : 'explicit');
-    assert(!Object.hasOwn(payload, 'rootpw'), 'blank password must preserve Native/Fork policy');
+    if (passwordIntent === 'clear') assert.equal(payload.rootpw, '@empty', 'visible default must be an explicit request');
+    else assert(!Object.hasOwn(payload, 'rootpw'), 'clearing the field must preserve upstream credentials');
     const editor = await waitFor('corresponding GitHub editor', async () => {
       const pages = await httpJson(browser.port, '/json/list');
       return pages.find(page => page.type === 'page' && page.url.startsWith('https://github.com/') &&
@@ -158,6 +164,8 @@ try {
       return true;
     }`, [payload, requestPath.split(/[\\/]/).at(-1)]);
     await ready(source);
+    assert.equal(await evaluate(`() => document.getElementById('rootpwBox').value`),
+      passwordIntent === 'clear' ? '@empty' : '', 'import must restore the request, not refill a missing password');
     assert.equal(await evaluate(`() => configFirmwareSettings(buildFinalConfigText()).themeMode`), payload.firmware.themeMode);
     let historicalReview = null;
     if (source === 'iStoreOS') {
