@@ -41,7 +41,7 @@
 
 打开 [**【在线定制页面】**](https://www.weigshare.com/wrt/)，按 **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】** 选择构建目标，在 **【② 勾选插件】** 选择功能，并按需调整 **【Advanced menuconfig】**、时区、主题等选项。
 
-已有配置可点击 **【加载配置】**，导入 `build-request.json`、`.config` 或 `config.buildinfo`，确认源码、设备和插件后继续。
+已有配置可点击 **【加载配置】**，导入配置文件 `*.json`、`.config` 或 `config.buildinfo`，确认源码、设备和插件后继续。
 
 ### 2. 提交 GitHub 云编译
 
