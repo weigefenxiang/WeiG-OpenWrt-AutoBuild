@@ -1375,10 +1375,21 @@ async function main() {
         expected: rootfs ? String(rootfs.value) : null,
         actual: field?.dataset.rootfsSize ?? null,
         methods: document.querySelectorAll('#modalBody .method-card').length,
+        entry: document.querySelector('#submitBtn .action-label-full')?.textContent,
+        title: document.getElementById('modalTitle').textContent,
+        method: document.querySelector('#modalBody .method-primary h4')?.textContent,
+        download: document.querySelector('#modalBody .method-primary button')?.textContent,
+        expectedEntry: t('btn.submit'),
+        expectedMethod: t('submit.m1.title'),
+        expectedDownload: t('submit.m1.btn'),
       };
     }`);
     expect(confirmation?.open && confirmation.methods === 3 && confirmation.actual === confirmation.expected,
       context, 'submit confirmation must show the actual RootFS value with three methods', confirmation);
+    expect(confirmation.entry === confirmation.expectedEntry && confirmation.title === confirmation.expectedEntry &&
+      confirmation.method === confirmation.expectedMethod && confirmation.download === confirmation.expectedDownload &&
+      confirmation.title !== confirmation.method,
+      context, 'cloud-build entry/title must stay separate from the recommended configuration method', confirmation);
     await click('#modalClose');
 
     // The advanced menuconfig entry may be unavailable only if Catalog data
