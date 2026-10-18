@@ -1,4 +1,4 @@
-# Wei.G OpenWrt — ऑनलाइन अपनी फ़र्मवेयर बनाएँ
+# Wei.G OpenWrt — ऑनलाइन अपना फ़र्मवेयर बनाएँ
 
 ब्राउज़र में उपकरण और पैकेज चुनें, GitHub से अनुरोध भेजें और OpenWrt फ़र्मवेयर का निर्माण क्लाउड में होने दें।
 
@@ -14,7 +14,7 @@
 
 **[🌐 ऑनलाइन कॉन्फ़िगरेटर खोलें](https://www.weigshare.com/wrt/) · [⬇️ फ़र्मवेयर डाउनलोड करें](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
-**समर्थित प्रणालियाँ:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+**समर्थित प्रणालियाँ:** [<img src="../docs/images/sources/immortalwrt.svg" alt="ImmortalWrt" align="absmiddle">](https://github.com/immortalwrt/immortalwrt) · [<img src="../docs/images/sources/lede.svg" alt="Lean LEDE" align="absmiddle">](https://github.com/coolsnowwolf/lede) · [<img src="../docs/images/sources/openwrt.svg" alt="OpenWrt" align="absmiddle">](https://github.com/openwrt/openwrt) · [<img src="../docs/images/sources/istoreos.svg" alt="iStoreOS" align="absmiddle">](https://github.com/istoreos/istoreos) · [<img src="../docs/images/sources/lienol.svg" alt="Lienol" align="absmiddle">](https://github.com/Lienol/openwrt) · [<img src="../docs/images/sources/hanwckf.svg" alt="ImmortalWrt (hanwckf MT798x)" align="absmiddle">](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **भाषा:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
 
@@ -22,7 +22,7 @@
 <summary><b>🔤 अन्य भाषाएँ</b></summary>
 
 <div dir="ltr">
-<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <strong>हिन्दी</strong> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
+<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <strong>हिन्दी</strong> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan (English)</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
 </div>
 
 </details>
@@ -39,16 +39,16 @@
 
 ### 1. स्रोत, उपकरण और पैकेज चुनें
 
-[**【ऑनलाइन कॉन्फ़िगरेटर】**](https://www.weigshare.com/wrt/) खोलें और **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】** चुनें। ज़रूरी पैकेज चिह्नित करें और आवश्यकता के अनुसार **【Advanced menuconfig】**, समय क्षेत्र तथा थीम बदलें। **【कॉन्फ़िगरेशन लोड करें】** से `build-request.json`, `.config` या `config.buildinfo` आयात कर सकते हैं। आगे बढ़ने से पहले चुनाव जाँचें।
+[**【ऑनलाइन कॉन्फ़िगरेटर】**](https://www.weigshare.com/wrt/) खोलें और क्रम से **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】** चुनें। ज़रूरी पैकेज चिह्नित करें और आवश्यकता के अनुसार **【Advanced menuconfig】**, समय क्षेत्र तथा थीम बदलें। **【कॉन्फ़िगरेशन लोड करें】** से कॉन्फ़िगरेशन फ़ाइल `*.json`, `.config` या `config.buildinfo` आयात कर सकते हैं। आगे बढ़ने से पहले स्रोत, उपकरण और प्लगइन जाँचें।
 
 ### 2. GitHub पर क्लाउड बिल्ड अनुरोध भेजें
 
-पहले [**【GitHub में साइन इन करें】**](https://github.com/login), फिर [**【कॉन्फ़िगरेटर】**](https://www.weigshare.com/wrt/) पर लौटकर **【क्लाउड बिल्ड भेजें】** → **【अनुरोध डाउनलोड करें और GitHub खोलें】** दबाएँ। ब्राउज़र `*.json` फ़ाइल डाउनलोड कर GitHub Issue फ़ॉर्म खोलेगा। कंप्यूटर पर JSON को अनुरोध वाले खाने में खींचें और **【Submit new issue】** पर क्लिक करें। बॉट बिल्ड का लिंक जवाब में देगा।
+पहले [**【GitHub में साइन इन करें】**](https://github.com/login), फिर [**【कॉन्फ़िगरेटर】**](https://www.weigshare.com/wrt/) पर लौटकर **【क्लाउड बिल्ड शुरू करें】** → **【कॉन्फ़िगरेशन डाउनलोड करें और GitHub खोलें】** दबाएँ। ब्राउज़र `*.json` फ़ाइल डाउनलोड कर GitHub Issue फ़ॉर्म खोलेगा। कंप्यूटर पर अभी डाउनलोड की गई JSON फ़ाइल बिल्ड अनुरोध वाले खाने में खींचकर अपलोड करें, फिर **【Submit new issue】** पर क्लिक करें। बॉट जवाब में बिल्ड का लिंक देगा।
 
 <details>
 <summary><strong>महत्त्वपूर्ण सुझाव (विस्तार करें)</strong></summary>
 
-> पृष्ठ के नीचे दाएँ फ़्लोटिंग टूलबार में **【जाँच】** दबाकर सेटिंग और संगतता की सलाह पहले देख सकते हैं। अनुरोध बनाते समय जाँच अपने-आप भी चलती है।
+> पृष्ठ के नीचे दाएँ फ़्लोटिंग टूलबार में **【जाँच】** दबाकर सेटिंग और संगतता की सलाह पहले देख सकते हैं। **【कॉन्फ़िगरेशन डाउनलोड करें और GitHub खोलें】** दबाने पर पूर्व-जाँच अपने-आप भी चलती है।
 >
 > समस्या मिलने पर सुझाया सुधार लागू करें या **【जैसा है रखें और ज़बरदस्ती आगे बढ़ें】** चुनें। इससे मूल स्रोत की खराबी ठीक नहीं होती और बिल्ड असफल हो सकता है।
 >

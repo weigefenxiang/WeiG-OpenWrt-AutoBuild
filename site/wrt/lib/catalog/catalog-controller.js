@@ -821,7 +821,7 @@ async function ensureCatalogMenuLoaded(includeHidden = false) {
         const language = state.lang;
         const [menuShard, languageShard] = await Promise.all([
           loader?.('menu'),
-          language !== 'en' ? loader?.(`menu:${language}`) : Promise.resolve(null),
+          language !== 'en' ? loader?.(`menu:${language}`, { optional: true }) : Promise.resolve(null),
         ]);
         if (!menuShard) throw new Error('Catalog menu shard is unavailable');
         if (MENU_CATALOG !== catalog || CATALOG_MODEL !== model || menuCatalogKey !== catalogKey) return false;
@@ -906,7 +906,7 @@ async function ensureCatalogMenuLanguage(language) {
   const catalog = MENU_CATALOG;
   const loader = catalogShardLoader;
   const catalogKey = menuCatalogKey;
-  const shard = await loader?.(`menu:${language}`);
+  const shard = await loader?.(`menu:${language}`, { optional: true });
   if (!shard || MENU_CATALOG !== catalog || menuCatalogKey !== catalogKey) return false;
   CATALOG_SCHEMA6_MODULE.applyMenuLanguageShard(catalog, shard);
   if (catalog.menu?.displayLoaded) buildMenuIndexes(catalog);

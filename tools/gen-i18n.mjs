@@ -1,370 +1,119 @@
 #!/usr/bin/env node
-// 合并 tools/i18n-source.json(英文源语言)+ tools/i18n-translations.json(其余语言) / Merges tools/i18n-source.json (English source) with tools/i18n-translations.json (other languages).
-// 产出 site/wrt/data/i18n/<language>.json(页面用) / Outputs one site/wrt/data/i18n/<language>.json file per language.
-// en 缺任何词条直接报错;其他语言缺条只警告,页面运行时回退英文 / Missing English entries are fatal; other languages only warn — the page falls back to English at runtime.
-// 用法 / Usage: node tools/gen-i18n.mjs
-
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+// Generates one deterministic gzip bundle per locale from the shared translation authorities.
+// --check verifies without writing. Explicit fallback entries never claim translated assets.
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import { feedbackIssueForm } from '../site/wrt/lib/feedback.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SRC = JSON.parse(readFileSync(join(ROOT, 'tools', 'i18n-source.json'), 'utf8'));
-const TR = JSON.parse(readFileSync(join(ROOT, 'tools', 'i18n-translations.json'), 'utf8'));
-
-const SOURCE_LANGUAGE = 'en';
-const REQUIRED_TRANSLATIONS = new Set(['zh-CN']);
-
-const LANGS = [
-  { id: 'en', name: 'English', native: 'English' },
-  { id: 'zh-CN', name: 'Chinese (Simplified)', native: '简体中文' },
-  { id: 'zh-TW', name: 'Chinese (Traditional)', native: '繁體中文' },
-  { id: 'ru', name: 'Russian', native: 'Русский' },
-  { id: 'es', name: 'Spanish', native: 'Español' },
-  { id: 'pt', name: 'Portuguese', native: 'Português' },
-  { id: 'ja', name: 'Japanese', native: '日本語' },
-  { id: 'ko', name: 'Korean', native: '한국어' },
-  { id: 'de', name: 'German', native: 'Deutsch' },
-  { id: 'fr', name: 'French', native: 'Français' },
-  { id: 'vi', name: 'Vietnamese', native: 'Tiếng Việt' },
-];
-
-// Pending entries expose the language directory without claiming translated UI.
-LANGS.push(...[
-  {
-    "id": "ar",
-    "name": "Arabic",
-    "native": "العربية",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "ast",
-    "name": "Asturian",
-    "native": "Asturianu",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "az",
-    "name": "Azerbaijani",
-    "native": "Azərbaycan dili",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "be",
-    "name": "Belarusian",
-    "native": "Беларуская",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "bg",
-    "name": "Bulgarian",
-    "native": "Български",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "bn",
-    "name": "Bangla",
-    "native": "বাংলা",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "bn-BD",
-    "name": "Bangla (Bangladesh)",
-    "native": "বাংলা (বাংলাদেশ)",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "ca",
-    "name": "Catalan",
-    "native": "Català",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "cs",
-    "name": "Czech",
-    "native": "Čeština",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "da",
-    "name": "Danish",
-    "native": "Dansk",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "el",
-    "name": "Greek",
-    "native": "Ελληνικά",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "fa",
-    "name": "Persian",
-    "native": "فارسی",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "fi",
-    "name": "Finnish",
-    "native": "Suomi",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "fil",
-    "name": "Filipino",
-    "native": "Filipino",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "ga",
-    "name": "Irish",
-    "native": "Gaeilge",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "he",
-    "name": "Hebrew",
-    "native": "עברית",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "hi",
-    "name": "Hindi",
-    "native": "हिन्दी",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "hu",
-    "name": "Hungarian",
-    "native": "Magyar",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "id",
-    "name": "Indonesian",
-    "native": "Bahasa Indonesia",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "it",
-    "name": "Italian",
-    "native": "Italiano",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "ka",
-    "name": "Georgian",
-    "native": "ქართული",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "lo",
-    "name": "Lao",
-    "native": "ລາວ",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "lt",
-    "name": "Lithuanian",
-    "native": "Lietuvių",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "lv",
-    "name": "Latvian",
-    "native": "Latviešu",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "ml",
-    "name": "Malayalam",
-    "native": "മലയാളം",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "mr",
-    "name": "Marathi",
-    "native": "मराठी",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "ms",
-    "name": "Malay",
-    "native": "Bahasa Melayu",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "nb-NO",
-    "name": "Norwegian Bokmål (Norway)",
-    "native": "Norsk bokmål",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "nl",
-    "name": "Dutch",
-    "native": "Nederlands",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "pl",
-    "name": "Polish",
-    "native": "Polski",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "pt-BR",
-    "name": "Brazilian Portuguese",
-    "native": "Português (Brasil)",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "ro",
-    "name": "Romanian",
-    "native": "Română",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "sk",
-    "name": "Slovak",
-    "native": "Slovenčina",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "sv",
-    "name": "Swedish",
-    "native": "Svenska",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "ta",
-    "name": "Tamil",
-    "native": "தமிழ்",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "tr",
-    "name": "Turkish",
-    "native": "Türkçe",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "uk",
-    "name": "Ukrainian",
-    "native": "Українська",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "ur",
-    "name": "Urdu",
-    "native": "اردو",
-    "pending": true,
-    "bundle": "en"
-  },
-  {
-    "id": "yua",
-    "name": "yua",
-    "native": "Maaya t'aan",
-    "pending": true,
-    "bundle": "en"
-  }
-]);
-const ACTIVE_LANGS = LANGS.filter((language) => !language.pending);
-
+const SRC = JSON.parse(readFileSync(join(ROOT, 'tools/i18n-source.json'), 'utf8'));
+const LOCALES = JSON.parse(readFileSync(join(ROOT, 'tools/i18n-locales.json'), 'utf8'));
+const CHECK_ONLY = process.argv.includes('--check');
 const keys = Object.keys(SRC.strings);
-const strings = {};
-const warnings = [];
+const placeholder = value => (value.match(/\{(\w+)\}/g) || []).sort().join(',');
 const errors = [];
-const PH = /\{(\w+)\}/g;
-
-for (const k of keys) {
-  const english = SRC.strings[k];
-  strings[k] = { [SOURCE_LANGUAGE]: english };
-  const want = (english.match(PH) || []).sort().join(',');
-  for (const l of ACTIVE_LANGS) {
-    if (l.id === SOURCE_LANGUAGE) continue;
-    const v = TR[l.id] && TR[l.id][k];
-    if (v === undefined || v === '') {
-      (REQUIRED_TRANSLATIONS.has(l.id) ? errors : warnings).push(`${l.id} 缺词条: ${k}`);
-      continue;
-    }
-    const got = (v.match(PH) || []).sort().join(',');
-    if (got !== want) {
-      (REQUIRED_TRANSLATIONS.has(l.id) ? errors : warnings).push(`${l.id} 占位符不符 ${k}: 期望 [${want}] 实得 [${got}]`);
-      if (REQUIRED_TRANSLATIONS.has(l.id)) continue;
-    }
-    strings[k][l.id] = v;
+const documents = new Map();
+const ids = new Set();
+for (const locale of LOCALES.languages) {
+  if (!/^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(locale.id) || ids.has(locale.id)) {
+    errors.push('Invalid/duplicate locale: ' + locale.id);
   }
+  ids.add(locale.id);
+  if (!locale.name || !locale.native || !['ltr', 'rtl'].includes(locale.dir) || typeof locale.common !== 'boolean') {
+    errors.push('Incomplete locale metadata: ' + locale.id);
+  }
+  if (locale.fallbackTo) {
+    const target = LOCALES.languages.find(entry => entry.id === locale.fallbackTo);
+    if (!target || target.fallbackTo || target.id === locale.id) errors.push('Invalid locale fallback: ' + locale.id);
+    continue;
+  }
+  const translationPath = join(ROOT, 'tools/i18n-translations', locale.id + '.json');
+  const translated = locale.id === LOCALES.source ? SRC.strings :
+    existsSync(translationPath) ? JSON.parse(readFileSync(translationPath, 'utf8')) : {};
+  const strings = {};
+  if (Object.keys(translated).length !== keys.length || Object.keys(translated).some(key => !keys.includes(key))) {
+    errors.push(locale.id + ': source key set differs');
+  }
+  for (const key of keys) {
+    const value = translated?.[key];
+    if (typeof value !== 'string' || !value.trim()) {
+      errors.push(locale.id + ': missing ' + key);
+    } else if (placeholder(value) !== placeholder(SRC.strings[key])) {
+      errors.push(locale.id + ': placeholder mismatch ' + key);
+    } else {
+      strings[key] = value;
+    }
+  }
+  documents.set(locale.id, { version: 2, language: locale.id, strings });
 }
-
+if (!ids.has(LOCALES.source) || !ids.has(LOCALES.fallback) || !ids.has(LOCALES.reference)) {
+  errors.push('Source, fallback and semantic reference must exist in the locale registry');
+}
 if (errors.length) {
-  console.error('❌ 源语言/兜底语言校验失败(必须 100% 完整):');
-  for (const e of errors) console.error('  - ' + e);
+  console.error('Localization validation failed (' + errors.length + ' errors):\n' + errors.slice(0, 40).join('\n'));
   process.exit(1);
 }
 
-const outputDirectory = join(ROOT, 'site', 'wrt', 'data', 'i18n');
-mkdirSync(outputDirectory, { recursive: true });
-writeFileSync(join(outputDirectory, 'index.json'),
-  JSON.stringify({ version: 2, fallback: SOURCE_LANGUAGE, source: SOURCE_LANGUAGE, languages: LANGS }, null, 1) + '\n');
-for (const language of ACTIVE_LANGS) {
-  const languageStrings = Object.fromEntries(keys.map((key) => [key,
-    strings[key][language.id] || strings[key][SOURCE_LANGUAGE],
-  ]));
-  writeFileSync(join(outputDirectory, `${language.id}.json`),
-    JSON.stringify({ version: 2, language: language.id, strings: languageStrings }, null, 1) + '\n');
+const artifacts = new Map();
+const manifest = {
+  version: 3, source: LOCALES.source, reference: LOCALES.reference,
+  fallback: LOCALES.fallback, stringCount: keys.length, languages: [],
+};
+for (const locale of LOCALES.languages) {
+  if (locale.fallbackTo) {
+    manifest.languages.push({ ...locale });
+    continue;
+  }
+  const bytes = Buffer.from(JSON.stringify(documents.get(locale.id)) + '\n');
+  const gzip = gzipSync(bytes, { level: 9 });
+  // Fix the OS marker too, so the checked-in gzip is byte-identical on Windows/Linux.
+  gzip[9] = 255;
+  const file = locale.id + '.json.gz';
+  artifacts.set('site/wrt/data/i18n/' + file, gzip);
+  manifest.languages.push({
+    ...locale, file, bytes: gzip.length, decodedBytes: bytes.length,
+    sha256: createHash('sha256').update(gzip).digest('hex'),
+  });
 }
-rmSync(join(ROOT, 'site', 'wrt', 'data', 'i18n.json'), { force: true });
+artifacts.set('site/wrt/data/i18n/index.json', Buffer.from(JSON.stringify(manifest, null, 2) + '\n'));
 for (const language of ['en', 'zh-CN']) {
-  writeFileSync(join(ROOT, '.github', 'ISSUE_TEMPLATE', `feedback.${language}.yml`),
-    feedbackIssueForm(key => strings[key]?.[language] || strings[key]?.[SOURCE_LANGUAGE] || key));
+  const strings = documents.get(language).strings;
+  artifacts.set('.github/ISSUE_TEMPLATE/feedback.' + language + '.yml',
+    Buffer.from(feedbackIssueForm(key => strings[key] || SRC.strings[key] || key)));
 }
-
-
-console.log(`data/i18n: ${keys.length} 词条 × ${LANGS.length} 语言`);
-for (const l of ACTIVE_LANGS) {
-  const n = keys.filter((k) => strings[k][l.id]).length;
-  console.log(`  ${l.id.padEnd(6)} ${n}/${keys.length}` + (n < keys.length ? ' (缺的运行时回退英文)' : ''));
+const mismatches = [];
+for (const [relative, bytes] of artifacts) {
+  const path = join(ROOT, relative);
+  if (CHECK_ONLY) {
+    if (!existsSync(path) || !readFileSync(path).equals(bytes)) mismatches.push(relative);
+  } else {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, bytes);
+  }
 }
-if (warnings.length) {
-  console.log(`\n警告 ${warnings.length} 条:`);
-  for (const w of warnings.slice(0, 15)) console.log('  - ' + w);
-  if (warnings.length > 15) console.log(`  … 其余 ${warnings.length - 15} 条未显示`);
+// Retire only the generator's known former outputs, never arbitrary directory contents.
+for (const locale of LOCALES.languages) {
+  for (const suffix of ['.json', ...(locale.fallbackTo ? ['.json.gz'] : [])]) {
+    const relative = 'site/wrt/data/i18n/' + locale.id + suffix;
+    const path = join(ROOT, relative);
+    if (!existsSync(path)) continue;
+    if (CHECK_ONLY) mismatches.push(relative + ' (retired localization bundle)');
+    else rmSync(path);
+  }
 }
+const legacy = join(ROOT, 'site/wrt/data/i18n.json');
+if (existsSync(legacy)) {
+  if (CHECK_ONLY) mismatches.push('site/wrt/data/i18n.json (retired monolith)');
+  else rmSync(legacy);
+}
+if (mismatches.length) {
+  console.error('Generated localization differs:\n' + mismatches.join('\n'));
+  process.exit(1);
+}
+console.log((CHECK_ONLY ? 'Verified' : 'Generated') + ' ' + keys.length + ' complete strings × ' +
+  documents.size + ' independent gzip language bundles; ' +
+  LOCALES.languages.filter(locale => locale.fallbackTo).length + ' explicit fallback entries; ' +
+  LOCALES.languages.filter(locale => locale.common).length + ' common locales.');

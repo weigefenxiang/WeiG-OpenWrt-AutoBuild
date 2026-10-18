@@ -14,7 +14,7 @@ Velg enhet og pakker i nettleseren, send en forespørsel via GitHub og la skyen 
 
 **[🌐 Åpne konfiguratoren](https://www.weigshare.com/wrt/) · [⬇️ Last ned fastvare](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
-**Støttede systemer:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+**Støttede systemer:** [<img src="../docs/images/sources/immortalwrt.svg" alt="ImmortalWrt" align="absmiddle">](https://github.com/immortalwrt/immortalwrt) · [<img src="../docs/images/sources/lede.svg" alt="Lean LEDE" align="absmiddle">](https://github.com/coolsnowwolf/lede) · [<img src="../docs/images/sources/openwrt.svg" alt="OpenWrt" align="absmiddle">](https://github.com/openwrt/openwrt) · [<img src="../docs/images/sources/istoreos.svg" alt="iStoreOS" align="absmiddle">](https://github.com/istoreos/istoreos) · [<img src="../docs/images/sources/lienol.svg" alt="Lienol" align="absmiddle">](https://github.com/Lienol/openwrt) · [<img src="../docs/images/sources/hanwckf.svg" alt="ImmortalWrt (hanwckf MT798x)" align="absmiddle">](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **Språk:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
 
@@ -22,7 +22,7 @@ Velg enhet og pakker i nettleseren, send en forespørsel via GitHub og la skyen 
 <summary><b>🔤 Flere språk</b></summary>
 
 <div dir="ltr">
-<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <strong>Norsk bokmål</strong> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
+<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <strong>Norsk bokmål</strong> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan (English)</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
 </div>
 
 </details>
@@ -30,7 +30,7 @@ Velg enhet og pakker i nettleseren, send en forespørsel via GitHub og la skyen 
 ## Forhåndsvisning av grensesnittet
 
 <p align="center">
-  <img src="../docs/images/wrt-desktop.png" alt="Wei.G OpenWrt desktop" width="78.65%"><img src="../docs/images/wrt-mobile.png" alt="Wei.G OpenWrt mobile" width="21.30%">
+  <img src="../docs/images/wrt-desktop.png" alt="Wei.G OpenWrt på datamaskin" width="78.65%"><img src="../docs/images/wrt-mobile.png" alt="Wei.G OpenWrt på telefon" width="21.30%">
 </p>
 
 ## Kom i gang: fastvare på tre trinn
@@ -39,18 +39,18 @@ Velg enhet og pakker i nettleseren, send en forespørsel via GitHub og la skyen 
 
 ### 1. Velg kildekode, enhet og pakker
 
-Åpne [**【Nettkonfiguratoren】**](https://www.weigshare.com/wrt/) og velg **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Merk av pakkene du trenger, og tilpass eventuelt **【Advanced menuconfig】**, tidssone og tema. Under **【Last inn konfigurasjon】** kan du importere `build-request.json`, `.config` eller `config.buildinfo`. Kontroller valgene før du går videre.
+Åpne [**【Nettkonfiguratoren】**](https://www.weigshare.com/wrt/) og velg **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Merk av funksjonene du trenger under **【② Velg tillegg】**, og tilpass eventuelt **【Advanced menuconfig】**, tidssone og tema. Under **【Last inn konfigurasjon】** kan du importere en konfigurasjonsfil `*.json`, `.config` eller `config.buildinfo`. Kontroller valgene før du går videre.
 
 ### 2. Send byggeforespørselen via GitHub
 
-[**【Logg først inn på GitHub】**](https://github.com/login). Gå tilbake til [**【Konfiguratoren】**](https://www.weigshare.com/wrt/) og velg **【Send skybygg】** → **【Last ned forespørsel og åpne GitHub】**. Nettleseren laster ned en `*.json`-fil og åpner et GitHub Issue-skjema. På datamaskinen drar du JSON-filen til feltet og klikker **【Submit new issue】**. En bot svarer med lenken til byggejobben.
+[**【Logg først inn på GitHub】**](https://github.com/login). Gå tilbake til [**【Konfiguratoren】**](https://www.weigshare.com/wrt/) og velg **【Start bygging i skyen】** → **【Last ned konfigurasjon og åpne GitHub】**. Nettleseren laster ned en `*.json`-fil og åpner et GitHub Issue-skjema. På datamaskinen drar du JSON-filen du nettopp lastet ned, til feltet og klikker **【Submit new issue】**. En bot svarer med lenken til byggejobben.
 
 <details>
 <summary><strong>Viktig informasjon (utvid)</strong></summary>
 
-> Bruk **【Test】** i den flytende verktøylinjen nederst til høyre for å kontrollere oppsett og kompatibilitet på forhånd. Sjekken kjøres også automatisk når forespørselen opprettes.
+> Bruk **【Test】** i den flytende verktøylinjen nederst til høyre for å kontrollere oppsett og kompatibilitet på forhånd. Sjekken kjøres også automatisk ved **【Last ned konfigurasjon og åpne GitHub】**.
 >
-> Ved problemer kan du bruke foreslått retting eller velge **【Behold og fortsett likevel】**. Det reparerer ikke feil i oppstrømskoden, og byggingen kan mislykkes.
+> Ved problemer kan du bruke foreslått retting eller velge **【Behold og tving】**. Det reparerer ikke feil i oppstrømskoden, og byggingen kan mislykkes.
 >
 > Bruk GitHub Issue-skjemaet som konfiguratoren åpner automatisk, slik at forhåndsutfylte opplysninger ikke forsvinner.
 >
@@ -76,7 +76,7 @@ Pakker og avhengigheter kan overskride størrelsen på RootFS-partisjonen. Hvis 
 <details>
 <summary>Hvorfor stopper en langvarig bygging?</summary>
 
-Ett Job på en GitHub-hosted Runner har normalt maks seks timer. Prosjektet bruker **350 minutter** som grense og stopper kjøringen etter **335 minutter** for å samle logger. Dette er **stopp, ikke en pause du kan fortsette senere**.
+En jobb på en maskin som GitHub leverer, har normalt maksimalt seks timer. Prosjektet bruker **350 minutter** som grense og stopper kjøringen etter **335 minutter** for å samle logger. Dette er **stopp, ikke en pause du kan fortsette senere**. Store avhengigheter som Node.js og Rust kan forlenge byggetiden.
 
 </details>
 
@@ -100,7 +100,7 @@ Vanlige brukere trenger verken klone repoet eller installere Node.js. Teknisk do
 
 ## Menuconfig Catalog
 
-[Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) publiserer kildegrener, enhetsprofiler, pakker, Kconfig-avhengigheter og kompatibilitetsdata for både nettsiden og byggesystemet.
+[Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) publiserer kildegrener, enhetsprofiler, pakker, Kconfig-avhengigheter og kompatibilitetsdata for både nettsiden og byggesystemet. Begge bruker samme data; AutoBuild vedlikeholder ikke en ekstra database for enheter og pakker.
 
 ## Takk til
 

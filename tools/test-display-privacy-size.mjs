@@ -4,6 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import { gunzipSync } from 'node:zlib';
 
 const root = join(fileURLToPath(new URL('..', import.meta.url)));
 const read = (relative) => readFileSync(join(root, relative), 'utf8');
@@ -109,16 +110,19 @@ assert.match(pluginController, /updateStats\(\);\s*\/\/ Restoring intent[\s\S]*?
   'restoring a default-Y selection must redraw, not remove a still-enabled plugin');
 
 const sourceJson = JSON.parse(read('tools/i18n-source.json'));
-const translationJson = JSON.parse(read('tools/i18n-translations.json'));
+const chineseTranslation = JSON.parse(read('tools/i18n-translations/zh-CN.json'));
 for (const key of ['bar.selectionSummary', 'drawer.effective', 'drawer.edit', 'lang.search', 'mode.self.steps']) {
   assert.equal(typeof sourceJson.strings?.[key], 'string', `${key} must exist in the English source catalog`);
-  assert.equal(typeof translationJson['zh-CN']?.[key], 'string', `${key} must exist in the Chinese translation catalog`);
+  assert.equal(typeof chineseTranslation[key], 'string', `${key} must exist in the Chinese translation catalog`);
 }
 const manifest = JSON.parse(read('site/wrt/data/i18n/index.json'));
 assert.equal(manifest.languages.length, 50);
-assert.equal(manifest.languages.filter((language) => language.pending).length, 39);
-for (const language of manifest.languages.filter((entry) => !entry.pending)) {
-  const document = JSON.parse(read(`site/wrt/data/i18n/${language.id}.json`));
+assert.equal(manifest.version, 3);
+assert.equal(manifest.languages.filter((language) => language.pending).length, 0);
+assert.equal(manifest.languages.filter((language) => language.common).length, 11);
+const readBundle = id => JSON.parse(gunzipSync(readFileSync(join(root, `site/wrt/data/i18n/${id}.json.gz`))).toString('utf8'));
+for (const language of manifest.languages) {
+  const document = readBundle(language.fallbackTo || language.id);
   assert.equal(Object.keys(document.strings).length, Object.keys(sourceJson.strings).length);
   assert(!Object.keys(document.strings).some((key) => key.startsWith('size.summary.')));
 }
@@ -126,7 +130,11 @@ for (const source of [pluginController, catalogSource, read('site/wrt/lib/config
   assert.doesNotMatch(source, /ensureCatalogPackageSizes|packageSizeEstimate|catalogObservedPackageSizes/,
     'retired package sizing must have no active caller');
 }
-for (const [browserLanguage, expected] of [['zh-CN', 'zh-CN'], ['en-US', 'en'], ['xx-ZZ', 'en'], ['nl', 'en']]) {
+for (const [browserLanguage, expected] of [
+  ...manifest.languages.map(locale => [locale.id, locale.fallbackTo || locale.id]),
+  ['en-US', 'en'], ['xx-ZZ', 'en'], ['zh-HK', 'zh-TW'], ['zh-Hant-MO', 'zh-TW'],
+  ['zh-Hans-SG', 'zh-CN'], ['no-NO', 'nb-NO'], ['iw-IL', 'he'], ['pt-br', 'pt-BR'],
+]) {
   const requests = [];
   const localization = {
     state: { lang: '' }, navigator: { languages: [browserLanguage] }, FALLBACK: 'en', SOURCE_LANG: 'en',
@@ -134,14 +142,14 @@ for (const [browserLanguage, expected] of [['zh-CN', 'zh-CN'], ['en-US', 'en'], 
     loadJson: async (path) => {
       requests.push(path);
       if (path === 'i18n/index.json') return manifest;
-      const id = path.match(/i18n\/(.+)\.json/)[1];
-      return JSON.parse(read(`site/wrt/data/i18n/${id}.json`));
+      const id = path.match(/i18n\/(.+)\.json\.gz$/)[1];
+      return readBundle(id);
     },
   };
   vm.createContext(localization);
   vm.runInContext(i18nSource, localization);
   await localization.initializeI18n();
-  assert.deepEqual(requests, ['i18n/index.json', `i18n/${expected}.json`],
+  assert.deepEqual(requests, ['i18n/index.json', `i18n/${expected}.json.gz`],
     'startup must load exactly one effective language bundle');
   assert.equal(localization.state.lang, expected);
 }

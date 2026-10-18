@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
@@ -27,9 +28,11 @@ const siteConfig = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'config', '
 const catalogLoading = siteConfig.catalog?.loading || {};
 const i18nSource = readFileSync(join(root, 'tools', 'i18n-source.json'), 'utf8');
 const i18nManifest = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'data', 'i18n', 'index.json'), 'utf8'));
-const i18nEnglish = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'data', 'i18n', 'en.json'), 'utf8'));
-const i18nZhCn = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'data', 'i18n', 'zh-CN.json'), 'utf8'));
-const i18nZhTw = JSON.parse(readFileSync(join(root, 'site', 'wrt', 'data', 'i18n', 'zh-TW.json'), 'utf8'));
+const i18nBundle = language => JSON.parse(gunzipSync(readFileSync(
+  join(root, 'site', 'wrt', 'data', 'i18n', language + '.json.gz'))).toString('utf8'));
+const i18nEnglish = i18nBundle('en');
+const i18nZhCn = i18nBundle('zh-CN');
+const i18nZhTw = i18nBundle('zh-TW');
 const expect = (condition, message) => { if (!condition) throw new Error(message); };
 const branchPreferenceSource = app.match(/function catalogBranchPreference\([^]*?\n\}/)?.[0];
 const branchControl = { dataset: { catalogSourceId: 'previous-source' }, value: '25.12' };

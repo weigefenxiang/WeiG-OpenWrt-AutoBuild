@@ -20,7 +20,7 @@ if (BUILD_META_ROOT_INDEX >= 0 && (!process.argv[BUILD_META_ROOT_INDEX + 1] ||
 const BUILD_META_ROOT = BUILD_META_ROOT_INDEX >= 0
   ? resolve(process.argv[BUILD_META_ROOT_INDEX + 1])
   : '';
-const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.config': 'text/plain; charset=utf-8' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.gz': 'application/gzip', '.config': 'text/plain; charset=utf-8' };
 
 function gitOutput(root, args) {
   try {

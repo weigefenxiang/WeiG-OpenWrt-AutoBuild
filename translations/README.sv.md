@@ -14,7 +14,7 @@ Välj enhet och paket i webbläsaren, skicka en förfrågan via GitHub och låt 
 
 **[🌐 Öppna konfiguratorn](https://www.weigshare.com/wrt/) · [⬇️ Ladda ned firmware](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
-**Distributioner som stöds:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+**Distributioner som stöds:** [<img src="../docs/images/sources/immortalwrt.svg" alt="ImmortalWrt" align="absmiddle">](https://github.com/immortalwrt/immortalwrt) · [<img src="../docs/images/sources/lede.svg" alt="Lean LEDE" align="absmiddle">](https://github.com/coolsnowwolf/lede) · [<img src="../docs/images/sources/openwrt.svg" alt="OpenWrt" align="absmiddle">](https://github.com/openwrt/openwrt) · [<img src="../docs/images/sources/istoreos.svg" alt="iStoreOS" align="absmiddle">](https://github.com/istoreos/istoreos) · [<img src="../docs/images/sources/lienol.svg" alt="Lienol" align="absmiddle">](https://github.com/Lienol/openwrt) · [<img src="../docs/images/sources/hanwckf.svg" alt="ImmortalWrt (hanwckf MT798x)" align="absmiddle">](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **Språk:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
 
@@ -22,7 +22,7 @@ Välj enhet och paket i webbläsaren, skicka en förfrågan via GitHub och låt 
 <summary><b>🔤 Fler språk</b></summary>
 
 <div dir="ltr">
-<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <strong>Svenska</strong> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
+<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <strong>Svenska</strong> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan (English)</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
 </div>
 
 </details>
@@ -39,16 +39,16 @@ Välj enhet och paket i webbläsaren, skicka en förfrågan via GitHub och låt 
 
 ### 1. Välj källkod, enhet och paket
 
-Öppna [**【Konfiguratorn】**](https://www.weigshare.com/wrt/) och välj **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Markera paketen du behöver och justera vid behov **【Advanced menuconfig】**, tidszon och tema. Du kan också välja **【Läs in konfiguration】** och importera `build-request.json`, `.config` eller `config.buildinfo`. Kontrollera enhet och paket innan du fortsätter.
+Öppna [**【Konfiguratorn】**](https://www.weigshare.com/wrt/) och välj **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】** i ordning. Markera paketen du behöver och justera vid behov **【Advanced menuconfig】**, tidszon och tema. Du kan också välja **【Läs in konfiguration】** och importera en konfigurationsfil i formatet `*.json`, `.config` eller `config.buildinfo`. Kontrollera källa, enhet och tillägg innan du fortsätter.
 
 ### 2. Skicka byggförfrågan via GitHub
 
-[**【Logga först in på GitHub】**](https://github.com/login). Gå tillbaka till [**【Konfiguratorn】**](https://www.weigshare.com/wrt/) och välj **【Skicka molnbygge】** → **【Ladda ned förfrågan och öppna GitHub】**. En `*.json`-fil sparas och ett GitHub Issue-formulär öppnas. På datorn drar du JSON-filen till formulärets förfrågningsfält och klickar på **【Submit new issue】**. Botten svarar i ärendet med en länk till bygget.
+[**【Logga först in på GitHub】**](https://github.com/login). Gå tillbaka till [**【Konfiguratorn】**](https://www.weigshare.com/wrt/) och välj **【Starta molnbygge】** → **【Ladda ned konfiguration och öppna GitHub】**. En `*.json`-fil sparas och ett GitHub Issue-formulär öppnas. På datorn laddar du upp den nyss hämtade JSON-filen genom att dra den till formulärets byggförfrågningsfält och klickar sedan på **【Submit new issue】**. Botten svarar i ärendet med en länk till bygget.
 
 <details>
 <summary><strong>Viktig information (visa)</strong></summary>
 
-> Du kan kontrollera konfigurationsproblem och kompatibilitetsråd i förväg med **【Test】** i det flytande verktygsfältet längst ned till höger. Kontrollen körs också automatiskt när du skapar förfrågan.
+> Du kan kontrollera konfigurationsproblem och kompatibilitetsråd i förväg med **【Test】** i det flytande verktygsfältet längst ned till höger. **【Ladda ned konfiguration och öppna GitHub】** kör också förkontrollen automatiskt.
 >
 > Vid problem kan du använda det föreslagna alternativet eller välja **【Behåll och fortsätt ändå】**. Det rättar inte fel i uppströmskoden och bygget kan fortfarande misslyckas.
 >
@@ -100,7 +100,7 @@ Vanliga användare behöver varken klona projektet eller installera Node.js. Tek
 
 ## Menuconfig Catalog
 
-[Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) samlar in och publicerar källkodgrenar, enhetsprofiler, paket, Kconfig-beroenden och kompatibilitetsuppgifter. Webbplatsen och byggsystemet använder samma data, så AutoBuild behöver ingen separat enhets- och paketdatabas.
+[Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) samlar in och publicerar källkodsgrenar, enhetsprofiler, paket, Kconfig-beroenden och kompatibilitetsuppgifter. Webbplatsen och byggsystemet använder samma data, så AutoBuild behöver ingen separat enhets- och paketdatabas.
 
 ## Tack
 

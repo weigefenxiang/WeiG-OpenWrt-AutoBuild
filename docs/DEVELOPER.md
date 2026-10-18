@@ -110,7 +110,9 @@ node tools/prepare-web-deployment.mjs --commit <40-character SHA> --branch <dev 
 
 This command creates the ignored `site/wrt/data/build-meta.json`. Deployment must include metadata consistent with `site-version.json`; missing, invalid, or stale metadata must keep the submission gate disabled. The Pages workflow's site-preparation stage only runs `node tools/stamp-site-version.mjs --check` and `prepare-web-deployment`; it does not modify configuration at deployment time. Independent hosting changes only the page location, not build identity: the request must still correspond to the same commit in the target AutoBuild repository.
 
-Edit only `tools/i18n-source.json` and `tools/i18n-translations.json` for web translations; `site/wrt/data/i18n/` contains generated bundles and must not be edited directly.
+Chinese is the semantic reference. Keep English text and stable keys in `tools/i18n-source.json`, locale translations in `tools/i18n-translations/<locale>.json`, and grouping, aliases and direction in `tools/i18n-locales.json`. Run `node tools/gen-i18n.mjs` to generate independent `.json.gz` bundles under `site/wrt/data/i18n/`; `--check` verifies real source coverage and deterministic output. Never edit generated bundles directly. Startup loads one effective language, without preloading the others. Upstream Catalog menu translations remain Catalog-owned.
+
+The directory has 50 entries: 49 complete language bundles and an explicitly English-fallback Yucatec Maya entry. A fallback entry declares `fallbackTo`, without a pretend translation source or duplicate English gzip. The 11 common/39 additional grouping is independent of translation status. Hong Kong and Macao Traditional Chinese aliases resolve to `zh-TW`. Site and Catalog loaders share JSON/gzip decoding; absent optional Catalog menu translations retain English without expanding Catalog data. README source names share six transparent, text-only SVGs with the original upstream links.
 
 ## 1. Non-negotiable boundary
 

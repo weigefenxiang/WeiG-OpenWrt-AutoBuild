@@ -7,18 +7,33 @@
 'use strict';
 
 /* ============ 多语言 / i18n ============ */
+function uiLocaleEntry(language) {
+  const tag = String(language || '').replaceAll('_', '-').toLowerCase();
+  const exact = I18N.languages.find(entry => entry.id.toLowerCase() === tag);
+  if (exact) return exact;
+  // Longest explicit alias first: script/region variants never depend on registry order.
+  const aliases = I18N.languages.flatMap(entry => (entry.aliases || []).map(alias => ({ entry, tag: alias.toLowerCase() })))
+    .sort((a, b) => b.tag.length - a.tag.length);
+  const alias = aliases.find(item => tag === item.tag || tag.startsWith(item.tag + '-'));
+  if (alias) return alias.entry;
+  try {
+    const parsed = new Intl.Locale(tag);
+    const regional = parsed.region && I18N.languages.find(entry =>
+      entry.id.toLowerCase() === (parsed.language + '-' + parsed.region).toLowerCase());
+    if (regional) return regional;
+  } catch { /* Invalid browser tags simply fall through to base language/fallback. */ }
+  const base = tag.split('-')[0];
+  return I18N.languages.find(entry => entry.id.toLowerCase() === base) ||
+    I18N.languages.find(entry => entry.id.toLowerCase().split('-')[0] === base);
+}
 function pickLang() {
-  const avail = I18N.languages.map((l) => l.id);
-  if (state.lang && avail.includes(state.lang)) return state.lang;
-  for (const nav of navigator.languages || [navigator.language || '']) {
-    // 中文细分:zh-TW/zh-HK/zh-Hant* → 繁中,其余 zh 一律简中 / Chinese split: zh-TW/zh-HK/zh-Hant* → Traditional, any other zh → Simplified
-    if (/^zh(-|$)/i.test(nav)) return /^zh-(TW|HK|Hant)/i.test(nav) ? 'zh-TW' : 'zh-CN';
-    if (avail.includes(nav)) return nav;
-    const base = nav.split('-')[0];
-    const hit = avail.find((a) => a === base || a.split('-')[0] === base);
-    if (hit) return hit;
+  const preferred = state.lang && uiLocaleEntry(state.lang);
+  if (preferred) return preferred.id;
+  for (const nav of navigator.languages?.length ? navigator.languages : [navigator.language || '']) {
+    const entry = uiLocaleEntry(nav);
+    if (entry) return entry.id;
   }
-  return FALLBACK;   // 侦测不到匹配语言时默认英文(用户定) / unmatched browsers default to English (per user decision)
+  return I18N.fallback;
 }
 function t(key, params) {
   const row = I18N && I18N.strings[key];
@@ -28,32 +43,48 @@ function t(key, params) {
 }
 async function ensureI18nLanguage(language) {
   const entry = I18N.languages.find((item) => item.id === language);
-  const id = entry?.bundle || entry?.id || I18N.fallback;
+  if (!entry || entry.file !== entry.id + '.json.gz') throw new Error('Invalid localization asset: ' + language);
+  const id = entry.id;
   if (I18N.loaded.has(id)) return;
-  const document = await loadJson(`i18n/${id}.json`);
-  if (document.version !== 2 || document.language !== id || !document.strings) {
-    throw new Error(`Invalid localization document: ${id}`);
+  if (!I18N.loading.has(id)) {
+    const pending = (async () => {
+      const document = await loadJson('i18n/' + entry.file);
+      if (document.version !== 2 || document.language !== id || !document.strings ||
+          Object.keys(document.strings).length !== I18N.stringCount ||
+          !Object.values(document.strings).every(value => typeof value === 'string' && value.trim())) {
+        throw new Error('Invalid localization document: ' + id);
+      }
+      for (const [key, value] of Object.entries(document.strings)) (I18N.strings[key] ||= {})[id] = value;
+      I18N.loaded.add(id);
+    })().finally(() => I18N.loading.delete(id));
+    I18N.loading.set(id, pending);
   }
-  for (const [key, value] of Object.entries(document.strings)) {
-    (I18N.strings[key] ||= {})[id] = value;
+  await I18N.loading.get(id);
+}
+async function loadUiLanguage(requested) {
+  const entry = I18N.languages.find(item => item.id === requested);
+  const effective = entry?.fallbackTo || requested;
+  const target = I18N.languages.find(item => item.id === effective);
+  if (!target || target.fallbackTo) throw new Error('Invalid localization fallback: ' + requested);
+  try {
+    await ensureI18nLanguage(effective);
+    return effective;
+  } catch (error) {
+    if (effective === I18N.fallback) throw error;
+    await ensureI18nLanguage(I18N.fallback);
+    return I18N.fallback;
   }
-  I18N.loaded.add(id);
 }
 async function initializeI18n() {
   const manifest = await loadJson('i18n/index.json');
-  if (manifest.version !== 2 || !Array.isArray(manifest.languages) || !manifest.languages.length) {
+  if (manifest.version !== 3 || !Array.isArray(manifest.languages) || !manifest.languages.length ||
+      !Number.isInteger(manifest.stringCount) || manifest.stringCount < 1) {
     throw new Error('Invalid localization manifest');
   }
-  I18N = { ...manifest, strings: {}, loaded: new Set() };
+  I18N = { ...manifest, strings: {}, loaded: new Set(), loading: new Map() };
   const requested = pickLang();
   I18N.selectedLanguage = requested;
-  state.lang = I18N.languages.find((entry) => entry.id === requested)?.bundle || requested;
-  try { await ensureI18nLanguage(state.lang); }
-  catch (error) {
-    if (state.lang === FALLBACK) throw error;
-    state.lang = FALLBACK;
-    await ensureI18nLanguage(FALLBACK);
-  }
+  state.lang = await loadUiLanguage(requested);
 }
 const formatList = (values) => values.join(t('format.listSeparator'));
 const formatSemicolonList = (values) => values.join(t('format.semicolonSeparator'));
@@ -102,6 +133,7 @@ function applyProjectBranding() {
 
 function applyI18n() {
   document.documentElement.lang = state.lang;
+  document.documentElement.dir = I18N.languages.find(entry => entry.id === state.lang)?.dir || 'ltr';
   applyProjectBranding();
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     const value = t(el.dataset.i18n);
@@ -208,7 +240,7 @@ let languageFloatingController = null;
 function refreshLanguageControl() {
   const button = $('langSel');
   if (!button || !I18N) return;
-  const id = I18N.selectedLanguage || state.lang;
+  const id = state.lang;
   const entry = I18N.languages.find((item) => item.id === id);
   button.textContent = LANG_SHORT[id] || id.split('-')[0].toUpperCase();
   button.setAttribute('aria-label', t('lang.label') + ': ' + (entry?.native || id));
@@ -216,9 +248,9 @@ function refreshLanguageControl() {
 async function selectUiLanguage(id) {
   const entry = I18N.languages.find((item) => item.id === id);
   if (!entry) return;
-  await ensureI18nLanguage(id);
+  const effective = await loadUiLanguage(id);
   I18N.selectedLanguage = id;
-  state.lang = entry.bundle || id;
+  state.lang = effective;
   safeSet('wrt_lang', id);
   if (MENU_CATALOG?.menu?.displayLoaded) {
     await ensureCatalogMenuLanguage(state.lang).catch((error) => console.warn('[Catalog language shard]', error));
@@ -242,10 +274,12 @@ function renderLangSel() {
     list.textContent = '';
     panel.scrollTop = 0;
     search.placeholder = t('lang.search');
-    more.textContent = t(showMore ? 'lang.less' : 'lang.more');
+    more.textContent = t(showMore ? 'lang.less' : 'lang.more', {
+      count: I18N.languages.filter(entry => !entry.common).length,
+    });
     more.hidden = Boolean(needle);
     const entries = I18N.languages.filter((entry) =>
-      (needle || showMore || !entry.pending) &&
+      (needle || showMore || entry.common) &&
       (!needle || [entry.id, entry.native, entry.name].join(' ').toLocaleLowerCase().includes(needle)));
     for (const entry of entries) {
       const option = document.createElement('button');
@@ -253,13 +287,10 @@ function renderLangSel() {
       option.className = 'language-option';
       option.dataset.language = entry.id;
       option.setAttribute('role', 'option');
-      option.setAttribute('aria-selected', String(entry.id === (I18N.selectedLanguage || state.lang)));
-      option.textContent = entry.native || entry.name;
-      if (entry.pending) {
-        const note = document.createElement('small');
-        note.textContent = t('lang.englishFallback');
-        option.append(note);
-      }
+      option.setAttribute('aria-selected', String(entry.id === state.lang));
+      option.textContent = (entry.native || entry.name) +
+        (entry.fallbackTo ? ' · ' + t('lang.englishFallback') : '');
+      option.dir = entry.dir;
       option.onclick = async () => {
         if (switching) return;
         switching = true;

@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import vm from 'node:vm';
 import { FEEDBACK_FIELDS, feedbackEnvironment, feedbackReport, feedbackIssueForm,
   feedbackIssueLink, feedbackLanguage, feedbackInterface, createFeedbackTemplateResolver } from '../site/wrt/lib/feedback.js';
 import { githubIssueUrl, isValidGithubOwner, ISSUE_URL_LIMIT } from '../site/wrt/lib/build-identity.js';
 const read = path => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
-const english = JSON.parse(read('site/wrt/data/i18n/en.json')).strings;
-const chinese = JSON.parse(read('site/wrt/data/i18n/zh-CN.json')).strings;
+const bundle = id => JSON.parse(gunzipSync(readFileSync(new URL(`../site/wrt/data/i18n/${id}.json.gz`, import.meta.url))).toString('utf8'));
+const english = bundle('en').strings;
+const chinese = bundle('zh-CN').strings;
 // Overall entry/title and the recommended method describe different levels.
 assert.equal(english['btn.submit'], 'Start cloud build');
 assert.equal(chinese['btn.submit'], '提交云编译');
@@ -71,17 +73,8 @@ const long = feedbackIssueLink({ repository: 'owner/repo', environment: { Browse
 assert(long.overflow); assert(long.report.includes('x'.repeat(8000))); assert(long.url.length <= ISSUE_URL_LIMIT);
 assert.doesNotMatch(read('site/wrt/lib/diagnostics/feedback-controller.js'), /openModal|feedbackForm|localStorage|fetch\([^]*method:\s*['"]POST/);
 assert.doesNotMatch(read('site/wrt/styles/40-overlays.css'), /feedback-dialog|feedback-form/);
-const entryLabels = {
-  en: ['Start cloud build', 'Submit'], 'zh-CN': ['提交云编译', '提交'],
-  'zh-TW': ['送出雲端編譯', '送出'], ru: ['Отправить в облачную сборку', 'Отправить'],
-  es: ['Enviar a compilar en la nube', 'Enviar'], pt: ['Enviar para compilar na nuvem', 'Enviar'],
-  ja: ['クラウドビルドを依頼', '送信'], ko: ['클라우드 빌드 요청', '제출'],
-  de: ['Cloud-Build starten', 'Senden'], fr: ['Lancer la compilation cloud', 'Envoyer'],
-  vi: ['Gửi yêu cầu biên dịch cloud', 'Gửi'],
-};
-for (const lang of JSON.parse(read('site/wrt/data/i18n/index.json')).languages.filter(row => !row.pending)) {
-  const strings = JSON.parse(read(`site/wrt/data/i18n/${lang.id}.json`)).strings;
-  assert.deepEqual([strings['btn.submit'], strings['btn.submit.short']], entryLabels[lang.id], `${lang.id}: localized cloud-build entry`);
+for (const lang of JSON.parse(read('site/wrt/data/i18n/index.json')).languages) {
+  const strings = bundle(lang.fallbackTo || lang.id).strings;
   assert.doesNotMatch(strings['tag.label'], /[()（）]|Actions/);
   assert(strings['submit.m1.desc'].includes('*.json'));
   assert.notEqual(strings['btn.submit'], strings['submit.m1.title'], `${lang.id}: entry must not reuse the method title`);

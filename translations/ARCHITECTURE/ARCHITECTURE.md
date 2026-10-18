@@ -71,7 +71,7 @@ There are two separate configuration authorities.
 
 Secrets must not be put in public site files, generated build requests, Issues or logs. Build password handling and repository Secrets belong on the trusted execution side.
 
-The browser's translation source is `tools/i18n-source.json` plus `tools/i18n-translations.json`; `site/wrt/data/i18n/` contains generated output, not separately maintained translations.
+Chinese is the semantic reference. English text and stable keys live in `tools/i18n-source.json`, locale sources in `tools/i18n-translations/<locale>.json`, and shared metadata in `tools/i18n-locales.json`. `site/wrt/data/i18n/` contains only the generated manifest and independent gzip language bundles. The browser loads them on demand; website strings are not copied into Catalog or maintained as another translation authority.
 
 The complete `site/wrt/` directory may be served by a static host. Submission is allowed only when the deployed release metadata matches the expected branch, commit and site identity. For exact-commit deployment, use the existing tool after committing the configuration and generated outputs:
 

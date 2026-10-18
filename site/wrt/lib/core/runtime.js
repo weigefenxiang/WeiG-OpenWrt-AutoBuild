@@ -191,7 +191,12 @@ function packageMirrorAvailable(id, sourceId = state.source?.id) {
 function packageMirrorEntries(sourceId = state.source?.id) {
   return (PACKAGE_MIRRORS?.presets || [])
     .filter((preset) => packageMirrorAvailable(preset.id, sourceId))
-    .map((preset) => [preset.id, preset.label?.[state.lang === 'zh-CN' ? 'zh-CN' : 'en'] || preset.label?.en || preset.id]);
+    .map((preset) => {
+      const key = 'fw.packageMirror.' + preset.id;
+      const translated = t(key);
+      return [preset.id, translated !== key ? translated :
+        (preset.label?.[state.lang] || preset.label?.en || preset.id)];
+    });
 }
 function defaultPackageMirrorId(sourceId = state.source?.id) {
   const availableIds = packageMirrorEntries(sourceId).map(([id]) => id);

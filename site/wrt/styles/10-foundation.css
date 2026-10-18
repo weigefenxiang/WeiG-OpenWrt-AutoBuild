@@ -57,6 +57,16 @@ body::before {
   padding-right: max(var(--viewport-gutter), env(safe-area-inset-right));
 }
 a { color: var(--accent-text); }
+/* Technical values keep their reading order inside localized/RTL prose. */
+code, pre, .menuconfig-option-id, .kconfig-tri,
+#lanipBox, #rootpwBox, #ownerBox, #timezoneBox {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+#languageSearch { text-align: start; }
+.language-option { unicode-bidi: isolate; text-align: start; }
+[dir="rtl"] .menuconfig-option-description { text-align: start; }
+[dir="rtl"] .menuconfig-category-count { padding-left: 0; padding-inline-start: 8px; }
 button { font: inherit; cursor: pointer; }
 input[type="search"], input[type="text"] {
   width: 100%;

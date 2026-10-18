@@ -722,6 +722,12 @@ async function main() {
       const timezoneMenu = document.getElementById('timezoneMenu');
       return Boolean(tooltip?.hidden && modal?.hidden && fontPanel?.hidden && timezoneMenu?.hidden);
     }`), 3_000, 40).catch(() => {});
+    // Dismissing a portaled dock schedules its restored layout for the next
+    // frame. Measure after that shared controller/ResizeObserver cycle, not
+    // the transient visible children before the collapsed state is restored.
+    await evaluateFunction(browser, `() => new Promise(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
+    })`);
   }
 
   async function headerTooltipState(selector) {
@@ -1135,16 +1141,20 @@ async function main() {
       document.getElementById('languageMore').click();
       await new Promise(resolve=>setTimeout(resolve,100));
       const all = panel.querySelectorAll('[role=option]').length;
+      const fallbackLabel = panel.querySelector('[data-language="yua"]')?.textContent || '';
+      const fallbackNotice = t('lang.englishFallback');
       const allScroll = await scrollAndWait();
       const search = document.getElementById('languageSearch');
       search.value = '日本'; search.dispatchEvent(new Event('input'));
       const filtered = [...panel.querySelectorAll('[role=option]')].map(node => node.dataset.language);
-      return { common, all, filtered, commonScroll, allScroll, width:r.width, height:r.height, viewport,
+      return { common, all, filtered, fallbackLabel, fallbackNotice, commonScroll, allScroll, width:r.width, height:r.height, viewport,
         triggerWidth:button.getBoundingClientRect().width,
+        commonCount:I18N.languages.filter(entry => entry.common).length,
         pending:I18N.languages.filter(entry => entry.pending).length };
     }`);
-    expect(languageMenu.common === 11 && languageMenu.all === 50 && languageMenu.pending === 39 &&
-      languageMenu.filtered.join(',') === 'ja' && languageMenu.triggerWidth <= 45 &&
+    expect(languageMenu.common === 11 && languageMenu.commonCount === 11 && languageMenu.all === 50 && languageMenu.pending === 0 &&
+      languageMenu.filtered.join(',') === 'ja' && languageMenu.fallbackLabel.includes(languageMenu.fallbackNotice) &&
+      languageMenu.triggerWidth <= 45 &&
       languageMenu.width <= languageMenu.viewport.width / 2 + 1 &&
       languageMenu.height <= languageMenu.viewport.height / 2 + 1, context,
       'compact searchable language directory or half-viewport bounds regressed', languageMenu);
@@ -1167,12 +1177,12 @@ async function main() {
         await selectUiLanguage('zh-CN');
         const zh=document.querySelector('.build-info-title').textContent;
         await selectUiLanguage('nl');
-        const pending=state.lang;
+        const dutch=state.lang;
         await selectUiLanguage(previous);
-        return {en,zh,pending};
+        return {en,zh,dutch};
       }`);
       expect(locales.en === 'Build Information' && locales.zh === '构建信息' &&
-        locales.pending === 'en', context, 'English/Chinese UI or pending-language fallback regressed', locales);
+        locales.dutch === 'nl', context, 'English/Chinese UI or independent Dutch localization regressed', locales);
     }
     await ensureDockControlsVisible(context);
     await exerciseDockTooltips(context);

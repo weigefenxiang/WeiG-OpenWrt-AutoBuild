@@ -14,7 +14,7 @@ Alege dispozitivul și pachetele în browser, trimite cererea pe GitHub și las�
 
 **[🌐 Deschide configuratorul](https://www.weigshare.com/wrt/) · [⬇️ Descarcă firmware](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
-**Distribuții acceptate:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+**Distribuții acceptate:** [<img src="../docs/images/sources/immortalwrt.svg" alt="ImmortalWrt" align="absmiddle">](https://github.com/immortalwrt/immortalwrt) · [<img src="../docs/images/sources/lede.svg" alt="Lean LEDE" align="absmiddle">](https://github.com/coolsnowwolf/lede) · [<img src="../docs/images/sources/openwrt.svg" alt="OpenWrt" align="absmiddle">](https://github.com/openwrt/openwrt) · [<img src="../docs/images/sources/istoreos.svg" alt="iStoreOS" align="absmiddle">](https://github.com/istoreos/istoreos) · [<img src="../docs/images/sources/lienol.svg" alt="Lienol" align="absmiddle">](https://github.com/Lienol/openwrt) · [<img src="../docs/images/sources/hanwckf.svg" alt="ImmortalWrt (hanwckf MT798x)" align="absmiddle">](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **Limbă:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
 
@@ -22,7 +22,7 @@ Alege dispozitivul și pachetele în browser, trimite cererea pe GitHub și las�
 <summary><b>🔤 Mai multe limbi</b></summary>
 
 <div dir="ltr">
-<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <strong>Română</strong> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
+<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <strong>Română</strong> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan (English)</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
 </div>
 
 </details>
@@ -30,7 +30,7 @@ Alege dispozitivul și pachetele în browser, trimite cererea pe GitHub și las�
 ## Previzualizarea interfeței
 
 <p align="center">
-  <img src="../docs/images/wrt-desktop.png" alt="Wei.G OpenWrt desktop" width="78.65%"><img src="../docs/images/wrt-mobile.png" alt="Wei.G OpenWrt mobile" width="21.30%">
+  <img src="../docs/images/wrt-desktop.png" alt="Wei.G OpenWrt pe computer" width="78.65%"><img src="../docs/images/wrt-mobile.png" alt="Wei.G OpenWrt pe telefon" width="21.30%">
 </p>
 
 ## Începe aici: firmware în trei pași
@@ -39,18 +39,18 @@ Alege dispozitivul și pachetele în browser, trimite cererea pe GitHub și las�
 
 ### 1. Alege sursa, dispozitivul și pachetele
 
-Deschide [**【Configuratorul online】**](https://www.weigshare.com/wrt/) și selectează **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Bifează pachetele dorite și ajustează **【Advanced menuconfig】**, fusul orar și tema dacă este necesar. Cu **【Încarcă o configurație】** poți importa `build-request.json`, `.config` sau `config.buildinfo`. Verifică setările înainte de a continua.
+Deschide [**【Configuratorul online】**](https://www.weigshare.com/wrt/) și selectează **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Bifează pachetele dorite în **【② Selectează pluginuri】** și ajustează **【Advanced menuconfig】**, fusul orar și tema dacă este necesar. Cu **【Încarcă configurația】** poți importa un fișier de configurare `*.json`, `.config` sau `config.buildinfo`. Verifică setările înainte de a continua.
 
 ### 2. Trimite cererea de compilare pe GitHub
 
-Mai întâi [**【autentifică-te pe GitHub】**](https://github.com/login). Revino la [**【Configurator】**](https://www.weigshare.com/wrt/) și apasă **【Trimite compilarea în cloud】** → **【Descarcă cererea și deschide GitHub】**. Browserul descarcă fișierul `*.json` și deschide formularul GitHub Issue. Pe calculator, trage JSON-ul în câmpul cererii și apasă **【Submit new issue】**. Botul răspunde cu un link către compilare.
+Mai întâi [**【autentifică-te pe GitHub】**](https://github.com/login). Revino la [**【Configurator】**](https://www.weigshare.com/wrt/) și apasă **【Pornește compilarea în cloud】** → **【Descarcă configurația și deschide GitHub】**. Browserul descarcă fișierul `*.json` și deschide formularul GitHub Issue. Pe calculator, trage JSON-ul tocmai descărcat în câmpul cererii și apasă **【Submit new issue】**. Botul răspunde cu un link către compilare.
 
 <details>
 <summary><strong>Informații importante (extinde)</strong></summary>
 
-> Poți verifica din timp configurația și recomandările de compatibilitate cu **【Test】** din bara flotantă din dreapta jos. Verificarea rulează automat și la generarea cererii.
+> Poți verifica din timp configurația și recomandările de compatibilitate cu **【Test】** din bara flotantă din dreapta jos. Verificarea rulează automat și cu **【Descarcă configurația și deschide GitHub】**.
 >
-> Dacă se găsește o problemă, aplică remedierea recomandată sau alege **【Păstrează și continuă forțat】**. Continuarea forțată nu repară erorile din codul sursă și nu garantează o compilare reușită.
+> Dacă se găsește o problemă, aplică remedierea recomandată sau alege **【Păstrează și forțează】**. Continuarea forțată nu repară erorile din codul sursă și nu garantează o compilare reușită.
 >
 > Folosește pagina GitHub Issue deschisă automat de configurator pentru a păstra informațiile precompletate.
 >
@@ -76,7 +76,7 @@ Pachetele și dependențele pot depăși dimensiunea partiției RootFS. Dacă di
 <details>
 <summary>De ce se oprește o compilare prea lungă?</summary>
 
-Un Job pe un GitHub-hosted Runner are de obicei limita de șase ore. Proiectul folosește **350 de minute** pentru Job și oprește execuția după **335 de minute** pentru a lăsa timp jurnalelor. Compilarea **se încheie; nu rămâne în pauză pentru reluare**. Dependențe mari, precum Node.js și Rust, pot prelungi durata.
+O sarcină pe o mașină de execuție găzduită de GitHub are de obicei limita de șase ore. Proiectul folosește **350 de minute** pentru sarcină și oprește execuția după **335 de minute** pentru a lăsa timp colectării jurnalelor. Compilarea **se încheie; nu rămâne în pauză pentru reluare**. Dependențe mari, precum Node.js și Rust, pot prelungi durata.
 
 </details>
 

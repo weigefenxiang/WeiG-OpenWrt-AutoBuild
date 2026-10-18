@@ -14,7 +14,7 @@ Válaszd ki az eszközt és a csomagokat a böngészőben, küldd el a kérést 
 
 **[🌐 Konfigurátor megnyitása](https://www.weigshare.com/wrt/) · [⬇️ Firmware letöltése](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
-**Támogatott rendszerek:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+**Támogatott rendszerek:** [<img src="../docs/images/sources/immortalwrt.svg" alt="ImmortalWrt" align="absmiddle">](https://github.com/immortalwrt/immortalwrt) · [<img src="../docs/images/sources/lede.svg" alt="Lean LEDE" align="absmiddle">](https://github.com/coolsnowwolf/lede) · [<img src="../docs/images/sources/openwrt.svg" alt="OpenWrt" align="absmiddle">](https://github.com/openwrt/openwrt) · [<img src="../docs/images/sources/istoreos.svg" alt="iStoreOS" align="absmiddle">](https://github.com/istoreos/istoreos) · [<img src="../docs/images/sources/lienol.svg" alt="Lienol" align="absmiddle">](https://github.com/Lienol/openwrt) · [<img src="../docs/images/sources/hanwckf.svg" alt="ImmortalWrt (hanwckf MT798x)" align="absmiddle">](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **Nyelv:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
 
@@ -22,7 +22,7 @@ Válaszd ki az eszközt és a csomagokat a böngészőben, küldd el a kérést 
 <summary><b>🔤 További nyelvek</b></summary>
 
 <div dir="ltr">
-<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <strong>Magyar</strong> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
+<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <strong>Magyar</strong> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan (English)</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
 </div>
 
 </details>
@@ -39,11 +39,11 @@ Válaszd ki az eszközt és a csomagokat a böngészőben, küldd el a kérést 
 
 ### 1. Forrás, eszköz és csomagok kiválasztása
 
-Nyisd meg az [**【Online konfigurátort】**](https://www.weigshare.com/wrt/), majd válaszd ki a **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】** értékeit. Jelöld be a szükséges csomagokat, és szükség esetén módosítsd az **【Advanced menuconfig】**, az időzóna és a téma beállításait. Meglévő konfigurációt a **【Konfiguráció betöltése】** opcióval, `build-request.json`, `.config` vagy `config.buildinfo` fájlból importálhatsz. Folytatás előtt ellenőrizd a választást.
+Nyisd meg az [**【Online konfigurátort】**](https://www.weigshare.com/wrt/), majd válaszd ki a **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】** értékeit. Jelöld be a szükséges csomagokat, és szükség esetén módosítsd az **【Advanced menuconfig】**, az időzóna és a téma beállításait. Meglévő konfigurációt a **【Konfiguráció betöltése】** opcióval, `*.json`, `.config` vagy `config.buildinfo` konfigurációs fájlból importálhatsz. Folytatás előtt ellenőrizd a választást.
 
 ### 2. Felhőben történő fordítás kérése GitHubon
 
-Először [**【jelentkezz be a GitHubra】**](https://github.com/login), majd térj vissza a [**【Konfigurátorhoz】**](https://www.weigshare.com/wrt/). Kattints a **【Felhőfordítás beküldése】** → **【Kérés letöltése és GitHub megnyitása】** gombokra. A böngésző letölt egy `*.json` fájlt és megnyitja a GitHub Issue űrlapot. Asztali gépen húzd a fájlt a megfelelő mezőbe, majd válaszd a **【Submit new issue】** lehetőséget. A bot a fordítás hivatkozásával válaszol.
+Először [**【jelentkezz be a GitHubra】**](https://github.com/login), majd térj vissza a [**【Konfigurátorhoz】**](https://www.weigshare.com/wrt/). Kattints a **【Felhőfordítás beküldése】** → **【Konfiguráció letöltése és GitHub megnyitása】** gombokra. A böngésző letölt egy `*.json` konfigurációs fájlt és megnyitja a GitHub Issue űrlapot. Töltsd fel az imént letöltött JSON-t a kérés mezőjébe; asztali gépen közvetlenül odahúzhatod a fájlt. Ezután válaszd a **【Submit new issue】** lehetőséget. A bot a fordítás hivatkozásával válaszol.
 
 <details>
 <summary><strong>Fontos tudnivalók (megnyitás)</strong></summary>
@@ -76,7 +76,7 @@ A csomagok és függőségeik túlléphetik a RootFS partíció méretét. Ha az
 <details>
 <summary>Miért áll le egy túl hosszú build?</summary>
 
-Egy GitHubon futó Job szokásos korlátja hat óra. Itt **350 perc** a limit, de a végrehajtás **335 perc** után leáll a naplók begyűjtése miatt. **Leáll, nem később folytatható szünetet tart**.
+Egy GitHubon futó Job szokásos korlátja hat óra. Itt **350 perc** a limit, de a végrehajtás **335 perc** után leáll a naplók begyűjtése miatt. **Leáll, nem később folytatható szünetet tart**. A nagy függőségek, például a Node.js és a Rust, növelhetik a fordítási időt.
 
 </details>
 
@@ -100,7 +100,7 @@ A webes fordításhoz nem kell klónozni a repót vagy Node.js-t telepíteni. Te
 
 ## Menuconfig Catalog
 
-A [Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) a forráságakat, eszközprofilokat, csomagokat, Kconfig-függőségeket és kompatibilitási adatokat teszi közzé a web és a build-rendszer számára.
+A [Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) a forráságakat, eszközprofilokat, csomagokat, Kconfig-függőségeket és kompatibilitási adatokat teszi közzé a web és a fordítórendszer számára. Ugyanazokat az adatokat használják; az AutoBuild nem tart fenn második eszköz- és csomagadatbázist.
 
 ## Köszönetnyilvánítás
 

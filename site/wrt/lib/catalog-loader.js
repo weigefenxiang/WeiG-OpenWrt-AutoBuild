@@ -1,3 +1,8 @@
+// Preserve the importing release's query, as other shared presentation adapters do.
+const codecUrl = new URL('./data-codec.js', import.meta.url);
+codecUrl.search = new URL(import.meta.url).search;
+const { decodeJsonBytes } = await import(codecUrl.href);
+
 const MIN_INDEX_SCHEMA = 2;
 const MIN_CATALOG_SCHEMA = 5;
 const MIN_RELATIONS_SCHEMA = 2;
@@ -307,16 +312,7 @@ function mergeGraphContractMetadata(relations, graphDocument) {
 }
 
 export async function decodeCatalogBytes(buffer, Decompression = globalThis.DecompressionStream) {
-  const bytes = new Uint8Array(buffer);
-  let text;
-  if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
-    if (typeof Decompression !== 'function') throw new Error('Browser does not support gzip Catalog data');
-    const stream = new Blob([bytes]).stream().pipeThrough(new Decompression('gzip'));
-    text = await new Response(stream).text();
-  } else {
-    text = new TextDecoder().decode(bytes);
-  }
-  return JSON.parse(text);
+  return decodeJsonBytes(buffer, Decompression);
 }
 
 export function validateCatalogDocument(data, expected, engine) {
@@ -824,7 +820,10 @@ export function createCatalogLoader({
         const pending = shardPromises.get(logical);
         if (!options.forceRefresh && pending && pending.signal === shardSignal) return pending.promise;
         const contract = branch.assets?.[logical];
-        if (!contract?.asset) throw new Error(`Catalog shard is unavailable: ${logical}`);
+        if (!contract?.asset) {
+          if (options.optional === true) return null;
+          throw new Error(`Catalog shard is unavailable: ${logical}`);
+        }
         const entry = { signal: shardSignal, promise: null };
         entry.promise = fetchAssetDocument({
           asset: contract.asset,

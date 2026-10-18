@@ -71,7 +71,7 @@ WeiG-OpenWrt-AutoBuild/
 
 真实密码、令牌等敏感信息不得写入公开站点文件、构建请求、Issue 或日志。密码模式和仓库 Secrets 由可信构建端负责处理。
 
-网页翻译的维护源是 `tools/i18n-source.json` 与 `tools/i18n-translations.json`；`site/wrt/data/i18n/` 仅存放生成文件，不另行维护独立翻译副本。
+网页翻译以简体中文为语义基准，英文及稳定键保存在 `tools/i18n-source.json`，各语种维护源保存在 `tools/i18n-translations/<语言>.json`，元数据由 `tools/i18n-locales.json` 统一管理。`site/wrt/data/i18n/` 只存放生成的语言清单和逐语种独立 gzip 包；浏览器按需加载，不另建翻译副本，也不将网页词条写入 Catalog。
 
 `site/wrt/` 可作为完整静态网站独立部署。部署元数据必须与预期分支、提交及站点身份一致，否则提交入口不可用。配置及生成文件提交后，可通过现有工具按精确提交准备部署：
 

@@ -1,0 +1,380 @@
+{
+  "version": 1,
+  "source": "en",
+  "reference": "zh-CN",
+  "fallback": "en",
+  "languages": [
+    {
+      "id": "en",
+      "name": "English",
+      "native": "English",
+      "common": true,
+      "dir": "ltr"
+    },
+    {
+      "id": "zh-CN",
+      "name": "Chinese (Simplified)",
+      "native": "简体中文",
+      "common": true,
+      "dir": "ltr",
+      "aliases": [
+        "zh",
+        "zh-Hans",
+        "zh-SG",
+        "zh-MY"
+      ]
+    },
+    {
+      "id": "zh-TW",
+      "name": "Chinese (Traditional)",
+      "native": "繁體中文",
+      "common": true,
+      "dir": "ltr",
+      "aliases": [
+        "zh-Hant",
+        "zh-HK",
+        "zh-MO"
+      ]
+    },
+    {
+      "id": "ru",
+      "name": "Russian",
+      "native": "Русский",
+      "common": true,
+      "dir": "ltr"
+    },
+    {
+      "id": "es",
+      "name": "Spanish",
+      "native": "Español",
+      "common": true,
+      "dir": "ltr"
+    },
+    {
+      "id": "pt",
+      "name": "Portuguese",
+      "native": "Português",
+      "common": true,
+      "dir": "ltr"
+    },
+    {
+      "id": "ja",
+      "name": "Japanese",
+      "native": "日本語",
+      "common": true,
+      "dir": "ltr"
+    },
+    {
+      "id": "ko",
+      "name": "Korean",
+      "native": "한국어",
+      "common": true,
+      "dir": "ltr"
+    },
+    {
+      "id": "de",
+      "name": "German",
+      "native": "Deutsch",
+      "common": true,
+      "dir": "ltr"
+    },
+    {
+      "id": "fr",
+      "name": "French",
+      "native": "Français",
+      "common": true,
+      "dir": "ltr"
+    },
+    {
+      "id": "vi",
+      "name": "Vietnamese",
+      "native": "Tiếng Việt",
+      "common": true,
+      "dir": "ltr"
+    },
+    {
+      "id": "ar",
+      "name": "Arabic",
+      "native": "العربية",
+      "common": false,
+      "dir": "rtl"
+    },
+    {
+      "id": "ast",
+      "name": "Asturian",
+      "native": "Asturianu",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "az",
+      "name": "Azerbaijani",
+      "native": "Azərbaycan dili",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "be",
+      "name": "Belarusian",
+      "native": "Беларуская",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "bg",
+      "name": "Bulgarian",
+      "native": "Български",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "bn",
+      "name": "Bengali",
+      "native": "বাংলা",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "bn-BD",
+      "name": "Bengali (Bangladesh)",
+      "native": "বাংলা (বাংলাদেশ)",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "ca",
+      "name": "Catalan",
+      "native": "Català",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "cs",
+      "name": "Czech",
+      "native": "Čeština",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "da",
+      "name": "Danish",
+      "native": "Dansk",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "el",
+      "name": "Greek",
+      "native": "Ελληνικά",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "fa",
+      "name": "Persian",
+      "native": "فارسی",
+      "common": false,
+      "dir": "rtl"
+    },
+    {
+      "id": "fi",
+      "name": "Finnish",
+      "native": "Suomi",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "fil",
+      "name": "Filipino",
+      "native": "Filipino",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "ga",
+      "name": "Irish",
+      "native": "Gaeilge",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "he",
+      "name": "Hebrew",
+      "native": "עברית",
+      "common": false,
+      "dir": "rtl",
+      "aliases": [
+        "iw"
+      ]
+    },
+    {
+      "id": "hi",
+      "name": "Hindi",
+      "native": "हिन्दी",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "hu",
+      "name": "Hungarian",
+      "native": "Magyar",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "id",
+      "name": "Indonesian",
+      "native": "Bahasa Indonesia",
+      "common": false,
+      "dir": "ltr",
+      "aliases": [
+        "in"
+      ]
+    },
+    {
+      "id": "it",
+      "name": "Italian",
+      "native": "Italiano",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "ka",
+      "name": "Georgian",
+      "native": "ქართული",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "lo",
+      "name": "Lao",
+      "native": "ລາວ",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "lt",
+      "name": "Lithuanian",
+      "native": "Lietuvių",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "lv",
+      "name": "Latvian",
+      "native": "Latviešu",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "ml",
+      "name": "Malayalam",
+      "native": "മലയാളം",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "mr",
+      "name": "Marathi",
+      "native": "मराठी",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "ms",
+      "name": "Malay",
+      "native": "Bahasa Melayu",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "nb-NO",
+      "name": "Norwegian Bokmål",
+      "native": "Norsk bokmål",
+      "common": false,
+      "dir": "ltr",
+      "aliases": [
+        "nb",
+        "no"
+      ]
+    },
+    {
+      "id": "nl",
+      "name": "Dutch",
+      "native": "Nederlands",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "pl",
+      "name": "Polish",
+      "native": "Polski",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "pt-BR",
+      "name": "Portuguese (Brazil)",
+      "native": "Português (Brasil)",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "ro",
+      "name": "Romanian",
+      "native": "Română",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "sk",
+      "name": "Slovak",
+      "native": "Slovenčina",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "sv",
+      "name": "Swedish",
+      "native": "Svenska",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "ta",
+      "name": "Tamil",
+      "native": "தமிழ்",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "tr",
+      "name": "Turkish",
+      "native": "Türkçe",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "uk",
+      "name": "Ukrainian",
+      "native": "Українська",
+      "common": false,
+      "dir": "ltr"
+    },
+    {
+      "id": "ur",
+      "name": "Urdu",
+      "native": "اردو",
+      "common": false,
+      "dir": "rtl"
+    },
+    {
+      "id": "yua",
+      "name": "Yucatec Maya",
+      "native": "Màaya t'aan",
+      "common": false,
+      "dir": "ltr",
+      "fallbackTo": "en"
+    }
+  ]
+}

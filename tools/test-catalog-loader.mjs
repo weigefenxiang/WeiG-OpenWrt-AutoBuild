@@ -633,6 +633,11 @@ assert(splitMenu.kind === 'menu' && splitCalls.some((url) => url.includes(splitA
 const splitCallCount = splitCalls.length;
 await splitBundle.loadShard('menu');
 assert(splitCalls.length === splitCallCount, 'loaded menu shard was not reused');
+assert(await splitBundle.loadShard('menu:unsupported', { optional: true }) === null,
+  'an absent optional language must retain the canonical English menu without a fetch');
+assert(splitCalls.length === splitCallCount, 'an absent optional language must not issue a network request');
+await assertRejects(() => splitBundle.loadShard('menu:unsupported'), /unavailable/,
+  'missing required shards must still fail closed');
 
 // A new consumer prefers the optional compact wire asset; publishers retain
 // the original graph contract for already-deployed readers.

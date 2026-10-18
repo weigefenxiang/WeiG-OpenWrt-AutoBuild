@@ -33,6 +33,13 @@ assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__depthOptions.map((opti
 assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__depthOptions.map((option) => probeContext.__uiText(option.shortKey)))),
   ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7'],
   'missing Catalog depth copy must degrade to protocol labels without a second description database');
+const websiteStrings = JSON.parse(fs.readFileSync(path.join(root, 'tools/i18n-source.json'), 'utf8')).strings;
+for (const option of probeContext.__depthOptions) {
+  for (const key of [option.shortKey, option.titleKey, option.titleKey + 'Short', option.helpKey]) {
+    assert(!Object.hasOwn(websiteStrings, 'probe.v3.' + key),
+      'Catalog depth descriptions must not acquire a shadow website translation database: ' + key);
+  }
+}
 const intent = [{ package: 'example', before: 'n', after: 'y' }];
 assert.deepEqual(JSON.parse(JSON.stringify(probeContext.__requestConfigs(intent))), {
   baselinePackageConfig: '', packageConfig: 'CONFIG_PACKAGE_example=y\n',

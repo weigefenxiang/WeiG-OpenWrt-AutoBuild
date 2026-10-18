@@ -44,8 +44,14 @@ async function loadJson(path) {
     try { return JSON.parse(cached); }
     catch (e) { try { localStorage.removeItem(key); } catch (removeError) { /* ignore */ } }
   }
-  const text = await (await fetchData(path)).text();
-  const value = JSON.parse(text);
-  safeSet(key, text);
+  const response = await fetchData(path);
+  let value;
+  if (path.endsWith('.gz')) {
+    const { decodeJsonBytes } = await import(releaseAssetUrl('./lib/data-codec.js'));
+    value = await decodeJsonBytes(await response.arrayBuffer());
+  } else {
+    value = JSON.parse(await response.text());
+  }
+  safeSet(key, JSON.stringify(value));
   return value;
 }

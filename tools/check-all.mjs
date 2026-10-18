@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 import { readFrontendRuntimeSource } from './lib/frontend-source.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -39,7 +40,8 @@ function run(label, command, args) {
 
 function parseJson(path) {
   try {
-    const value = JSON.parse(readFileSync(path, 'utf8'));
+    const bytes = readFileSync(path);
+    const value = JSON.parse((path.endsWith('.gz') ? gunzipSync(bytes) : bytes).toString('utf8'));
     pass(`JSON ${relative(ROOT, path)}`);
     return value;
   } catch (error) {
@@ -89,6 +91,8 @@ const regressionTests = [
   'test-build-result.mjs',
   'test-root-password.mjs',
   'test-feedback.mjs',
+  'test-localization.mjs',
+  'test-localization-runtime.mjs',
   'test-build-closure.mjs',
   'test-project-config.mjs',
   'test-project-customization-runtime.mjs',
@@ -128,26 +132,19 @@ if (license.includes('GNU GENERAL PUBLIC LICENSE') && license.includes('Version 
 } else fail('project license contract');
 
 console.log('[2/4] Canonical local data / 本地权威数据');
+const localeRegistry = JSON.parse(readFileSync(join(ROOT, 'tools/i18n-locales.json'), 'utf8'));
 const dataFiles = [
   'site/wrt/data/i18n/index.json',
-  'site/wrt/data/i18n/zh-CN.json',
-  'site/wrt/data/i18n/zh-TW.json',
-  'site/wrt/data/i18n/en.json',
-  'site/wrt/data/i18n/ru.json',
-  'site/wrt/data/i18n/es.json',
-  'site/wrt/data/i18n/pt.json',
-  'site/wrt/data/i18n/ja.json',
-  'site/wrt/data/i18n/ko.json',
-  'site/wrt/data/i18n/de.json',
-  'site/wrt/data/i18n/fr.json',
-  'site/wrt/data/i18n/vi.json',
+  ...localeRegistry.languages.filter(locale => !locale.fallbackTo).map(locale => `site/wrt/data/i18n/${locale.id}.json.gz`),
   'site/wrt/data/package-mirrors.json',
   'site/wrt/data/site-version.json',
   'site/wrt/data/timezones.json',
   'config/policies/package-mirrors.json',
   '.github/automation-policy.json',
   'tools/i18n-source.json',
-  'tools/i18n-translations.json',
+  ...localeRegistry.languages.filter(locale => locale.id !== localeRegistry.source && !locale.fallbackTo)
+    .map(locale => `tools/i18n-translations/${locale.id}.json`),
+  'tools/i18n-locales.json',
 ];
 const parsed = new Map(dataFiles.map((name) => [name, parseJson(join(ROOT, name))]));
 const siteConfig = parseJson(join(ROOT, 'site', 'wrt', 'config', 'site.json'));
@@ -201,15 +198,17 @@ run('package mirror public projection matches its canonical policy', process.exe
   [join(ROOT, 'tools', 'gen-package-mirrors.mjs'), '--check']);
 
 const i18n = parsed.get('site/wrt/data/i18n/index.json');
-const i18nDocuments = (i18n?.languages || []).filter((language) => !language.pending).map((language) =>
-  parsed.get(`site/wrt/data/i18n/${language.id}.json`));
+const translatedLanguages = (i18n?.languages || []).filter(language => !language.fallbackTo);
+const i18nDocuments = translatedLanguages.map((language) =>
+  parsed.get(`site/wrt/data/i18n/${language.id}.json.gz`));
 const i18nKeys = Object.keys(i18nDocuments[0]?.strings || {});
-if (i18n?.version === 2 && i18n.languages?.length === 50 && i18nDocuments.length === 11 && i18nDocuments.every((document) =>
+if (i18n?.version === 3 && i18n.languages?.length === 50 && i18nDocuments.length === 49 && i18nDocuments.every((document) =>
   document?.version === 2 && i18n.languages.some((language) => language.id === document.language) &&
   Object.keys(document.strings || {}).length === i18nKeys.length &&
   i18nKeys.every((key) => String(document.strings[key] || '').length))) {
-  pass(`${i18nKeys.length} UI strings are complete in 11 language files`);
+  pass(`${i18nKeys.length} UI strings are complete in 49 independent bundles, with one explicit English fallback`);
 } else fail('i18n completeness');
+run('strict deterministic localization output', process.execPath, [join(ROOT, 'tools/gen-i18n.mjs'), '--check']);
 
 const timezones = parsed.get('site/wrt/data/timezones.json')?.zones || [];
 if (timezones.length >= 400 && new Set(timezones.map((row) => row.zonename)).size === timezones.length &&

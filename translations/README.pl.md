@@ -14,7 +14,7 @@ Wybierz urządzenie i pakiety, wyślij zgłoszenie przez GitHub, a firmware Open
 
 **[🌐 Otwórz konfigurator](https://www.weigshare.com/wrt/) · [⬇️ Pobierz firmware](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
-**Obsługiwane źródła:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+**Obsługiwane źródła:** [<img src="../docs/images/sources/immortalwrt.svg" alt="ImmortalWrt" align="absmiddle">](https://github.com/immortalwrt/immortalwrt) · [<img src="../docs/images/sources/lede.svg" alt="Lean LEDE" align="absmiddle">](https://github.com/coolsnowwolf/lede) · [<img src="../docs/images/sources/openwrt.svg" alt="OpenWrt" align="absmiddle">](https://github.com/openwrt/openwrt) · [<img src="../docs/images/sources/istoreos.svg" alt="iStoreOS" align="absmiddle">](https://github.com/istoreos/istoreos) · [<img src="../docs/images/sources/lienol.svg" alt="Lienol" align="absmiddle">](https://github.com/Lienol/openwrt) · [<img src="../docs/images/sources/hanwckf.svg" alt="ImmortalWrt (hanwckf MT798x)" align="absmiddle">](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **Język:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
 
@@ -22,7 +22,7 @@ Wybierz urządzenie i pakiety, wyślij zgłoszenie przez GitHub, a firmware Open
 <summary><b>🔤 Więcej języków</b></summary>
 
 <div dir="ltr">
-<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <strong>Polski</strong> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
+<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <strong>Polski</strong> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan (English)</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
 </div>
 
 </details>
@@ -39,18 +39,18 @@ Wybierz urządzenie i pakiety, wyślij zgłoszenie przez GitHub, a firmware Open
 
 ### 1. Wybierz źródło, urządzenie i pakiety
 
-Otwórz [**【Konfigurator online】**](https://www.weigshare.com/wrt/) i wybierz po kolei **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Zaznacz potrzebne pakiety, a w razie potrzeby dostosuj **【Advanced menuconfig】**, strefę czasową i motyw. Przez **【Wczytaj konfigurację】** możesz zaimportować `build-request.json`, `.config` lub `config.buildinfo`; przed dalszym działaniem sprawdź ustawienia.
+Otwórz [**【Konfigurator online】**](https://www.weigshare.com/wrt/) i wybierz po kolei **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Zaznacz potrzebne pakiety w **【② Wybierz wtyczki】**, a w razie potrzeby dostosuj **【Advanced menuconfig】**, strefę czasową i motyw. Przez **【Wczytaj konfigurację】** możesz zaimportować plik konfiguracji `*.json`, `.config` lub `config.buildinfo`; przed dalszym działaniem sprawdź ustawienia.
 
 ### 2. Zleć kompilację przez GitHub
 
-Najpierw [**【zaloguj się do GitHub】**](https://github.com/login), wróć do [**【Konfiguratora】**](https://www.weigshare.com/wrt/) i wybierz **【Zleć kompilację w chmurze】** → **【Pobierz żądanie i otwórz GitHub】**. Strona pobierze plik `*.json` i otworzy formularz GitHub Issue. Na komputerze przeciągnij JSON do pola żądania i naciśnij **【Submit new issue】**. Bot odpowie linkiem do kompilacji.
+Najpierw [**【zaloguj się do GitHub】**](https://github.com/login), wróć do [**【Konfiguratora】**](https://www.weigshare.com/wrt/) i wybierz **【Uruchom kompilację w chmurze】** → **【Pobierz konfigurację i otwórz GitHub】**. Strona pobierze plik `*.json` i otworzy formularz GitHub Issue. Na komputerze przeciągnij właśnie pobrany JSON do pola żądania i naciśnij **【Submit new issue】**. Bot odpowie linkiem do kompilacji.
 
 <details>
 <summary><strong>Ważne informacje (rozwiń)</strong></summary>
 
-> Przycisk **【Test】** na pływającym pasku w prawym dolnym rogu sprawdza konfigurację i zgodność. Pobranie żądania także automatycznie uruchamia kontrolę.
+> Przycisk **【Test】** na pływającym pasku w prawym dolnym rogu sprawdza konfigurację i zgodność. **【Pobierz konfigurację i otwórz GitHub】** także automatycznie uruchamia kontrolę.
 >
-> W razie problemu zastosuj zalecaną poprawkę albo wybierz **【Zachowaj i mimo to kontynuuj】**. Wymuszenie nie naprawia błędów w źródłach i nie gwarantuje sukcesu.
+> W razie problemu zastosuj zalecaną poprawkę albo wybierz **【Zachowaj i wymuś】**. Wymuszenie nie naprawia błędów w źródłach i nie gwarantuje sukcesu.
 >
 > Korzystaj ze strony Issue otwartej automatycznie przez konfigurator, aby nie zgubić wstępnie uzupełnionych danych.
 >
@@ -76,7 +76,7 @@ Pakiety i zależności mogą nie zmieścić się na partycji RootFS. Jeśli urz�
 <details>
 <summary>Dlaczego długi proces kompilacji zostaje przerwany?</summary>
 
-Limit pojedynczego Job na GitHub-hosted Runner wynosi zwykle sześć godzin. Projekt przyjmuje **350 minut**, z terminem zakończenia wykonywania po **335 minutach**, aby zapisać logi. To **zatrzymanie, nie pauza z możliwością wznowienia**. Duże pakiety Node.js i Rust wydłużają pracę.
+Pojedyncze zadanie na maszynie udostępnionej przez GitHub ma zwykle limit sześciu godzin. Projekt przyjmuje **350 minut**, z terminem zakończenia wykonywania po **335 minutach**, aby zapisać dzienniki. To **zatrzymanie, nie pauza z możliwością wznowienia**. Duże zależności, takie jak Node.js i Rust, wydłużają pracę.
 
 </details>
 

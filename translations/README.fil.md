@@ -14,7 +14,7 @@ Piliin ang device at mga package sa browser, magsumite ng request sa GitHub, at 
 
 **[🌐 Buksan ang customizer](https://www.weigshare.com/wrt/) · [⬇️ I-download ang firmware](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
-**Mga suportadong system:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+**Mga suportadong system:** [<img src="../docs/images/sources/immortalwrt.svg" alt="ImmortalWrt" align="absmiddle">](https://github.com/immortalwrt/immortalwrt) · [<img src="../docs/images/sources/lede.svg" alt="Lean LEDE" align="absmiddle">](https://github.com/coolsnowwolf/lede) · [<img src="../docs/images/sources/openwrt.svg" alt="OpenWrt" align="absmiddle">](https://github.com/openwrt/openwrt) · [<img src="../docs/images/sources/istoreos.svg" alt="iStoreOS" align="absmiddle">](https://github.com/istoreos/istoreos) · [<img src="../docs/images/sources/lienol.svg" alt="Lienol" align="absmiddle">](https://github.com/Lienol/openwrt) · [<img src="../docs/images/sources/hanwckf.svg" alt="ImmortalWrt (hanwckf MT798x)" align="absmiddle">](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **Wika:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
 
@@ -22,7 +22,7 @@ Piliin ang device at mga package sa browser, magsumite ng request sa GitHub, at 
 <summary><b>🔤 Iba pang wika</b></summary>
 
 <div dir="ltr">
-<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <strong>Filipino</strong> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
+<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <strong>Filipino</strong> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan (English)</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
 </div>
 
 </details>
@@ -39,18 +39,18 @@ Piliin ang device at mga package sa browser, magsumite ng request sa GitHub, at 
 
 ### 1. Pumili ng source, device at package
 
-Buksan ang [**【Online customizer】**](https://www.weigshare.com/wrt/) at piliin ang **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Markahan ang kailangan mong package at baguhin ang **【Advanced menuconfig】**, time zone at tema kung kinakailangan. Gamitin ang **【Load configuration】** para mag-import ng `build-request.json`, `.config` o `config.buildinfo`. Suriin ang mga pagpipilian bago magpatuloy.
+Buksan ang [**【Online customizer】**](https://www.weigshare.com/wrt/) at piliin ang **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Markahan ang kailangan mong package at baguhin ang **【Advanced menuconfig】**, time zone at tema kung kinakailangan. Gamitin ang **【Mag-load ng kumpigurasyon】** para mag-import ng file ng kumpigurasyon na `*.json`, `.config` o `config.buildinfo`. Suriin ang mga pagpipilian bago magpatuloy.
 
 ### 2. Magpadala ng cloud build sa GitHub
 
-[**【Mag-sign in sa GitHub】**](https://github.com/login) muna. Bumalik sa [**【Customizer】**](https://www.weigshare.com/wrt/) at pindutin ang **【Submit cloud build】** → **【Download request and open GitHub】**. Magda-download ng `*.json` at magbubukas ang GitHub Issue form. Sa desktop, i-drag ang JSON sa request field, saka i-click ang **【Submit new issue】**. Sasagot ang bot ng link sa build.
+[**【Mag-sign in sa GitHub】**](https://github.com/login) muna. Bumalik sa [**【Customizer】**](https://www.weigshare.com/wrt/) at pindutin ang **【Isumite ang build sa cloud】** → **【I-download ang kumpigurasyon at buksan ang GitHub】**. Magda-download ng file ng kumpigurasyon na `*.json` at magbubukas ang GitHub Issue form. I-upload ang JSON na kakatapos mong i-download sa request field; sa desktop, maaari mo itong i-drag nang direkta sa field. Saka i-click ang **【Submit new issue】**. Sasagot ang bot ng link sa build.
 
 <details>
 <summary><strong>Mahahalagang paalala (buksan)</strong></summary>
 
-> I-click ang **【Test】** sa floating toolbar sa ibabang kanan para makita ang problema sa configuration at payo sa compatibility. Awtomatiko rin ang pag-check kapag gumagawa ng request.
+> I-click ang **【Suriin】** sa floating toolbar sa ibabang kanan para makita ang problema sa kumpigurasyon at payo sa compatibility. Awtomatiko rin ang pagsusuri kapag gumagawa ng request.
 >
-> Kung may problema, ilapat ang inirekomendang pag-aayos o piliin ang **【Keep and force continue】**. Hindi nito inaayos ang bug sa upstream source at maaari pa ring pumalya ang build.
+> Kung may problema, ilapat ang inirekomendang pag-aayos o piliin ang **【Panatilihin at piliting magpatuloy】**. Hindi nito inaayos ang bug sa upstream source at maaari pa ring pumalya ang build.
 >
 > Gamitin ang GitHub Issue page na awtomatikong binuksan ng customizer para hindi mawala ang prefilled na impormasyon.
 >
@@ -76,7 +76,7 @@ Maaaring lumampas ang mga package at dependency sa laki ng RootFS partition. Kun
 <details>
 <summary>Bakit natitigil ang matagal na build?</summary>
 
-Karaniwan, anim na oras ang limit ng isang Job sa GitHub-hosted Runner. Nakatakda rito ang **350 minuto** at tumitigil ang execution pagdating ng **335 minuto** para may oras sa logs. **Humihinto ito, hindi naka-pause para ituloy sa ibang pagkakataon**.
+Karaniwan, anim na oras ang limit ng isang Job sa GitHub-hosted Runner. Nakatakda rito ang **350 minuto** at tumitigil ang pagpapatakbo pagdating ng **335 minuto** para may oras sa logs. **Humihinto ito, hindi naka-pause para ituloy sa ibang pagkakataon**. Maaaring tumagal ang build dahil sa malalaking dependency tulad ng Node.js at Rust.
 
 </details>
 
@@ -100,7 +100,7 @@ Hindi kailangang i-clone ang repository o mag-install ng Node.js para gamitin an
 
 ## Menuconfig Catalog
 
-Naglalathala ang [Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) ng source branches, device profiles, packages, Kconfig dependencies at compatibility data para sa website at build worker.
+Naglalathala ang [Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) ng mga branch ng source, profile ng device, package, dependency ng Kconfig at datos ng compatibility para sa website at build worker. Parehong datos ang ginagamit nila; walang hiwalay na ikalawang talaan ng device at package ang AutoBuild.
 
 ## Pasasalamat
 

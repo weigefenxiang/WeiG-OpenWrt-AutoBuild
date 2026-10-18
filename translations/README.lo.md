@@ -10,11 +10,11 @@
   <img src="https://img.shields.io/badge/-Shell-8A2BE2?logo=gnubash&logoColor=white" alt="Shell">
 </p>
 
-**📱 ໃຊ້ງ່າຍໃນມືຖື · 🌙 ຫົວຂໍ້ສະຫວ່າງ ແລະ ມືດ · ✅ ຮອງຮັບ OpenWrt ຫຼາຍລຸ້ນ**
+**📱 ໃຊ້ງ່າຍໃນມືຖື · 🌙 ຮູບແບບສະຫວ່າງ ແລະ ມືດ · ✅ ຮອງຮັບ OpenWrt ຫຼາຍລຸ້ນ**
 
 **[🌐 ເປີດໜ້າປັບແຕ່ງ](https://www.weigshare.com/wrt/) · [⬇️ ດາວໂຫຼດ firmware](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
-**ລະບົບທີ່ຮອງຮັບ:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+**ລະບົບທີ່ຮອງຮັບ:** [<img src="../docs/images/sources/immortalwrt.svg" alt="ImmortalWrt" align="absmiddle">](https://github.com/immortalwrt/immortalwrt) · [<img src="../docs/images/sources/lede.svg" alt="Lean LEDE" align="absmiddle">](https://github.com/coolsnowwolf/lede) · [<img src="../docs/images/sources/openwrt.svg" alt="OpenWrt" align="absmiddle">](https://github.com/openwrt/openwrt) · [<img src="../docs/images/sources/istoreos.svg" alt="iStoreOS" align="absmiddle">](https://github.com/istoreos/istoreos) · [<img src="../docs/images/sources/lienol.svg" alt="Lienol" align="absmiddle">](https://github.com/Lienol/openwrt) · [<img src="../docs/images/sources/hanwckf.svg" alt="ImmortalWrt (hanwckf MT798x)" align="absmiddle">](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **ພາສາ:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
 
@@ -22,7 +22,7 @@
 <summary><b>🔤 ພາສາອື່ນໆ</b></summary>
 
 <div dir="ltr">
-<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <strong>ລາວ</strong> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
+<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <strong>ລາວ</strong> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan (English)</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
 </div>
 
 </details>
@@ -37,20 +37,20 @@
 
 **📖 [ຄູ່ມືມີຮູບພາບ](https://weigshare.com/posts/WeiG-OpenWrt-AutoBuild-Guide/)**
 
-### 1. ເລືອກແຫຼ່ງຂໍ້ມູນ ອຸປະກອນ ແລະ ແພັກເກັດ
+### 1. ເລືອກລະຫັດຕົ້ນສະບັບ, ອຸປະກອນ ແລະ ແພັກເກັດ
 
-ເປີດ [**【ໜ້າປັບແຕ່ງອອນລາຍ】**](https://www.weigshare.com/wrt/) ແລ້ວເລືອກ **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. ເລືອກແພັກເກັດທີ່ຕ້ອງການ ແລະ ປັບ **【Advanced menuconfig】**, ເຂດເວລາ, ຮູບແບບຕາມຄວາມຕ້ອງການ. ກົດ **【ໂຫຼດການຕັ້ງຄ່າ】** ເພື່ອນຳເຂົ້າ `build-request.json`, `.config` ຫຼື `config.buildinfo`. ກວດຄືນກ່ອນດຳເນີນຕໍ່.
+ເປີດ [**【ໜ້າປັບແຕ່ງອອນລາຍ】**](https://www.weigshare.com/wrt/) ແລ້ວເລືອກ **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】** ຕາມລຳດັບ. ເລືອກແພັກເກັດທີ່ຕ້ອງການ ແລະ ປັບ **【Advanced menuconfig】**, ເຂດເວລາ, ຮູບແບບຕາມຄວາມຕ້ອງການ. ກົດ **【ໂຫຼດການຕັ້ງຄ່າ】** ເພື່ອນຳເຂົ້າໄຟລ໌ຕັ້ງຄ່າ `*.json`, `.config` ຫຼື `config.buildinfo`. ກວດລະຫັດຕົ້ນສະບັບ, ອຸປະກອນ ແລະ ປລັກອິນກ່ອນສືບຕໍ່.
 
 ### 2. ສົ່ງຄຳຮ້ອງສ້າງຜ່ານ GitHub
 
-ກ່ອນອື່ນ [**【ເຂົ້າລະບົບ GitHub】**](https://github.com/login), ກັບໄປ [**【ໜ້າປັບແຕ່ງ】**](https://www.weigshare.com/wrt/) ແລ້ວກົດ **【ສົ່ງຄຳຮ້ອງສ້າງຜ່ານຄລາວ】** → **【ດາວໂຫຼດຄຳຮ້ອງ ແລະ ເປີດ GitHub】**. ຈະໄດ້ໄຟລ໌ `*.json` ແລະ ແບບຟອມ GitHub Issue. ໃນຄອມພິວເຕີ ລາກ JSON ໃສ່ຊ່ອງຄຳຮ້ອງແລ້ວກົດ **【Submit new issue】**. ບັອດຈະຕອບດ້ວຍລິ້ງການສ້າງ.
+ກ່ອນອື່ນ [**【ເຂົ້າລະບົບ GitHub】**](https://github.com/login), ກັບໄປ [**【ໜ້າປັບແຕ່ງ】**](https://www.weigshare.com/wrt/) ແລ້ວກົດ **【ເລີ່ມສ້າງຜ່ານຄລາວ】** → **【ດາວໂຫຼດການຕັ້ງຄ່າ ແລະ ເປີດ GitHub】**. ບຣາວເຊີຈະດາວໂຫຼດໄຟລ໌ `*.json` ແລະ ເປີດແບບຟອມ GitHub Issue. ໃນຄອມພິວເຕີ ໃຫ້ລາກໄຟລ໌ JSON ທີ່ຫາກໍດາວໂຫຼດໃສ່ຊ່ອງຄຳຮ້ອງເພື່ອອັບໂຫຼດ ແລ້ວກົດ **【Submit new issue】**. ບັອດຈະຕອບດ້ວຍລິ້ງການສ້າງ.
 
 <details>
 <summary><strong>ຂໍ້ຄວນຮູ້ (ກົດເພື່ອເປີດ)</strong></summary>
 
-> ໃຊ້ **【ກວດສອບ】** ຢູ່ແຖບລອຍດ້ານຂວາລຸ່ມ ເພື່ອກວດການຕັ້ງຄ່າ ແລະ ຄວາມເຂົ້າກັນໄດ້. ເມື່ອສ້າງຄຳຮ້ອງລະບົບຈະກວດອັດຕະໂນມັດ.
+> ໃຊ້ **【ກວດສອບ】** ຢູ່ແຖບລອຍດ້ານຂວາລຸ່ມ ເພື່ອກວດການຕັ້ງຄ່າ ແລະ ຄວາມເຂົ້າກັນໄດ້. ເມື່ອກົດ **【ດາວໂຫຼດການຕັ້ງຄ່າ ແລະ ເປີດ GitHub】** ລະບົບຈະກວດລ່ວງໜ້າອັດຕະໂນມັດ.
 >
-> ຖ້າພົບບັນຫາ ໃຫ້ໃຊ້ວິທີແກ້ທີ່ແນະນຳ ຫຼື ເລືອກ **【ຮັກສາຄ່າເກົ່າ ແລະ ສືບຕໍ່】**. ນີ້ບໍ່ໄດ້ແກ້ຂໍ້ຜິດພາດໃນໂຄດຕົ້ນສະບັບ.
+> ຖ້າພົບບັນຫາ ໃຫ້ໃຊ້ວິທີແກ້ທີ່ແນະນຳ ຫຼື ເລືອກ **【ຮັກສາຄ່າ ແລະ ບັງຄັບສືບຕໍ່】**. ນີ້ບໍ່ໄດ້ແກ້ຂໍ້ຜິດພາດໃນລະຫັດຕົ້ນສະບັບ; ການສ້າງຍັງອາດລົ້ມເຫຼວ.
 >
 > ໃຊ້ໜ້າ GitHub Issue ທີ່ເວັບໄຊເປີດໃຫ້ອັດຕະໂນມັດ ເພື່ອບໍ່ໃຫ້ຂໍ້ມູນທີ່ກອກໄວ້ຫາຍໄປ.
 >
@@ -62,7 +62,7 @@
 
 ### 3. ດາວໂຫຼດ firmware
 
-ເປີດລິ້ງໃນ Issue ຫຼື [**【Actions → Firmware Download】**](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml). ຫຼັງສຳເລັດ ດາວໂຫຼດ firmware ໃນ **【Artifacts】**. `CONFIG` ແມ່ນການຕັ້ງຄ່າ ແລະ `BUILD-LOGS` ແມ່ນບັນທຶກກວດສອບ; **ບໍ່ແມ່ນໄຟລ໌ firmware ສຳລັບແຟລັດ**. ໄຟລ໌ຢູ່ໄດ້ **60 ມື້**.
+ເປີດລິ້ງໃນ Issue ຫຼື [**【Actions → Firmware Download】**](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml). ຫຼັງສຳເລັດ ດາວໂຫຼດເຟີມແວໃນ **【Artifacts】**. `CONFIG` ແມ່ນການຕັ້ງຄ່າ ແລະ `BUILD-LOGS` ແມ່ນບັນທຶກກວດສອບ; **ບໍ່ແມ່ນໄຟລ໌ເຟີມແວສຳລັບຂຽນໃສ່ອຸປະກອນ**. ໄຟລ໌ຢູ່ໄດ້ **60 ມື້**.
 
 ## ຄຳຖາມທີ່ພົບເລື້ອຍ
 
@@ -100,7 +100,7 @@ Job ໃນ GitHub-hosted Runner ປົກກະຕິຈຳກັດ 6 ຊົ່
 
 ## Menuconfig Catalog
 
-[Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) ເຜີຍແຜ່ສາຂາຊອດ, ໂປຣໄຟລ໌ອຸປະກອນ, ແພັກເກັດ, ຄວາມພຶ່ງພາ Kconfig ແລະ ຄວາມເຂົ້າກັນໄດ້.
+[Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) ເຜີຍແຜ່ສາຂາຂອງລະຫັດຕົ້ນສະບັບ, ໂປຣໄຟລ໌ອຸປະກອນ, ແພັກເກັດ, ຄວາມພຶ່ງພາ Kconfig ແລະ ຄວາມເຂົ້າກັນໄດ້.
 
 ## ຂອບໃຈ
 

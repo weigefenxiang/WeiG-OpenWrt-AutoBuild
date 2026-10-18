@@ -90,7 +90,9 @@ node tools/prepare-web-deployment.mjs --commit <40位SHA> --branch <dev或main>
 
 该命令生成被忽略的 `site/wrt/data/build-meta.json`。部署必须携带与 `site-version.json` 一致的元数据；元数据缺失、非法或陈旧时提交门禁必须保持禁用。Pages workflow 的站点准备阶段只执行 `node tools/stamp-site-version.mjs --check` 和 `prepare-web-deployment`，不在部署现场修改配置。独立部署只改变网页托管位置，不改变构建身份：请求仍必须对应目标 AutoBuild 仓库的同一提交。
 
-网页翻译只编辑 `tools/i18n-source.json` 与 `tools/i18n-translations.json`；`site/wrt/data/i18n/` 是生成包，不能直接修改。
+网页翻译以简体中文为语义基准：英文及稳定词条键保存在 `tools/i18n-source.json`，各语种译文保存在 `tools/i18n-translations/<语言>.json`，语言分组、别名和书写方向由 `tools/i18n-locales.json` 管理。运行 `node tools/gen-i18n.mjs` 生成 `site/wrt/data/i18n/` 中逐语种独立的 `.json.gz`；`--check` 校验真实译文完整性与确定性生成结果。不要直接编辑生成包。浏览器首次只加载一个生效语种，不预加载其他语种；Catalog 的上游菜单翻译仍由 Catalog 自己管理。
+
+语言目录有 50 个入口：49 个完整语言包及明确回退英文的尤卡坦玛雅语入口。回退条目使用 `fallbackTo`，没有伪造的译文源或重复英文 gzip。常用 11 项与其余 39 项的分组独立于翻译状态；香港/澳门繁体别名映射到 `zh-TW`。浏览器和 Catalog 共用 JSON/gzip 解码器；缺失的可选菜单语言分片沿用英文，不扩充 Catalog。README 的源码名称使用六个共用透明 SVG，仅文字着色，保留原上游链接。
 
 ## 1. 不可突破的边界
 

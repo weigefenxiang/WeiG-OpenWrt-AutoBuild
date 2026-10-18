@@ -1,6 +1,6 @@
-# Wei.G OpenWrt — saincheap do firmware ar líne
+# Wei.G OpenWrt — saincheap dochtearraí ar líne
 
-Roghnaigh do ghléas agus na pacáistí sa bhrabhsálaí, seol iarratas trí GitHub agus lig don tseirbhís scamall firmware OpenWrt a thiomsú.
+Roghnaigh do ghléas agus na pacáistí sa bhrabhsálaí, seol iarratas trí GitHub agus lig don néal dochtearraí OpenWrt a thiomsú.
 
 <p>
   <img src="https://img.shields.io/badge/-JavaScript-F7DF1E?logo=javascript&logoColor=black" alt="JavaScript">
@@ -14,7 +14,7 @@ Roghnaigh do ghléas agus na pacáistí sa bhrabhsálaí, seol iarratas trí Git
 
 **[🌐 Oscail an cumraitheoir](https://www.weigshare.com/wrt/) · [⬇️ Íoslódáil firmware](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
-**Córais a dtacaítear leo:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+**Córais a dtacaítear leo:** [<img src="../docs/images/sources/immortalwrt.svg" alt="ImmortalWrt" align="absmiddle">](https://github.com/immortalwrt/immortalwrt) · [<img src="../docs/images/sources/lede.svg" alt="Lean LEDE" align="absmiddle">](https://github.com/coolsnowwolf/lede) · [<img src="../docs/images/sources/openwrt.svg" alt="OpenWrt" align="absmiddle">](https://github.com/openwrt/openwrt) · [<img src="../docs/images/sources/istoreos.svg" alt="iStoreOS" align="absmiddle">](https://github.com/istoreos/istoreos) · [<img src="../docs/images/sources/lienol.svg" alt="Lienol" align="absmiddle">](https://github.com/Lienol/openwrt) · [<img src="../docs/images/sources/hanwckf.svg" alt="ImmortalWrt (hanwckf MT798x)" align="absmiddle">](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **Teanga:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
 
@@ -22,7 +22,7 @@ Roghnaigh do ghléas agus na pacáistí sa bhrabhsálaí, seol iarratas trí Git
 <summary><b>🔤 Tuilleadh teangacha</b></summary>
 
 <div dir="ltr">
-<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <strong>Gaeilge</strong> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
+<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <strong>Gaeilge</strong> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan (English)</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
 </div>
 
 </details>
@@ -39,11 +39,11 @@ Roghnaigh do ghléas agus na pacáistí sa bhrabhsálaí, seol iarratas trí Git
 
 ### 1. Roghnaigh foinse, gléas agus pacáistí
 
-Oscail an [**【Cumraitheoir ar líne】**](https://www.weigshare.com/wrt/) agus roghnaigh **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Roghnaigh na pacáistí atá uait agus athraigh **【Advanced menuconfig】**, an crios ama agus an téama más gá. Le **【Luchtaigh cumraíocht】** is féidir `build-request.json`, `.config` nó `config.buildinfo` a iompórtáil. Seiceáil na socruithe roimh leanúint ar aghaidh.
+Oscail an [**【Cumraitheoir ar líne】**](https://www.weigshare.com/wrt/) agus roghnaigh **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Roghnaigh na pacáistí atá uait agus athraigh **【Advanced menuconfig】**, an crios ama agus an téama más gá. Le **【Luchtaigh cumraíocht】** is féidir comhad cumraíochta `*.json`, `.config` nó `config.buildinfo` a iompórtáil. Seiceáil na socruithe roimh leanúint ar aghaidh.
 
 ### 2. Seol iarratas tógála ar GitHub
 
-[**【Sínigh isteach ar GitHub】**](https://github.com/login) ar dtús, ansin fill ar an [**【gCumraitheoir】**](https://www.weigshare.com/wrt/) agus roghnaigh **【Seol tógáil scamall】** → **【Íoslódáil iarratas agus oscail GitHub】**. Íoslódálfar comhad `*.json` agus osclófar foirm GitHub Issue. Ar ríomhaire, tarraing an JSON isteach sa réimse iarratais agus cliceáil **【Submit new issue】**. Freagróidh an bot le nasc chuig an tógáil.
+[**【Sínigh isteach ar GitHub】**](https://github.com/login) ar dtús, ansin fill ar an [**【gCumraitheoir】**](https://www.weigshare.com/wrt/) agus roghnaigh **【Seol tiomsú sa néal】** → **【Íoslódáil an chumraíocht agus oscail GitHub】**. Íoslódálfar comhad cumraíochta `*.json` agus osclófar foirm GitHub Issue. Uaslódáil an JSON atá díreach íoslódáilte agat sa réimse iarratais; ar ríomhaire, is féidir é a tharraingt isteach sa réimse sin. Ansin cliceáil **【Submit new issue】**. Freagróidh an bot le nasc chuig an tiomsú.
 
 <details>
 <summary><strong>Nótaí tábhachtacha (leathnaigh)</strong></summary>
@@ -76,7 +76,7 @@ D’fhéadfadh pacáistí agus a spleáchais dul thar mhéid na deighilte RootFS
 <details>
 <summary>Cén fáth a stopann tógáil fhada?</summary>
 
-Is é sé huaire an teorainn ghnách ar Job i GitHub-hosted Runner. Tá teorainn **350 nóiméad** sa tionscadal seo agus stopann an próiseas tar éis **335 nóiméad** chun logaí a bhailiú. Is **stopadh é, ní sos is féidir a atosú**.
+Is é sé huaire an teorainn ghnách ar Job i GitHub-hosted Runner. Tá teorainn **350 nóiméad** sa tionscadal seo agus stopann an próiseas tar éis **335 nóiméad** chun logaí a bhailiú. Is **stopadh é, ní sos is féidir a atosú**. Féadfaidh spleáchais mhóra, mar Node.js nó Rust, an tiomsú a mhoilliú.
 
 </details>
 
@@ -100,7 +100,7 @@ Ní gá an stór a chlónáil ná Node.js a shuiteáil chun an suíomh a úsáid
 
 ## Menuconfig Catalog
 
-Foilsíonn [Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) brainsí foinse, próifílí gléasanna, pacáistí, spleáchais Kconfig agus sonraí comhoiriúnachta don suíomh agus don chóras tógála.
+Foilsíonn [Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) brainsí foinse, próifílí gléasanna, pacáistí, spleáchais Kconfig agus sonraí comhoiriúnachta don suíomh agus don chóras tiomsaithe. Úsáideann siad na sonraí céanna; ní choinníonn AutoBuild an dara bunachar gléasanna agus pacáistí.
 
 ## Buíochas
 

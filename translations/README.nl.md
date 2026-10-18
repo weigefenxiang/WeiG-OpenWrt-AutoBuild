@@ -14,7 +14,7 @@ Kies je apparaat en pakketten in de browser, dien een aanvraag in op GitHub en l
 
 **[🌐 Configurator openen](https://www.weigshare.com/wrt/) · [⬇️ Firmware downloaden](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
-**Ondersteund:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+**Ondersteund:** [<img src="../docs/images/sources/immortalwrt.svg" alt="ImmortalWrt" align="absmiddle">](https://github.com/immortalwrt/immortalwrt) · [<img src="../docs/images/sources/lede.svg" alt="Lean LEDE" align="absmiddle">](https://github.com/coolsnowwolf/lede) · [<img src="../docs/images/sources/openwrt.svg" alt="OpenWrt" align="absmiddle">](https://github.com/openwrt/openwrt) · [<img src="../docs/images/sources/istoreos.svg" alt="iStoreOS" align="absmiddle">](https://github.com/istoreos/istoreos) · [<img src="../docs/images/sources/lienol.svg" alt="Lienol" align="absmiddle">](https://github.com/Lienol/openwrt) · [<img src="../docs/images/sources/hanwckf.svg" alt="ImmortalWrt (hanwckf MT798x)" align="absmiddle">](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **Taal:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
 
@@ -22,7 +22,7 @@ Kies je apparaat en pakketten in de browser, dien een aanvraag in op GitHub en l
 <summary><b>🔤 Meer talen</b></summary>
 
 <div dir="ltr">
-<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <strong>Nederlands</strong> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
+<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <strong>Nederlands</strong> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan (English)</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
 </div>
 
 </details>
@@ -30,7 +30,7 @@ Kies je apparaat en pakketten in de browser, dien een aanvraag in op GitHub en l
 ## Voorbeeld van de interface
 
 <p align="center">
-  <img src="../docs/images/wrt-desktop.png" alt="Wei.G OpenWrt desktop" width="78.65%"><img src="../docs/images/wrt-mobile.png" alt="Wei.G OpenWrt mobile" width="21.30%">
+  <img src="../docs/images/wrt-desktop.png" alt="Wei.G OpenWrt op een computer" width="78.65%"><img src="../docs/images/wrt-mobile.png" alt="Wei.G OpenWrt op een telefoon" width="21.30%">
 </p>
 
 ## Aan de slag: firmware bouwen in drie stappen
@@ -39,18 +39,18 @@ Kies je apparaat en pakketten in de browser, dien een aanvraag in op GitHub en l
 
 ### 1. Broncode, apparaat en pakketten kiezen
 
-Open de [**【Online configurator】**](https://www.weigshare.com/wrt/) en kies **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Selecteer de gewenste pakketten en pas zo nodig **【Advanced menuconfig】**, tijdzone en thema aan. Met **【Configuratie laden】** kun je ook `build-request.json`, `.config` of `config.buildinfo` importeren; controleer daarna je instellingen.
+Open de [**【Online configurator】**](https://www.weigshare.com/wrt/) en kies **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Selecteer de gewenste pakketten onder **【② Plugins selecteren】** en pas zo nodig **【Advanced menuconfig】**, tijdzone en thema aan. Met **【Configuratie laden】** kun je ook een configuratiebestand `*.json`, `.config` of `config.buildinfo` importeren; controleer daarna je instellingen.
 
 ### 2. De cloudbuild via GitHub aanvragen
 
-[**【Log eerst in bij GitHub】**](https://github.com/login), keer terug naar de [**【Configurator】**](https://www.weigshare.com/wrt/) en kies **【Cloudbuild indienen】** → **【Aanvraag downloaden en GitHub openen】**. Er wordt een `*.json`-bestand gedownload en een GitHub Issue-formulier geopend. Sleep op een computer de JSON naar het verzoekveld en klik op **【Submit new issue】**. De bot plaatst vervolgens een link naar de build in je Issue.
+[**【Log eerst in bij GitHub】**](https://github.com/login), keer terug naar de [**【Configurator】**](https://www.weigshare.com/wrt/) en kies **【Cloudbuild starten】** → **【Configuratie downloaden en GitHub openen】**. Er wordt een `*.json`-bestand gedownload en een GitHub Issue-formulier geopend. Sleep op een computer het zojuist gedownloade JSON-bestand naar het verzoekveld en klik op **【Submit new issue】**. De bot plaatst vervolgens een link naar de build in je Issue.
 
 <details>
 <summary><strong>Belangrijke opmerkingen (uitklappen)</strong></summary>
 
-> Met **【Test】** in de zwevende werkbalk rechtsonder controleer je vooraf configuratiefouten en compatibiliteit. Ook bij het downloaden van de aanvraag draait deze controle automatisch.
+> Met **【Test】** in de zwevende werkbalk rechtsonder controleer je vooraf configuratiefouten en compatibiliteit. Ook bij **【Configuratie downloaden en GitHub openen】** draait deze controle automatisch.
 >
-> Bij problemen kun je de voorgestelde oplossing toepassen of **【Behouden en toch doorgaan】** kiezen. Dit verhelpt geen fouten in de upstream-broncode en garandeert geen succesvolle build.
+> Bij problemen kun je de voorgestelde oplossing toepassen of **【Behouden en forceren】** kiezen. Dit verhelpt geen fouten in de upstream-broncode en garandeert geen succesvolle build.
 >
 > Gebruik het Issue-formulier dat de configurator automatisch opent, zodat vooraf ingevulde gegevens behouden blijven.
 >
@@ -76,7 +76,7 @@ Pakketten en afhankelijkheden kunnen te groot zijn voor de RootFS-partitie. Bij 
 <details>
 <summary>Waarom wordt mijn build afgebroken vanwege de tijdslimiet?</summary>
 
-Een GitHub-hosted Runner heeft per Job normaal maximaal zes uur. Dit project hanteert een limiet van **350 minuten** en beëindigt de uitvoering na **335 minuten** zodat de logs nog kunnen worden verzameld. De build **stopt en kan niet later worden hervat**. Grote afhankelijkheden zoals Node.js of Rust kosten extra tijd.
+Een door GitHub gehoste runner heeft per taak normaal maximaal zes uur. Dit project hanteert een limiet van **350 minuten** en beëindigt de uitvoering na **335 minuten** zodat de logboeken nog kunnen worden verzameld. De build **stopt en kan niet later worden hervat**. Grote afhankelijkheden zoals Node.js of Rust kosten extra tijd.
 
 </details>
 

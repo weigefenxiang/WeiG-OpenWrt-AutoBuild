@@ -14,7 +14,7 @@ Scegli il dispositivo e i pacchetti dal browser, invia la richiesta su GitHub e 
 
 **[🌐 Apri il configuratore](https://www.weigshare.com/wrt/) · [⬇️ Scarica il firmware](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
-**Distribuzioni supportate:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+**Distribuzioni supportate:** [<img src="../docs/images/sources/immortalwrt.svg" alt="ImmortalWrt" align="absmiddle">](https://github.com/immortalwrt/immortalwrt) · [<img src="../docs/images/sources/lede.svg" alt="Lean LEDE" align="absmiddle">](https://github.com/coolsnowwolf/lede) · [<img src="../docs/images/sources/openwrt.svg" alt="OpenWrt" align="absmiddle">](https://github.com/openwrt/openwrt) · [<img src="../docs/images/sources/istoreos.svg" alt="iStoreOS" align="absmiddle">](https://github.com/istoreos/istoreos) · [<img src="../docs/images/sources/lienol.svg" alt="Lienol" align="absmiddle">](https://github.com/Lienol/openwrt) · [<img src="../docs/images/sources/hanwckf.svg" alt="ImmortalWrt (hanwckf MT798x)" align="absmiddle">](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **Lingua:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
 
@@ -22,7 +22,7 @@ Scegli il dispositivo e i pacchetti dal browser, invia la richiesta su GitHub e 
 <summary><b>🔤 Altre lingue</b></summary>
 
 <div dir="ltr">
-<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <strong>Italiano</strong> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
+<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <strong>Italiano</strong> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan (English)</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
 </div>
 
 </details>
@@ -39,18 +39,18 @@ Scegli il dispositivo e i pacchetti dal browser, invia la richiesta su GitHub e 
 
 ### 1. Scegli sorgente, dispositivo e pacchetti
 
-Apri il [**【Configuratore online】**](https://www.weigshare.com/wrt/) e seleziona **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Scegli i pacchetti necessari e, se serve, modifica **【Advanced menuconfig】**, fuso orario e tema. Per recuperare una configurazione precedente, usa **【Carica configurazione】** con `build-request.json`, `.config` o `config.buildinfo` e ricontrolla le impostazioni.
+Apri il [**【Configuratore online】**](https://www.weigshare.com/wrt/) e seleziona **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Scegli i pacchetti necessari in **【② Seleziona i plugin】** e, se serve, modifica **【Advanced menuconfig】**, fuso orario e tema. Per recuperare una configurazione precedente, usa **【Carica configurazione】** con un file di configurazione `*.json`, `.config` o `config.buildinfo` e ricontrolla le impostazioni.
 
 ### 2. Invia la compilazione tramite GitHub
 
-[**【Accedi a GitHub】**](https://github.com/login), torna al [**【Configuratore】**](https://www.weigshare.com/wrt/) e fai clic su **【Invia compilazione cloud】** → **【Scarica richiesta e apri GitHub】**. Verrà scaricato un file `*.json` e si aprirà un modulo GitHub Issue. Da computer trascina il JSON nel campo della richiesta, quindi premi **【Submit new issue】**. Il bot risponderà con il link alla compilazione.
+[**【Accedi a GitHub】**](https://github.com/login), torna al [**【Configuratore】**](https://www.weigshare.com/wrt/) e fai clic su **【Avvia compilazione nel cloud】** → **【Scarica configurazione e apri GitHub】**. Verrà scaricato un file `*.json` e si aprirà un modulo GitHub Issue. Da computer trascina il JSON appena scaricato nel campo della richiesta, quindi premi **【Submit new issue】**. Il bot risponderà con il link alla compilazione.
 
 <details>
 <summary><strong>Avvertenze (espandi)</strong></summary>
 
-> **Suggerimento:** Puoi verificare in anticipo configurazione e compatibilità usando **【Test】** nella barra flottante in basso a destra; il controllo viene eseguito anche quando scarichi la richiesta.
+> **Suggerimento:** Puoi verificare in anticipo configurazione e compatibilità usando **【Test】** nella barra flottante in basso a destra; il controllo viene eseguito anche con **【Scarica configurazione e apri GitHub】**.
 >
-> Se vengono rilevati problemi, puoi applicare le correzioni suggerite oppure scegliere **【Mantieni e continua comunque】**. Forzare la procedura non risolve gli errori presenti nel codice sorgente a monte.
+> Se vengono rilevati problemi, puoi applicare le correzioni suggerite oppure scegliere **【Mantieni e forza】**. Forzare la procedura non risolve gli errori presenti nel codice sorgente a monte e la compilazione può ancora fallire.
 >
 > Usa la pagina GitHub Issue aperta dal configuratore per non perdere i dati precompilati.
 >
@@ -83,7 +83,7 @@ Un job sui runner GitHub ha normalmente un limite di sei ore. Qui il massimo è 
 <details>
 <summary>Come posso individuare la causa di un errore?</summary>
 
-Scarica `BUILD-LOGS` da **【Artifacts】** e leggi prima `00-SUMMARY.txt`. Controlla se il problema riguarda RootFS, tempo massimo, sorgenti o dipendenze. Consulta [Issue #233](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/issues/233). Dopo la correzione apri **un nuovo Issue**.
+Scarica `BUILD-LOGS` da **【Artifacts】** e leggi prima `00-SUMMARY.txt`. Controlla se il problema riguarda RootFS, tempo massimo, sorgenti o dipendenze. Consulta [Issue #233](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/issues/233). Dopo la correzione apri **una nuova Issue**.
 
 </details>
 

@@ -14,7 +14,7 @@
 
 **[🌐 Открыть конфигуратор](https://www.weigshare.com/wrt/) · [⬇️ Скачать прошивку](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
-**Поддерживаются:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+**Поддерживаются:** [<img src="../docs/images/sources/immortalwrt.svg" alt="ImmortalWrt" align="absmiddle">](https://github.com/immortalwrt/immortalwrt) · [<img src="../docs/images/sources/lede.svg" alt="Lean LEDE" align="absmiddle">](https://github.com/coolsnowwolf/lede) · [<img src="../docs/images/sources/openwrt.svg" alt="OpenWrt" align="absmiddle">](https://github.com/openwrt/openwrt) · [<img src="../docs/images/sources/istoreos.svg" alt="iStoreOS" align="absmiddle">](https://github.com/istoreos/istoreos) · [<img src="../docs/images/sources/lienol.svg" alt="Lienol" align="absmiddle">](https://github.com/Lienol/openwrt) · [<img src="../docs/images/sources/hanwckf.svg" alt="ImmortalWrt (hanwckf MT798x)" align="absmiddle">](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **Язык:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · **Русский** · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
 
@@ -22,7 +22,7 @@
 <summary><b>🔤 Другие языки</b></summary>
 
 <div dir="ltr">
-<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
+<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan (English)</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
 </div>
 
 </details>
@@ -39,20 +39,20 @@
 
 ### 1. Выберите исходники, устройство и пакеты
 
-Откройте [**【Конфигуратор】**](https://www.weigshare.com/wrt/). Последовательно выберите **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. В разделе **【② Пакеты】** отметьте нужные компоненты; при необходимости настройте **【Advanced menuconfig】**, часовой пояс и тему.
+Откройте [**【Конфигуратор】**](https://www.weigshare.com/wrt/). Последовательно выберите **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. В разделе **【② Выбор пакетов】** отметьте нужные компоненты; при необходимости настройте **【Advanced menuconfig】**, часовой пояс и тему.
 
-Если конфигурация уже есть, нажмите **【Загрузить конфигурацию】** и импортируйте `build-request.json`, `.config` или `config.buildinfo`. Перед продолжением проверьте ветку, модель и пакеты.
+Если конфигурация уже есть, нажмите **【Загрузить конфигурацию】** и импортируйте файл конфигурации `*.json`, `.config` или `config.buildinfo`. Перед продолжением проверьте ветку, модель и пакеты.
 
 ### 2. Отправьте запрос на облачную сборку
 
-Сначала [**【войдите в GitHub】**](https://github.com/login), затем вернитесь в [**【Конфигуратор】**](https://www.weigshare.com/wrt/) и выберите **【Отправить на облачную сборку】** → **【Скачать запрос и открыть GitHub】**. Сайт скачает файл `*.json` и откроет форму GitHub Issue. На компьютере перетащите JSON в поле запроса и нажмите **【Submit new issue】**.
+Сначала [**【войдите в GitHub】**](https://github.com/login), затем вернитесь в [**【Конфигуратор】**](https://www.weigshare.com/wrt/) и выберите **【Отправить в облачную сборку】** → **【Скачать конфигурацию и открыть GitHub】**. Сайт скачает файл `*.json` и откроет форму GitHub Issue. На компьютере перетащите JSON в поле запроса и нажмите **【Submit new issue】**.
 
 После отправки Issue бот ответит ссылкой на запуск сборки.
 
 <details>
 <summary><strong>Важные замечания (развернуть)</strong></summary>
 
-> **Совет:** Проверку настроек и рекомендации по совместимости можно заранее запустить кнопкой **【Тест】** на плавающей панели в правом нижнем углу. При выборе **【Скачать запрос и открыть GitHub】** проверки запускаются автоматически.
+> **Совет:** Проверку настроек и рекомендации по совместимости можно заранее запустить кнопкой **【Проверка】** на плавающей панели в правом нижнем углу. При выборе **【Скачать конфигурацию и открыть GitHub】** проверки запускаются автоматически.
 >
 > Если обнаружены проблемы, примените предложенное исправление или выберите **【Сохранить и продолжить принудительно】**. Принудительное продолжение не устраняет ошибки в исходниках и не гарантирует успешную сборку.
 >
@@ -80,7 +80,7 @@
 <details>
 <summary>Почему сборка прерывается по времени?</summary>
 
-На GitHub-hosted runner один Job обычно ограничен шестью часами. Здесь Job ограничен **350 минутами**, а компиляция останавливается к **335-й минуте**, чтобы сохранить время для журналов. Это **остановка, не пауза**: продолжить сборку с того же места нельзя. Большие зависимости, например Node.js и Rust, увеличивают время работы.
+На исполнителе, предоставленном GitHub, одно задание обычно ограничено шестью часами. Здесь задание ограничено **350 минутами**, а компиляция останавливается к **335-й минуте**, чтобы сохранить время для журналов. Это **остановка, не пауза**: продолжить сборку с того же места нельзя. Большие зависимости, например Node.js и Rust, увеличивают время работы.
 
 </details>
 

@@ -14,7 +14,7 @@
 
 **[🌐 Відкрити конфігуратор](https://www.weigshare.com/wrt/) · [⬇️ Завантажити прошивку](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
-**Підтримувані системи:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+**Підтримувані системи:** [<img src="../docs/images/sources/immortalwrt.svg" alt="ImmortalWrt" align="absmiddle">](https://github.com/immortalwrt/immortalwrt) · [<img src="../docs/images/sources/lede.svg" alt="Lean LEDE" align="absmiddle">](https://github.com/coolsnowwolf/lede) · [<img src="../docs/images/sources/openwrt.svg" alt="OpenWrt" align="absmiddle">](https://github.com/openwrt/openwrt) · [<img src="../docs/images/sources/istoreos.svg" alt="iStoreOS" align="absmiddle">](https://github.com/istoreos/istoreos) · [<img src="../docs/images/sources/lienol.svg" alt="Lienol" align="absmiddle">](https://github.com/Lienol/openwrt) · [<img src="../docs/images/sources/hanwckf.svg" alt="ImmortalWrt (hanwckf MT798x)" align="absmiddle">](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **Мова:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
 
@@ -22,7 +22,7 @@
 <summary><b>🔤 Інші мови</b></summary>
 
 <div dir="ltr">
-<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <strong>Українська</strong> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
+<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <strong>Українська</strong> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan (English)</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
 </div>
 
 </details>
@@ -30,7 +30,7 @@
 ## Попередній перегляд інтерфейсу
 
 <p align="center">
-  <img src="../docs/images/wrt-desktop.png" alt="Wei.G OpenWrt desktop" width="78.65%"><img src="../docs/images/wrt-mobile.png" alt="Wei.G OpenWrt mobile" width="21.30%">
+  <img src="../docs/images/wrt-desktop.png" alt="Wei.G OpenWrt на комп’ютері" width="78.65%"><img src="../docs/images/wrt-mobile.png" alt="Wei.G OpenWrt на телефоні" width="21.30%">
 </p>
 
 ## Початок роботи: три кроки до прошивки
@@ -39,18 +39,18 @@
 
 ### 1. Виберіть джерело, пристрій і пакунки
 
-Відкрийте [**【Онлайн-конфігуратор】**](https://www.weigshare.com/wrt/) і виберіть **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Позначте потрібні пакунки та налаштуйте **【Advanced menuconfig】**, часовий пояс і тему за потреби. Через **【Завантажити конфігурацію】** можна імпортувати `build-request.json`, `.config` або `config.buildinfo`. Перевірте вибір перед продовженням.
+Відкрийте [**【Онлайн-конфігуратор】**](https://www.weigshare.com/wrt/) і виберіть **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. У **【② Виберіть плагіни】** позначте потрібні функції та налаштуйте **【Advanced menuconfig】**, часовий пояс і тему за потреби. Через **【Завантажити конфігурацію】** можна імпортувати файл конфігурації `*.json`, `.config` або `config.buildinfo`. Перевірте вибір перед продовженням.
 
 ### 2. Надішліть запит на хмарне збирання через GitHub
 
-Спочатку [**【увійдіть у GitHub】**](https://github.com/login), потім поверніться до [**【Конфігуратора】**](https://www.weigshare.com/wrt/) й натисніть **【Надіслати хмарне збирання】** → **【Завантажити запит і відкрити GitHub】**. Завантажиться файл `*.json` та відкриється форма GitHub Issue. На комп’ютері перетягніть JSON у поле запиту й натисніть **【Submit new issue】**. Бот відповість посиланням на виконання.
+Спочатку [**【увійдіть у GitHub】**](https://github.com/login), потім поверніться до [**【Конфігуратора】**](https://www.weigshare.com/wrt/) й натисніть **【Почати збирання у хмарі】** → **【Завантажити конфігурацію та відкрити GitHub】**. Завантажиться файл `*.json` та відкриється форма GitHub Issue. На комп’ютері перетягніть щойно завантажений JSON у поле запиту й натисніть **【Submit new issue】**. Бот відповість посиланням на виконання.
 
 <details>
 <summary><strong>Важливі зауваження (розгорнути)</strong></summary>
 
-> Кнопка **【Тест】** на плавучій панелі праворуч унизу перевіряє налаштування та сумісність; під час створення запиту перевірка запускається автоматично.
+> Кнопка **【Перевірка】** на плавучій панелі праворуч унизу перевіряє налаштування та сумісність; **【Завантажити конфігурацію та відкрити GitHub】** також запускає перевірку автоматично.
 >
-> Якщо знайдено проблему, застосуйте виправлення або виберіть **【Зберегти й продовжити примусово】**. Це не усуває помилки у вихідному коді, тому збирання може не вдатися.
+> Якщо знайдено проблему, застосуйте виправлення або виберіть **【Зберегти та примусово продовжити】**. Це не усуває помилки у вихідному коді, тому збирання може не вдатися.
 >
 > Скористайтеся сторінкою GitHub Issue, яку відкрив конфігуратор, щоб не втратити заповнені дані.
 >
@@ -76,7 +76,7 @@
 <details>
 <summary>Чому тривале збирання зупиняється?</summary>
 
-Завдання Job на GitHub-hosted Runner зазвичай обмежене шістьма годинами. У проєкті ліміт становить **350 хвилин**, а виконання зупиняється через **335 хвилин**, щоб зібрати журнали. Це **зупинка, а не пауза з можливістю відновлення**.
+Завдання на машині, яку надає GitHub, зазвичай обмежене шістьма годинами. У проєкті ліміт становить **350 хвилин**, а виконання зупиняється через **335 хвилин**, щоб зібрати журнали. Це **зупинка, а не пауза з можливістю відновлення**. Великі залежності, наприклад Node.js і Rust, можуть подовжувати збирання.
 
 </details>
 
@@ -100,7 +100,7 @@
 
 ## Menuconfig Catalog
 
-[Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) публікує гілки джерел, профілі пристроїв, пакунки, залежності Kconfig і сумісність для сайту та системи збирання.
+[Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) публікує гілки джерел, профілі пристроїв, пакунки, залежності Kconfig і дані сумісності для сайту та системи збирання. Обидві частини використовують спільні дані; AutoBuild не веде другої бази пристроїв і пакунків.
 
 ## Подяки
 

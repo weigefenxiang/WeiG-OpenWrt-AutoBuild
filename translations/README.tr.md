@@ -1,4 +1,4 @@
-# Wei.G OpenWrt — çevrimiçi özel yazılım derleme
+# Wei.G OpenWrt — aygıt yazılımını çevrimiçi özelleştirin
 
 Aygıtınızı ve paketleri tarayıcıda seçin, isteği GitHub üzerinden gönderin; OpenWrt aygıt yazılımı bulutta derlensin.
 
@@ -14,7 +14,7 @@ Aygıtınızı ve paketleri tarayıcıda seçin, isteği GitHub üzerinden gönd
 
 **[🌐 Özelleştiriciyi aç](https://www.weigshare.com/wrt/) · [⬇️ Aygıt yazılımını indir](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
-**Desteklenen dağıtımlar:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+**Desteklenen dağıtımlar:** [<img src="../docs/images/sources/immortalwrt.svg" alt="ImmortalWrt" align="absmiddle">](https://github.com/immortalwrt/immortalwrt) · [<img src="../docs/images/sources/lede.svg" alt="Lean LEDE" align="absmiddle">](https://github.com/coolsnowwolf/lede) · [<img src="../docs/images/sources/openwrt.svg" alt="OpenWrt" align="absmiddle">](https://github.com/openwrt/openwrt) · [<img src="../docs/images/sources/istoreos.svg" alt="iStoreOS" align="absmiddle">](https://github.com/istoreos/istoreos) · [<img src="../docs/images/sources/lienol.svg" alt="Lienol" align="absmiddle">](https://github.com/Lienol/openwrt) · [<img src="../docs/images/sources/hanwckf.svg" alt="ImmortalWrt (hanwckf MT798x)" align="absmiddle">](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **Dil:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
 
@@ -22,7 +22,7 @@ Aygıtınızı ve paketleri tarayıcıda seçin, isteği GitHub üzerinden gönd
 <summary><b>🔤 Diğer diller</b></summary>
 
 <div dir="ltr">
-<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <strong>Türkçe</strong> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
+<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <strong>Türkçe</strong> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan (English)</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
 </div>
 
 </details>
@@ -39,11 +39,11 @@ Aygıtınızı ve paketleri tarayıcıda seçin, isteği GitHub üzerinden gönd
 
 ### 1. Kaynağı, aygıtı ve paketleri seçin
 
-[**【Çevrimiçi özelleştiriciyi】**](https://www.weigshare.com/wrt/) açın. Sırasıyla **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】** seçeneklerini belirleyin. Gerekli paketleri seçip **【Advanced menuconfig】**, saat dilimi ve tema ayarlarını düzenleyin. Önceden kaydettiğiniz `build-request.json`, `.config` veya `config.buildinfo` dosyasını **【Yapılandırma yükle】** ile içe aktarabilir, ardından seçimlerinizi denetleyebilirsiniz.
+[**【Çevrimiçi özelleştiriciyi】**](https://www.weigshare.com/wrt/) açın. Sırasıyla **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】** seçeneklerini belirleyin. Gerekli paketleri seçip **【Advanced menuconfig】**, saat dilimi ve tema ayarlarını düzenleyin. Önceden kaydettiğiniz `*.json`, `.config` veya `config.buildinfo` yapılandırma dosyasını **【Yapılandırma yükle】** ile içe aktarabilir, ardından seçimlerinizi denetleyebilirsiniz.
 
 ### 2. GitHub üzerinden bulut derlemesi isteyin
 
-Önce [**【GitHub hesabınızda oturum açın】**](https://github.com/login). [**【Özelleştiriciye】**](https://www.weigshare.com/wrt/) dönün ve **【Bulut derlemesi gönder】** → **【İsteği indir ve GitHub’ı aç】** seçeneklerini tıklayın. `*.json` dosyası indirilir ve GitHub Issue formu açılır. Bilgisayarda JSON dosyasını istek alanına sürükleyip **【Submit new issue】** düğmesine basın. Bot, derleme bağlantısıyla yanıt verir.
+Önce [**【GitHub hesabınızda oturum açın】**](https://github.com/login). [**【Özelleştiriciye】**](https://www.weigshare.com/wrt/) dönün ve **【Bulut derlemesi gönder】** → **【Yapılandırmayı indir ve GitHub'ı aç】** seçeneklerini tıklayın. `*.json` yapılandırma dosyası indirilir ve GitHub Issue formu açılır. Yeni indirdiğiniz JSON dosyasını istek alanına yükleyin; bilgisayarda dosyayı doğrudan bu alana sürükleyebilirsiniz. Ardından **【Submit new issue】** düğmesine basın. Bot, derleme bağlantısıyla yanıt verir.
 
 <details>
 <summary><strong>Önemli notlar (açmak için tıklayın)</strong></summary>
@@ -62,7 +62,7 @@ Aygıtınızı ve paketleri tarayıcıda seçin, isteği GitHub üzerinden gönd
 
 ### 3. Aygıt yazılımını indirin
 
-Issue içindeki bağlantıyı açın veya [**【Actions → Firmware Download】**](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml) üzerinden derlemeyi bulun. İşlem tamamlanınca sayfanın altındaki **【Artifacts】** bölümünden aygıt yazılımını indirin. `CONFIG` yapılandırma, `BUILD-LOGS` tanılama günlükleridir; **ikisi de cihaza yazılacak firmware görüntüsü değildir**. Dosyalar **60 gün** saklanır.
+Issue içindeki bağlantıyı açın veya [**【Actions → Firmware Download】**](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml) üzerinden derlemeyi bulun. İşlem tamamlanınca sayfanın altındaki **【Artifacts】** bölümünden aygıt yazılımını indirin. `CONFIG` yapılandırma, `BUILD-LOGS` tanılama günlükleridir; **ikisi de aygıta yüklenecek aygıt yazılımı görüntüsü değildir**. Dosyalar **60 gün** saklanır.
 
 ## Sık sorulan sorular
 

@@ -14,7 +14,7 @@ Brauzerdə cihazı və paketləri seçin, GitHub üzərindən sorğu göndərin,
 
 **[🌐 Konfiquratoru aç](https://www.weigshare.com/wrt/) · [⬇️ Firmware-i endir](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
-**Dəstəklənən sistemlər:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+**Dəstəklənən sistemlər:** [<img src="../docs/images/sources/immortalwrt.svg" alt="ImmortalWrt" align="absmiddle">](https://github.com/immortalwrt/immortalwrt) · [<img src="../docs/images/sources/lede.svg" alt="Lean LEDE" align="absmiddle">](https://github.com/coolsnowwolf/lede) · [<img src="../docs/images/sources/openwrt.svg" alt="OpenWrt" align="absmiddle">](https://github.com/openwrt/openwrt) · [<img src="../docs/images/sources/istoreos.svg" alt="iStoreOS" align="absmiddle">](https://github.com/istoreos/istoreos) · [<img src="../docs/images/sources/lienol.svg" alt="Lienol" align="absmiddle">](https://github.com/Lienol/openwrt) · [<img src="../docs/images/sources/hanwckf.svg" alt="ImmortalWrt (hanwckf MT798x)" align="absmiddle">](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **Dil:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
 
@@ -22,7 +22,7 @@ Brauzerdə cihazı və paketləri seçin, GitHub üzərindən sorğu göndərin,
 <summary><b>🔤 Digər dillər</b></summary>
 
 <div dir="ltr">
-<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <strong>Azərbaycanca</strong> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
+<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <strong>Azərbaycanca</strong> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <a href="README.cs.md">Čeština</a> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan (English)</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
 </div>
 
 </details>
@@ -39,11 +39,11 @@ Brauzerdə cihazı və paketləri seçin, GitHub üzərindən sorğu göndərin,
 
 ### 1. Mənbəni, cihazı və paketləri seçin
 
-[**【Onlayn konfiquratoru】**](https://www.weigshare.com/wrt/) açın və **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】** seçin. Lazım olan paketləri qeyd edin, sonra istəsəniz **【Advanced menuconfig】**, saat qurşağı və mövzunu dəyişin. Mövcud parametrləri **【Konfiqurasiyanı yüklə】** ilə `build-request.json`, `.config` və ya `config.buildinfo` faylından idxal edə bilərsiniz. Davam etməzdən əvvəl yoxlayın.
+[**【Onlayn konfiquratoru】**](https://www.weigshare.com/wrt/) açın və **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】** seçin. Lazım olan paketləri qeyd edin, sonra istəsəniz **【Advanced menuconfig】**, saat qurşağı və mövzunu dəyişin. Mövcud parametrləri **【Konfiqurasiyanı yüklə】** ilə `*.json`, `.config` və ya `config.buildinfo` konfiqurasiya faylından idxal edə bilərsiniz. Davam etməzdən əvvəl yoxlayın.
 
 ### 2. GitHub vasitəsilə bulud yığımı göndərin
 
-Əvvəlcə [**【GitHub hesabınıza daxil olun】**](https://github.com/login), sonra [**【Konfiquratora】**](https://www.weigshare.com/wrt/) qayıdın. **【Bulud yığımını göndər】** → **【Sorğunu endir və GitHub-u aç】** düymələrini seçin. Brauzer `*.json` yükləyib GitHub Issue formasını açacaq. Kompüterdə JSON faylını sorğu sahəsinə sürüşdürün və **【Submit new issue】** düyməsinə basın. Bot yığımın keçidini cavab olaraq verəcək.
+Əvvəlcə [**【GitHub hesabınıza daxil olun】**](https://github.com/login), sonra [**【Konfiquratora】**](https://www.weigshare.com/wrt/) qayıdın. **【Bulud yığımına göndər】** → **【Konfiqurasiyanı endir və GitHub-ı aç】** düymələrini seçin. Brauzer `*.json` konfiqurasiya faylını endirib GitHub Issue formasını açacaq. Yeni endirdiyiniz JSON faylını sorğu sahəsinə əlavə edin; kompüterdə faylı birbaşa həmin sahəyə sürüşdürə bilərsiniz. Sonra **【Submit new issue】** düyməsinə basın. Bot yığımın keçidini cavab olaraq verəcək.
 
 <details>
 <summary><strong>Vacib qeydlər (aç)</strong></summary>
@@ -76,7 +76,7 @@ Paketlər və asılılıqlar RootFS bölməsindən böyük ola bilər. Cihaz də
 <details>
 <summary>Uzun yığım niyə dayanır?</summary>
 
-GitHub-hosted Runner-də bir Job üçün adətən altı saat limit var. Bu layihədə limit **350 dəqiqə**, icra müddəti isə loqlar üçün **335 dəqiqədir**. Yığım **dayanır, sonra bərpa etmək üçün fasiləyə qoyulmur**.
+GitHub-hosted Runner-də bir Job üçün adətən altı saat limit var. Bu layihədə limit **350 dəqiqə**, icra müddəti isə loqlar üçün **335 dəqiqədir**. Yığım **dayanır, sonra bərpa etmək üçün fasiləyə qoyulmur**. Node.js və Rust kimi böyük asılılıqlar yığım müddətini artıra bilər.
 
 </details>
 
@@ -100,7 +100,7 @@ Saytdan istifadə üçün repozitoriyanı klonlamaq və Node.js quraşdırmaq la
 
 ## Menuconfig Catalog
 
-[Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) mənbə budaqları, cihaz profilləri, paketlər, Kconfig asılılıqları və uyğunluq məlumatlarını dərc edir.
+[Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) mənbə budaqları, cihaz profilləri, paketlər, Kconfig asılılıqları və uyğunluq məlumatlarını dərc edir. Sayt və bulud yığımı eyni məlumatları istifadə edir; AutoBuild ayrıca ikinci cihaz və paket bazası saxlamır.
 
 ## Təşəkkürlər
 

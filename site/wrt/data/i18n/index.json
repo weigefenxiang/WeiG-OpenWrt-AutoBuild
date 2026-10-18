@@ -1,335 +1,577 @@
 {
- "version": 2,
- "fallback": "en",
- "source": "en",
- "languages": [
-  {
-   "id": "en",
-   "name": "English",
-   "native": "English"
-  },
-  {
-   "id": "zh-CN",
-   "name": "Chinese (Simplified)",
-   "native": "简体中文"
-  },
-  {
-   "id": "zh-TW",
-   "name": "Chinese (Traditional)",
-   "native": "繁體中文"
-  },
-  {
-   "id": "ru",
-   "name": "Russian",
-   "native": "Русский"
-  },
-  {
-   "id": "es",
-   "name": "Spanish",
-   "native": "Español"
-  },
-  {
-   "id": "pt",
-   "name": "Portuguese",
-   "native": "Português"
-  },
-  {
-   "id": "ja",
-   "name": "Japanese",
-   "native": "日本語"
-  },
-  {
-   "id": "ko",
-   "name": "Korean",
-   "native": "한국어"
-  },
-  {
-   "id": "de",
-   "name": "German",
-   "native": "Deutsch"
-  },
-  {
-   "id": "fr",
-   "name": "French",
-   "native": "Français"
-  },
-  {
-   "id": "vi",
-   "name": "Vietnamese",
-   "native": "Tiếng Việt"
-  },
-  {
-   "id": "ar",
-   "name": "Arabic",
-   "native": "العربية",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "ast",
-   "name": "Asturian",
-   "native": "Asturianu",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "az",
-   "name": "Azerbaijani",
-   "native": "Azərbaycan dili",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "be",
-   "name": "Belarusian",
-   "native": "Беларуская",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "bg",
-   "name": "Bulgarian",
-   "native": "Български",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "bn",
-   "name": "Bangla",
-   "native": "বাংলা",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "bn-BD",
-   "name": "Bangla (Bangladesh)",
-   "native": "বাংলা (বাংলাদেশ)",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "ca",
-   "name": "Catalan",
-   "native": "Català",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "cs",
-   "name": "Czech",
-   "native": "Čeština",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "da",
-   "name": "Danish",
-   "native": "Dansk",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "el",
-   "name": "Greek",
-   "native": "Ελληνικά",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "fa",
-   "name": "Persian",
-   "native": "فارسی",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "fi",
-   "name": "Finnish",
-   "native": "Suomi",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "fil",
-   "name": "Filipino",
-   "native": "Filipino",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "ga",
-   "name": "Irish",
-   "native": "Gaeilge",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "he",
-   "name": "Hebrew",
-   "native": "עברית",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "hi",
-   "name": "Hindi",
-   "native": "हिन्दी",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "hu",
-   "name": "Hungarian",
-   "native": "Magyar",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "id",
-   "name": "Indonesian",
-   "native": "Bahasa Indonesia",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "it",
-   "name": "Italian",
-   "native": "Italiano",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "ka",
-   "name": "Georgian",
-   "native": "ქართული",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "lo",
-   "name": "Lao",
-   "native": "ລາວ",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "lt",
-   "name": "Lithuanian",
-   "native": "Lietuvių",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "lv",
-   "name": "Latvian",
-   "native": "Latviešu",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "ml",
-   "name": "Malayalam",
-   "native": "മലയാളം",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "mr",
-   "name": "Marathi",
-   "native": "मराठी",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "ms",
-   "name": "Malay",
-   "native": "Bahasa Melayu",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "nb-NO",
-   "name": "Norwegian Bokmål (Norway)",
-   "native": "Norsk bokmål",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "nl",
-   "name": "Dutch",
-   "native": "Nederlands",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "pl",
-   "name": "Polish",
-   "native": "Polski",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "pt-BR",
-   "name": "Brazilian Portuguese",
-   "native": "Português (Brasil)",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "ro",
-   "name": "Romanian",
-   "native": "Română",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "sk",
-   "name": "Slovak",
-   "native": "Slovenčina",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "sv",
-   "name": "Swedish",
-   "native": "Svenska",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "ta",
-   "name": "Tamil",
-   "native": "தமிழ்",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "tr",
-   "name": "Turkish",
-   "native": "Türkçe",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "uk",
-   "name": "Ukrainian",
-   "native": "Українська",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "ur",
-   "name": "Urdu",
-   "native": "اردو",
-   "pending": true,
-   "bundle": "en"
-  },
-  {
-   "id": "yua",
-   "name": "yua",
-   "native": "Maaya t'aan",
-   "pending": true,
-   "bundle": "en"
-  }
- ]
+  "version": 3,
+  "source": "en",
+  "reference": "zh-CN",
+  "fallback": "en",
+  "stringCount": 625,
+  "languages": [
+    {
+      "id": "en",
+      "name": "English",
+      "native": "English",
+      "common": true,
+      "dir": "ltr",
+      "file": "en.json.gz",
+      "bytes": 16123,
+      "decodedBytes": 45555,
+      "sha256": "cdb2278e395f932a8ce23d49fa60b78af873cffccf20a773db5a5ab58517affc"
+    },
+    {
+      "id": "zh-CN",
+      "name": "Chinese (Simplified)",
+      "native": "简体中文",
+      "common": true,
+      "dir": "ltr",
+      "aliases": [
+        "zh",
+        "zh-Hans",
+        "zh-SG",
+        "zh-MY"
+      ],
+      "file": "zh-CN.json.gz",
+      "bytes": 17148,
+      "decodedBytes": 41884,
+      "sha256": "08e6b5b7772dfaaad204f1a28d278c21f568daca3dee1416beb545bebadcb2a4"
+    },
+    {
+      "id": "zh-TW",
+      "name": "Chinese (Traditional)",
+      "native": "繁體中文",
+      "common": true,
+      "dir": "ltr",
+      "aliases": [
+        "zh-Hant",
+        "zh-HK",
+        "zh-MO"
+      ],
+      "file": "zh-TW.json.gz",
+      "bytes": 17632,
+      "decodedBytes": 43001,
+      "sha256": "e7a6f6a7275f9a06eb1558a6bb4d8723c741ce86b8df57b60149c9588ebb0d46"
+    },
+    {
+      "id": "ru",
+      "name": "Russian",
+      "native": "Русский",
+      "common": true,
+      "dir": "ltr",
+      "file": "ru.json.gz",
+      "bytes": 20206,
+      "decodedBytes": 72626,
+      "sha256": "834ab86c21a55c026accc4d85298c4fd4361a9cfbe6db1a25e7379406584d598"
+    },
+    {
+      "id": "es",
+      "name": "Spanish",
+      "native": "Español",
+      "common": true,
+      "dir": "ltr",
+      "file": "es.json.gz",
+      "bytes": 17579,
+      "decodedBytes": 51178,
+      "sha256": "04b963b8036219605df11b13c4778ad8a3ac6fb688cf30cd8d2377d1068e94b1"
+    },
+    {
+      "id": "pt",
+      "name": "Portuguese",
+      "native": "Português",
+      "common": true,
+      "dir": "ltr",
+      "file": "pt.json.gz",
+      "bytes": 17463,
+      "decodedBytes": 51729,
+      "sha256": "a1260998823469947208dcc8ce7c66c1f822c5e75783c8f067d1b8194f281d21"
+    },
+    {
+      "id": "ja",
+      "name": "Japanese",
+      "native": "日本語",
+      "common": true,
+      "dir": "ltr",
+      "file": "ja.json.gz",
+      "bytes": 18812,
+      "decodedBytes": 57535,
+      "sha256": "447864df09de1fa1543edb77c956eab15dfa9267b867bb04a3881cdf1566ca7f"
+    },
+    {
+      "id": "ko",
+      "name": "Korean",
+      "native": "한국어",
+      "common": true,
+      "dir": "ltr",
+      "file": "ko.json.gz",
+      "bytes": 18068,
+      "decodedBytes": 53643,
+      "sha256": "038f3040e4cc648bb94862ca02017cc9870656f814f313b00a1daf439a324e95"
+    },
+    {
+      "id": "de",
+      "name": "German",
+      "native": "Deutsch",
+      "common": true,
+      "dir": "ltr",
+      "file": "de.json.gz",
+      "bytes": 18147,
+      "decodedBytes": 51150,
+      "sha256": "90710530a288903bcf36e3701591c17dc0d27392f51e4b7fea4e4c06d67c9219"
+    },
+    {
+      "id": "fr",
+      "name": "French",
+      "native": "Français",
+      "common": true,
+      "dir": "ltr",
+      "file": "fr.json.gz",
+      "bytes": 17859,
+      "decodedBytes": 52924,
+      "sha256": "86a329fc51eeaad98dd38f7ddcab643512a0c855a043e13b507b4b34ea1a116f"
+    },
+    {
+      "id": "vi",
+      "name": "Vietnamese",
+      "native": "Tiếng Việt",
+      "common": true,
+      "dir": "ltr",
+      "file": "vi.json.gz",
+      "bytes": 17374,
+      "decodedBytes": 54572,
+      "sha256": "fc0275133869a86940e500bca4acd8892391f201a451a25bfea15b5ec2dc6fc6"
+    },
+    {
+      "id": "ar",
+      "name": "Arabic",
+      "native": "العربية",
+      "common": false,
+      "dir": "rtl",
+      "file": "ar.json.gz",
+      "bytes": 18267,
+      "decodedBytes": 60320,
+      "sha256": "253891149ea47c9f3c1c62e3b04cceedb47d8a5a82807580a4d36a2eb4aa6ed8"
+    },
+    {
+      "id": "ast",
+      "name": "Asturian",
+      "native": "Asturianu",
+      "common": false,
+      "dir": "ltr",
+      "file": "ast.json.gz",
+      "bytes": 17676,
+      "decodedBytes": 51394,
+      "sha256": "010df33091b7bf064ceadf52ee90e6c0368ec2bc89060994f191122c3ff38288"
+    },
+    {
+      "id": "az",
+      "name": "Azerbaijani",
+      "native": "Azərbaycan dili",
+      "common": false,
+      "dir": "ltr",
+      "file": "az.json.gz",
+      "bytes": 17454,
+      "decodedBytes": 51433,
+      "sha256": "332d63403c01052335232267d29f91c6b978509fcb89848eabdf2a286fdc777b"
+    },
+    {
+      "id": "be",
+      "name": "Belarusian",
+      "native": "Беларуская",
+      "common": false,
+      "dir": "ltr",
+      "file": "be.json.gz",
+      "bytes": 19956,
+      "decodedBytes": 72123,
+      "sha256": "687243daf28fb9ae234b251a6bade18c663bf7f59c37a00d76050b1e65d105d0"
+    },
+    {
+      "id": "bg",
+      "name": "Bulgarian",
+      "native": "Български",
+      "common": false,
+      "dir": "ltr",
+      "file": "bg.json.gz",
+      "bytes": 19755,
+      "decodedBytes": 74115,
+      "sha256": "512ab9fed51497ab68b51867049c557066247c687abe6930ca96197889d6d7c3"
+    },
+    {
+      "id": "bn",
+      "name": "Bengali",
+      "native": "বাংলা",
+      "common": false,
+      "dir": "ltr",
+      "file": "bn.json.gz",
+      "bytes": 18291,
+      "decodedBytes": 83104,
+      "sha256": "cf1ef87973fec03d0459db7b97b4a8e400bd8179e136a055b38a04a53e8add6f"
+    },
+    {
+      "id": "bn-BD",
+      "name": "Bengali (Bangladesh)",
+      "native": "বাংলা (বাংলাদেশ)",
+      "common": false,
+      "dir": "ltr",
+      "file": "bn-BD.json.gz",
+      "bytes": 18308,
+      "decodedBytes": 83310,
+      "sha256": "8e0a0a6b224ab42cfd2dd88cd324f78ab0a585282771aed98ef3293b564133cc"
+    },
+    {
+      "id": "ca",
+      "name": "Catalan",
+      "native": "Català",
+      "common": false,
+      "dir": "ltr",
+      "file": "ca.json.gz",
+      "bytes": 17534,
+      "decodedBytes": 51850,
+      "sha256": "297cfefc01c172fe65bd0f5034bc25c36ccb6e14aae69b8e6f90e181dbe12219"
+    },
+    {
+      "id": "cs",
+      "name": "Czech",
+      "native": "Čeština",
+      "common": false,
+      "dir": "ltr",
+      "file": "cs.json.gz",
+      "bytes": 17773,
+      "decodedBytes": 49124,
+      "sha256": "5084ec6aef2baadbc1a9231ea08a8f02f8d0b05c1cb35a1017ce8843c24a99ea"
+    },
+    {
+      "id": "da",
+      "name": "Danish",
+      "native": "Dansk",
+      "common": false,
+      "dir": "ltr",
+      "file": "da.json.gz",
+      "bytes": 16823,
+      "decodedBytes": 46620,
+      "sha256": "9b5bcef3fa3ea7f3143410456fe84d12f368f8e3dd82324f19bae67b8c163efc"
+    },
+    {
+      "id": "el",
+      "name": "Greek",
+      "native": "Ελληνικά",
+      "common": false,
+      "dir": "ltr",
+      "file": "el.json.gz",
+      "bytes": 20319,
+      "decodedBytes": 73004,
+      "sha256": "15242ffbf85d374eb08902f7a19b470a7250287c1318fa43034ab3072c3ac0f2"
+    },
+    {
+      "id": "fa",
+      "name": "Persian",
+      "native": "فارسی",
+      "common": false,
+      "dir": "rtl",
+      "file": "fa.json.gz",
+      "bytes": 18172,
+      "decodedBytes": 63693,
+      "sha256": "d1b3dafd58b8d5837685c9b14430bbcb66757360c8e418205fcf831eadf9a3d0"
+    },
+    {
+      "id": "fi",
+      "name": "Finnish",
+      "native": "Suomi",
+      "common": false,
+      "dir": "ltr",
+      "file": "fi.json.gz",
+      "bytes": 17414,
+      "decodedBytes": 48983,
+      "sha256": "89365dfd881879ea16132ce1f3cea72bf48c12130cab0e0155926acc508ec99f"
+    },
+    {
+      "id": "fil",
+      "name": "Filipino",
+      "native": "Filipino",
+      "common": false,
+      "dir": "ltr",
+      "file": "fil.json.gz",
+      "bytes": 16875,
+      "decodedBytes": 51920,
+      "sha256": "fa38bb3450cb30fda5a29fd58216f27f26b14143676b1291ddc428e760ff2a09"
+    },
+    {
+      "id": "ga",
+      "name": "Irish",
+      "native": "Gaeilge",
+      "common": false,
+      "dir": "ltr",
+      "file": "ga.json.gz",
+      "bytes": 17980,
+      "decodedBytes": 53143,
+      "sha256": "4fdc378b8d96227c732ce3dc26d431b9dc3757fe96563ff7b13bf48f3e019107"
+    },
+    {
+      "id": "he",
+      "name": "Hebrew",
+      "native": "עברית",
+      "common": false,
+      "dir": "rtl",
+      "aliases": [
+        "iw"
+      ],
+      "file": "he.json.gz",
+      "bytes": 17569,
+      "decodedBytes": 55889,
+      "sha256": "5d42f24425dee7e736d930725ea590d8ba8019ab150134523755c40d400c0be0"
+    },
+    {
+      "id": "hi",
+      "name": "Hindi",
+      "native": "हिन्दी",
+      "common": false,
+      "dir": "ltr",
+      "file": "hi.json.gz",
+      "bytes": 18760,
+      "decodedBytes": 81824,
+      "sha256": "df05ce74738681eef3b7f211c0acdec2819d1ae72c5684fc94090826a6b6dc65"
+    },
+    {
+      "id": "hu",
+      "name": "Hungarian",
+      "native": "Magyar",
+      "common": false,
+      "dir": "ltr",
+      "file": "hu.json.gz",
+      "bytes": 17975,
+      "decodedBytes": 52131,
+      "sha256": "27c117a680259ab0630bf08af415041532aa89a7784a542221ecdff33c4e37af"
+    },
+    {
+      "id": "id",
+      "name": "Indonesian",
+      "native": "Bahasa Indonesia",
+      "common": false,
+      "dir": "ltr",
+      "aliases": [
+        "in"
+      ],
+      "file": "id.json.gz",
+      "bytes": 16303,
+      "decodedBytes": 47889,
+      "sha256": "96af7eaf588d99228646661e4d6e7bb5bc1d1cb0f4e5f02d7b2237cd8198f4ed"
+    },
+    {
+      "id": "it",
+      "name": "Italian",
+      "native": "Italiano",
+      "common": false,
+      "dir": "ltr",
+      "file": "it.json.gz",
+      "bytes": 17180,
+      "decodedBytes": 50836,
+      "sha256": "07dfafd55c23d83daee0008c8453a17fa033d19b5731d46dcc39a03f322152c3"
+    },
+    {
+      "id": "ka",
+      "name": "Georgian",
+      "native": "ქართული",
+      "common": false,
+      "dir": "ltr",
+      "file": "ka.json.gz",
+      "bytes": 19636,
+      "decodedBytes": 96532,
+      "sha256": "73b70d4b6419b5d2d6db41913cac9012e3e84149495a7da135e0e3f27aea1954"
+    },
+    {
+      "id": "lo",
+      "name": "Lao",
+      "native": "ລາວ",
+      "common": false,
+      "dir": "ltr",
+      "file": "lo.json.gz",
+      "bytes": 17794,
+      "decodedBytes": 78504,
+      "sha256": "2e958eed78c9e730084deb85a589d2e3e8b7485a704c6158eb2033e9e27e3e80"
+    },
+    {
+      "id": "lt",
+      "name": "Lithuanian",
+      "native": "Lietuvių",
+      "common": false,
+      "dir": "ltr",
+      "file": "lt.json.gz",
+      "bytes": 17623,
+      "decodedBytes": 50574,
+      "sha256": "397029c5486d3525b4541b1477900e8fc190fa8f35e2a1241f2013b7a7e7121d"
+    },
+    {
+      "id": "lv",
+      "name": "Latvian",
+      "native": "Latviešu",
+      "common": false,
+      "dir": "ltr",
+      "file": "lv.json.gz",
+      "bytes": 17524,
+      "decodedBytes": 50977,
+      "sha256": "df0b2850912acc1e7c306b980e0e415a53cb093062ea28d5332107ed3ec12b70"
+    },
+    {
+      "id": "ml",
+      "name": "Malayalam",
+      "native": "മലയാളം",
+      "common": false,
+      "dir": "ltr",
+      "file": "ml.json.gz",
+      "bytes": 19462,
+      "decodedBytes": 97299,
+      "sha256": "6eb0b1afffeb956b3305fdd0bc488370fa7ef656fe224042cb1abb0cbbb50f2b"
+    },
+    {
+      "id": "mr",
+      "name": "Marathi",
+      "native": "मराठी",
+      "common": false,
+      "dir": "ltr",
+      "file": "mr.json.gz",
+      "bytes": 18865,
+      "decodedBytes": 83223,
+      "sha256": "c8037a0c575fb7d592554cc02cbc6c91b0e029eeea33e7e1111d0c9c48eed279"
+    },
+    {
+      "id": "ms",
+      "name": "Malay",
+      "native": "Bahasa Melayu",
+      "common": false,
+      "dir": "ltr",
+      "file": "ms.json.gz",
+      "bytes": 16365,
+      "decodedBytes": 48555,
+      "sha256": "8c2c6220eaf36eb44425ff905944c6727cc4822056d815766e9403ce1fdd5c43"
+    },
+    {
+      "id": "nb-NO",
+      "name": "Norwegian Bokmål",
+      "native": "Norsk bokmål",
+      "common": false,
+      "dir": "ltr",
+      "aliases": [
+        "nb",
+        "no"
+      ],
+      "file": "nb-NO.json.gz",
+      "bytes": 16935,
+      "decodedBytes": 47438,
+      "sha256": "eebcde22e4616e80fc47597030d2d614b74489eb0a30377025a5806cffe5e12b"
+    },
+    {
+      "id": "nl",
+      "name": "Dutch",
+      "native": "Nederlands",
+      "common": false,
+      "dir": "ltr",
+      "file": "nl.json.gz",
+      "bytes": 17322,
+      "decodedBytes": 49771,
+      "sha256": "92fe125af0a2f0048556dc00d125ae8b88c19393380aa429e4715b7bfd9444e7"
+    },
+    {
+      "id": "pl",
+      "name": "Polish",
+      "native": "Polski",
+      "common": false,
+      "dir": "ltr",
+      "file": "pl.json.gz",
+      "bytes": 17895,
+      "decodedBytes": 49800,
+      "sha256": "682c05caaff2430e5b5ab8b56df5e81f1fd649ce3b4ca8237aadc2528c9db65c"
+    },
+    {
+      "id": "pt-BR",
+      "name": "Portuguese (Brazil)",
+      "native": "Português (Brasil)",
+      "common": false,
+      "dir": "ltr",
+      "file": "pt-BR.json.gz",
+      "bytes": 17428,
+      "decodedBytes": 51203,
+      "sha256": "84723a93711373b7512db91608e84a05c7f95397ddce77117e117d84c1224d79"
+    },
+    {
+      "id": "ro",
+      "name": "Romanian",
+      "native": "Română",
+      "common": false,
+      "dir": "ltr",
+      "file": "ro.json.gz",
+      "bytes": 17501,
+      "decodedBytes": 50687,
+      "sha256": "289b5eb13c8d1901fc15511de1db52091233f35fce6177f0d987ac8d20d5300f"
+    },
+    {
+      "id": "sk",
+      "name": "Slovak",
+      "native": "Slovenčina",
+      "common": false,
+      "dir": "ltr",
+      "file": "sk.json.gz",
+      "bytes": 17843,
+      "decodedBytes": 49271,
+      "sha256": "9fa4523b69d78937730eda49847331e7f2a65580e64d8fe335891481ebe2c6b0"
+    },
+    {
+      "id": "sv",
+      "name": "Swedish",
+      "native": "Svenska",
+      "common": false,
+      "dir": "ltr",
+      "file": "sv.json.gz",
+      "bytes": 16872,
+      "decodedBytes": 46878,
+      "sha256": "72548e69132818ffc30ff7df8f0b2cc4ed8b34b8fe43fea223670462a5975adc"
+    },
+    {
+      "id": "ta",
+      "name": "Tamil",
+      "native": "தமிழ்",
+      "common": false,
+      "dir": "ltr",
+      "file": "ta.json.gz",
+      "bytes": 19257,
+      "decodedBytes": 101695,
+      "sha256": "c98acdd1d3ba54bcac996c77f9ed609407c065e2dddd10364d4fbb2cb562513a"
+    },
+    {
+      "id": "tr",
+      "name": "Turkish",
+      "native": "Türkçe",
+      "common": false,
+      "dir": "ltr",
+      "file": "tr.json.gz",
+      "bytes": 17247,
+      "decodedBytes": 50093,
+      "sha256": "43bc76da0a2355a49460ae6253f835044f62f59b1fceab3670cd23682e572f18"
+    },
+    {
+      "id": "uk",
+      "name": "Ukrainian",
+      "native": "Українська",
+      "common": false,
+      "dir": "ltr",
+      "file": "uk.json.gz",
+      "bytes": 19933,
+      "decodedBytes": 72037,
+      "sha256": "b5af8f3e0a1cdd3e71015e152aea84c7ebaaaec386676c94a9e2708ac05a031d"
+    },
+    {
+      "id": "ur",
+      "name": "Urdu",
+      "native": "اردو",
+      "common": false,
+      "dir": "rtl",
+      "file": "ur.json.gz",
+      "bytes": 18184,
+      "decodedBytes": 63190,
+      "sha256": "db1fbf7eb530b9ad341f4bb427547e9e3ec57704747b60855c3608767f78339a"
+    },
+    {
+      "id": "yua",
+      "name": "Yucatec Maya",
+      "native": "Màaya t'aan",
+      "common": false,
+      "dir": "ltr",
+      "fallbackTo": "en"
+    }
+  ]
 }

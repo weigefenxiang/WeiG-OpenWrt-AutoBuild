@@ -14,7 +14,7 @@ V prohlížeči vyberte zařízení a balíčky, odešlete požadavek přes GitH
 
 **[🌐 Otevřít konfigurátor](https://www.weigshare.com/wrt/) · [⬇️ Stáhnout firmware](https://github.com/weigefenxiang/WeiG-OpenWrt-AutoBuild/actions/workflows/custom-build.yml)**
 
-**Podporované systémy:** [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) · [Lean LEDE](https://github.com/coolsnowwolf/lede) · [OpenWrt](https://github.com/openwrt/openwrt) · [iStoreOS](https://github.com/istoreos/istoreos) · [Lienol](https://github.com/Lienol/openwrt) · [ImmortalWrt (hanwckf MT798x)](https://github.com/hanwckf/immortalwrt-mt798x)
+**Podporované systémy:** [<img src="../docs/images/sources/immortalwrt.svg" alt="ImmortalWrt" align="absmiddle">](https://github.com/immortalwrt/immortalwrt) · [<img src="../docs/images/sources/lede.svg" alt="Lean LEDE" align="absmiddle">](https://github.com/coolsnowwolf/lede) · [<img src="../docs/images/sources/openwrt.svg" alt="OpenWrt" align="absmiddle">](https://github.com/openwrt/openwrt) · [<img src="../docs/images/sources/istoreos.svg" alt="iStoreOS" align="absmiddle">](https://github.com/istoreos/istoreos) · [<img src="../docs/images/sources/lienol.svg" alt="Lienol" align="absmiddle">](https://github.com/Lienol/openwrt) · [<img src="../docs/images/sources/hanwckf.svg" alt="ImmortalWrt (hanwckf MT798x)" align="absmiddle">](https://github.com/hanwckf/immortalwrt-mt798x)
 
 **Jazyk:** [English](../README.md) · [简中](README.zh-CN.md) · [繁中](README.zh-TW.md) · [Русский](README.ru.md) · [Español](README.es.md) · [Português](README.pt.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Tiếng Việt](README.vi.md)
 
@@ -22,7 +22,7 @@ V prohlížeči vyberte zařízení a balíčky, odešlete požadavek přes GitH
 <summary><b>🔤 Další jazyky</b></summary>
 
 <div dir="ltr">
-<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <strong>Čeština</strong> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
+<a href="README.ast.md">Asturianu</a> &lrm;·&lrm; <a href="README.az.md">Azərbaycanca</a> &lrm;·&lrm; <a href="README.be.md">Беларуская</a> &lrm;·&lrm; <a href="README.bg.md">Български</a> &lrm;·&lrm; <a href="README.bn.md">বাংলা</a> &lrm;·&lrm; <a href="README.bn-BD.md">বাংলা (বাংলাদেশ)</a> &lrm;·&lrm; <a href="README.ca.md">Català</a> &lrm;·&lrm; <strong>Čeština</strong> &lrm;·&lrm; <a href="README.da.md">Dansk</a> &lrm;·&lrm; <a href="README.el.md">Ελληνικά</a> &lrm;·&lrm; <a href="README.fi.md">Suomi</a> &lrm;·&lrm; <a href="README.fil.md">Filipino</a> &lrm;·&lrm; <a href="README.ga.md">Gaeilge</a> &lrm;·&lrm; <a href="README.hi.md">हिन्दी</a> &lrm;·&lrm; <a href="README.hu.md">Magyar</a> &lrm;·&lrm; <a href="README.id.md">Bahasa Indonesia</a> &lrm;·&lrm; <a href="README.it.md">Italiano</a> &lrm;·&lrm; <a href="README.ka.md">ქართული</a> &lrm;·&lrm; <a href="README.lo.md">ລາວ</a> &lrm;·&lrm; <a href="README.lt.md">Lietuvių</a> &lrm;·&lrm; <a href="README.lv.md">Latviešu</a> &lrm;·&lrm; <a href="README.ml.md">മലയാളം</a> &lrm;·&lrm; <a href="README.mr.md">मराठी</a> &lrm;·&lrm; <a href="README.ms.md">Bahasa Melayu</a> &lrm;·&lrm; <a href="README.nb-NO.md">Norsk bokmål</a> &lrm;·&lrm; <a href="README.nl.md">Nederlands</a> &lrm;·&lrm; <a href="README.pl.md">Polski</a> &lrm;·&lrm; <a href="README.pt-BR.md">Português (Brasil)</a> &lrm;·&lrm; <a href="README.ro.md">Română</a> &lrm;·&lrm; <a href="README.sk.md">Slovenčina</a> &lrm;·&lrm; <a href="README.sv.md">Svenska</a> &lrm;·&lrm; <a href="README.ta.md">தமிழ்</a> &lrm;·&lrm; <a href="README.tr.md">Türkçe</a> &lrm;·&lrm; <a href="README.uk.md">Українська</a> &lrm;·&lrm; <a href="README.yua.md">Màaya t'aan (English)</a> &lrm;·&lrm; <a href="README.ar.md">&#x2067;العربية&#x2069;</a> &lrm;·&lrm; <a href="README.fa.md">&#x2067;فارسی&#x2069;</a> &lrm;·&lrm; <a href="README.he.md">&#x2067;עברית&#x2069;</a> &lrm;·&lrm; <a href="README.ur.md">&#x2067;اردو&#x2069;</a>
 </div>
 
 </details>
@@ -30,7 +30,7 @@ V prohlížeči vyberte zařízení a balíčky, odešlete požadavek přes GitH
 ## Ukázka rozhraní
 
 <p align="center">
-  <img src="../docs/images/wrt-desktop.png" alt="Wei.G OpenWrt desktop" width="78.65%"><img src="../docs/images/wrt-mobile.png" alt="Wei.G OpenWrt mobile" width="21.30%">
+  <img src="../docs/images/wrt-desktop.png" alt="Wei.G OpenWrt na počítači" width="78.65%"><img src="../docs/images/wrt-mobile.png" alt="Wei.G OpenWrt na telefonu" width="21.30%">
 </p>
 
 ## Začínáme: firmware ve třech krocích
@@ -39,18 +39,18 @@ V prohlížeči vyberte zařízení a balíčky, odešlete požadavek přes GitH
 
 ### 1. Zvolte zdroj, zařízení a balíčky
 
-Otevřete [**【Online konfigurátor】**](https://www.weigshare.com/wrt/) a postupně zvolte **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. Vyberte balíčky a podle potřeby upravte **【Advanced menuconfig】**, časové pásmo a vzhled. Tlačítkem **【Načíst konfiguraci】** lze importovat `build-request.json`, `.config` nebo `config.buildinfo`. Před pokračováním volby zkontrolujte.
+Otevřete [**【Online konfigurátor】**](https://www.weigshare.com/wrt/) a postupně zvolte **【Source】** → **【Branch】** → **【Target System】** → **【Subtarget】** → **【Target Profile】**. V **【② Vyberte doplňky】** zvolte požadované funkce a podle potřeby upravte **【Advanced menuconfig】**, časové pásmo a vzhled. Tlačítkem **【Načíst konfiguraci】** lze importovat soubor konfigurace `*.json`, `.config` nebo `config.buildinfo`. Před pokračováním volby zkontrolujte.
 
 ### 2. Odešlete požadavek na sestavení přes GitHub
 
-Nejprve se [**【přihlaste ke GitHubu】**](https://github.com/login). Vraťte se do [**【Konfigurátoru】**](https://www.weigshare.com/wrt/) a vyberte **【Odeslat cloudové sestavení】** → **【Stáhnout žádost a otevřít GitHub】**. Prohlížeč stáhne `*.json` a otevře formulář GitHub Issue. Na počítači přetáhněte JSON do pole žádosti a klikněte na **【Submit new issue】**. Bot odpoví odkazem na sestavení.
+Nejprve se [**【přihlaste ke GitHubu】**](https://github.com/login). Vraťte se do [**【Konfigurátoru】**](https://www.weigshare.com/wrt/) a vyberte **【Spustit sestavení v cloudu】** → **【Stáhnout konfiguraci a otevřít GitHub】**. Prohlížeč stáhne `*.json` a otevře formulář GitHub Issue. Na počítači přetáhněte právě stažený JSON do pole žádosti a klikněte na **【Submit new issue】**. Bot odpoví odkazem na sestavení.
 
 <details>
 <summary><strong>Důležité poznámky (rozbalit)</strong></summary>
 
-> Nastavení a doporučení kompatibility lze předem prověřit tlačítkem **【Test】** v plovoucí liště vpravo dole. Kontrola se spustí také automaticky při vytvoření žádosti.
+> Nastavení a doporučení kompatibility lze předem prověřit tlačítkem **【Test】** v plovoucí liště vpravo dole. Kontrola se spustí také automaticky při **【Stáhnout konfiguraci a otevřít GitHub】**.
 >
-> Při problémech použijte navrženou opravu nebo zvolte **【Ponechat a vynutit pokračování】**. Tím se neodstraní chyby upstream zdrojů a sestavení může selhat.
+> Při problémech použijte navrženou opravu nebo zvolte **【Zachovat a vynutit】**. Tím se neodstraní chyby původního zdrojového kódu a sestavení může selhat.
 >
 > Použijte formulář GitHub Issue, který otevře konfigurátor, aby zůstaly zachovány předvyplněné údaje.
 >
@@ -76,7 +76,7 @@ Balíčky a závislosti mohou překročit kapacitu oddílu RootFS. Pokud to zař
 <details>
 <summary>Proč se dlouhé sestavení ukončí?</summary>
 
-Jeden Job na GitHub-hosted runneru obvykle smí trvat nejvýše šest hodin. Projekt používá limit **350 minut** a běh ukončí po **335 minutách**, aby zbýval čas na logy. **Nejde o pozastavení, ve kterém lze pokračovat**.
+Jedna úloha na stroji poskytovaném GitHubem obvykle smí trvat nejvýše šest hodin. Projekt používá limit **350 minut** a běh ukončí po **335 minutách**, aby zbýval čas na protokoly. **Nejde o pozastavení, ve kterém lze pokračovat**. Velké závislosti, například Node.js a Rust, mohou dobu sestavení prodloužit.
 
 </details>
 
@@ -100,7 +100,7 @@ Pro běžné sestavení není nutné klonovat repozitář ani instalovat Node.js
 
 ## Menuconfig Catalog
 
-[Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) publikuje zdrojové větve, profily zařízení, balíčky, vztahy Kconfig a informace o kompatibilitě pro web i sestavovací službu.
+[Menuconfig Catalog](https://github.com/weigefenxiang/WeiG-OpenWrt-Menuconfig-Catalog) publikuje zdrojové větve, profily zařízení, balíčky, závislosti Kconfig a informace o kompatibilitě pro web i sestavovací službu. Obě části používají stejná data; AutoBuild neudržuje druhou databázi zařízení a balíčků.
 
 ## Poděkování
 
