@@ -616,7 +616,7 @@ input:focus-visible { border-color: var(--accent); }
 .target-picker label.target-single select{border-style:dashed;color:var(--text2)}
 .target-picker label.target-extra{grid-column:auto}
 .menuconfig-box{margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-raised);box-shadow:var(--elevation-1),inset 0 1px 0 var(--control-highlight)}
-.menuconfig-header{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,360px);align-items:center;gap:10px;min-width:0}
+.menuconfig-header{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,3fr);align-items:center;gap:10px;min-width:0}
 .menuconfig-title-group{display:flex;align-items:center;gap:8px;min-width:0}
 .menuconfig-title-group .menuconfig-toggle{flex:1 1 auto}
 .menuconfig-defconfig{flex:none;min-width:52px;min-height:42px;padding:0 9px;justify-content:center;gap:5px}
@@ -630,7 +630,7 @@ input:focus-visible { border-color: var(--accent); }
 .menuconfig-scroll{max-height:clamp(280px,55vh,620px);max-height:clamp(280px,55dvh,620px);overflow-y:auto;overflow-x:hidden;padding:0 10px 12px;overscroll-behavior-y:auto;scrollbar-gutter:stable;-webkit-overflow-scrolling:touch}
 .menuconfig-toolbar{display:block;margin-top:10px;padding-bottom:2px}
 .menuconfig-path-row{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:nowrap}
-.menuconfig-search-group{position:relative;display:flex;flex:0 1 360px;align-items:center;gap:8px;min-width:260px;margin-left:auto}
+.menuconfig-search-group{position:relative;display:flex;align-items:center;gap:8px;min-width:0;width:100%}
 .menuconfig-search-group.is-searching::after{content:"";position:absolute;right:70px;width:15px;height:15px;border:2px solid color-mix(in srgb,var(--accent) 28%,transparent);border-top-color:var(--accent);border-radius:50%;animation:menu-search-spin .7s linear infinite;pointer-events:none}
 @keyframes menu-search-spin{to{transform:rotate(360deg)}}
 .menuconfig-back{flex:none;width:34px;height:34px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);cursor:pointer}
@@ -1000,12 +1000,12 @@ button.catalog-applications-state{cursor:pointer}
 
 .field-label { display: block; font-size: var(--font-meta); color: var(--text2); margin: 0 0 4px; }
 .submit-primary-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.rootpw-warning { display: flex; flex-wrap: wrap; gap: 4px 10px; }
-.rootpw-warning strong { color: #dc2626; }
-.rootpw-warning span { color: #b45309; }
+.rootpw-warning { color: var(--danger); }
+.login-password-hint { color: var(--text3); }
 .firmware-settings {
   display: grid;
-  grid-template-columns: minmax(250px, 2.25fr) minmax(125px, .9fr) minmax(145px, 1.05fr) minmax(135px, 1fr);
+  --content-fit-count: 4;
+  grid-template-columns: var(--content-fit-columns, repeat(4, minmax(0, 1fr)));
   gap: 10px; margin-top: 14px;
 }
 .firmware-settings label { display: grid; gap: 5px; min-width: 0; color: var(--text3); font-size: var(--font-meta); }
@@ -1467,17 +1467,6 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
 .ui-operation-busy { cursor: progress; }
 @keyframes operation-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .operation-spinner { animation: none; } }
-.modal.feedback-dialog { max-width:640px; display:flex; flex-direction:column; overflow:hidden; }
-.feedback-dialog .modal-head { flex:none; }
-.feedback-dialog .modal-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; }
-.feedback-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
-.feedback-form > .hint,.feedback-field-textarea,.feedback-field-input,.feedback-environment,.feedback-form > .modal-actions { grid-column:1/-1; }
-.feedback-field { display:grid; gap:6px; min-width:0; }
-.feedback-field :is(input,select) { width:100%; min-width:0; min-height:44px; padding:8px 10px; }
-.feedback-form textarea { width:100%; min-width:0; padding:8px 10px; resize:vertical; }
-.feedback-environment { min-width:0; }
-.feedback-environment textarea { margin-top:8px; font-family:var(--font-family-mono); }
-@media (max-width:640px) { .feedback-form { grid-template-columns:minmax(0,1fr); } }
 
 @media(min-width:641px) and (max-width:960px){
   .catalog-overview-row{grid-template-columns:max-content minmax(0,1fr);grid-template-rows:auto auto auto}
@@ -1561,7 +1550,7 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
 @media(max-width:560px){.modal.catalog-conflict{align-self:flex-end;max-height:88vh;max-height:88dvh;border-radius:16px 16px 10px 10px}.catalog-conflict-row{grid-template-columns:1fr}.catalog-conflict-state{justify-self:end}.compatibility-summary{padding:12px}.compatibility-evidence,.compatibility-recommendation-detail{flex:1 1 100%;margin-left:0;text-align:left}.compatibility-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}.compatibility-actions-spacer{display:none}.compatibility-actions .btn{width:100%;min-width:0;padding-inline:10px;white-space:normal;overflow-wrap:anywhere}.compatibility-confirm-actions{grid-template-columns:1fr}}
 @media (max-width: 860px) {
   .plugin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .firmware-settings { grid-template-columns: minmax(230px, 1.6fr) minmax(150px, 1fr); }
+  .firmware-settings { --content-fit-count: 2; }
   .target-picker .target-field { flex: 1 1 calc(33.333% - 10px); }
   .target-picker .target-profile { flex-grow: 2; }
 }
@@ -1601,7 +1590,7 @@ html[data-theme="light"] .import-source-field .target-select { color-scheme: lig
   .build-info-card dl > div { grid-template-columns: 84px minmax(0, 1fr); gap: 9px; }
   .risk-row { align-items: flex-start; }
   .submit-primary-fields { grid-template-columns: 1fr; }
-  .firmware-settings { grid-template-columns: 1fr; }
+  .firmware-settings { --content-fit-count: 1; }
   .target-picker .target-field { flex: 1 1 calc(50% - 10px); }
   .target-picker .target-profile { flex-basis: 100%; }
   .catalog-load-state{flex-basis:100%}

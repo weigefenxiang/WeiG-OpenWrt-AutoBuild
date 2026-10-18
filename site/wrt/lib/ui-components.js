@@ -24,6 +24,69 @@ function loadComponentStyles() {
 }
 loadComponentStyles();
 
+// Equal columns are the default. Borrow only spare width for a selected value
+// that would be clipped, then wrap if all preferred widths cannot fit together.
+export function fitUiContentColumns(preferred, available, maxColumns = preferred.length, gap = 10) {
+  let count = Math.max(1, Math.min(preferred.length, Math.floor(maxColumns) || 1));
+  let needs, budget;
+  do {
+    needs = Array.from({ length: count }, (_, column) => Math.max(0,
+      ...preferred.filter((_, index) => index % count === column)));
+    budget = Math.max(0, available - gap * (count - 1));
+    if (count === 1 || needs.reduce((sum, value) => sum + value, 0) <= budget) break;
+    count = Math.ceil(count / 2);
+  } while (count > 0);
+  const equal = budget / count;
+  const demand = needs.reduce((sum, value) => sum + Math.max(0, value - equal), 0);
+  const spare = needs.reduce((sum, value) => sum + Math.max(0, equal - value), 0);
+  return needs.map(value => value > equal ? Math.min(value, budget)
+    : equal - (spare ? demand * (equal - value) / spare : 0));
+}
+
+export function createUiContentFitGrid(grid) {
+  const context = document.createElement('canvas').getContext('2d');
+  let frame = 0;
+  const measure = (text, element) => {
+    const style = getComputedStyle(element);
+    context.font = style.font;
+    return context.measureText(text).width + Math.max(0, text.length - 1) * (parseFloat(style.letterSpacing) || 0);
+  };
+  const render = () => {
+    frame = 0;
+    if (!grid?.getClientRects().length || !grid.clientWidth) return;
+    const style = getComputedStyle(grid);
+    const preferred = [...grid.children].map(field => {
+      const control = field.querySelector('input,select');
+      const controlStyle = getComputedStyle(control);
+      const text = control.tagName === 'SELECT' ? control.selectedOptions[0]?.textContent || '' : control.value;
+      const padding = ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth']
+        .reduce((sum, key) => sum + (parseFloat(controlStyle[key]) || 0), 0);
+      return Math.ceil(Math.max(measure(field.firstElementChild.textContent, field.firstElementChild),
+        measure(text, control) + padding + 28));
+    });
+    const widths = fitUiContentColumns(preferred, grid.clientWidth,
+      parseInt(style.getPropertyValue('--content-fit-count'), 10), parseFloat(style.columnGap) || 0);
+    const columns = widths.map(width => `${width.toFixed(2)}px`).join(' ');
+    if (grid.style.getPropertyValue('--content-fit-columns') !== columns) grid.style.setProperty('--content-fit-columns', columns);
+  };
+  const update = () => { if (!frame) frame = requestAnimationFrame(render); };
+  const resize = typeof ResizeObserver === 'function' ? new ResizeObserver(update) : null;
+  const mutations = new MutationObserver(update);
+  resize?.observe(grid);
+  mutations.observe(grid, { childList: true, subtree: true, characterData: true });
+  grid.addEventListener('change', update);
+  document.addEventListener('wrt:typography-change', update);
+  window.addEventListener('resize', update, { passive: true });
+  document.fonts?.ready.then(update);
+  update();
+  return { update, destroy() {
+    resize?.disconnect(); mutations.disconnect(); cancelAnimationFrame(frame);
+    grid.removeEventListener('change', update);
+    document.removeEventListener('wrt:typography-change', update);
+    window.removeEventListener('resize', update);
+  } };
+}
+
 export function createUiActionRow(className = '') {
   const row = document.createElement('div');
   addClassNames(row, 'ui-action-row', className);

@@ -68,6 +68,7 @@ export function installPageShellUi({ get, t, safeSet, openModal, fitPluginNames 
   const applyFont = (px, save) => {
     fontPx = Math.min(FONT_MAX, Math.max(FONT_MIN, Math.round(Number(px)) || FONT_DEF));
     setFontVariables();
+    document.dispatchEvent(new Event('wrt:typography-change'));
     $('fontInput').value = fontPx;
     if (save) safeSet('wrt_font', String(fontPx));
     fitPluginNames();
@@ -170,7 +171,9 @@ export function installPageShellUi({ get, t, safeSet, openModal, fitPluginNames 
   globalThis.visualViewport?.addEventListener('resize', scheduleViewportClearance, { passive: true });
   globalThis.visualViewport?.addEventListener('scroll', scheduleViewportClearance, { passive: true });
   const typographyMedia = matchMedia('(max-width: 640px)');
-  typographyMedia.addEventListener?.('change', () => { setFontVariables(); scheduleViewportClearance(); });
+  typographyMedia.addEventListener?.('change', () => {
+    setFontVariables(); document.dispatchEvent(new Event('wrt:typography-change')); scheduleViewportClearance();
+  });
   updateViewportClearance();
 
   $('helpBtn').addEventListener('click', () => {

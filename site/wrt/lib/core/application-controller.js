@@ -171,6 +171,7 @@ async function init() {
     renderDevices();
     renderModes();
     initFeedbackControls();
+    firmwareSettingsLayout = UI_COMPONENTS.createUiContentFitGrid(document.querySelector('.firmware-settings'));
     $('fwThemeBox')?.addEventListener('change', () => { firmwareThemeExplicit = true; });
     renderFirmwareSettings();
     initDeviceFold();

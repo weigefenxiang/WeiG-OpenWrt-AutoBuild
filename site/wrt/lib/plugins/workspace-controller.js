@@ -492,6 +492,7 @@ function renderTimezones() {
   $('timezoneBox').value = timezoneLabel(zone);
   closeTimezoneMenu();
 }
+let firmwareSettingsLayout = null;
 function renderFirmwareSettings() {
   if (!state.source) return;
   renderTimezones();
@@ -520,6 +521,7 @@ function renderFirmwareSettings() {
     })
     : defaultPackageMirrorId(state.source.id);
   state.packageMirror = fillSelect('packageMirrorBox', packageMirrorEntriesForSource, state.packageMirror);
+  firmwareSettingsLayout?.update();
   updateSubmitGate();
 }
 function firmwareThemePackage(option) {
@@ -566,7 +568,7 @@ function updateLoginInfo() {
   const pwKey = state.rootpw === '@empty' ? 'login.pw.none'
     : state.rootpw ? 'login.pw.set'
     : 'login.pw.source';
-  document.querySelector('.rootpw-warning strong').hidden = !state.rootpw || state.rootpw === '@empty';
+  document.querySelector('.rootpw-warning').hidden = !state.rootpw || state.rootpw === '@empty';
   const pwText = t(pwKey);
   //  作密码占位,模板任意语言通用 /  marks the password slot, language-agnostic
   const parts = t('login.info', { pw: '' }).split('');
@@ -589,6 +591,10 @@ function updateLoginInfo() {
   box.appendChild(pw);
   if (noteAt > 0) box.appendChild(document.createTextNode('  ' + pwText.slice(noteAt)));
   addWithRoot(parts[1] || '');
+  const note = document.createElement('span');
+  note.className = 'login-password-hint';
+  note.textContent = ` (${t('rootpw.hint')})`;
+  box.appendChild(note);
 }
 
 /* ============ 插件列表 / Plugin list ============ */

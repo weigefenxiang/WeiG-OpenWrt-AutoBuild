@@ -80,7 +80,7 @@
 @media(max-width:560px){.modal.catalog-conflict{align-self:flex-end;max-height:88vh;max-height:88dvh;border-radius:16px 16px 10px 10px}.catalog-conflict-row{grid-template-columns:1fr}.catalog-conflict-state{justify-self:end}.compatibility-summary{padding:12px}.compatibility-evidence,.compatibility-recommendation-detail{flex:1 1 100%;margin-left:0;text-align:left}.compatibility-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}.compatibility-actions-spacer{display:none}.compatibility-actions .btn{width:100%;min-width:0;padding-inline:10px;white-space:normal;overflow-wrap:anywhere}.compatibility-confirm-actions{grid-template-columns:1fr}}
 @media (max-width: 860px) {
   .plugin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .firmware-settings { grid-template-columns: minmax(230px, 1.6fr) minmax(150px, 1fr); }
+  .firmware-settings { --content-fit-count: 2; }
   .target-picker .target-field { flex: 1 1 calc(33.333% - 10px); }
   .target-picker .target-profile { flex-grow: 2; }
 }
@@ -120,7 +120,7 @@
   .build-info-card dl > div { grid-template-columns: 84px minmax(0, 1fr); gap: 9px; }
   .risk-row { align-items: flex-start; }
   .submit-primary-fields { grid-template-columns: 1fr; }
-  .firmware-settings { grid-template-columns: 1fr; }
+  .firmware-settings { --content-fit-count: 1; }
   .target-picker .target-field { flex: 1 1 calc(50% - 10px); }
   .target-picker .target-profile { flex-basis: 100%; }
   .catalog-load-state{flex-basis:100%}

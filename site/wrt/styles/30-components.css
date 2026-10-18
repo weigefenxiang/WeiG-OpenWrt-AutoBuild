@@ -282,12 +282,12 @@ button.catalog-applications-state{cursor:pointer}
 
 .field-label { display: block; font-size: var(--font-meta); color: var(--text2); margin: 0 0 4px; }
 .submit-primary-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.rootpw-warning { display: flex; flex-wrap: wrap; gap: 4px 10px; }
-.rootpw-warning strong { color: #dc2626; }
-.rootpw-warning span { color: #b45309; }
+.rootpw-warning { color: var(--danger); }
+.login-password-hint { color: var(--text3); }
 .firmware-settings {
   display: grid;
-  grid-template-columns: minmax(250px, 2.25fr) minmax(125px, .9fr) minmax(145px, 1.05fr) minmax(135px, 1fr);
+  --content-fit-count: 4;
+  grid-template-columns: var(--content-fit-columns, repeat(4, minmax(0, 1fr)));
   gap: 10px; margin-top: 14px;
 }
 .firmware-settings label { display: grid; gap: 5px; min-width: 0; color: var(--text3); font-size: var(--font-meta); }

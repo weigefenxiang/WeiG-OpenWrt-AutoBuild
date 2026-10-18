@@ -203,6 +203,16 @@ browser zoom.
 
 ## 9. Implementation contract
 
+- Login status and the editable-password-policy note share one inline paragraph;
+  narrow windows wrap naturally. A custom password retains its separate public-data warning.
+- Firmware settings start with equal columns. The shared content-fit component
+  responds only to selected text, content, typography or size changes, borrowing
+  spare space before wrapping. Advanced groups divide available width 4:3,
+  including their non-shrinking D and N/M/Y controls.
+- Feedback opens GitHub directly with whitelisted environment prefills. Native
+  forms are activated by normal default-branch promotion; unavailable templates
+  use a prefilled plain Issue. Do not restore a second website feedback form.
+
 The stylesheet is assembled in this fixed order by
 `tools/gen-site-css.mjs`:
 

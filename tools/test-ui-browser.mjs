@@ -1316,25 +1316,53 @@ async function main() {
     }
 
     await resetFloatingState();
-    await click('#feedbackBtn');
-    await waitVisible('#feedbackForm', context);
-    await evaluateFunction(browser, `() => document.getElementById('feedbackGithub').scrollIntoView({block:'nearest'})`);
-    await assertInside('#feedbackGithub', context, {within:'.modal'});
-    const feedback = await evaluateFunction(browser, `() => {
-      const description=document.getElementById('feedback-description');
-      const required=description.required;
-      description.value='Example interaction failure';description.dispatchEvent(new Event('input',{bubbles:true}));
-      const url=new URL(document.getElementById('feedbackGithub').href);
-      return {required,url:url.href,title:url.searchParams.get('title'),body:url.searchParams.get('body'),
-        report:document.getElementById('feedbackReport').value,
-        interfaceOptions:document.getElementById('feedback-interface').options.length,
-        fieldHeights:[...document.querySelectorAll('.feedback-field input,.feedback-field select')].map(el=>el.getBoundingClientRect().height)};
+    const feedback = await evaluateFunction(browser, `async () => {
+      const originalOpen=window.open, originalFetch=window.fetch, previousLanguage=I18N.selectedLanguage;
+      const results=[];
+      let available=false;
+      try {
+        window.fetch=(url,options) => String(url).startsWith('https://api.github.com/repos/')
+          ? Promise.resolve(new Response(available ? JSON.stringify({type:'file',name:String(url).split('/').at(-1)}) : '{}', {status:available?200:404}))
+          : originalFetch(url,options);
+        for (const native of [false,true]) {
+          available=native;
+          if (native) await selectUiLanguage(state.lang==='zh-CN'?'en':'zh-CN');
+          let done, timer; const navigation=new Promise(resolve=>{done=resolve;});
+          window.open=url=>{done(url);return {opener:null};};
+          document.getElementById('feedbackBtn').click();
+          const href=await Promise.race([navigation,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('feedback navigation timeout')),10000);})]);
+          clearTimeout(timer);
+          const url=new URL(href);
+          results.push({url:href,title:url.searchParams.get('title'),body:url.searchParams.get('body'),
+            template:url.searchParams.get('template'),environment:url.searchParams.get('environment'),
+            noModal:document.getElementById('modal').hidden && !document.getElementById('feedbackForm')});
+        }
+      } finally {window.open=originalOpen;window.fetch=originalFetch;await selectUiLanguage(previousLanguage);}
+      return results;
     }`);
-    expect(feedback.required && feedback.title.startsWith('[feedback]') && !feedback.title.startsWith('[build]') &&
-      feedback.interfaceOptions===4 && feedback.fieldHeights.every(height=>height>=43) && feedback.body===feedback.report && feedback.report.includes('Example interaction failure') &&
-      feedback.report.includes('Target Profile') && feedback.url.startsWith('https://github.com/'+SITE_CONFIG.project.repository+'/issues/new?'),
-      context, 'feedback fields, context or non-build Issue destination regressed', feedback);
-    await click('#modalClose');
+    expect(feedback.every(row=>row.noModal && row.title.startsWith('[feedback]')) &&
+      feedback[0].body?.includes('Target Profile') && feedback[1].template?.startsWith('feedback.') &&
+      JSON.parse(feedback[1].environment)['Web Version'] &&
+      feedback[0].url.startsWith('https://github.com/'+SITE_CONFIG.project.repository+'/issues/new?'),
+      context, 'direct feedback prefill, native form availability or non-build navigation regressed',
+      feedback.map(row=>({template:row.template,noModal:row.noModal,title:row.title,hasBody:Boolean(row.body),hasEnvironment:Boolean(row.environment)})));
+    const layout = await evaluateFunction(browser, `async () => {
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      const rect=selector=>{const r=document.querySelector(selector).getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,width:r.width};};
+      return {left:rect('.menuconfig-title-group'),right:rect('.menuconfig-search-group'),
+        defconfig:rect('#defconfigSwitch'),states:rect('#menuconfigStateHelp'),
+        fields:[...document.querySelectorAll('.firmware-settings>label')].map(el=>({width:el.getBoundingClientRect().width,left:el.getBoundingClientRect().left,top:el.getBoundingClientRect().top})),
+        hint:document.querySelectorAll('#loginInfo .login-password-hint').length,
+        outsideHints:document.querySelectorAll('[data-i18n="rootpw.hint"]').length};
+    }`);
+    expect(layout.hint===1 && layout.outsideHints===0,context,'password hint must appear once, inline with login status',layout);
+    if(viewport.width>=1366) {
+      expect(Math.abs(layout.left.width/layout.right.width-4/3)<0.03 &&
+        layout.defconfig.left>=layout.left.left && layout.defconfig.right<=layout.left.right+1 &&
+        layout.states.left>=layout.right.left && layout.states.right<=layout.right.right+1,
+      context,'Advanced 4:3 groups must reserve D and N/M/Y controls',layout);
+      expect(layout.fields.every(row=>Math.abs(row.top-layout.fields[0].top)<1),context,'desktop firmware settings should fit four columns',layout);
+    }
 
 
     // Open only the confirmation surface: never click a request/download action.

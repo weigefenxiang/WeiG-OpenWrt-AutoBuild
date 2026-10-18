@@ -4,11 +4,18 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createUiSessionState } from '../site/wrt/lib/ui-session-state.js';
-import { createUiKconfigStateControl, updateUiKconfigStateControl, createUiConfigurationReview }
+import { createUiKconfigStateControl, updateUiKconfigStateControl, createUiConfigurationReview, fitUiContentColumns }
   from '../site/wrt/lib/ui-components.js';
 import { readFrontendRuntimeSource } from './lib/frontend-source.mjs';
 
 const session = createUiSessionState();
+assert.deepEqual(fitUiContentColumns([150, 150, 150, 150], 1230, 4, 10), [300, 300, 300, 300]);
+const fitted = fitUiContentColumns([340, 150, 160, 180], 1230, 4, 10);
+assert.equal(fitted.length, 4); assert.equal(fitted[0], 340);
+assert(Math.abs(fitted.reduce((sum, value) => sum + value, 0) - 1200) < 0.001);
+assert(fitted.every((value, index) => value >= [340, 150, 160, 180][index]));
+assert.equal(fitUiContentColumns([340, 350, 350, 350], 900, 4, 10).length, 2);
+assert.deepEqual(fitUiContentColumns([800, 150, 160, 180], 300, 4, 10), [300]);
 assert.equal(session.compatibility.getAcknowledgement(), null);
 assert.equal('getRememberDefault' in session.compatibility, false);
 assert.equal('setRememberDefault' in session.compatibility, false);

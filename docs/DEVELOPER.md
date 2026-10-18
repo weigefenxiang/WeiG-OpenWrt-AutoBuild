@@ -337,3 +337,19 @@ Size loading exposes idle/loading/ready/unavailable/error states. Missing exact 
 
 Catalog index, freshness HEAD, core, graph and shard requests share a 60-second per-provider deadline covering headers and body. A provider timeout enters the existing fallback chain; a user/selection abort stops it. Immutable identity and byte/hash validation remain mandatory.
 The build request parser imports the same download budget instead of maintaining a shorter, independent limit. A transport timeout is not a package compatibility finding.
+
+Feedback navigates directly to GitHub, without another website form. feedback.js
+owns native form fields and stable URL-prefill IDs. Capture only the environment
+whitelist on an explicit click; omit unresolved Target/Profile data and all secrets.
+Default-branch template availability is cached per effective form language with a
+two-second deadline. Available templates receive native field prefills; absent or
+unreachable templates use a prefilled plain Issue, never the build template. Other
+languages use the English form without changing UI language. Oversized reports
+download intact for attachment rather than being silently trimmed. Only normal
+default-branch promotion activates native templates; dev does not change main or
+automatically submit anything. The website feedback modal and its CSS are retired.
+
+Firmware settings start as equal columns. Shared content-fit layout measures the
+selected text/labels, borrows spare width only when needed, and wraps when necessary.
+Content, value, typography and resize events schedule updates; no idle polling or
+pointer-move measurement. Advanced groups use a 4:3 ratio including D and N/M/Y.

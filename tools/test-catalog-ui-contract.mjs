@@ -999,9 +999,10 @@ expect(css.includes('grid-template-columns:minmax(0,1fr) max-content max-content
   /@media\(min-width:641px\) and \(max-width:960px\)\{[\s\S]*?\.catalog-locator\{grid-column:1 \/ -1;grid-row:1[\s\S]*?\.build-contract-head\{grid-column:1;grid-row:2\}[\s\S]*?\.build-contract-controls\{grid-column:2;grid-row:2[\s\S]*?\.build-contract-body\{grid-column:1 \/ -1;grid-row:3\}/.test(css) &&
   /@media\(max-width:640px\)\{[\s\S]*?\.catalog-locator\{grid-column:1;grid-row:1\}[\s\S]*?\.build-contract-head\{grid-column:1;grid-row:2[\s\S]*?\.build-contract-controls\{grid-column:1;grid-row:3[\s\S]*?\.build-contract-body\{grid-column:1;grid-row:4\}/.test(css),
   'desktop/tablet/mobile build-contract layout contract drifted');
-expect(css.includes('.menuconfig-header{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,360px)') &&
-  css.includes('.menuconfig-search-group{position:relative;display:flex;flex:0 1 360px'),
-  'top contract compaction changed the Advanced menuconfig search');
+expect(css.includes('.menuconfig-header{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,3fr)') &&
+  css.includes('.menuconfig-search-group{position:relative;display:flex;align-items:center;gap:8px;min-width:0;width:100%}') &&
+  css.includes('.menuconfig-state-help{flex:none') && css.includes('.menuconfig-defconfig{flex:none'),
+  'Advanced groups must share 4:3 space while reserving D and N/M/Y');
 
 const sources = [{ id: 'anonymous-default' }, { id: 'anonymous-user' }, { id: 'anonymous-state' }];
 expect(preferredCatalogSource(sources, ['', '', '', 'anonymous-default']) === 'anonymous-default',

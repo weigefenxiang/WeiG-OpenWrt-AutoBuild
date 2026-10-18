@@ -807,7 +807,7 @@ function closeModal() {
   modalCancelHandler = null;
   $('modal').hidden = true;
   $('modalProbe').hidden = true;
-  $('modal').querySelector('.modal').classList.remove('modal-wide', 'feedback-dialog', 'submit-confirmation', 'modal-import-source', 'recommended-config', 'profile-package-config', 'generation-error', 'catalog-conflict', 'compatibility-warning', 'rootfs-guidance', 'package-probe');
+  $('modal').querySelector('.modal').classList.remove('modal-wide', 'submit-confirmation', 'modal-import-source', 'recommended-config', 'profile-package-config', 'generation-error', 'catalog-conflict', 'compatibility-warning', 'rootfs-guidance', 'package-probe');
   document.body.classList.remove('modal-open');
   if (lastFocus && lastFocus.focus) lastFocus.focus();
   if (cancel) cancel();
