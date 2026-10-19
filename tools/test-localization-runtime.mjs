@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Isolated loader fixtures do not represent authored translations; real 50-locale
+// Isolated loader fixtures do not represent authored translations; real 49-locale
 // assets/source/README coverage is checked separately by test-localization.mjs.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -11,7 +11,7 @@ function fixture({ browser = ['en'], stored = '', failure = '', badDocument = ''
   const requests = [];
   const manifest = {
     version: 3, source: 'en', fallback: 'en', stringCount: 1,
-    languages: registry.languages.map(locale => locale.fallbackTo ? { ...locale } : ({ ...locale,
+    languages: registry.languages.map(locale => ({ ...locale,
       file: locale.id === badFile ? '../all.json.gz' : locale.id + '.json.gz' })),
   };
   const context = {
@@ -34,21 +34,29 @@ function fixture({ browser = ['en'], stored = '', failure = '', badDocument = ''
 for (const locale of registry.languages) {
   const { context, requests } = fixture({ browser: [locale.id] });
   await context.initializeI18n();
-  const effective = locale.fallbackTo || locale.id;
+  const effective = locale.id;
   assert.equal(context.state.lang, effective);
   assert.equal(context.I18N.selectedLanguage, locale.id);
   assert.deepEqual(requests, ['i18n/index.json', 'i18n/' + effective + '.json.gz']);
-  assert.equal(context.I18N.loaded.size, 1, 'startup must not preload English or the other 49 locales');
+  assert.equal(context.I18N.loaded.size, 1, 'startup must not preload English or the other 48 locales');
   await Promise.all([context.ensureI18nLanguage(effective), context.ensureI18nLanguage(effective)]);
   assert.equal(requests.length, 2, 'loaded language must not be downloaded again');
 }
 {
   const { context, requests } = fixture({ browser: ['de'] });
   await context.initializeI18n();
-  await context.selectUiLanguage('yua');
-  assert.equal(context.state.lang, 'en');
-  assert.equal(context.I18N.selectedLanguage, 'yua');
-  assert(!requests.some(path => path.includes('yua.json')), 'explicit fallback never downloads a pretend translation');
+  await context.selectUiLanguage('xx-ZZ');
+  assert.equal(context.state.lang, 'de', 'an unregistered manual selection is ignored');
+  assert.equal(context.I18N.selectedLanguage, 'de');
+  assert.equal(requests.length, 2, 'an unregistered selection never requests a language asset');
+}
+for (const [stored, browser, expected] of [
+  ['xx-ZZ', ['fr', 'en'], 'fr'], ['yua', ['zh-CN'], 'zh-CN'], ['yua', ['xx-ZZ'], 'en'],
+]) {
+  const { context, requests } = fixture({ stored, browser });
+  await context.initializeI18n();
+  assert.equal(context.state.lang, expected, 'unknown or retired stored choices use supported browser preferences');
+  assert.deepEqual(requests, ['i18n/index.json', 'i18n/' + expected + '.json.gz']);
 }
 for (const [browser, expected] of [
   ['zh-HK', 'zh-TW'], ['ZH_hK', 'zh-TW'], ['zh-Hant-CN', 'zh-TW'],
@@ -84,4 +92,4 @@ for (const variant of ['failure', 'badDocument', 'badFile']) {
 assert(!code.includes('!entry.pending'), 'menu visibility must not be coupled to translation completion');
 assert(code.includes('entry.common'));
 assert(code.includes('document.documentElement.dir'));
-console.log('50-locale single-bundle startup, aliases, cache/deduplication, failure fallback and common grouping passed.');
+console.log('49-locale single-bundle startup, aliases, stale preferences, cache/deduplication and failure fallback passed.');

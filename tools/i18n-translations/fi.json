@@ -615,7 +615,6 @@
   "lang.search": "Hae kieliä…",
   "lang.more": "Lisää kieliä ({count})",
   "lang.less": "Näytä yleiset kielet",
-  "lang.englishFallback": "Englanniksi käännöksen valmistumiseen asti",
   "lang.noResults": "Vastaavia kieliä ei ole",
   "footer.contributors": "sekä kaikki avoimen lähdekoodin tekijät.",
   "buildInfo.title": "Käännöstiedot",

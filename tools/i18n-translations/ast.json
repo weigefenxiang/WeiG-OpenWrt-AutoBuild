@@ -615,7 +615,6 @@
   "lang.search": "Buscar llingües…",
   "lang.more": "Más llingües ({count})",
   "lang.less": "Amosar les llingües habituales",
-  "lang.englishFallback": "N'inglés hasta que tea traducío",
   "lang.noResults": "Nun hai llingües coincidentes",
   "footer.contributors": "y toles persones que contribúin al códigu abiertu.",
   "buildInfo.title": "Información de compilación",

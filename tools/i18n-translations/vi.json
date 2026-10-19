@@ -615,7 +615,6 @@
   "lang.search": "Tìm ngôn ngữ…",
   "lang.more": "Ngôn ngữ khác ({count})",
   "lang.less": "Chỉ hiện ngôn ngữ thường dùng",
-  "lang.englishFallback": "Tạm dùng tiếng Anh trong khi chưa dịch",
   "lang.noResults": "Không có ngôn ngữ phù hợp",
   "footer.contributors": "và tất cả những người đóng góp mã nguồn mở.",
   "buildInfo.title": "Thông tin bản dựng",

@@ -114,7 +114,6 @@
   "lang.search": "搜尋語言…",
   "lang.more": "更多語言（{count}）",
   "lang.less": "只顯示常用語言",
-  "lang.englishFallback": "暫時使用英文",
   "lang.noResults": "找不到符合的語言",
   "footer.contributors": "及所有開源貢獻者。",
   "buildInfo.title": "建置資訊",

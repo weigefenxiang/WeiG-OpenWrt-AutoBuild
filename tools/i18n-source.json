@@ -617,7 +617,6 @@
   "lang.search": "Search languages…",
   "lang.more": "More languages ({count})",
   "lang.less": "Show common languages",
-  "lang.englishFallback": "English until translated",
   "lang.noResults": "No matching languages",
   "footer.contributors": "and all open-source contributors.",
   "buildInfo.title": "Build Information",

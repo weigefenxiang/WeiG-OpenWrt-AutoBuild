@@ -615,7 +615,6 @@
   "lang.search": "جست‌وجوی زبان‌ها…",
   "lang.more": "زبان‌های بیشتر ({count})",
   "lang.less": "نمایش زبان‌های رایج",
-  "lang.englishFallback": "انگلیسی تا آماده‌شدن ترجمه",
   "lang.noResults": "زبان منطبقی یافت نشد",
   "footer.contributors": "و همه مشارکت‌کنندگان متن‌باز.",
   "buildInfo.title": "اطلاعات ساخت",

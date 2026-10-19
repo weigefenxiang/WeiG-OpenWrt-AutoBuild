@@ -615,7 +615,6 @@
   "lang.search": "Cuardaigh teangacha…",
   "lang.more": "Tuilleadh teangacha ({count})",
   "lang.less": "Taispeáin na teangacha coitianta",
-  "lang.englishFallback": "I mBéarla go dtí go mbeidh aistriúchán ann",
   "lang.noResults": "Níl teangacha meaitseála ann",
   "footer.contributors": "agus gach rannpháirtí foinse oscailte.",
   "buildInfo.title": "Eolas tiomsaithe",

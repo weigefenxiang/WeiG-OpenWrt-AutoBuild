@@ -92,7 +92,7 @@ node tools/prepare-web-deployment.mjs --commit <40位SHA> --branch <dev或main>
 
 网页翻译以简体中文为语义基准：英文及稳定词条键保存在 `tools/i18n-source.json`，各语种译文保存在 `tools/i18n-translations/<语言>.json`，语言分组、别名和书写方向由 `tools/i18n-locales.json` 管理。运行 `node tools/gen-i18n.mjs` 生成 `site/wrt/data/i18n/` 中逐语种独立的 `.json.gz`；`--check` 校验真实译文完整性与确定性生成结果。不要直接编辑生成包。浏览器首次只加载一个生效语种，不预加载其他语种；Catalog 的上游菜单翻译仍由 Catalog 自己管理。
 
-语言目录有 50 个入口：49 个完整语言包及明确回退英文的尤卡坦玛雅语入口。回退条目使用 `fallbackTo`，没有伪造的译文源或重复英文 gzip。常用 11 项与其余 39 项的分组独立于翻译状态；香港/澳门繁体别名映射到 `zh-TW`。浏览器和 Catalog 共用 JSON/gzip 解码器；缺失的可选菜单语言分片沿用英文，不扩充 Catalog。README 的源码名称使用六个共用透明 SVG，仅文字着色，保留原上游链接。
+语言目录有 49 个入口，各自具有完整语言包：常用 11 项，其余 38 项。不列出尚无译文的占位入口；不支持的浏览器语言和语言包加载失败仍使用共用英文回退。香港/澳门繁体别名映射到 `zh-TW`。浏览器和 Catalog 共用 JSON/gzip 解码器；缺失的可选菜单语言分片沿用英文，不扩充 Catalog。README 的源码名称使用六个共用透明 SVG，仅文字着色，保留原上游链接。
 
 ## 1. 不可突破的边界
 

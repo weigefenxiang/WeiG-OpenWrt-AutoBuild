@@ -615,7 +615,6 @@
   "lang.search": "ຄົ້ນຫາພາສາ…",
   "lang.more": "ພາສາເພີ່ມເຕີມ ({count})",
   "lang.less": "ສະແດງພາສາທີ່ໃຊ້ບ່ອຍ",
-  "lang.englishFallback": "ໃຊ້ອັງກິດຈົນກວ່າຈະແປ",
   "lang.noResults": "ບໍ່ພົບພາສາທີ່ກົງກັນ",
   "footer.contributors": "ແລະ ຜູ້ຮ່ວມພັດທະນາຊອບແວແບບເປີດລະຫັດທຸກຄົນ.",
   "buildInfo.title": "ຂໍ້ມູນການສ້າງ",

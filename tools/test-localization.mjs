@@ -32,10 +32,10 @@ const english = JSON.parse(read('tools/i18n-source.json')).strings;
 const keys = Object.keys(english).sort();
 const placeholders = value => (value.match(/\{(\w+)\}/g) || []).sort();
 assert.equal(manifest.version, 3);
-assert.equal(manifest.languages.length, 50);
+assert.equal(manifest.languages.length, 49);
 assert.equal(manifest.stringCount, keys.length);
 assert.equal(manifest.languages.filter(locale => locale.common).length, 11);
-assert.equal(manifest.languages.filter(locale => !locale.common).length, 39);
+assert.equal(manifest.languages.filter(locale => !locale.common).length, 38);
 assert.deepEqual(manifest.languages.map(locale => locale.id), registry.languages.map(locale => locale.id));
 const expectedFiles = ['index.json'];
 const rtl = [];
@@ -61,25 +61,19 @@ assert.equal(colors.size, 6, 'each source has a distinct text color');
 const mirrorKeys = JSON.parse(read('site/wrt/data/package-mirrors.json')).presets.map(preset => 'fw.packageMirror.' + preset.id);
 assert(mirrorKeys.every(key => keys.includes(key)), 'mirror option copy belongs to the shared UI translation authority');
 for (const locale of manifest.languages) {
-  assert(!Object.hasOwn(locale, 'pending') && !Object.hasOwn(locale, 'bundle'));
+  assert(['pending', 'bundle', 'fallbackTo'].every(key => !Object.hasOwn(locale, key)));
   const markdownPath = locale.id === 'en' ? 'README.md' : 'translations/README.' + locale.id + '.md';
   const markdown = read(markdownPath);
-  if (!locale.fallbackTo) assert(markdown.includes("Màaya t'aan (English)</a>"),
-    locale.id + ': README language directory must disclose the Maya English fallback');
+  for (const [, target] of markdown.matchAll(/href="([^\"]*README[^\"]*\.md)"/g)) {
+    if (/^https?:\/\//.test(target)) continue;
+    assert(existsSync(join(root, posix.dirname(markdownPath), target)),
+      locale.id + ': README language link must resolve: ' + target);
+  }
   assert.deepEqual(sourceLinks(markdown, markdownPath), canonicalBadges,
     locale.id + ': all README source labels share names, assets and upstream links');
   const sourceRow = markdown.split(/\r?\n/).find(line => line.includes('docs/images/sources/'));
   assert.equal((sourceRow?.match(/ · /g) || []).length, 5,
     locale.id + ': use the same middle-dot separator as the language row');
-  if (locale.fallbackTo) {
-    assert.equal(locale.id, 'yua', 'only the explicitly approved locale remains untranslated');
-    assert.equal(locale.fallbackTo, 'en');
-    for (const key of ['file', 'bytes', 'decodedBytes', 'sha256']) assert(!Object.hasOwn(locale, key));
-    assert(!existsSync(join(root, 'tools/i18n-translations', locale.id + '.json')),
-      'do not manufacture an English-filled translation source');
-    assert(markdown.includes('English fallback') && markdown.includes('../README.md'));
-    continue;
-  }
   assert.equal(locale.file, locale.id + '.json.gz');
   expectedFiles.push(locale.file);
   const gzip = readFileSync(join(root, 'site/wrt/data/i18n', locale.file));
@@ -118,6 +112,11 @@ for (const locale of manifest.languages) {
   assert.equal((markdown.match(/<details>/g) || []).length, (markdown.match(/<\/details>/g) || []).length);
 }
 assert.deepEqual(rtl.sort(), ['ar', 'fa', 'he', 'ur']);
+const readmeFiles = ['README.md', ...readdirSync(join(root, 'translations'))
+  .filter(name => /^README\.[\w-]+\.md$/.test(name)).map(name => 'translations/' + name)];
+assert.deepEqual(readmeFiles.sort(), manifest.languages.map(locale => locale.id === 'en' ?
+  'README.md' : 'translations/README.' + locale.id + '.md').sort(),
+  'README language entries must exactly match supported languages, without retired placeholders');
 assert.deepEqual(readdirSync(join(root, 'site/wrt/data/i18n')).sort(), expectedFiles.sort(), 'retired JSON/monolithic packages must not remain');
-assert.equal(expectedFiles.length, 50, '49 real language assets and one manifest, not a pretend Maya bundle');
-console.log('49 authored locales, explicit Maya fallback, gzip assets, source badges and README/UI terminology passed.');
+assert.equal(expectedFiles.length, 50, '49 real language assets and one manifest');
+console.log('49 authored locales, gzip assets, supported README links, source labels and README/UI terminology passed.');

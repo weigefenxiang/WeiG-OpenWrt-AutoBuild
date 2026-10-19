@@ -615,7 +615,6 @@
   "lang.search": "Søk etter språk…",
   "lang.more": "Flere språk ({count})",
   "lang.less": "Vis vanlige språk",
-  "lang.englishFallback": "Engelsk til oversettelsen er klar",
   "lang.noResults": "Ingen samsvarende språk",
   "footer.contributors": "og alle bidragsytere til åpen kildekode.",
   "buildInfo.title": "Byggeinformasjon",

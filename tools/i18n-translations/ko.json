@@ -615,7 +615,6 @@
   "lang.search": "언어 검색…",
   "lang.more": "다른 언어({count})",
   "lang.less": "자주 쓰는 언어만 표시",
-  "lang.englishFallback": "번역 전까지 영어로 표시",
   "lang.noResults": "일치하는 언어가 없습니다",
   "footer.contributors": "및 모든 오픈 소스 기여자.",
   "buildInfo.title": "빌드 정보",

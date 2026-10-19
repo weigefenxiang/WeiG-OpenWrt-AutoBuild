@@ -615,7 +615,6 @@
   "lang.search": "Talen zoeken…",
   "lang.more": "Meer talen ({count})",
   "lang.less": "Veelgebruikte talen tonen",
-  "lang.englishFallback": "Engels zolang de vertaling ontbreekt",
   "lang.noResults": "Geen overeenkomende talen",
   "footer.contributors": "en alle opensourcebijdragers.",
   "buildInfo.title": "Buildinformatie",

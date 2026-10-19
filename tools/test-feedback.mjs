@@ -74,7 +74,7 @@ assert(long.overflow); assert(long.report.includes('x'.repeat(8000))); assert(lo
 assert.doesNotMatch(read('site/wrt/lib/diagnostics/feedback-controller.js'), /openModal|feedbackForm|localStorage|fetch\([^]*method:\s*['"]POST/);
 assert.doesNotMatch(read('site/wrt/styles/40-overlays.css'), /feedback-dialog|feedback-form/);
 for (const lang of JSON.parse(read('site/wrt/data/i18n/index.json')).languages) {
-  const strings = bundle(lang.fallbackTo || lang.id).strings;
+  const strings = bundle(lang.id).strings;
   assert.doesNotMatch(strings['tag.label'], /[()（）]|Actions/);
   assert(strings['submit.m1.desc'].includes('*.json'));
   assert.notEqual(strings['btn.submit'], strings['submit.m1.title'], `${lang.id}: entry must not reuse the method title`);

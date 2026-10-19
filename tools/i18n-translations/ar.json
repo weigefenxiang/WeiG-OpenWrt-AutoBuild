@@ -615,7 +615,6 @@
   "lang.search": "البحث عن لغة…",
   "lang.more": "لغات أخرى ({count})",
   "lang.less": "عرض اللغات الشائعة",
-  "lang.englishFallback": "الإنجليزية حتى اكتمال الترجمة",
   "lang.noResults": "لا توجد لغات مطابقة",
   "footer.contributors": "وجميع المساهمين في المصادر المفتوحة.",
   "buildInfo.title": "معلومات البناء",

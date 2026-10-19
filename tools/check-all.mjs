@@ -135,14 +135,14 @@ console.log('[2/4] Canonical local data / 本地权威数据');
 const localeRegistry = JSON.parse(readFileSync(join(ROOT, 'tools/i18n-locales.json'), 'utf8'));
 const dataFiles = [
   'site/wrt/data/i18n/index.json',
-  ...localeRegistry.languages.filter(locale => !locale.fallbackTo).map(locale => `site/wrt/data/i18n/${locale.id}.json.gz`),
+  ...localeRegistry.languages.map(locale => `site/wrt/data/i18n/${locale.id}.json.gz`),
   'site/wrt/data/package-mirrors.json',
   'site/wrt/data/site-version.json',
   'site/wrt/data/timezones.json',
   'config/policies/package-mirrors.json',
   '.github/automation-policy.json',
   'tools/i18n-source.json',
-  ...localeRegistry.languages.filter(locale => locale.id !== localeRegistry.source && !locale.fallbackTo)
+  ...localeRegistry.languages.filter(locale => locale.id !== localeRegistry.source)
     .map(locale => `tools/i18n-translations/${locale.id}.json`),
   'tools/i18n-locales.json',
 ];
@@ -198,15 +198,15 @@ run('package mirror public projection matches its canonical policy', process.exe
   [join(ROOT, 'tools', 'gen-package-mirrors.mjs'), '--check']);
 
 const i18n = parsed.get('site/wrt/data/i18n/index.json');
-const translatedLanguages = (i18n?.languages || []).filter(language => !language.fallbackTo);
+const translatedLanguages = i18n?.languages || [];
 const i18nDocuments = translatedLanguages.map((language) =>
   parsed.get(`site/wrt/data/i18n/${language.id}.json.gz`));
 const i18nKeys = Object.keys(i18nDocuments[0]?.strings || {});
-if (i18n?.version === 3 && i18n.languages?.length === 50 && i18nDocuments.length === 49 && i18nDocuments.every((document) =>
+if (i18n?.version === 3 && i18n.languages?.length === 49 && i18nDocuments.length === 49 && i18nDocuments.every((document) =>
   document?.version === 2 && i18n.languages.some((language) => language.id === document.language) &&
   Object.keys(document.strings || {}).length === i18nKeys.length &&
   i18nKeys.every((key) => String(document.strings[key] || '').length))) {
-  pass(`${i18nKeys.length} UI strings are complete in 49 independent bundles, with one explicit English fallback`);
+  pass(`${i18nKeys.length} UI strings are complete in all 49 independent language bundles`);
 } else fail('i18n completeness');
 run('strict deterministic localization output', process.execPath, [join(ROOT, 'tools/gen-i18n.mjs'), '--check']);
 

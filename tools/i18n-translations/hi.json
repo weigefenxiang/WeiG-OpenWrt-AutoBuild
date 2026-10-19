@@ -615,7 +615,6 @@
   "lang.search": "भाषाएँ खोजें…",
   "lang.more": "और भाषाएँ ({count})",
   "lang.less": "आम भाषाएँ दिखाएँ",
-  "lang.englishFallback": "अनुवाद पूरा होने तक अंग्रेज़ी",
   "lang.noResults": "कोई मेल खाती भाषा नहीं",
   "footer.contributors": "और सभी ओपन सोर्स योगदानकर्ता।",
   "buildInfo.title": "बिल्ड की जानकारी",

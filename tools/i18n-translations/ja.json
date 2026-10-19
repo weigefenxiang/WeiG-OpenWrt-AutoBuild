@@ -615,7 +615,6 @@
   "lang.search": "言語を検索…",
   "lang.more": "その他の言語（{count}）",
   "lang.less": "よく使う言語のみ表示",
-  "lang.englishFallback": "未翻訳のため英語で表示",
   "lang.noResults": "一致する言語はありません",
   "footer.contributors": "およびすべてのオープンソース貢献者。",
   "buildInfo.title": "ビルド情報",

@@ -367,14 +367,6 @@
       "native": "اردو",
       "common": false,
       "dir": "rtl"
-    },
-    {
-      "id": "yua",
-      "name": "Yucatec Maya",
-      "native": "Màaya t'aan",
-      "common": false,
-      "dir": "ltr",
-      "fallbackTo": "en"
     }
   ]
 }

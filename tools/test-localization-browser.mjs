@@ -37,7 +37,7 @@ try {
           .map(option=>({actual:option.textContent,expected:t('fw.packageMirror.'+option.value)})),
         expected:t('btn.submit'),width:document.documentElement.scrollWidth,viewport:innerWidth,
         loaded:[...I18N.loaded],busy:$('submitBtn').disabled})`);
-      const effective = locales.find(item => item.id === (locale.fallbackTo || locale.id));
+      const effective = locale;
       assert.equal(actual.language, effective.id);
       assert.equal(actual.title, effective.id);
       assert.equal(actual.dir, effective.dir);
@@ -68,8 +68,7 @@ try {
   const downloads = await evaluate(`() => performance.getEntriesByType('resource')
     .map(row=>new URL(row.name).pathname).filter(path=>path.includes('/data/i18n/')&&!path.endsWith('/index.json'))`);
   const unique = [...new Set(downloads)];
-  assert.equal(unique.length, locales.filter(locale => !locale.fallbackTo).length,
-    'one independent asset per translated language; explicit fallback reuses English');
+  assert.equal(unique.length, locales.length, 'every language entry has its own independent asset');
   assert(unique.every(path => path.endsWith('.json.gz')), 'no uncompressed or all-languages bundle');
   const codec = await evaluate(`() => performance.getEntriesByType('resource').map(row=>new URL(row.name))
     .filter(url=>url.pathname.endsWith('/lib/data-codec.js')).map(url=>url.search)`);

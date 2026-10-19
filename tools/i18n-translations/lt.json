@@ -615,7 +615,6 @@
   "lang.search": "Ieškoti kalbų…",
   "lang.more": "Daugiau kalbų ({count})",
   "lang.less": "Rodyti įprastas kalbas",
-  "lang.englishFallback": "Angliškai, kol bus išversta",
   "lang.noResults": "Atitinkančių kalbų nėra",
   "footer.contributors": "ir visiems atvirojo kodo bendradarbiams.",
   "buildInfo.title": "Kompiliavimo informacija",

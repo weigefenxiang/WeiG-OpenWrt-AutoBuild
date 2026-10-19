@@ -615,7 +615,6 @@
   "lang.search": "Caută limbi…",
   "lang.more": "Mai multe limbi ({count})",
   "lang.less": "Arată limbile uzuale",
-  "lang.englishFallback": "În engleză până la traducere",
   "lang.noResults": "Nicio limbă potrivită",
   "footer.contributors": "și tuturor contribuitorilor la proiectele cu sursă deschisă.",
   "buildInfo.title": "Informații despre compilare",

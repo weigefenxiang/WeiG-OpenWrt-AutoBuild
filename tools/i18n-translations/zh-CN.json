@@ -38,7 +38,6 @@
   "lang.search": "搜索语言…",
   "lang.more": "更多语言（{count}）",
   "lang.less": "只显示常用语言",
-  "lang.englishFallback": "尚未完善，暂用英文",
   "lang.noResults": "没有匹配的语言",
   "footer.contributors": "及所有开源贡献者。",
   "buildInfo.title": "构建信息",

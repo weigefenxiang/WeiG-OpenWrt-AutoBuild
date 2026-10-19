@@ -615,7 +615,6 @@
   "lang.search": "Cerca lingue…",
   "lang.more": "Altre lingue ({count})",
   "lang.less": "Mostra lingue comuni",
-  "lang.englishFallback": "In inglese finché non sarà tradotto",
   "lang.noResults": "Nessuna lingua corrispondente",
   "footer.contributors": "e tutti i collaboratori del software libero.",
   "buildInfo.title": "Informazioni sulla compilazione",

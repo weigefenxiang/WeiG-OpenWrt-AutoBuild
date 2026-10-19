@@ -615,7 +615,6 @@
   "lang.search": "Maghanap ng wika…",
   "lang.more": "Iba pang wika ({count})",
   "lang.less": "Ipakita ang karaniwang mga wika",
-  "lang.englishFallback": "Ingles muna habang wala pang salin",
   "lang.noResults": "Walang katugmang wika",
   "footer.contributors": "at sa lahat ng nag-aambag sa open source.",
   "buildInfo.title": "Impormasyon ng build",

@@ -615,7 +615,6 @@
   "lang.search": "Søg i sprog…",
   "lang.more": "Flere sprog ({count})",
   "lang.less": "Vis almindelige sprog",
-  "lang.englishFallback": "Engelsk indtil oversættelsen er klar",
   "lang.noResults": "Ingen matchende sprog",
   "footer.contributors": "og alle open source-bidragydere.",
   "buildInfo.title": "Build-oplysninger",

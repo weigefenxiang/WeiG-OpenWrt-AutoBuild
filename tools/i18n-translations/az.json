@@ -615,7 +615,6 @@
   "lang.search": "Dil axtar…",
   "lang.more": "Digər dillər ({count})",
   "lang.less": "Əsas dilləri göstər",
-  "lang.englishFallback": "Tərcümə hazır olanadək ingiliscə",
   "lang.noResults": "Uyğun dil yoxdur",
   "footer.contributors": "və açıq mənbəyə töhfə verən hər kəs.",
   "buildInfo.title": "Yığım məlumatları",

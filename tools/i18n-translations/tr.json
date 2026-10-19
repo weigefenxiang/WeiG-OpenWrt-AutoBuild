@@ -615,7 +615,6 @@
   "lang.search": "Dil ara…",
   "lang.more": "Diğer diller ({count})",
   "lang.less": "Yaygın dilleri göster",
-  "lang.englishFallback": "Çeviri tamamlanana kadar İngilizce",
   "lang.noResults": "Eşleşen dil yok",
   "footer.contributors": "ve açık kaynağa katkıda bulunan herkes.",
   "buildInfo.title": "Derleme Bilgileri",

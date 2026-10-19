@@ -615,7 +615,6 @@
   "lang.search": "ভাষা খুঁজুন…",
   "lang.more": "আরও ভাষা ({count})",
   "lang.less": "প্রচলিত ভাষা দেখান",
-  "lang.englishFallback": "অনুবাদ না হওয়া পর্যন্ত ইংরেজি",
   "lang.noResults": "মিল থাকা ভাষা নেই",
   "footer.contributors": "এবং মুক্ত সফটওয়্যারের সব অবদানকারী।",
   "buildInfo.title": "বিল্ডের তথ্য",

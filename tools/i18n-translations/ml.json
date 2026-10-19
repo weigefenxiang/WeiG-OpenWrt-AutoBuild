@@ -615,7 +615,6 @@
   "lang.search": "ഭാഷകൾ തിരയുക…",
   "lang.more": "കൂടുതൽ ഭാഷകൾ ({count})",
   "lang.less": "സാധാരണ ഭാഷകൾ കാണിക്കുക",
-  "lang.englishFallback": "പരിഭാഷയാകുന്നതുവരെ ഇംഗ്ലീഷ്",
   "lang.noResults": "യോജിച്ച ഭാഷകളില്ല",
   "footer.contributors": "കൂടാതെ എല്ലാ ഓപ്പൺ സോഴ്‌സ് സംഭാവനക്കാരും.",
   "buildInfo.title": "ബിൽഡ് വിവരങ്ങൾ",

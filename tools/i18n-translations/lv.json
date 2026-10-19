@@ -615,7 +615,6 @@
   "lang.search": "Meklēt valodas…",
   "lang.more": "Citas valodas ({count})",
   "lang.less": "Rādīt ierastās valodas",
-  "lang.englishFallback": "Angliski, līdz tulkojums būs gatavs",
   "lang.noResults": "Nav atbilstošu valodu",
   "footer.contributors": "un visiem atvērtā pirmkoda līdzautoriem.",
   "buildInfo.title": "Būves informācija",

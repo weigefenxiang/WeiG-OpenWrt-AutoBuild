@@ -615,7 +615,6 @@
   "lang.search": "Hľadať jazyky…",
   "lang.more": "Ďalšie jazyky ({count})",
   "lang.less": "Zobraziť bežné jazyky",
-  "lang.englishFallback": "Zatiaľ nepreložené; používa sa angličtina",
   "lang.noResults": "Žiadne zodpovedajúce jazyky",
   "footer.contributors": "a všetkým prispievateľom otvoreného softvéru.",
   "buildInfo.title": "Informácie o zostavení",

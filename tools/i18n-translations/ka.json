@@ -615,7 +615,6 @@
   "lang.search": "ენების ძებნა…",
   "lang.more": "მეტი ენა ({count})",
   "lang.less": "გავრცელებული ენების ჩვენება",
-  "lang.englishFallback": "თარგმნამდე ინგლისურად",
   "lang.noResults": "შესაბამისი ენები არ მოიძებნა",
   "footer.contributors": "და ღია კოდის ყველა მონაწილეს.",
   "buildInfo.title": "აწყობის ინფორმაცია",

@@ -62,15 +62,11 @@ async function ensureI18nLanguage(language) {
   await I18N.loading.get(id);
 }
 async function loadUiLanguage(requested) {
-  const entry = I18N.languages.find(item => item.id === requested);
-  const effective = entry?.fallbackTo || requested;
-  const target = I18N.languages.find(item => item.id === effective);
-  if (!target || target.fallbackTo) throw new Error('Invalid localization fallback: ' + requested);
   try {
-    await ensureI18nLanguage(effective);
-    return effective;
+    await ensureI18nLanguage(requested);
+    return requested;
   } catch (error) {
-    if (effective === I18N.fallback) throw error;
+    if (requested === I18N.fallback) throw error;
     await ensureI18nLanguage(I18N.fallback);
     return I18N.fallback;
   }
@@ -288,8 +284,7 @@ function renderLangSel() {
       option.dataset.language = entry.id;
       option.setAttribute('role', 'option');
       option.setAttribute('aria-selected', String(entry.id === state.lang));
-      option.textContent = (entry.native || entry.name) +
-        (entry.fallbackTo ? ' · ' + t('lang.englishFallback') : '');
+      option.textContent = entry.native || entry.name;
       option.dir = entry.dir;
       option.onclick = async () => {
         if (switching) return;

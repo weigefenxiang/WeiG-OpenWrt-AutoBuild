@@ -116,13 +116,13 @@ for (const key of ['bar.selectionSummary', 'drawer.effective', 'drawer.edit', 'l
   assert.equal(typeof chineseTranslation[key], 'string', `${key} must exist in the Chinese translation catalog`);
 }
 const manifest = JSON.parse(read('site/wrt/data/i18n/index.json'));
-assert.equal(manifest.languages.length, 50);
+assert.equal(manifest.languages.length, 49);
 assert.equal(manifest.version, 3);
 assert.equal(manifest.languages.filter((language) => language.pending).length, 0);
 assert.equal(manifest.languages.filter((language) => language.common).length, 11);
 const readBundle = id => JSON.parse(gunzipSync(readFileSync(join(root, `site/wrt/data/i18n/${id}.json.gz`))).toString('utf8'));
 for (const language of manifest.languages) {
-  const document = readBundle(language.fallbackTo || language.id);
+  const document = readBundle(language.id);
   assert.equal(Object.keys(document.strings).length, Object.keys(sourceJson.strings).length);
   assert(!Object.keys(document.strings).some((key) => key.startsWith('size.summary.')));
 }
@@ -131,7 +131,7 @@ for (const source of [pluginController, catalogSource, read('site/wrt/lib/config
     'retired package sizing must have no active caller');
 }
 for (const [browserLanguage, expected] of [
-  ...manifest.languages.map(locale => [locale.id, locale.fallbackTo || locale.id]),
+  ...manifest.languages.map(locale => [locale.id, locale.id]),
   ['en-US', 'en'], ['xx-ZZ', 'en'], ['zh-HK', 'zh-TW'], ['zh-Hant-MO', 'zh-TW'],
   ['zh-Hans-SG', 'zh-CN'], ['no-NO', 'nb-NO'], ['iw-IL', 'he'], ['pt-br', 'pt-BR'],
 ]) {

@@ -1141,19 +1141,18 @@ async function main() {
       document.getElementById('languageMore').click();
       await new Promise(resolve=>setTimeout(resolve,100));
       const all = panel.querySelectorAll('[role=option]').length;
-      const fallbackLabel = panel.querySelector('[data-language="yua"]')?.textContent || '';
-      const fallbackNotice = t('lang.englishFallback');
+      const complete = I18N.languages.every(entry => entry.file === entry.id + '.json.gz');
       const allScroll = await scrollAndWait();
       const search = document.getElementById('languageSearch');
       search.value = '日本'; search.dispatchEvent(new Event('input'));
       const filtered = [...panel.querySelectorAll('[role=option]')].map(node => node.dataset.language);
-      return { common, all, filtered, fallbackLabel, fallbackNotice, commonScroll, allScroll, width:r.width, height:r.height, viewport,
+      return { common, all, filtered, complete, commonScroll, allScroll, width:r.width, height:r.height, viewport,
         triggerWidth:button.getBoundingClientRect().width,
         commonCount:I18N.languages.filter(entry => entry.common).length,
         pending:I18N.languages.filter(entry => entry.pending).length };
     }`);
-    expect(languageMenu.common === 11 && languageMenu.commonCount === 11 && languageMenu.all === 50 && languageMenu.pending === 0 &&
-      languageMenu.filtered.join(',') === 'ja' && languageMenu.fallbackLabel.includes(languageMenu.fallbackNotice) &&
+    expect(languageMenu.common === 11 && languageMenu.commonCount === 11 && languageMenu.all === 49 && languageMenu.pending === 0 &&
+      languageMenu.filtered.join(',') === 'ja' && languageMenu.complete &&
       languageMenu.triggerWidth <= 45 &&
       languageMenu.width <= languageMenu.viewport.width / 2 + 1 &&
       languageMenu.height <= languageMenu.viewport.height / 2 + 1, context,

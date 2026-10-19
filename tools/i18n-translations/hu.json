@@ -615,7 +615,6 @@
   "lang.search": "Nyelvek keresése…",
   "lang.more": "További nyelvek ({count})",
   "lang.less": "Gyakori nyelvek megjelenítése",
-  "lang.englishFallback": "Angolul a fordítás elkészültéig",
   "lang.noResults": "Nincs megfelelő nyelv",
   "footer.contributors": "és minden nyílt forráskódú közreműködő.",
   "buildInfo.title": "Fordítási adatok",

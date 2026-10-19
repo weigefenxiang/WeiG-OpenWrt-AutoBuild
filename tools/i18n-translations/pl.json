@@ -615,7 +615,6 @@
   "lang.search": "Szukaj języków…",
   "lang.more": "Więcej języków ({count})",
   "lang.less": "Pokaż często używane języki",
-  "lang.englishFallback": "Do czasu tłumaczenia używany jest angielski",
   "lang.noResults": "Brak pasujących języków",
   "footer.contributors": "i wszystkim współtwórcom otwartego oprogramowania.",
   "buildInfo.title": "Informacje o kompilacji",

@@ -615,7 +615,6 @@
   "lang.search": "חיפוש שפות…",
   "lang.more": "שפות נוספות ({count})",
   "lang.less": "הצגת שפות נפוצות",
-  "lang.englishFallback": "אנגלית עד להשלמת התרגום",
   "lang.noResults": "לא נמצאו שפות תואמות",
   "footer.contributors": "וכל התורמים לקוד הפתוח.",
   "buildInfo.title": "מידע על הבנייה",

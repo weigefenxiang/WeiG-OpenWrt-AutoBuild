@@ -615,7 +615,6 @@
   "lang.search": "Cerca llengües…",
   "lang.more": "Més llengües ({count})",
   "lang.less": "Mostra les llengües habituals",
-  "lang.englishFallback": "En anglès fins que estigui traduït",
   "lang.noResults": "No hi ha cap llengua que coincideixi",
   "footer.contributors": "i totes les persones que contribueixen al codi obert.",
   "buildInfo.title": "Informació de compilació",

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Generates one deterministic gzip bundle per locale from the shared translation authorities.
-// --check verifies without writing. Explicit fallback entries never claim translated assets.
+// --check verifies without writing. Every registered locale must have complete authored text.
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -24,11 +24,6 @@ for (const locale of LOCALES.languages) {
   ids.add(locale.id);
   if (!locale.name || !locale.native || !['ltr', 'rtl'].includes(locale.dir) || typeof locale.common !== 'boolean') {
     errors.push('Incomplete locale metadata: ' + locale.id);
-  }
-  if (locale.fallbackTo) {
-    const target = LOCALES.languages.find(entry => entry.id === locale.fallbackTo);
-    if (!target || target.fallbackTo || target.id === locale.id) errors.push('Invalid locale fallback: ' + locale.id);
-    continue;
   }
   const translationPath = join(ROOT, 'tools/i18n-translations', locale.id + '.json');
   const translated = locale.id === LOCALES.source ? SRC.strings :
@@ -63,10 +58,6 @@ const manifest = {
   fallback: LOCALES.fallback, stringCount: keys.length, languages: [],
 };
 for (const locale of LOCALES.languages) {
-  if (locale.fallbackTo) {
-    manifest.languages.push({ ...locale });
-    continue;
-  }
   const bytes = Buffer.from(JSON.stringify(documents.get(locale.id)) + '\n');
   const gzip = gzipSync(bytes, { level: 9 });
   // Fix the OS marker too, so the checked-in gzip is byte-identical on Windows/Linux.
@@ -96,13 +87,11 @@ for (const [relative, bytes] of artifacts) {
 }
 // Retire only the generator's known former outputs, never arbitrary directory contents.
 for (const locale of LOCALES.languages) {
-  for (const suffix of ['.json', ...(locale.fallbackTo ? ['.json.gz'] : [])]) {
-    const relative = 'site/wrt/data/i18n/' + locale.id + suffix;
-    const path = join(ROOT, relative);
-    if (!existsSync(path)) continue;
-    if (CHECK_ONLY) mismatches.push(relative + ' (retired localization bundle)');
-    else rmSync(path);
-  }
+  const relative = 'site/wrt/data/i18n/' + locale.id + '.json';
+  const path = join(ROOT, relative);
+  if (!existsSync(path)) continue;
+  if (CHECK_ONLY) mismatches.push(relative + ' (retired localization bundle)');
+  else rmSync(path);
 }
 const legacy = join(ROOT, 'site/wrt/data/i18n.json');
 if (existsSync(legacy)) {
@@ -115,5 +104,4 @@ if (mismatches.length) {
 }
 console.log((CHECK_ONLY ? 'Verified' : 'Generated') + ' ' + keys.length + ' complete strings × ' +
   documents.size + ' independent gzip language bundles; ' +
-  LOCALES.languages.filter(locale => locale.fallbackTo).length + ' explicit fallback entries; ' +
   LOCALES.languages.filter(locale => locale.common).length + ' common locales.');

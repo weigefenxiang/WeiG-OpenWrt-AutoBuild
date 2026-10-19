@@ -615,7 +615,6 @@
   "lang.search": "Cari bahasa…",
   "lang.more": "Bahasa lain ({count})",
   "lang.less": "Paparkan bahasa umum",
-  "lang.englishFallback": "Bahasa Inggeris digunakan sehingga terjemahan tersedia",
   "lang.noResults": "Tiada bahasa yang sepadan",
   "footer.contributors": "serta semua penyumbang sumber terbuka.",
   "buildInfo.title": "Maklumat Binaan",
